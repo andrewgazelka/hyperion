@@ -7,6 +7,9 @@ readme = "README.md"
 
 [dependencies]
 ser.workspace = true
+uuid = { version = "1.7.0", features = ["v4"] }
+serde = { version = "1.0.197", features = ["derive"] }
+tokio = { version = "1.36.0", features = ["full"] }
 
 
 [lints.rust]
@@ -22,7 +25,8 @@ wildcard_dependencies = "deny"
 
 complexity = "deny"
 
-nursery = "deny"
+nursery = { level = "deny", priority = -1 }
+future_not_send = "allow"
 
 pedantic = { level = "deny", priority = -1 }
 uninlined_format_args = "allow" # consider denying; this is allowed because Copilot often generates code that triggers this lint

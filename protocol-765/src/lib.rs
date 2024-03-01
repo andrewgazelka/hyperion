@@ -2,7 +2,7 @@
 
 // The login process is as follows:
 // 1. C→S: Handshake with Next State set to 2 (login)
-// 2. CS: Login Start
+// 2. C→S: Login Start
 // 3. S→C: Encryption Request
 // 4. Client auth
 // 5. C→S: Encryption Response
@@ -11,5 +11,7 @@
 // 8. S→C: Login Success
 // 9. C→S: Login Acknowledged
 
+pub mod serverbound;
+pub mod clientbound;
+pub mod status;
 
-pub mod client;
