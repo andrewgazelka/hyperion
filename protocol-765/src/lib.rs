@@ -11,7 +11,6 @@
 // 8. S→C: Login Success
 // 9. C→S: Login Acknowledged
 
-pub mod serverbound;
 pub mod clientbound;
+pub mod serverbound;
 pub mod status;
-

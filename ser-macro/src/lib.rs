@@ -70,7 +70,11 @@ pub fn writable(input: TokenStream) -> TokenStream {
 
     let name = input.ident;
 
-    let idents: Vec<_> = input.fields.iter().map(|x| x.ident.as_ref().unwrap()).collect();
+    let idents: Vec<_> = input
+        .fields
+        .iter()
+        .map(|x| x.ident.as_ref().unwrap())
+        .collect();
 
     let expanded = quote! {
         impl ::ser::Writable for #name {
@@ -79,7 +83,7 @@ pub fn writable(input: TokenStream) -> TokenStream {
                 #(self.#idents.write(writer)?;)*
                 Ok(())
             }
-            
+
             async fn write_async(self, writer: &mut (impl ::tokio::io::AsyncWrite + ::std::marker::Unpin)) -> ::std::io::Result<()> {
                 // todo: make sure to make sure all fields are ::ser::Writable
                 #(self.#idents.write_async(writer).await?;)*
@@ -97,7 +101,11 @@ pub fn readable(input: TokenStream) -> TokenStream {
 
     let name = input.ident;
 
-    let idents: Vec<_> = input.fields.iter().map(|x| x.ident.as_ref().unwrap()).collect();
+    let idents: Vec<_> = input
+        .fields
+        .iter()
+        .map(|x| x.ident.as_ref().unwrap())
+        .collect();
     let types: Vec<_> = input.fields.iter().map(|x| &x.ty).collect();
 
     let expanded = quote! {
@@ -107,7 +115,7 @@ pub fn readable(input: TokenStream) -> TokenStream {
                     #(#idents: <#types as ::ser::Readable>::read(reader)?),*
                 })
             }
-            
+
             async fn read_async(reader: &mut (impl ::tokio::io::AsyncBufRead + ::std::marker::Unpin)) -> ::std::io::Result<Self> {
                 Ok(#name {
                     #(#idents: <#types as ::ser::Readable>::read_async(reader).await?),*
@@ -126,10 +134,17 @@ pub fn enum_writable(input: TokenStream) -> TokenStream {
     let name = input.ident;
 
     let expanded = quote! {
-        impl ByteWritable for #name {
-            fn write_to_bytes(self, writer: &mut ByteWriter) {
+        impl ::ser::Writable for #name {
+            fn write(self, writer: &mut impl ::std::io::Write) -> ::std::io::Result<()> {
                 let v = self as i32;
-                writer.write(VarInt(v));
+                let v = VarInt(v);
+                v.write(writer)
+            }
+
+            async fn write_async(self, writer: &mut (impl ::tokio::io::AsyncWrite + ::std::marker::Unpin)) -> ::std::io::Result<()> {
+                let v = self as i32;
+                let v = VarInt(v);
+                v.write_async(writer).await
             }
         }
     };
@@ -144,20 +159,25 @@ pub fn enum_readable_count(input: TokenStream) -> TokenStream {
     let name = input.ident;
 
     let idents: Vec<_> = input.variants.iter().map(|x| x.ident.clone()).collect();
-    
+
     // for instance if we have enum Foo { A = 3, B = 5,
     // C = 7}, then the discriminants will be 3, 5, 7 else default to idx
     // let discriminants = // todo
-    let discriminants: Vec<_> = input.variants.iter().enumerate().map(|(idx, v)| {
-        // Attempt to find an explicit discriminant
-        match &v.discriminant {
-            Some((_, expr)) => quote! { #expr },
-            None => {
-                let idx = idx as u32; // Assuming u32 for simplicity; adjust as needed
-                quote! { #idx }
+    let discriminants: Vec<_> = input
+        .variants
+        .iter()
+        .enumerate()
+        .map(|(idx, v)| {
+            // Attempt to find an explicit discriminant
+            match &v.discriminant {
+                Some((_, expr)) => quote! { #expr },
+                None => {
+                    let idx = idx as u32; // Assuming u32 for simplicity; adjust as needed
+                    quote! { #idx }
+                }
             }
-        }
-    }).collect();
+        })
+        .collect();
 
     let expanded = quote! {
         impl ser::Readable for #name {
@@ -169,7 +189,7 @@ pub fn enum_readable_count(input: TokenStream) -> TokenStream {
                     _ => ::std::result::Result::Err(::std::io::Error::new(::std::io::ErrorKind::InvalidData, "Invalid enum discriminant"))
                 }
             }
-            
+
             async fn read_async(byte_reader: &mut (impl ::tokio::io::AsyncBufRead + ::std::marker::Unpin)) -> ::std::io::Result<Self> {
                 let VarInt(inner) = VarInt::read_async(byte_reader).await?;
 

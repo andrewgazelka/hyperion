@@ -144,7 +144,7 @@ impl<T: Writable + Debug> Writable for WritePacket<T> {
     }
 }
 
-impl<T: Readable + Packet> Readable for ExactPacket<T> {
+impl<T: Readable + Packet + Debug> Readable for ExactPacket<T> {
     fn read(reader: &mut impl std::io::BufRead) -> std::io::Result<Self>
     where
         Self: Sized,
@@ -159,7 +159,11 @@ impl<T: Readable + Packet> Readable for ExactPacket<T> {
 
         let _id = VarInt::read(&mut cursor)?;
 
-        Ok(Self(T::read(&mut cursor)?))
+        let result = T::read(&mut cursor)?;
+
+        debug!("read packet {:?}", result);
+
+        Ok(Self(result))
     }
 
     async fn read_async(
@@ -185,6 +189,9 @@ impl<T: Readable + Packet> Readable for ExactPacket<T> {
             ));
         }
 
-        Ok(Self(T::read(&mut cursor)?))
+        let result = T::read(&mut cursor)?;
+        debug!("read packet {:?}", result);
+
+        Ok(Self(result))
     }
 }

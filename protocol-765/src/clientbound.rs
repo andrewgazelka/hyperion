@@ -1,11 +1,11 @@
-use ser::{Packet, Writable};
+use ser::{Packet, Readable, Writable};
 
 // Status Response
 // packet id 0x0
-#[derive(Packet, Writable, Debug)]
+#[derive(Packet, Readable, Writable, Debug, Eq, PartialEq, Clone)]
 #[packet(0x00, Handshake)]
 pub struct StatusResponse {
-    pub json: String
+    pub json: String,
 }
 
 // Pong
@@ -13,9 +13,8 @@ pub struct StatusResponse {
 #[derive(Packet, Writable, Debug)]
 #[packet(0x01, Handshake)]
 pub struct Pong {
-    pub payload: i64
+    pub payload: i64,
 }
-
 
 // // Encryption Request
 // // Packet ID	State	Bound To	Field Name	Field Type	Notes
@@ -31,3 +30,25 @@ pub struct Pong {
 //     pub public_key: Vec<u8>,
 //     pub verify_token: Vec<u8>
 // }
+
+#[cfg(test)]
+mod tests {
+    use std::io::Cursor;
+
+    use ser::{ReadExt, Writable};
+
+    use crate::clientbound::StatusResponse;
+
+    #[test]
+    fn test_round_trip() {
+        let json = r#"{"version":{"name":"1.16.5","protocol":754},"players":{"max":20,"online":0,"sample":[]},"description":{"text":"Hello world"}}"#;
+        let status_response = super::StatusResponse {
+            json: json.to_string(),
+        };
+        let mut data = Vec::new();
+        status_response.clone().write(&mut data).unwrap();
+        let mut reader = std::io::Cursor::new(data);
+        let status_response2: StatusResponse = reader.read_type().unwrap();
+        assert_eq!(status_response, status_response2);
+    }
+}

@@ -2,6 +2,7 @@
 use anyhow::{bail, ensure};
 use protocol_765::{serverbound, serverbound::NextState, status::Root};
 use ser::{ExactPacket, ReadExtAsync, Readable, Writable, WritePacket};
+use serde_json::json;
 use tokio::{
     io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader, BufWriter, ReadHalf, WriteHalf},
     net::{TcpListener, TcpStream},
@@ -10,7 +11,7 @@ use tokio::{
 use tracing::{debug, error, info, instrument, warn};
 
 struct Process {
-    writer: BufWriter<WriteHalf<TcpStream>>,
+    writer: WriteHalf<TcpStream>,
     reader: BufReader<ReadHalf<TcpStream>>,
 }
 
@@ -18,7 +19,7 @@ impl Process {
     fn new(stream: TcpStream) -> Self {
         let (reader, writer) = tokio::io::split(stream);
         let reader = BufReader::new(reader);
-        let writer = BufWriter::new(writer);
+        // let writer = BufWriter::new(writer);
         Self { writer, reader }
     }
 
@@ -55,6 +56,7 @@ impl Process {
 
     async fn login(mut self) -> anyhow::Result<()> {
         info!("login");
+
         let ExactPacket(serverbound::LoginStart { username, uuid }) =
             self.reader.read_type().await?;
 
@@ -68,15 +70,37 @@ impl Process {
         info!("status");
         let ExactPacket(serverbound::StatusRequest) = self.reader.read_type().await?;
 
+        info!("byte");
+
+        let mut json = json!({
+            "version": {
+                "name": "1.20.4",
+                "protocol": 765,
+            },
+            "players": {
+                "online": 0,
+                "max": 10_000,
+                "sample": [],
+            },
+            "description": "10k babyyyyy",
+        });
+
         let send = WritePacket::new(protocol_765::clientbound::StatusResponse {
-            json: serde_json::to_string_pretty(&Root::sample())?,
+            json: json.to_string(),
         });
 
         send.write_async(&mut self.writer).await?;
 
-        print!("start read byte");
-        let read_byte = self.reader.read_u8().await?;
-        bail!("status not implemented");
+        info!("wrote status response");
+
+        let ExactPacket(serverbound::Ping { payload }) = self.reader.read_type().await?;
+
+        info!("read ping {}", payload);
+
+        let pong = WritePacket::new(protocol_765::clientbound::Pong { payload });
+        pong.write_async(&mut self.writer).await?;
+
+        Ok(())
     }
 }
 

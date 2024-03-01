@@ -16,8 +16,8 @@ pub struct Sample {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Players {
-    pub max: i64,
     pub online: i64,
+    pub max: i64,
     pub sample: Vec<Sample>,
 }
 
@@ -35,13 +35,13 @@ pub struct Root {
     pub players: Players,
     pub description: Description,
     // pub favicon: String,
-    pub enforces_secure_chat: bool,
-    pub previews_chat: bool,
+    // pub enforces_secure_chat: bool,
+    // pub previews_chat: bool,
 }
 
-
 impl Root {
-    #[must_use] pub fn sample() -> Self {
+    #[must_use]
+    pub fn sample() -> Self {
         // {
         //     "version": {
         //         "name": "1.19.4",
@@ -64,7 +64,7 @@ impl Root {
         //     "enforcesSecureChat": true,
         //     "previewsChat": true
         // }
-        
+
         Self {
             version: Version {
                 name: "1.20.4".to_string(),
@@ -79,8 +79,8 @@ impl Root {
                 text: "Hello world".to_string(),
             },
             // favicon: "data:image/png;base64,<data>".to_string(),
-            enforces_secure_chat: true,
-            previews_chat: true,
+            // enforces_secure_chat: true,
+            // previews_chat: true,
         }
     }
 }

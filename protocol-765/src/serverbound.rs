@@ -1,8 +1,8 @@
-use ser::{types::VarInt, Packet, Readable, EnumReadable};
+use ser::{types::VarInt, EnumReadable, EnumWritable, Packet, Readable, Writable};
 use uuid::Uuid;
 
 // packet id 0x0
-#[derive(Packet, Readable, Debug)]
+#[derive(Packet, Writable, Readable, Debug)]
 #[packet(0x0, Handshake)]
 pub struct Handshake {
     pub protocol_version: VarInt,
@@ -12,11 +12,11 @@ pub struct Handshake {
 }
 
 // packet id 0x0
-#[derive(Packet, Readable, Debug)]
+#[derive(Packet, Writable, Readable, Debug)]
 #[packet(0x0, Handshake)]
 pub struct StatusRequest;
 
-#[derive(EnumReadable, Debug, Eq, PartialEq)]
+#[derive(EnumReadable, EnumWritable, Debug, Eq, PartialEq)]
 pub enum NextState {
     Status = 1,
     Login = 2,
@@ -28,4 +28,10 @@ pub enum NextState {
 pub struct LoginStart {
     pub username: String,
     pub uuid: Uuid,
+}
+
+#[derive(Packet, Writable, Readable, Debug)]
+#[packet(0x1, Handshake)]
+pub struct Ping {
+    pub payload: i64,
 }

@@ -55,7 +55,9 @@ impl Writable for String {
         let bytes = self.as_bytes();
         let length = bytes.len() as u32;
 
-        debug!("Writing string (sync): {self} with: {length} bytes");
+        let str_length = self.len();
+
+        debug!("Writing string (sync): {self} with: {length} bytes and {str_length} characters");
 
         writer.write_type(VarUInt(length))?.write_all(bytes)
     }
@@ -64,7 +66,9 @@ impl Writable for String {
         let bytes = self.as_bytes();
         let length = bytes.len() as u32;
 
-        debug!("Writing string: {self} with: {length} bytes");
+        let str_length = self.len();
+
+        debug!("Writing string: {self} with: {length} bytes and {str_length} characters");
 
         writer
             .write_type(VarUInt(length))
@@ -89,6 +93,32 @@ impl Readable for u16 {
         let mut buffer = [0; 2];
         reader.read_exact(&mut buffer).await?;
         Ok(Self::from_be_bytes(buffer))
+    }
+}
+
+impl Writable for u16 {
+    fn write(self, writer: &mut impl Write) -> io::Result<()> {
+        writer.write_u16::<byteorder::BigEndian>(self)
+    }
+
+    async fn write_async(self, writer: &mut (impl AsyncWrite + Unpin)) -> io::Result<()> {
+        writer.write_u16(self).await
+    }
+}
+
+impl Readable for i64 {
+    fn read(reader: &mut impl BufRead) -> io::Result<Self>
+    where
+        Self: Sized,
+    {
+        reader.read_i64::<byteorder::BigEndian>()
+    }
+
+    async fn read_async(reader: &mut (impl AsyncBufRead + Unpin)) -> io::Result<Self>
+    where
+        Self: Sized,
+    {
+        reader.read_i64().await
     }
 }
 
@@ -139,6 +169,12 @@ impl<T: Serialize> Writable for Json<T> {
 // section
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct VarInt(pub i32);
+
+impl From<i32> for VarInt {
+    fn from(value: i32) -> Self {
+        Self(value)
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct VarUInt(pub u32);
@@ -293,7 +329,9 @@ impl Writable for VarInt {
                 writer.write_all(&[value as u8]).await?;
                 return Ok(());
             }
-            writer.write_all(&[(value as u8 & SEGMENT_BITS) | CONTINUE_BIT]).await?;
+            writer
+                .write_all(&[(value as u8 & SEGMENT_BITS) | CONTINUE_BIT])
+                .await?;
             // Note: Rust does not have a logical right shift operator (>>>), but since we're
             // working with a signed int, converting to u32 for the shift operation
             // achieves the same effect of not preserving the sign bit.
