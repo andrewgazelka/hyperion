@@ -1,0 +1,15 @@
+[workspace]
+resolver = "2"
+
+members = [
+    "protocol-765",
+    "ser",
+    "ser-macro",
+    "server",
+]
+
+[workspace.dependencies]
+protocol-765 = { path = "protocol-765" }
+ser = { path = "ser" }
+ser-macro = { path = "ser-macro" }
+
