@@ -11,22 +11,16 @@ use tokio::{
 use tracing::{debug, error, info, instrument, warn};
 
 struct Process {
-    writer: WriteHalf<TcpStream>,
-    reader: BufReader<ReadHalf<TcpStream>>,
+    stream: TcpStream,
 }
 
 impl Process {
     fn new(stream: TcpStream) -> Self {
-        let (reader, writer) = tokio::io::split(stream);
-        let reader = BufReader::new(reader);
-        // let writer = BufWriter::new(writer);
-        Self { writer, reader }
+        Self { stream }
     }
 
     #[instrument(skip(self))]
     async fn process(mut self, id: usize) -> anyhow::Result<()> {
-        let bytes = self.reader.fill_buf().await?;
-
         if let Some(byte) = bytes.first() {
             if *byte == 0xfe {
                 warn!("first byte: {:#x}", byte);
