@@ -2,7 +2,8 @@ use proc_macro::TokenStream;
 use quote::quote;
 use syn::{
     parse::{Parse, ParseStream},
-    parse_macro_input, DeriveInput, Error, ItemEnum, ItemStruct, Meta, Token,
+    parse_macro_input, parse_quote, Data, DeriveInput, Error, GenericParam, Generics, ItemEnum,
+    Meta, Token,
 };
 
 struct PacketParams(syn::LitInt, syn::Ident);
@@ -16,7 +17,6 @@ impl Parse for PacketParams {
     }
 }
 
-// https://doc.rust-lang.org/reference/procedural-macros.html#attribute-macros
 #[proc_macro_derive(Packet, attributes(packet))]
 pub fn packet(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
@@ -33,9 +33,10 @@ pub fn packet(input: TokenStream) -> TokenStream {
         return TokenStream::from(error.to_compile_error());
     };
 
-    let ident = input.ident;
+    let ident = &input.ident;
+    let generics = &input.generics;
+    let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
 
-    // let tokens = packet_attr.to_token_stream();
     let Meta::List(meta) = &packet_attr.meta else {
         let error = Error::new_spanned(
             &packet_attr.meta,
@@ -55,9 +56,10 @@ pub fn packet(input: TokenStream) -> TokenStream {
     };
 
     let expanded = quote! {
-        impl ::ser::Packet for #ident {
+        impl #impl_generics ::ser::Packet for #ident #ty_generics #where_clause {
             const ID: i32 = #id;
             const STATE: ser::types::PacketState = ser::types::PacketState::#kind;
+            const NAME: &'static str = stringify!(#ident);
         }
     };
 
@@ -66,59 +68,105 @@ pub fn packet(input: TokenStream) -> TokenStream {
 
 #[proc_macro_derive(Writable)]
 pub fn writable(input: TokenStream) -> TokenStream {
-    let input = parse_macro_input!(input as ItemStruct);
+    let input = parse_macro_input!(input as DeriveInput);
 
     let name = input.ident;
+    let generics = input.generics;
+    let (generics, where_clause) = extend_generics_and_create_where_clause(&generics);
 
-    let idents: Vec<_> = input
-        .fields
-        .iter()
-        .map(|x| x.ident.as_ref().unwrap())
-        .collect();
+    // Extracting field identifiers and ensuring that the struct can actually be used with this
+    // macro.
+    let idents: Vec<_> = match input.data {
+        syn::Data::Struct(data_struct) => data_struct
+            .fields
+            .iter()
+            .filter_map(|f| f.ident.clone())
+            .collect(),
+        _ => return TokenStream::new(), // Early return if not struct
+    };
 
     let expanded = quote! {
-        impl ::ser::Writable for #name {
-            fn write(self, writer: &mut impl ::std::io::Write) -> ::std::io::Result<()> {
-                // todo: make sure to make sure all fields are ::ser::Writable
+        impl #generics ::ser::Writable for #name #generics #where_clause {
+            fn write(&self, writer: &mut impl ::std::io::Write) -> ::anyhow::Result<()> {
                 #(self.#idents.write(writer)?;)*
                 Ok(())
             }
-
-            async fn write_async(self, writer: &mut (impl ::tokio::io::AsyncWrite + ::std::marker::Unpin)) -> ::std::io::Result<()> {
-                // todo: make sure to make sure all fields are ::ser::Writable
-                #(self.#idents.write_async(writer).await?;)*
-                Ok(())
-            }
+            //
+            // async fn write_async(self, writer: &mut (impl ::tokio::io::AsyncWrite + ::std::marker::Unpin)) -> ::anyhow::Result<()> {
+            //     #(self.#idents.write_async(writer).await?;)*
+            //     Ok(())
+            // }
         }
     };
 
     TokenStream::from(expanded)
 }
 
+// lifetime if needed, and to create a where clause that bounds all fields by the
+// specified lifetime. It returns a tuple of the possibly extended generics and
+// the where clause.
+fn extend_generics_and_create_where_clause(
+    generics: &Generics,
+) -> (Generics, proc_macro2::TokenStream) {
+    let mut generics = generics.clone();
+    let mut where_clause = generics.make_where_clause().predicates.clone();
+
+    for param in &generics.params {
+        if let GenericParam::Type(type_param) = param {
+            // Assuming all types must implement the 'Readable' trait bound by a certain lifetime
+            where_clause.push(parse_quote!(#type_param: ::ser::Readable<'a>));
+        }
+    }
+
+    (generics, quote!(#where_clause))
+}
+
 #[proc_macro_derive(Readable)]
 pub fn readable(input: TokenStream) -> TokenStream {
-    let input = parse_macro_input!(input as ItemStruct);
+    let input = parse_macro_input!(input as DeriveInput);
 
     let name = input.ident;
+    let generics = input.generics;
+    let (generics, where_clause) = extend_generics_and_create_where_clause(&generics);
 
-    let idents: Vec<_> = input
+    // if generics is empty, then make it <'_>
+    let readable_generics = if generics.params.is_empty() {
+        quote! { <'_> }
+    } else {
+        quote! { #generics }
+    };
+
+    let slice_generics = {
+        let lifetimes = generics.lifetimes().collect::<Vec<_>>();
+        if !lifetimes.is_empty() {
+            // Assume using the first lifetime if available
+            let lifetime = lifetimes[0];
+            quote! { &#lifetime }
+        } else {
+            // Default to '_ if no lifetimes are present
+            quote! { &'_ }
+        }
+    };
+
+    let Data::Struct(data) = input.data else {
+        let error = Error::new_spanned(
+            &name,
+            "only structs are supported for the `#[derive(Readable)]` attribute",
+        );
+        return TokenStream::from(error.to_compile_error());
+    };
+
+    let idents: Vec<_> = data
         .fields
         .iter()
-        .map(|x| x.ident.as_ref().unwrap())
+        .map(|f| f.ident.as_ref().unwrap())
         .collect();
-    let types: Vec<_> = input.fields.iter().map(|x| &x.ty).collect();
 
     let expanded = quote! {
-        impl ::ser::Readable for #name {
-            fn read(reader: &mut impl ::std::io::BufRead) -> ::std::io::Result<Self> {
-                Ok(#name {
-                    #(#idents: <#types as ::ser::Readable>::read(reader)?),*
-                })
-            }
-
-            async fn read_async(reader: &mut (impl ::tokio::io::AsyncBufRead + ::std::marker::Unpin)) -> ::std::io::Result<Self> {
-                Ok(#name {
-                    #(#idents: <#types as ::ser::Readable>::read_async(reader).await?),*
+        impl #generics ::ser::Readable #readable_generics for #name #generics where #where_clause {
+            fn decode(r: &mut #slice_generics [u8]) -> ::anyhow::Result<Self> {
+                Ok(Self {
+                    #(#idents: ::ser::Readable::decode(r)?,)*
                 })
             }
         }
@@ -129,23 +177,23 @@ pub fn readable(input: TokenStream) -> TokenStream {
 
 #[proc_macro_derive(EnumWritable)]
 pub fn enum_writable(input: TokenStream) -> TokenStream {
-    let input = parse_macro_input!(input as ItemEnum);
+    let input = parse_macro_input!(input as DeriveInput);
 
     let name = input.ident;
 
     let expanded = quote! {
         impl ::ser::Writable for #name {
-            fn write(self, writer: &mut impl ::std::io::Write) -> ::std::io::Result<()> {
-                let v = self as i32;
+            fn write(&self, writer: &mut impl ::std::io::Write) -> ::anyhow::Result<()> {
+                let v = *self as i32;
                 let v = VarInt(v);
                 v.write(writer)
             }
 
-            async fn write_async(self, writer: &mut (impl ::tokio::io::AsyncWrite + ::std::marker::Unpin)) -> ::std::io::Result<()> {
-                let v = self as i32;
-                let v = VarInt(v);
-                v.write_async(writer).await
-            }
+            // async fn write_async(self, writer: &mut (impl ::tokio::io::AsyncWrite + ::std::marker::Unpin)) -> ::anyhow::Result<()> {
+            //     let v = self as i32;
+            //     let v = VarInt(v);
+            //     v.write_async(writer).await
+            // }
         }
     };
 
@@ -154,16 +202,24 @@ pub fn enum_writable(input: TokenStream) -> TokenStream {
 
 #[proc_macro_derive(EnumReadable)]
 pub fn enum_readable_count(input: TokenStream) -> TokenStream {
-    let input = parse_macro_input!(input as ItemEnum);
+    let input = parse_macro_input!(input as DeriveInput);
 
     let name = input.ident;
 
-    let idents: Vec<_> = input.variants.iter().map(|x| x.ident.clone()).collect();
+    let Data::Enum(data) = input.data else {
+        let error = Error::new_spanned(
+            &name,
+            "only enums are supported for the `#[derive(EnumReadable)]` attribute",
+        );
+        return TokenStream::from(error.to_compile_error());
+    };
+
+    let idents: Vec<_> = data.variants.iter().map(|x| x.ident.clone()).collect();
 
     // for instance if we have enum Foo { A = 3, B = 5,
     // C = 7}, then the discriminants will be 3, 5, 7 else default to idx
     // let discriminants = // todo
-    let discriminants: Vec<_> = input
+    let discriminants: Vec<_> = data
         .variants
         .iter()
         .enumerate()
@@ -180,22 +236,12 @@ pub fn enum_readable_count(input: TokenStream) -> TokenStream {
         .collect();
 
     let expanded = quote! {
-        impl ser::Readable for #name {
-            fn read(byte_reader: &mut impl ::std::io::BufRead) -> ::std::io::Result<Self> {
-                let VarInt(inner) = VarInt::read(byte_reader)?;
-
+        impl ser::Readable<'_> for #name {
+            fn decode(r: &mut &[u8]) -> anyhow::Result<Self> {
+                let VarInt(inner) = VarInt::decode(r)?;
                 match inner {
-                    #(#discriminants => Ok(#name::#idents)),*,
-                    _ => ::std::result::Result::Err(::std::io::Error::new(::std::io::ErrorKind::InvalidData, "Invalid enum discriminant"))
-                }
-            }
-
-            async fn read_async(byte_reader: &mut (impl ::tokio::io::AsyncBufRead + ::std::marker::Unpin)) -> ::std::io::Result<Self> {
-                let VarInt(inner) = VarInt::read_async(byte_reader).await?;
-
-                match inner {
-                    #(#discriminants => Ok(#name::#idents)),*,
-                    _ => ::std::result::Result::Err(::std::io::Error::new(::std::io::ErrorKind::InvalidData, "Invalid enum discriminant"))
+                    #(#discriminants => Ok(#name::#idents),)*
+                    _ => Err(anyhow::anyhow!("invalid discriminant"))
                 }
             }
         }

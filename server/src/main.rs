@@ -1,7 +1,14 @@
 #![allow(unused)]
-use anyhow::{bail, ensure};
-use protocol_765::{serverbound, serverbound::NextState, status::Root};
-use ser::{ExactPacket, ReadExtAsync, Readable, Writable, WritePacket};
+
+use std::{io, io::ErrorKind};
+
+use anyhow::{bail, ensure, Context};
+use bytes::{Buf, BufMut, BytesMut};
+use protocol_765::{clientbound, serverbound, serverbound::NextState, status::Root};
+use ser::{
+    types::{VarInt, VarIntDecodeError, MAX_PACKET_SIZE},
+    ExactPacket, Packet, Readable, Writable, WritePacket,
+};
 use serde_json::json;
 use tokio::{
     io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader, BufWriter, ReadHalf, WriteHalf},
@@ -10,38 +17,240 @@ use tokio::{
 };
 use tracing::{debug, error, info, instrument, warn};
 
-struct Process {
-    writer: WriteHalf<TcpStream>,
-    reader: BufReader<ReadHalf<TcpStream>>,
+#[derive(Default)]
+struct PacketDecoder {
+    buf: BytesMut,
 }
 
-impl Process {
+#[derive(Clone, Debug, Default)]
+pub struct PacketFrame {
+    /// The ID of the decoded packet.
+    pub id: i32,
+    /// The contents of the packet after the leading VarInt ID.
+    pub body: BytesMut,
+}
+
+impl PacketFrame {
+    pub fn decode<'a, P>(&'a self) -> anyhow::Result<P>
+    where
+        P: Packet + Readable<'a>,
+    {
+        ensure!(
+            P::ID == self.id,
+            "packet ID mismatch while decoding '{}': expected {}, got {}",
+            P::NAME,
+            P::ID,
+            self.id
+        );
+
+        #[allow(clippy::min_ident_chars)]
+        let mut r = &*self.body;
+
+        let pkt = P::decode(&mut r)?;
+
+        ensure!(
+            r.is_empty(),
+            "missed {} bytes while decoding '{}'",
+            r.len(),
+            P::NAME
+        );
+
+        Ok(pkt)
+    }
+}
+
+impl PacketDecoder {
+    #[allow(
+        clippy::cast_possible_truncation,
+        clippy::cast_possible_wrap,
+        clippy::cast_sign_loss,
+        clippy::min_ident_chars
+    )]
+    pub fn try_next_packet(&mut self) -> anyhow::Result<Option<PacketFrame>> {
+        let mut r = &*self.buf;
+
+        let packet_len = match VarInt::decode_partial(&mut r) {
+            Ok(len) => len,
+            Err(VarIntDecodeError::Incomplete) => return Ok(None),
+            Err(VarIntDecodeError::TooLarge) => bail!("malformed packet length VarInt"),
+        };
+
+        ensure!(
+            (0..=MAX_PACKET_SIZE).contains(&packet_len),
+            "packet length of {packet_len} is out of bounds"
+        );
+
+        if r.len() < packet_len as usize {
+            // Not enough data arrived yet.
+            return Ok(None);
+        }
+
+        let packet_len_len = VarInt(packet_len).written_size();
+
+        let mut data;
+
+        self.buf.advance(packet_len_len);
+
+        data = self.buf.split_to(packet_len as usize);
+
+        // Decode the leading packet ID.
+        r = &*data;
+        let packet_id = VarInt::decode(&mut r)
+            .context("failed to decode packet ID")?
+            .0;
+
+        data.advance(data.len() - r.len());
+
+        Ok(Some(PacketFrame {
+            id: packet_id,
+            body: data,
+        }))
+    }
+
+    pub fn queue_bytes(&mut self, mut bytes: BytesMut) {
+        self.buf.unsplit(bytes);
+    }
+
+    pub fn take_capacity(&mut self) -> BytesMut {
+        self.buf.split_off(self.buf.len())
+    }
+
+    pub fn reserve(&mut self, additional: usize) {
+        self.buf.reserve(additional);
+    }
+}
+
+const READ_BUF_SIZE: usize = 4096;
+
+#[derive(Default)]
+pub struct PacketEncoder {
+    buf: BytesMut,
+}
+
+impl PacketEncoder {
+    #[allow(
+        clippy::cast_possible_truncation,
+        clippy::cast_possible_wrap,
+        clippy::cast_sign_loss,
+        clippy::min_ident_chars
+    )]
+    pub fn append_packet<P>(&mut self, pkt: &P) -> anyhow::Result<()>
+    where
+        P: Packet + Writable,
+    {
+        let start_len = self.buf.len();
+
+        let mut writer = (&mut self.buf).writer();
+        VarInt(P::ID).write(&mut writer)?;
+
+        pkt.write(&mut writer)?;
+
+        let data_len = self.buf.len() - start_len;
+
+        let packet_len = data_len;
+
+        ensure!(
+            packet_len <= MAX_PACKET_SIZE as usize,
+            "packet exceeds maximum length"
+        );
+
+        let packet_len_size = VarInt(packet_len as i32).written_size();
+
+        self.buf.put_bytes(0, packet_len_size);
+        self.buf
+            .copy_within(start_len..start_len + data_len, start_len + packet_len_size);
+
+        #[allow(clippy::indexing_slicing)]
+        let mut front = &mut self.buf[start_len..];
+        VarInt(packet_len as i32).write(&mut front)?;
+
+        Ok(())
+    }
+
+    /// Takes all the packets written so far and encrypts them if encryption is
+    /// enabled.
+    pub fn take(&mut self) -> BytesMut {
+        self.buf.split()
+    }
+}
+
+struct Io {
+    stream: TcpStream,
+    dec: PacketDecoder,
+    enc: PacketEncoder,
+    frame: PacketFrame,
+}
+
+impl Io {
+    pub async fn recv_packet<'a, P>(&'a mut self) -> anyhow::Result<P>
+    where
+        P: Packet + Readable<'a>,
+    {
+        loop {
+            if let Some(frame) = self.dec.try_next_packet()? {
+                self.frame = frame;
+                return self.frame.decode();
+            }
+
+            self.dec.reserve(READ_BUF_SIZE);
+            let mut buf = self.dec.take_capacity();
+
+            if self.stream.read_buf(&mut buf).await? == 0 {
+                return Err(io::Error::from(ErrorKind::UnexpectedEof).into());
+            }
+
+            // This should always be an O(1) unsplit because we reserved space earlier and
+            // the call to `read_buf` shouldn't have grown the allocation.
+            self.dec.queue_bytes(buf);
+        }
+    }
+
+    pub async fn recv_packet_raw(&mut self) -> anyhow::Result<PacketFrame> {
+        loop {
+            if let Some(frame) = self.dec.try_next_packet()? {
+                return Ok(frame);
+            }
+
+            self.dec.reserve(READ_BUF_SIZE);
+            let mut buf = self.dec.take_capacity();
+
+            if self.stream.read_buf(&mut buf).await? == 0 {
+                return Err(io::Error::from(ErrorKind::UnexpectedEof).into());
+            }
+
+            // This should always be an O(1) unsplit because we reserved space earlier and
+            // the call to `read_buf` shouldn't have grown the allocation.
+            self.dec.queue_bytes(buf);
+        }
+    }
+
     fn new(stream: TcpStream) -> Self {
-        let (reader, writer) = tokio::io::split(stream);
-        let reader = BufReader::new(reader);
-        // let writer = BufWriter::new(writer);
-        Self { writer, reader }
+        Self {
+            stream,
+            dec: PacketDecoder::default(),
+            enc: PacketEncoder::default(),
+            frame: PacketFrame::default(),
+        }
+    }
+
+    pub(crate) async fn send_packet<P>(&mut self, pkt: &P) -> anyhow::Result<()>
+    where
+        P: Packet + Writable,
+    {
+        self.enc.append_packet(pkt)?;
+        let bytes = self.enc.take();
+        self.stream.write_all(&bytes).await?;
+        Ok(())
     }
 
     #[instrument(skip(self))]
     async fn process(mut self, id: usize) -> anyhow::Result<()> {
-        let bytes = self.reader.fill_buf().await?;
-
-        if let Some(byte) = bytes.first() {
-            if *byte == 0xfe {
-                warn!("first byte: {:#x}", byte);
-                self.status().await?;
-                return Ok(());
-            }
-            warn!("no first byte");
-        }
-
-        let ExactPacket(serverbound::Handshake {
+        let serverbound::Handshake {
             protocol_version,
             server_address,
             server_port,
             next_state,
-        }) = self.reader.read_type().await?;
+        } = self.recv_packet().await?;
 
         ensure!(protocol_version.0 == 765, "expected protocol version 765");
         ensure!(server_port == 25565, "expected server port 25565");
@@ -54,23 +263,55 @@ impl Process {
         Ok(())
     }
 
+    // The login process is as follows:
+    // 1. C→S: Handshake with Next State set to 2 (login)
+    // 2. C→S: Login Start
+    // 3. S→C: Encryption Request
+    // 4. Client auth
+    // 5. C→S: Encryption Response
+    // 6. Server auth, both enable encryption
+    // 7. S→C: Set Compression (optional)
+    // 8. S→C: Login Success
+    // 9. C→S: Login Acknowledged
     async fn login(mut self) -> anyhow::Result<()> {
-        info!("login");
+        debug!("login");
 
-        let ExactPacket(serverbound::LoginStart { username, uuid }) =
-            self.reader.read_type().await?;
+        let serverbound::LoginStart { username, uuid } = self.recv_packet().await?;
 
         debug!("username: {username}");
         debug!("uuid: {uuid}");
 
+        let username = username.to_owned();
+
+        let packet = clientbound::LoginSuccess {
+            uuid,
+            username: &username,
+            properties: vec![],
+        };
+
+        debug!("sending {packet:?}");
+
+        self.send_packet(&packet).await?;
+
+        let serverbound::LoginAcknowledged = self.recv_packet().await?;
+
+        debug!("received login acknowledged");
+
+        self.main_loop().await?;
+
         Ok(())
     }
 
-    async fn status(mut self) -> anyhow::Result<()> {
-        info!("status");
-        let ExactPacket(serverbound::StatusRequest) = self.reader.read_type().await?;
+    async fn main_loop(mut self) -> anyhow::Result<()> {
+        loop {
+            let packet = self.recv_packet_raw().await?;
+            debug!("received {packet:?}");
+        }
+    }
 
-        info!("byte");
+    async fn status(mut self) -> anyhow::Result<()> {
+        debug!("status");
+        let serverbound::StatusRequest = self.recv_packet().await?;
 
         let mut json = json!({
             "version": {
@@ -85,80 +326,30 @@ impl Process {
             "description": "10k babyyyyy",
         });
 
-        let send = WritePacket::new(protocol_765::clientbound::StatusResponse {
-            json: json.to_string(),
-        });
+        let json = serde_json::to_string_pretty(&json)?;
 
-        send.write_async(&mut self.writer).await?;
+        let send = clientbound::StatusResponse { json: &json };
 
-        info!("wrote status response");
+        self.send_packet(&send).await?;
 
-        let ExactPacket(serverbound::Ping { payload }) = self.reader.read_type().await?;
+        debug!("wrote status response");
 
-        info!("read ping {}", payload);
+        let serverbound::Ping { payload } = self.recv_packet().await?;
 
-        let pong = WritePacket::new(protocol_765::clientbound::Pong { payload });
-        pong.write_async(&mut self.writer).await?;
+        debug!("read ping {}", payload);
+
+        let pong = clientbound::Pong { payload };
+        self.send_packet(&pong).await?;
 
         Ok(())
     }
 }
 
-async fn print_errors(future: impl std::future::Future<Output = anyhow::Result<()>>) {
+async fn print_errors(future: impl core::future::Future<Output = anyhow::Result<()>>) {
     if let Err(err) = future.await {
         error!("{:?}", err);
     }
 }
-
-// #[allow(clippy::infinite_loop)]
-// async fn process(id: usize, stream: TcpStream) -> anyhow::Result<()> {
-//     println!("{handshake:?}");
-//
-//     ensure!(
-//         handshake.data.next_state == NextState::Status,
-//         "expected status"
-//     );
-//
-//     let _status_pkt = ExactPacket::<serverbound::StatusRequest>::read_async(&mut reader).await?;
-//     // ensure!(status_pkt.0 == 0, "expected status packet");
-//
-//     let mut writer = BufWriter::new(writer);
-//
-//     let json = Root::sample();
-//     let json = serde_json::to_string_pretty(&json)?;
-//
-//     println!("{}", json);
-//
-//     let response = protocol_765::clientbound::StatusResponse { json };
-//
-//     let login_start = WritePacket::new(response);
-//     login_start.write_async(&mut writer).await?;
-//
-//     debug!("wrote status response");
-//
-//     let pong = WritePacket::new(protocol_765::clientbound::Pong { payload: 0 });
-//     pong.write_async(&mut writer).await?;
-//
-//     println!("wrote pong");
-//
-//     // wait for the client to disconnect
-//     // loop {
-//     //     writer.write_u8(0).await?;
-//     //     // let byte = reader.read_u8().await?;
-//     //     sleep(core::time::Duration::from_millis(10)).await;
-//     // }
-//
-//     while let Ok(byte) = reader.read_u8().await {
-//         println!("{:#x}", byte);
-//     }
-//     // let x = reader.read_u8().await?;
-//     //
-//     // println!("{:#x}", x);
-//
-//     println!("done");
-//
-//     Ok(())
-// }
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -172,7 +363,7 @@ async fn main() -> anyhow::Result<()> {
     loop {
         let (stream, _) = listener.accept().await?;
 
-        let process = Process::new(stream);
+        let process = Io::new(stream);
         let action = process.process(id);
         let action = print_errors(action);
 
