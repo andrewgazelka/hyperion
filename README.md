@@ -52,3 +52,19 @@ In fact, if we had a normal size world
 10k x 10k x 256 and one byte per block this would only take
 
 25.6 GB
+
+## Core Count
+
+Suppose we get a 64-core machine. This means that we can allocate 
+10k / 64 = 156.25 players per core.
+This is much under what a normal vanilla server can do on one core.
+
+## Network
+
+Network is very dependent on player packing.
+A large factor of sending packets over network has to do with sending player updates.
+The bandwidth will be O(nm), where m is a "packing factor" and the number of players within a given radius. 
+Where all players can see all other players (i.e., there is a small radius), the bandwidth will be O(n^2).
+
+If we adjust the map size so that there is always a constant number of players m within a certain radius of a map, 
+we will get the bandwidth will be O(nm) = O(Cn) = CO(n) = O(n) for a constant C.
