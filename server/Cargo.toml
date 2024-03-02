@@ -13,6 +13,7 @@ ser.workspace = true
 tracing-subscriber = "0.3.18"
 tracing = "0.1.40"
 serde_json = "1.0.114"
+bytes = "1.5.0"
 
 
 [lints.rust]
@@ -49,10 +50,12 @@ exhaustive_structs = "allow"
 pub_use = "allow"
 let_underscore_untyped = "allow"
 infinite_loop = "allow"
+single_char_lifetime_names = "allow"
 
 complexity = "deny"
 
 nursery = { level = "deny", priority = -1 }
+future_not_send = "allow"
 
 pedantic = { level = "deny", priority = -1 }
 uninlined_format_args = "allow" # consider denying; this is allowed because Copilot often generates code that triggers this lint

@@ -6,11 +6,17 @@ members = [
     "ser",
     "ser-macro",
     "server",
-    "client"
 ]
 
 [workspace.dependencies]
 protocol-765 = { path = "protocol-765" }
 ser = { path = "ser" }
 ser-macro = { path = "ser-macro" }
+
+# max perf
+[profile.release]
+#lto = true
+#codegen-units = 1
+
+
 
