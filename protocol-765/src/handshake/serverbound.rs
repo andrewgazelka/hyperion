@@ -3,7 +3,7 @@ use uuid::Uuid;
 
 // packet id 0x0
 #[derive(Packet, Writable, Readable, Debug)]
-#[packet(0x0, Handshake)]
+#[packet(0x0)]
 pub struct Handshake<'a> {
     pub protocol_version: VarInt,
     pub server_address: &'a str,
@@ -13,7 +13,7 @@ pub struct Handshake<'a> {
 
 // packet id 0x0
 #[derive(Packet, Writable, Readable, Debug)]
-#[packet(0x0, Handshake)]
+#[packet(0x0)]
 pub struct StatusRequest;
 
 #[derive(EnumReadable, EnumWritable, Debug, Eq, PartialEq, Copy, Clone)]
@@ -24,14 +24,14 @@ pub enum NextState {
 
 // login start
 #[derive(Packet, Readable, Debug)]
-#[packet(0x0, Handshake)]
+#[packet(0x0)]
 pub struct LoginStart<'a> {
     pub username: &'a str,
     pub uuid: Uuid,
 }
 
 #[derive(Packet, Writable, Readable, Debug)]
-#[packet(0x1, Handshake)]
+#[packet(0x1)]
 pub struct Ping {
     pub payload: i64,
 }
@@ -42,5 +42,5 @@ pub struct Ping {
 // Packet ID	State	Bound To	Field Name	Field Type	Notes
 // 0x03	Login	Server	no fields
 #[derive(Packet, Writable, Readable, Debug)]
-#[packet(0x3, Handshake)]
+#[packet(0x3)]
 pub struct LoginAcknowledged;

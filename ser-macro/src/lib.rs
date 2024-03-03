@@ -1,21 +1,9 @@
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::{
-    parse::{Parse, ParseStream},
     parse_macro_input, parse_quote, Data, DeriveInput, Error, GenericParam, Generics, ItemEnum,
-    Meta, Token,
+    Meta,
 };
-
-struct PacketParams(syn::LitInt, syn::Ident);
-
-impl Parse for PacketParams {
-    fn parse(input: ParseStream) -> syn::Result<Self> {
-        let type1 = input.parse()?;
-        input.parse::<Token![,]>()?;
-        let type2 = input.parse()?;
-        Ok(PacketParams(type1, type2))
-    }
-}
 
 #[proc_macro_derive(Packet, attributes(packet))]
 pub fn packet(input: TokenStream) -> TokenStream {
@@ -40,17 +28,18 @@ pub fn packet(input: TokenStream) -> TokenStream {
     let Meta::List(meta) = &packet_attr.meta else {
         let error = Error::new_spanned(
             &packet_attr.meta,
-            "invalid `#[packet]` attribute. Example: `#[packet(0, Handshake)]`",
+            "invalid `#[packet]` attribute. Example: `#[packet(0)]`",
         );
         return TokenStream::from(error.to_compile_error());
     };
 
     let tokens = meta.tokens.clone();
 
-    let Ok(PacketParams(id, kind)) = syn::parse(tokens.into()) else {
+    // get literal
+    let Ok(id) = syn::parse2::<syn::LitInt>(tokens) else {
         let error = Error::new_spanned(
             meta,
-            "invalid `#[packet]` attribute. Example: `#[packet(0, Handshake)]`",
+            "invalid `#[packet]` attribute. Example: `#[packet(0)]`",
         );
         return TokenStream::from(error.to_compile_error());
     };
@@ -58,7 +47,7 @@ pub fn packet(input: TokenStream) -> TokenStream {
     let expanded = quote! {
         impl #impl_generics ::ser::Packet for #ident #ty_generics #where_clause {
             const ID: i32 = #id;
-            const STATE: ser::types::PacketState = ser::types::PacketState::#kind;
+            // const STATE: ser::types::PacketState = ser::types::PacketState::#kind;
             const NAME: &'static str = stringify!(#ident);
         }
     };
@@ -87,15 +76,10 @@ pub fn writable(input: TokenStream) -> TokenStream {
 
     let expanded = quote! {
         impl #generics ::ser::Writable for #name #generics #where_clause {
-            fn write(&self, writer: &mut impl ::std::io::Write) -> ::anyhow::Result<()> {
+            fn write(&self, writer: &mut impl ::std::io::Write) -> anyhow::Result<()> {
                 #(self.#idents.write(writer)?;)*
                 Ok(())
             }
-            //
-            // async fn write_async(self, writer: &mut (impl ::tokio::io::AsyncWrite + ::std::marker::Unpin)) -> ::anyhow::Result<()> {
-            //     #(self.#idents.write_async(writer).await?;)*
-            //     Ok(())
-            // }
         }
     };
 
@@ -183,17 +167,11 @@ pub fn enum_writable(input: TokenStream) -> TokenStream {
 
     let expanded = quote! {
         impl ::ser::Writable for #name {
-            fn write(&self, writer: &mut impl ::std::io::Write) -> ::anyhow::Result<()> {
+            fn write(&self, writer: &mut impl ::std::io::Write) -> anyhow::Result<()> {
                 let v = *self as i32;
                 let v = VarInt(v);
                 v.write(writer)
             }
-
-            // async fn write_async(self, writer: &mut (impl ::tokio::io::AsyncWrite + ::std::marker::Unpin)) -> ::anyhow::Result<()> {
-            //     let v = self as i32;
-            //     let v = VarInt(v);
-            //     v.write_async(writer).await
-            // }
         }
     };
 
@@ -228,7 +206,7 @@ pub fn enum_readable_count(input: TokenStream) -> TokenStream {
             match &v.discriminant {
                 Some((_, expr)) => quote! { #expr },
                 None => {
-                    let idx = idx as u32; // Assuming u32 for simplicity; adjust as needed
+                    let idx = idx as i32;
                     quote! { #idx }
                 }
             }
@@ -236,9 +214,9 @@ pub fn enum_readable_count(input: TokenStream) -> TokenStream {
         .collect();
 
     let expanded = quote! {
-        impl ser::Readable<'_> for #name {
+        impl ::ser::Readable<'_> for #name {
             fn decode(r: &mut &[u8]) -> anyhow::Result<Self> {
-                let VarInt(inner) = VarInt::decode(r)?;
+                let ::ser::types::VarInt(inner) = ::ser::types::VarInt::decode(r)?;
                 match inner {
                     #(#discriminants => Ok(#name::#idents),)*
                     _ => Err(anyhow::anyhow!("invalid discriminant"))

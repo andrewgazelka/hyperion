@@ -1,13 +1,13 @@
 #![allow(unused)]
 
-use std::{io, io::ErrorKind};
+use std::{fmt::Debug, io, io::ErrorKind};
 
 use anyhow::{bail, ensure, Context};
 use bytes::{Buf, BufMut, BytesMut};
-use protocol_765::{clientbound, serverbound, serverbound::NextState, status::Root};
+use protocol_765::{configuration::serverbound, play::clientbound::ChunkDataAndLight};
 use ser::{
     types::{VarInt, VarIntDecodeError, MAX_PACKET_SIZE},
-    ExactPacket, Packet, Readable, Writable, WritePacket,
+    ExactPacket, Packet, Readable, Writable,
 };
 use serde_json::json;
 use tokio::{
@@ -22,12 +22,22 @@ struct PacketDecoder {
     buf: BytesMut,
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Default)]
 pub struct PacketFrame {
     /// The ID of the decoded packet.
     pub id: i32,
     /// The contents of the packet after the leading VarInt ID.
     pub body: BytesMut,
+}
+
+impl Debug for PacketFrame {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("PacketFrame")
+            // write a hex
+            .field("id", &format_args!("{:#x}", self.id))
+            .field("body", &self.body)
+            .finish()
+    }
 }
 
 impl PacketFrame {
@@ -141,9 +151,9 @@ impl PacketEncoder {
         let start_len = self.buf.len();
 
         let mut writer = (&mut self.buf).writer();
-        VarInt(P::ID).write(&mut writer)?;
+        VarInt(P::ID).write(&mut writer);
 
-        pkt.write(&mut writer)?;
+        pkt.write(&mut writer);
 
         let data_len = self.buf.len() - start_len;
 
@@ -160,8 +170,11 @@ impl PacketEncoder {
         self.buf
             .copy_within(start_len..start_len + data_len, start_len + packet_len_size);
 
+        // todo: change to pre-reserve max size of VarInt
         #[allow(clippy::indexing_slicing)]
         let mut front = &mut self.buf[start_len..];
+
+        info!("writing packet len: {packet_len}, start_len: {start_len}");
         VarInt(packet_len as i32).write(&mut front)?;
 
         Ok(())
@@ -239,12 +252,29 @@ impl Io {
     {
         self.enc.append_packet(pkt)?;
         let bytes = self.enc.take();
+
+        let mut bytes_slice = &*bytes;
+        let slice = &mut bytes_slice;
+        #[allow(clippy::cast_sign_loss)]
+        let length = VarInt::decode_partial(slice).unwrap() as usize;
+
+        let slice_len = bytes_slice.len();
+
+        ensure!(
+            length == slice_len,
+            "length mismatch: var int length {}, got pkt length {}",
+            length,
+            slice_len
+        );
+
         self.stream.write_all(&bytes).await?;
         Ok(())
     }
 
     #[instrument(skip(self))]
     async fn process(mut self, id: usize) -> anyhow::Result<()> {
+        use protocol_765::handshake::*;
+
         let serverbound::Handshake {
             protocol_version,
             server_address,
@@ -256,8 +286,8 @@ impl Io {
         ensure!(server_port == 25565, "expected server port 25565");
 
         match next_state {
-            NextState::Status => self.status().await?,
-            NextState::Login => self.login().await?,
+            serverbound::NextState::Status => self.status().await?,
+            serverbound::NextState::Login => self.login().await?,
         }
 
         Ok(())
@@ -274,6 +304,7 @@ impl Io {
     // 8. S→C: Login Success
     // 9. C→S: Login Acknowledged
     async fn login(mut self) -> anyhow::Result<()> {
+        use protocol_765::handshake::*;
         debug!("login");
 
         let serverbound::LoginStart { username, uuid } = self.recv_packet().await?;
@@ -297,19 +328,88 @@ impl Io {
 
         debug!("received login acknowledged");
 
+        self.configuration().await?;
+
+        Ok(())
+    }
+
+    async fn configuration(mut self) -> anyhow::Result<()> {
+        use protocol_765::configuration::*;
+
+        self.send_packet(&clientbound::FinishConfiguration).await?;
+
+        loop {
+            let raw = self.recv_packet_raw().await?;
+
+            info!("read {raw:?}");
+
+            if raw.id == serverbound::Configuration::ID {
+                let pkt: serverbound::Configuration = raw.decode()?;
+                info!("{pkt:#?}");
+            }
+
+            if raw.id == serverbound::PluginMessage::ID {
+                let pkt: serverbound::PluginMessage = raw.decode()?;
+                info!("{pkt:#?}");
+            }
+
+            if raw.id == serverbound::FinishConfiguration::ID {
+                let pkt: serverbound::FinishConfiguration = raw.decode()?;
+                info!("{pkt:#?}");
+                break;
+            }
+        }
+
         self.main_loop().await?;
 
         Ok(())
     }
 
     async fn main_loop(mut self) -> anyhow::Result<()> {
+        use protocol_765::play::*;
+
+        info!("main loop");
+
+        let login = clientbound::Login {
+            entity_id: 0,
+            is_hardcore: false,
+            dimension_names: vec!["minecraft:overworld".try_into()?],
+            max_players: 10_000.into(),
+            view_distance: 10.into(),
+            simulation_distance: 10.into(),
+            reduced_debug_info: false,
+            enable_respawn_screen: false,
+            do_limited_crafting: false,
+            dimension_type: "minecraft:overworld".try_into()?,
+            dimension_name: "minecraft:overworld".try_into()?,
+            hashed_seed: 0,
+            game_mode: 0,
+            previous_game_mode: 0,
+            is_debug: false,
+            is_flat: false,
+            death_location: None,
+            portal_cooldown: 0.into(),
+        };
+
+        self.send_packet(&login).await?;
+
+        let chunk = ChunkDataAndLight::new(0, 0)?;
+        self.send_packet(&chunk).await?;
+
+        info!("wrote login");
+
         loop {
-            let packet = self.recv_packet_raw().await?;
-            debug!("received {packet:?}");
+            let raw = self.recv_packet_raw().await?;
+
+            info!("read {raw:?}");
         }
+
+        Ok(())
     }
 
     async fn status(mut self) -> anyhow::Result<()> {
+        use protocol_765::handshake::*;
+
         debug!("status");
         let serverbound::StatusRequest = self.recv_packet().await?;
 

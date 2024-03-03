@@ -1,12 +1,10 @@
-use std::io::Write;
-
 use ser::{Packet, Readable, Writable};
 use uuid::Uuid;
 
 // Status Response
 // packet id 0x0
 #[derive(Packet, Readable, Writable, Debug, Eq, PartialEq, Clone)]
-#[packet(0x00, Handshake)]
+#[packet(0x00)]
 pub struct StatusResponse<'a> {
     pub json: &'a str,
 }
@@ -14,13 +12,13 @@ pub struct StatusResponse<'a> {
 // Pong
 // packet id 0x01
 #[derive(Packet, Writable, Debug)]
-#[packet(0x01, Handshake)]
+#[packet(0x01)]
 pub struct Pong {
     pub payload: i64,
 }
 
 #[derive(Packet, Readable, Writable, Debug)]
-#[packet(0x02, Handshake)]
+#[packet(0x02)]
 pub struct LoginSuccess<'a> {
     pub uuid: Uuid,
     pub username: &'a str,
@@ -43,7 +41,7 @@ pub struct Property<'a> {
 }
 
 impl<'a> Writable for Property<'a> {
-    fn write(&self, writer: &mut impl Write) -> anyhow::Result<()> {
+    fn write(&self, writer: &mut impl std::io::Write) -> anyhow::Result<()> {
         self.name.write(writer)?;
         self.value.write(writer)?;
         self.is_signed.write(writer)?;

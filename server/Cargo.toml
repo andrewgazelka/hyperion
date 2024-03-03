@@ -14,6 +14,7 @@ tracing-subscriber = "0.3.18"
 tracing = "0.1.40"
 serde_json = "1.0.114"
 bytes = "1.5.0"
+valence_nbt = "0.8.0"
 
 
 [lints.rust]
@@ -51,6 +52,8 @@ pub_use = "allow"
 let_underscore_untyped = "allow"
 infinite_loop = "allow"
 single_char_lifetime_names = "allow"
+min_ident_chars = "allow"
+std_instead_of_core = "allow"
 
 complexity = "deny"
 
@@ -64,6 +67,7 @@ cast_lossless = "allow"
 cast_possible_truncation = "allow" # consider denying
 cast_precision_loss = "allow" # consider denying
 missing_errors_doc = "allow" # consider denying
+wildcard_imports = "allow"
 
 perf = "deny"
 

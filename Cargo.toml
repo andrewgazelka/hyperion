@@ -13,6 +13,8 @@ protocol-765 = { path = "protocol-765" }
 ser = { path = "ser" }
 ser-macro = { path = "ser-macro" }
 
+valence_nbt = { git = "https://github.com/valence-rs" }
+
 # max perf
 [profile.release]
 #lto = true

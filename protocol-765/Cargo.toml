@@ -10,6 +10,10 @@ ser.workspace = true
 uuid = { version = "1.7.0", features = ["v4"] }
 serde = { version = "1.0.197", features = ["derive"] }
 anyhow = "1.0.80"
+valence_nbt = "0.8.0"
+byteorder = "1.5.0"
+bytes = "1.5.0"
+bytemuck = "1.14.3"
 
 
 [lints.rust]
@@ -34,6 +38,7 @@ needless_pass_by_value = "allow" # consider denying
 cast_lossless = "allow"
 cast_possible_truncation = "allow" # consider denying
 cast_precision_loss = "allow" # consider denying
+struct_excessive_bools = "allow"
 
 perf = "deny"
 
