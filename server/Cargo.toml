@@ -14,7 +14,14 @@ tracing = "0.1.40"
 serde_json = "1.0.114"
 bytes = "1.5.0"
 #azalea = { git = "https://github.com/azalea-rs/azalea" }
-valence_protocol.workspace = true
+#valence_protocol.workspace = true
+
+#valence = { git = "https://github.com/valence-rs/valence" }
+valence = { git = "https://github.com/andrewgazelka/valence" }
+#azalea = { git = "https://github.com/azalea-rs/azalea", branch = "1.20.1" }
+azalea-buf = { git = "https://github.com/azalea-rs/azalea", branch = "1.20.1" }
+azalea-world = { git = "https://github.com/azalea-rs/azalea", branch = "1.20.1" }
+
 
 # no secure alloc
 mimalloc = { version = "0.1.39" , default-features = false }

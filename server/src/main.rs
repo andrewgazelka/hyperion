@@ -1,31 +1,32 @@
-#![allow(unused)]
-
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
-use std::{borrow::Cow, collections::BTreeSet, fmt::Debug, io, io::ErrorKind};
+use std::{borrow::Cow, collections::BTreeSet, io, io::ErrorKind};
 
-use anyhow::{bail, ensure, Context};
-use bytes::{Buf, BufMut, BytesMut};
+use anyhow::{ensure, Context};
+use azalea_buf::McBufWritable;
+use bytes::BytesMut;
 use serde_json::json;
 use tokio::{
-    io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader, BufWriter, ReadHalf, WriteHalf},
+    io::{AsyncReadExt, AsyncWriteExt},
     net::{TcpListener, TcpStream},
-    time::sleep,
 };
-use tracing::{debug, error, info, instrument, warn};
+use tracing::{debug, error, info, instrument};
+use valence::{
+    math::DVec3, protocol as valence_protocol,
+    protocol::packets::play::player_position_look_s2c::PlayerPositionLookFlags,
+    registry::RegistryCodec, BlockPos,
+};
 use valence_protocol::{
     decode::PacketFrame,
     game_mode::OptGameMode,
     nbt::Compound,
     packets::{
         handshaking::{handshake_c2s::HandshakeNextState, HandshakeC2s},
-        login::{LoginHelloC2s, LoginHelloS2c, LoginSuccessS2c},
-        play,
-        play::MessageAcknowledgmentC2s,
+        login::{LoginHelloC2s, LoginSuccessS2c},
         status,
     },
-    Bounded, Decode, Encode, GameMode, Ident, PacketDecoder, PacketEncoder, VarInt,
+    Bounded, ChunkPos, Decode, Encode, GameMode, Ident, PacketDecoder, PacketEncoder, VarInt,
 };
 
 const READ_BUF_SIZE: usize = 4096;
@@ -126,11 +127,19 @@ impl Io {
 
     #[instrument(skip(self))]
     async fn process(mut self, id: usize) -> anyhow::Result<()> {
+        self.stream.set_nodelay(true)?;
+
+        info!("connection id {id}");
+
+        let ip = self.stream.peer_addr()?;
+
+        info!("connection from {ip}");
+
         let HandshakeC2s {
             protocol_version,
-            server_address,
             server_port,
             next_state,
+            ..
         } = self.recv_packet().await?;
 
         let version = protocol_version.0;
@@ -138,10 +147,6 @@ impl Io {
         ensure!(
             protocol_version.0 == PROTOCOL_VERSION,
             "expected protocol version {PROTOCOL_VERSION}, got {version}"
-        );
-        ensure!(
-            next_state == HandshakeNextState::Status,
-            "expected next state status"
         );
         ensure!(server_port == 25565, "expected server port 25565");
 
@@ -153,16 +158,6 @@ impl Io {
         Ok(())
     }
 
-    // The login process is as follows:
-    // 1. C→S: Handshake with Next State set to 2 (login)
-    // 2. C→S: Login Start
-    // 3. S→C: Encryption Request
-    // 4. Client auth
-    // 5. C→S: Encryption Response
-    // 6. Server auth, both enable encryption
-    // 7. S→C: Set Compression (optional)
-    // 8. S→C: Login Success
-    // 9. C→S: Login Acknowledged
     async fn login(mut self) -> anyhow::Result<()> {
         debug!("login");
 
@@ -177,11 +172,12 @@ impl Io {
         debug!("username: {username}");
         debug!("profile id: {profile_id:?}");
 
-        let username: Box<str> = Box::from(username.0);
+        // let username: Box<str> = Box::from(username.0);
+        let username = "Emerald_Explorer";
 
         let packet = LoginSuccessS2c {
             uuid: profile_id,
-            username: Bounded::from(&*username),
+            username: Bounded::from(username),
             properties: Cow::Borrowed(&[]),
         };
 
@@ -190,29 +186,31 @@ impl Io {
         // second
         self.send_packet(&packet).await?;
 
-        // recv ack
-        let MessageAcknowledgmentC2s { message_count } = self.recv_packet().await?;
-
-        debug!("received login acknowledged");
-
         self.main_loop().await?;
 
         Ok(())
     }
 
     async fn main_loop(mut self) -> anyhow::Result<()> {
+        use valence_protocol::packets::play;
         info!("main loop");
 
         let overworld: Ident<Cow<'static, str>> = "minecraft:overworld".try_into()?;
         let set: BTreeSet<_> = std::iter::once(overworld).collect();
 
+        // recv ack
+
         let dimension_names = Cow::Owned(set);
 
+        let default_codec = RegistryCodec::default();
+
+        let registry_codec = default_codec.cached_codec();
+
         let pkt = play::GameJoinS2c {
-            entity_id: 0,
+            entity_id: 123,
             is_hardcore: false,
             dimension_names,
-            registry_codec: Cow::Owned(Compound::new()),
+            registry_codec: Cow::Borrowed(registry_codec),
             max_players: 10_000.into(),
             view_distance: 10.into(),
             simulation_distance: 10.into(),
@@ -233,22 +231,78 @@ impl Io {
 
         info!("wrote login");
 
+        let mut chunk = azalea_world::Chunk::default();
+
+        #[allow(clippy::indexing_slicing)]
+        let first_section = &mut chunk.sections[0];
+
+        let states = &mut first_section.states;
+
+        for x in 0..16 {
+            for z in 0..16 {
+                let id: u32 = 2;
+                states.set(x, 0, z, id);
+            }
+        }
+
+        let mut bytes = Vec::new();
+
+        chunk.write_into(&mut bytes)?;
+
+        let chunk = play::ChunkDataS2c {
+            pos: ChunkPos::new(0, 0),
+            heightmaps: Cow::Owned(Compound::new()),
+            blocks_and_biomes: &bytes,
+            block_entities: Cow::Borrowed(&[]),
+            sky_light_mask: Cow::Borrowed(&[]),
+            block_light_mask: Cow::Borrowed(&[]),
+            empty_sky_light_mask: Cow::Borrowed(&[]),
+            empty_block_light_mask: Cow::default(),
+            sky_light_arrays: Cow::default(),
+            block_light_arrays: Cow::Borrowed(&[]),
+        };
+
+        self.send_packet(&chunk).await?;
+        info!("wrote chunk");
+
+        let mut flags = PlayerPositionLookFlags::default();
+
+        flags.set_x(true);
+        flags.set_y(true);
+        flags.set_z(true);
+
+        // Synchronize Player Position
+        // Set Player Position and Rotation
+        let pos = play::PlayerPositionLookS2c {
+            position: DVec3::new(0.0, 2.0, 0.0),
+            yaw: 0.0,
+            pitch: 0.0,
+            flags,
+            teleport_id: 1.into(),
+        };
+        self.send_packet(&pos).await?;
+        info!("wrote pos");
+
+        // Spawn
+        let spawn = play::PlayerSpawnPositionS2c {
+            position: BlockPos::default(),
+            angle: 3.0,
+        };
+        self.send_packet(&spawn).await?;
+        info!("wrote spawn");
+
         loop {
             let raw = self.recv_packet_raw().await?;
 
             info!("read {raw:?}");
         }
-
-        Ok(())
     }
 
     async fn status(mut self) -> anyhow::Result<()> {
-        use valence_protocol::packets::status;
-
         debug!("status");
         let status::QueryRequestC2s = self.recv_packet().await?;
 
-        let mut json = json!({
+        let json = json!({
             "version": {
                 "name": MINECRAFT_VERSION,
                 "protocol": PROTOCOL_VERSION,
