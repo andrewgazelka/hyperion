@@ -8,13 +8,16 @@ readme = "README.md"
 [dependencies]
 tokio = { version = "1.36.0", features = ["full"] }
 anyhow = "1.0.80"
-protocol-765.workspace = true
-ser.workspace = true
+#ser.workspace = true
 tracing-subscriber = "0.3.18"
 tracing = "0.1.40"
 serde_json = "1.0.114"
 bytes = "1.5.0"
-valence_nbt = "0.8.0"
+#azalea = { git = "https://github.com/azalea-rs/azalea" }
+valence_protocol.workspace = true
+
+# no secure alloc
+mimalloc = { version = "0.1.39" , default-features = false }
 
 
 [lints.rust]

@@ -1,14 +1,12 @@
 #![allow(unused)]
 
-use std::{fmt::Debug, io, io::ErrorKind};
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
+use std::{borrow::Cow, collections::BTreeSet, fmt::Debug, io, io::ErrorKind};
 
 use anyhow::{bail, ensure, Context};
 use bytes::{Buf, BufMut, BytesMut};
-use protocol_765::{configuration::serverbound, play::clientbound::ChunkDataAndLight};
-use ser::{
-    types::{VarInt, VarIntDecodeError, MAX_PACKET_SIZE},
-    ExactPacket, Packet, Readable, Writable,
-};
 use serde_json::json;
 use tokio::{
     io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader, BufWriter, ReadHalf, WriteHalf},
@@ -16,176 +14,28 @@ use tokio::{
     time::sleep,
 };
 use tracing::{debug, error, info, instrument, warn};
-
-#[derive(Default)]
-struct PacketDecoder {
-    buf: BytesMut,
-}
-
-#[derive(Clone, Default)]
-pub struct PacketFrame {
-    /// The ID of the decoded packet.
-    pub id: i32,
-    /// The contents of the packet after the leading VarInt ID.
-    pub body: BytesMut,
-}
-
-impl Debug for PacketFrame {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.debug_struct("PacketFrame")
-            // write a hex
-            .field("id", &format_args!("{:#x}", self.id))
-            .field("body", &self.body)
-            .finish()
-    }
-}
-
-impl PacketFrame {
-    pub fn decode<'a, P>(&'a self) -> anyhow::Result<P>
-    where
-        P: Packet + Readable<'a>,
-    {
-        ensure!(
-            P::ID == self.id,
-            "packet ID mismatch while decoding '{}': expected {}, got {}",
-            P::NAME,
-            P::ID,
-            self.id
-        );
-
-        #[allow(clippy::min_ident_chars)]
-        let mut r = &*self.body;
-
-        let pkt = P::decode(&mut r)?;
-
-        ensure!(
-            r.is_empty(),
-            "missed {} bytes while decoding '{}'",
-            r.len(),
-            P::NAME
-        );
-
-        Ok(pkt)
-    }
-}
-
-impl PacketDecoder {
-    #[allow(
-        clippy::cast_possible_truncation,
-        clippy::cast_possible_wrap,
-        clippy::cast_sign_loss,
-        clippy::min_ident_chars
-    )]
-    pub fn try_next_packet(&mut self) -> anyhow::Result<Option<PacketFrame>> {
-        let mut r = &*self.buf;
-
-        let packet_len = match VarInt::decode_partial(&mut r) {
-            Ok(len) => len,
-            Err(VarIntDecodeError::Incomplete) => return Ok(None),
-            Err(VarIntDecodeError::TooLarge) => bail!("malformed packet length VarInt"),
-        };
-
-        ensure!(
-            (0..=MAX_PACKET_SIZE).contains(&packet_len),
-            "packet length of {packet_len} is out of bounds"
-        );
-
-        if r.len() < packet_len as usize {
-            // Not enough data arrived yet.
-            return Ok(None);
-        }
-
-        let packet_len_len = VarInt(packet_len).written_size();
-
-        let mut data;
-
-        self.buf.advance(packet_len_len);
-
-        data = self.buf.split_to(packet_len as usize);
-
-        // Decode the leading packet ID.
-        r = &*data;
-        let packet_id = VarInt::decode(&mut r)
-            .context("failed to decode packet ID")?
-            .0;
-
-        data.advance(data.len() - r.len());
-
-        Ok(Some(PacketFrame {
-            id: packet_id,
-            body: data,
-        }))
-    }
-
-    pub fn queue_bytes(&mut self, mut bytes: BytesMut) {
-        self.buf.unsplit(bytes);
-    }
-
-    pub fn take_capacity(&mut self) -> BytesMut {
-        self.buf.split_off(self.buf.len())
-    }
-
-    pub fn reserve(&mut self, additional: usize) {
-        self.buf.reserve(additional);
-    }
-}
+use valence_protocol::{
+    decode::PacketFrame,
+    game_mode::OptGameMode,
+    nbt::Compound,
+    packets::{
+        handshaking::{handshake_c2s::HandshakeNextState, HandshakeC2s},
+        login::{LoginHelloC2s, LoginHelloS2c, LoginSuccessS2c},
+        play,
+        play::MessageAcknowledgmentC2s,
+        status,
+    },
+    Bounded, Decode, Encode, GameMode, Ident, PacketDecoder, PacketEncoder, VarInt,
+};
 
 const READ_BUF_SIZE: usize = 4096;
 
-#[derive(Default)]
-pub struct PacketEncoder {
-    buf: BytesMut,
-}
+/// The Minecraft protocol version this library currently targets.
+pub const PROTOCOL_VERSION: i32 = 763;
 
-impl PacketEncoder {
-    #[allow(
-        clippy::cast_possible_truncation,
-        clippy::cast_possible_wrap,
-        clippy::cast_sign_loss,
-        clippy::min_ident_chars
-    )]
-    pub fn append_packet<P>(&mut self, pkt: &P) -> anyhow::Result<()>
-    where
-        P: Packet + Writable,
-    {
-        let start_len = self.buf.len();
-
-        let mut writer = (&mut self.buf).writer();
-        VarInt(P::ID).write(&mut writer);
-
-        pkt.write(&mut writer);
-
-        let data_len = self.buf.len() - start_len;
-
-        let packet_len = data_len;
-
-        ensure!(
-            packet_len <= MAX_PACKET_SIZE as usize,
-            "packet exceeds maximum length"
-        );
-
-        let packet_len_size = VarInt(packet_len as i32).written_size();
-
-        self.buf.put_bytes(0, packet_len_size);
-        self.buf
-            .copy_within(start_len..start_len + data_len, start_len + packet_len_size);
-
-        // todo: change to pre-reserve max size of VarInt
-        #[allow(clippy::indexing_slicing)]
-        let mut front = &mut self.buf[start_len..];
-
-        info!("writing packet len: {packet_len}, start_len: {start_len}");
-        VarInt(packet_len as i32).write(&mut front)?;
-
-        Ok(())
-    }
-
-    /// Takes all the packets written so far and encrypts them if encryption is
-    /// enabled.
-    pub fn take(&mut self) -> BytesMut {
-        self.buf.split()
-    }
-}
+/// The stringified name of the Minecraft version this library currently
+/// targets.
+pub const MINECRAFT_VERSION: &str = "1.20.1";
 
 struct Io {
     stream: TcpStream,
@@ -197,7 +47,7 @@ struct Io {
 impl Io {
     pub async fn recv_packet<'a, P>(&'a mut self) -> anyhow::Result<P>
     where
-        P: Packet + Readable<'a>,
+        P: valence_protocol::Packet + Decode<'a>,
     {
         loop {
             if let Some(frame) = self.dec.try_next_packet()? {
@@ -242,13 +92,16 @@ impl Io {
             stream,
             dec: PacketDecoder::default(),
             enc: PacketEncoder::default(),
-            frame: PacketFrame::default(),
+            frame: PacketFrame {
+                id: 0,
+                body: BytesMut::new(),
+            },
         }
     }
 
     pub(crate) async fn send_packet<P>(&mut self, pkt: &P) -> anyhow::Result<()>
     where
-        P: Packet + Writable,
+        P: valence_protocol::Packet + Encode,
     {
         self.enc.append_packet(pkt)?;
         let bytes = self.enc.take();
@@ -273,21 +126,28 @@ impl Io {
 
     #[instrument(skip(self))]
     async fn process(mut self, id: usize) -> anyhow::Result<()> {
-        use protocol_765::handshake::*;
-
-        let serverbound::Handshake {
+        let HandshakeC2s {
             protocol_version,
             server_address,
             server_port,
             next_state,
         } = self.recv_packet().await?;
 
-        ensure!(protocol_version.0 == 765, "expected protocol version 765");
+        let version = protocol_version.0;
+
+        ensure!(
+            protocol_version.0 == PROTOCOL_VERSION,
+            "expected protocol version {PROTOCOL_VERSION}, got {version}"
+        );
+        ensure!(
+            next_state == HandshakeNextState::Status,
+            "expected next state status"
+        );
         ensure!(server_port == 25565, "expected server port 25565");
 
         match next_state {
-            serverbound::NextState::Status => self.status().await?,
-            serverbound::NextState::Login => self.login().await?,
+            HandshakeNextState::Status => self.status().await?,
+            HandshakeNextState::Login => self.login().await?,
         }
 
         Ok(())
@@ -304,61 +164,36 @@ impl Io {
     // 8. S→C: Login Success
     // 9. C→S: Login Acknowledged
     async fn login(mut self) -> anyhow::Result<()> {
-        use protocol_765::handshake::*;
         debug!("login");
 
-        let serverbound::LoginStart { username, uuid } = self.recv_packet().await?;
+        // first
+        let LoginHelloC2s {
+            username,
+            profile_id,
+        } = self.recv_packet().await?;
+
+        let profile_id = profile_id.context("missing profile id")?;
 
         debug!("username: {username}");
-        debug!("uuid: {uuid}");
+        debug!("profile id: {profile_id:?}");
 
-        let username = username.to_owned();
+        let username: Box<str> = Box::from(username.0);
 
-        let packet = clientbound::LoginSuccess {
-            uuid,
-            username: &username,
-            properties: vec![],
+        let packet = LoginSuccessS2c {
+            uuid: profile_id,
+            username: Bounded::from(&*username),
+            properties: Cow::Borrowed(&[]),
         };
 
         debug!("sending {packet:?}");
 
+        // second
         self.send_packet(&packet).await?;
 
-        let serverbound::LoginAcknowledged = self.recv_packet().await?;
+        // recv ack
+        let MessageAcknowledgmentC2s { message_count } = self.recv_packet().await?;
 
         debug!("received login acknowledged");
-
-        self.configuration().await?;
-
-        Ok(())
-    }
-
-    async fn configuration(mut self) -> anyhow::Result<()> {
-        use protocol_765::configuration::*;
-
-        self.send_packet(&clientbound::FinishConfiguration).await?;
-
-        loop {
-            let raw = self.recv_packet_raw().await?;
-
-            info!("read {raw:?}");
-
-            if raw.id == serverbound::Configuration::ID {
-                let pkt: serverbound::Configuration = raw.decode()?;
-                info!("{pkt:#?}");
-            }
-
-            if raw.id == serverbound::PluginMessage::ID {
-                let pkt: serverbound::PluginMessage = raw.decode()?;
-                info!("{pkt:#?}");
-            }
-
-            if raw.id == serverbound::FinishConfiguration::ID {
-                let pkt: serverbound::FinishConfiguration = raw.decode()?;
-                info!("{pkt:#?}");
-                break;
-            }
-        }
 
         self.main_loop().await?;
 
@@ -366,35 +201,35 @@ impl Io {
     }
 
     async fn main_loop(mut self) -> anyhow::Result<()> {
-        use protocol_765::play::*;
-
         info!("main loop");
 
-        let login = clientbound::Login {
+        let overworld: Ident<Cow<'static, str>> = "minecraft:overworld".try_into()?;
+        let set: BTreeSet<_> = std::iter::once(overworld).collect();
+
+        let dimension_names = Cow::Owned(set);
+
+        let pkt = play::GameJoinS2c {
             entity_id: 0,
             is_hardcore: false,
-            dimension_names: vec!["minecraft:overworld".try_into()?],
+            dimension_names,
+            registry_codec: Cow::Owned(Compound::new()),
             max_players: 10_000.into(),
             view_distance: 10.into(),
             simulation_distance: 10.into(),
             reduced_debug_info: false,
             enable_respawn_screen: false,
-            do_limited_crafting: false,
-            dimension_type: "minecraft:overworld".try_into()?,
             dimension_name: "minecraft:overworld".try_into()?,
             hashed_seed: 0,
-            game_mode: 0,
-            previous_game_mode: 0,
-            is_debug: false,
+            game_mode: GameMode::Survival,
             is_flat: false,
-            death_location: None,
+            last_death_location: None,
             portal_cooldown: 0.into(),
+            previous_game_mode: OptGameMode(None),
+            dimension_type_name: "minecraft:overworld".try_into()?,
+            is_debug: false,
         };
 
-        self.send_packet(&login).await?;
-
-        let chunk = ChunkDataAndLight::new(0, 0)?;
-        self.send_packet(&chunk).await?;
+        self.send_packet(&pkt).await?;
 
         info!("wrote login");
 
@@ -408,15 +243,15 @@ impl Io {
     }
 
     async fn status(mut self) -> anyhow::Result<()> {
-        use protocol_765::handshake::*;
+        use valence_protocol::packets::status;
 
         debug!("status");
-        let serverbound::StatusRequest = self.recv_packet().await?;
+        let status::QueryRequestC2s = self.recv_packet().await?;
 
         let mut json = json!({
             "version": {
-                "name": "1.20.4",
-                "protocol": 765,
+                "name": MINECRAFT_VERSION,
+                "protocol": PROTOCOL_VERSION,
             },
             "players": {
                 "online": 0,
@@ -428,17 +263,18 @@ impl Io {
 
         let json = serde_json::to_string_pretty(&json)?;
 
-        let send = clientbound::StatusResponse { json: &json };
+        let send = status::QueryResponseS2c { json: &json };
 
         self.send_packet(&send).await?;
 
         debug!("wrote status response");
 
-        let serverbound::Ping { payload } = self.recv_packet().await?;
+        // ping
+        let status::QueryPingC2s { payload } = self.recv_packet().await?;
 
         debug!("read ping {}", payload);
 
-        let pong = clientbound::Pong { payload };
+        let pong = status::QueryPongS2c { payload };
         self.send_packet(&pong).await?;
 
         Ok(())
