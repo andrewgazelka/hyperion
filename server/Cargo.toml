@@ -16,7 +16,8 @@ bytes = "1.5.0"
 #valence_protocol.workspace = true
 
 #valence = { git = "https://github.com/valence-rs/valence" }
-valence = { git = "https://github.com/andrewgazelka/valence" }
+valence_protocol = { git = "https://github.com/andrewgazelka/valence" }
+valence_registry = { git = "https://github.com/andrewgazelka/valence" }
 #azalea = { git = "https://github.com/azalea-rs/azalea", branch = "1.20.1" }
 azalea-buf = { git = "https://github.com/azalea-rs/azalea", branch = "1.20.1" }
 azalea-world = { git = "https://github.com/azalea-rs/azalea", branch = "1.20.1" }

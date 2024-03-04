@@ -15,30 +15,23 @@ use tokio::{
     net::{TcpListener, TcpStream},
 };
 use tracing::{debug, error, info, instrument};
-use valence::{
-    ident,
-    math::DVec3,
-    nbt::{compound, List},
-    prelude::{BiomeRegistry, Uuid},
-    protocol as valence_protocol,
-    protocol::{
-        packets::play::{player_position_look_s2c::PlayerPositionLookFlags, SynchronizeTagsS2c},
-        RawBytes,
-    },
-    registry::{RegistryCodec, TagsRegistry},
-    BlockPos,
-};
 use valence_protocol::{
     decode::PacketFrame,
     game_mode::OptGameMode,
-    nbt::Compound,
+    ident,
+    math::DVec3,
+    nbt::{compound, Compound, List},
     packets::{
         handshaking::{handshake_c2s::HandshakeNextState, HandshakeC2s},
         login::{LoginHelloC2s, LoginSuccessS2c},
+        play::player_position_look_s2c::PlayerPositionLookFlags,
         status,
     },
-    Bounded, ChunkPos, Decode, Encode, GameMode, Ident, PacketDecoder, PacketEncoder, VarInt,
+    uuid::Uuid,
+    BlockPos, Bounded, ChunkPos, Decode, Encode, GameMode, Ident, PacketDecoder, PacketEncoder,
+    VarInt,
 };
+use valence_registry::{BiomeRegistry, RegistryCodec};
 
 const READ_BUF_SIZE: usize = 4096;
 
