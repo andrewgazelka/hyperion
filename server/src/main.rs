@@ -18,10 +18,12 @@ use tracing::{debug, error, info, instrument};
 use valence::{
     ident,
     math::DVec3,
+    nbt::{compound, List},
     prelude::{BiomeRegistry, Uuid},
     protocol as valence_protocol,
-    protocol::packets::play::{
-        player_position_look_s2c::PlayerPositionLookFlags, GameJoinS2c, SynchronizeTagsS2c,
+    protocol::{
+        packets::play::{player_position_look_s2c::PlayerPositionLookFlags, SynchronizeTagsS2c},
+        RawBytes,
     },
     registry::{RegistryCodec, TagsRegistry},
     BlockPos,
@@ -68,7 +70,7 @@ impl Io {
             if let Some(frame) = self.dec.try_next_packet()? {
                 self.frame = frame;
                 let decode: P = self.frame.decode()?;
-                info!("read packet {decode:#?}");
+                // info!("read packet {decode:#?}");
                 return Ok(decode);
             }
 
@@ -91,7 +93,7 @@ impl Io {
     pub async fn recv_packet_raw(&mut self) -> anyhow::Result<PacketFrame> {
         loop {
             if let Some(frame) = self.dec.try_next_packet()? {
-                info!("read packet id {}", frame.id);
+                info!("read packet id {:#x}", frame.id);
                 return Ok(frame);
             }
 
@@ -144,7 +146,7 @@ impl Io {
         self.stream.write_all(&bytes).await?;
         self.stream.flush().await?; // todo: remove
 
-        info!("wrote {pkt:#?}");
+        // info!("wrote {pkt:#?}");
 
         Ok(())
     }
@@ -154,7 +156,7 @@ impl Io {
 
         let pkt = HandshakeC2s {
             protocol_version: PROTOCOL_VERSION.into(),
-            server_address: "localhost:25565".try_into()?,
+            server_address: "localhost:25565".into(),
             server_port: 25565,
             next_state: HandshakeNextState::Login,
         };
@@ -183,21 +185,21 @@ impl Io {
 
         let pkt: login::LoginSuccessS2c = self.recv_packet().await?;
 
-        self.client_read_loop().await?;
+        // self.client_read_loop().await?;
 
         Ok(())
     }
 
-    async fn client_read_loop(mut self) -> anyhow::Result<()> {
-        let game_join: GameJoinS2c = self.recv_packet().await?;
-
-        loop {
-            let frame = self.recv_packet_raw().await?;
-            let id = frame.id;
-            // hex
-            info!("read packet id {id:#x}");
-        }
-    }
+    // async fn client_read_loop(mut self) -> anyhow::Result<()> {
+    //     let game_join: playGameJoinS2c = self.recv_packet().await?;
+    //
+    //     loop {
+    //         let frame = self.recv_packet_raw().await?;
+    //         let id = frame.id;
+    //         // hex
+    //         info!("read packet id {id:#x}");
+    //     }
+    // }
 
     async fn server_process(mut self, id: usize) -> anyhow::Result<()> {
         // self.stream.set_nodelay(true)?;
@@ -264,9 +266,9 @@ impl Io {
 
         // recv ack
 
-        let codec = RegistryCodec::default();
+        let mut codec = RegistryCodec::default();
 
-        let registry_codec = codec.cached_codec();
+        let registry_codec = registry_codec_raw(&codec);
 
         let dimension_names: BTreeSet<Ident<Cow<str>>> = codec
             .registry(BiomeRegistry::KEY)
@@ -281,7 +283,7 @@ impl Io {
             entity_id: 0,
             is_hardcore: false,
             dimension_names: Cow::Owned(dimension_names),
-            registry_codec: Cow::Borrowed(registry_codec),
+            registry_codec: Cow::Borrowed(&registry_codec),
             max_players: 10_000.into(),
             view_distance: 10.into(),
             simulation_distance: 10.into(),
@@ -310,56 +312,7 @@ impl Io {
         //
         // self.send_packet(&pkt).await?;
         //
-        // let mut chunk = azalea_world::Chunk::default();
-        //
-        // #[allow(clippy::indexing_slicing)]
-        // let first_section = &mut chunk.sections[0];
-        //
-        // let states = &mut first_section.states;
-        //
-        // for x in 0..16 {
-        //     for z in 0..16 {
-        //         let id: u32 = 2;
-        //         states.set(x, 0, z, id);
-        //     }
-        // }
-        //
-        // let mut bytes = Vec::new();
-        //
-        // chunk.write_into(&mut bytes)?;
-        //
-        // let chunk = play::ChunkDataS2c {
-        //     pos: ChunkPos::new(0, 0),
-        //     heightmaps: Cow::Owned(Compound::new()),
-        //     blocks_and_biomes: &bytes,
-        //     block_entities: Cow::Borrowed(&[]),
-        //     sky_light_mask: Cow::Borrowed(&[]),
-        //     block_light_mask: Cow::Borrowed(&[]),
-        //     empty_sky_light_mask: Cow::Borrowed(&[]),
-        //     empty_block_light_mask: Cow::default(),
-        //     sky_light_arrays: Cow::default(),
-        //     block_light_arrays: Cow::Borrowed(&[]),
-        // };
-        //
-        // let flags = PlayerPositionLookFlags::default();
-        //
-        // self.send_packet(&chunk).await?;
-        //
-        // // flags.set_x(true);
-        // // flags.set_y(true);
-        // // flags.set_z(true);
-        //
-        // // Synchronize Player Position
-        // // Set Player Position and Rotation
-        // let pos = play::PlayerPositionLookS2c {
-        //     position: DVec3::new(0.0, 2.0, 0.0),
-        //     yaw: 0.0,
-        //     pitch: 0.0,
-        //     flags,
-        //     teleport_id: 1.into(),
-        // };
-        // self.send_packet(&pos).await?;
-        //
+
         // // Spawn
         // let spawn = play::PlayerSpawnPositionS2c {
         //     position: BlockPos::default(),
@@ -367,9 +320,97 @@ impl Io {
         // };
         // self.send_packet(&spawn).await?;
 
+        // todo: dont depend on this order
         info!("start read loop");
         let x: play::ClientSettingsC2s = self.recv_packet().await?;
-        info!("read {x:?}");
+        info!("read {x:#?}");
+
+        // Set Held Item
+        self.send_packet(&play::UpdateSelectedSlotS2c { slot: 0 });
+
+        let mut chunk = azalea_world::Chunk::default();
+
+        #[allow(clippy::indexing_slicing)]
+        let first_section = &mut chunk.sections[0];
+
+        let states = &mut first_section.states;
+
+        for x in 0..16 {
+            for z in 0..16 {
+                let id: u32 = 2;
+                states.set(x, 0, z, id);
+            }
+        }
+
+        let mut bytes = Vec::new();
+
+        chunk.write_into(&mut bytes)?;
+
+        let chunk = play::ChunkDataS2c {
+            pos: ChunkPos::new(0, 0),
+            heightmaps: Cow::Owned(Compound::new()),
+            blocks_and_biomes: &bytes,
+            block_entities: Cow::Borrowed(&[]),
+            sky_light_mask: Cow::Borrowed(&[]),
+            block_light_mask: Cow::Borrowed(&[]),
+            empty_sky_light_mask: Cow::Borrowed(&[]),
+            empty_block_light_mask: Cow::default(),
+            sky_light_arrays: Cow::default(),
+            block_light_arrays: Cow::Borrowed(&[]),
+        };
+        self.send_packet(&chunk).await?;
+
+        let mut flags = PlayerPositionLookFlags::default();
+
+        // flags.set_x(true);
+        // flags.set_y(true);
+        // flags.set_z(true);
+
+        // Synchronize Player Position
+        // Set Player Position and Rotation
+        let pos = play::PlayerPositionLookS2c {
+            position: DVec3::new(0.0, 2.0, 0.0),
+            yaw: 0.0,
+            pitch: 0.0,
+            flags,
+            teleport_id: 1.into(),
+        };
+        self.send_packet(&pos).await?;
+
+        // let mut bytes = Vec::new();
+        // // write varint with len 0
+        // VarInt(0).encode(&mut bytes)?;
+        //
+        // // Update Recipes
+        // self.send_packet(&play::SynchronizeRecipesS2c {
+        //     recipes: RawBytes::from(bytes.as_slice()),
+        // });
+
+        // Update Tags
+
+        // Entity Event
+
+        // Commands
+
+        //
+
+        // Set Default Spawn Position 0x50
+        self.send_packet(&play::PlayerSpawnPositionS2c {
+            position: BlockPos::new(0, 10, 0),
+            angle: 0.0,
+        });
+
+        // read 0xd Plugin Message
+        // read 0x15 Set Player Position and Rotation
+        // read 0x14 Set Player Position
+
+        // read packet
+        loop {
+            let frame = self.recv_packet_raw().await?;
+            let id = frame.id;
+            // hex
+            // info!("read packet id {id:#x}");
+        }
 
         Ok(())
     }
@@ -448,5 +489,33 @@ async fn client() -> anyhow::Result<()> {
 async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt::Subscriber::builder().init();
 
-    client().await
+    // client().await
+    server().await
+}
+
+fn registry_codec_raw(codec: &RegistryCodec) -> Compound {
+    // codec.cached_codec.clear();
+
+    let mut compound = Compound::default();
+
+    for (reg_name, reg) in &codec.registries {
+        let mut value = vec![];
+
+        for (id, v) in reg.iter().enumerate() {
+            value.push(compound! {
+                "id" => id as i32,
+                "name" => v.name.as_str(),
+                "element" => v.element.clone(),
+            });
+        }
+
+        let registry = compound! {
+            "type" => reg_name.as_str(),
+            "value" => List::Compound(value),
+        };
+
+        compound.insert(reg_name.as_str(), registry);
+    }
+
+    compound
 }
