@@ -8,12 +8,23 @@ readme = "README.md"
 [dependencies]
 tokio = { version = "1.36.0", features = ["full"] }
 anyhow = "1.0.80"
-protocol-765.workspace = true
-ser.workspace = true
-tracing-subscriber = "0.3.18"
+tracing-subscriber = { version = "0.3.18", features = ["chrono"] }
 tracing = "0.1.40"
 serde_json = "1.0.114"
 bytes = "1.5.0"
+#azalea = { git = "https://github.com/azalea-rs/azalea" }
+#valence_protocol.workspace = true
+
+#valence = { git = "https://github.com/valence-rs/valence" }
+valence = { git = "https://github.com/andrewgazelka/valence" }
+#azalea = { git = "https://github.com/azalea-rs/azalea", branch = "1.20.1" }
+azalea-buf = { git = "https://github.com/azalea-rs/azalea", branch = "1.20.1" }
+azalea-world = { git = "https://github.com/azalea-rs/azalea", branch = "1.20.1" }
+
+
+# no secure alloc
+mimalloc = { version = "0.1.39" , default-features = false }
+sha2 = "0.10.8"
 
 
 [lints.rust]
@@ -51,6 +62,8 @@ pub_use = "allow"
 let_underscore_untyped = "allow"
 infinite_loop = "allow"
 single_char_lifetime_names = "allow"
+min_ident_chars = "allow"
+std_instead_of_core = "allow"
 
 complexity = "deny"
 
@@ -64,6 +77,7 @@ cast_lossless = "allow"
 cast_possible_truncation = "allow" # consider denying
 cast_precision_loss = "allow" # consider denying
 missing_errors_doc = "allow" # consider denying
+wildcard_imports = "allow"
 
 perf = "deny"
 

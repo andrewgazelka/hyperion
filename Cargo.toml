@@ -2,21 +2,30 @@
 resolver = "2"
 
 members = [
-    "protocol-765",
-    "ser",
-    "ser-macro",
+#    "ser",
+#    "ser-macro",
     "server",
 ]
 
 [workspace.dependencies]
-protocol-765 = { path = "protocol-765" }
-ser = { path = "ser" }
-ser-macro = { path = "ser-macro" }
+#ser = { path = "ser" }
+#ser-macro = { path = "ser-macro" }
+
+valence_nbt = { git = "https://github.com/valence-rs/valence"}
+valence_protocol = { git = "https://github.com/valence-rs/valence" }
 
 # max perf
 [profile.release]
 #lto = true
 #codegen-units = 1
+
+
+[profile.dev]
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 3
+
 
 
 
