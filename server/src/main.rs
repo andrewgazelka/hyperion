@@ -21,7 +21,7 @@ use valence::{
     prelude::{BiomeRegistry, Uuid},
     protocol as valence_protocol,
     protocol::packets::play::{
-        player_position_look_s2c::PlayerPositionLookFlags, SynchronizeTagsS2c,
+        player_position_look_s2c::PlayerPositionLookFlags, GameJoinS2c, SynchronizeTagsS2c,
     },
     registry::{RegistryCodec, TagsRegistry},
     BlockPos,
@@ -149,8 +149,57 @@ impl Io {
         Ok(())
     }
 
-    #[instrument(skip(self))]
-    async fn process(mut self, id: usize) -> anyhow::Result<()> {
+    async fn client_process(mut self) -> anyhow::Result<()> {
+        use valence_protocol::packets::handshaking;
+
+        let pkt = HandshakeC2s {
+            protocol_version: PROTOCOL_VERSION.into(),
+            server_address: "localhost:25565".try_into()?,
+            server_port: 25565,
+            next_state: HandshakeNextState::Login,
+        };
+
+        self.send_packet(&pkt).await?;
+
+        self.client_login().await?;
+
+        Ok(())
+    }
+
+    async fn client_login(mut self) -> anyhow::Result<()> {
+        use valence_protocol::packets::login;
+
+        let pkt = login::LoginHelloC2s {
+            username: "Emerald_Explorer".into(),
+            profile_id: Some(Uuid::from_u128(0)),
+        };
+
+        self.send_packet(&pkt).await?;
+
+        // let login::LoginCompressionS2c { threshold } = self.recv_packet().await?;
+        //
+        // let threshold = threshold.0;
+        // info!("compression threshold {threshold}");
+
+        let pkt: login::LoginSuccessS2c = self.recv_packet().await?;
+
+        self.client_read_loop().await?;
+
+        Ok(())
+    }
+
+    async fn client_read_loop(mut self) -> anyhow::Result<()> {
+        let game_join: GameJoinS2c = self.recv_packet().await?;
+
+        loop {
+            let frame = self.recv_packet_raw().await?;
+            let id = frame.id;
+            // hex
+            info!("read packet id {id:#x}");
+        }
+    }
+
+    async fn server_process(mut self, id: usize) -> anyhow::Result<()> {
         // self.stream.set_nodelay(true)?;
 
         info!("connection id {id}");
@@ -175,14 +224,14 @@ impl Io {
         ensure!(server_port == 25565, "expected server port 25565");
 
         match next_state {
-            HandshakeNextState::Status => self.status().await?,
-            HandshakeNextState::Login => self.login().await?,
+            HandshakeNextState::Status => self.server_status().await?,
+            HandshakeNextState::Login => self.server_login().await?,
         }
 
         Ok(())
     }
 
-    async fn login(mut self) -> anyhow::Result<()> {
+    async fn server_login(mut self) -> anyhow::Result<()> {
         debug!("[[start login phase]]");
 
         // first
@@ -244,7 +293,7 @@ impl Io {
             is_flat: false,
             last_death_location: None,
             portal_cooldown: 60.into(),
-            previous_game_mode: OptGameMode(None),
+            previous_game_mode: OptGameMode(Some(GameMode::Creative)),
             dimension_type_name: "minecraft:overworld".try_into()?,
             is_debug: false,
         };
@@ -318,15 +367,14 @@ impl Io {
         // };
         // self.send_packet(&spawn).await?;
 
-        loop {
-            info!("start read loop");
-            let raw = self.recv_packet_raw().await?;
+        info!("start read loop");
+        let x: play::ClientSettingsC2s = self.recv_packet().await?;
+        info!("read {x:?}");
 
-            info!("read {raw:?}");
-        }
+        Ok(())
     }
 
-    async fn status(mut self) -> anyhow::Result<()> {
+    async fn server_status(mut self) -> anyhow::Result<()> {
         debug!("status");
         let status::QueryRequestC2s = self.recv_packet().await?;
 
@@ -369,10 +417,7 @@ async fn print_errors(future: impl core::future::Future<Output = anyhow::Result<
     }
 }
 
-#[tokio::main]
-async fn main() -> anyhow::Result<()> {
-    tracing_subscriber::fmt::init();
-
+async fn server() -> anyhow::Result<()> {
     // start socket 25565
     let listener = TcpListener::bind("0.0.0.0:25565").await?;
 
@@ -383,10 +428,25 @@ async fn main() -> anyhow::Result<()> {
         let (stream, _) = listener.accept().await?;
 
         let process = Io::new(stream);
-        let action = process.process(id);
+        let action = process.server_process(id);
         let action = print_errors(action);
 
         tokio::spawn(action);
         id += 1;
     }
+    Ok(())
+}
+
+async fn client() -> anyhow::Result<()> {
+    let stream = TcpStream::connect("localhost:25565").await?;
+    let process = Io::new(stream);
+    process.client_process().await?;
+    Ok(())
+}
+
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    tracing_subscriber::fmt::Subscriber::builder().init();
+
+    client().await
 }
