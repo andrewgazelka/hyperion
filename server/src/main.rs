@@ -268,7 +268,7 @@ impl Io {
 
         let mut codec = RegistryCodec::default();
 
-        let registry_codec = registry_codec_raw(&codec);
+        let registry_codec = registry_codec_raw(&codec)?;
 
         let dimension_names: BTreeSet<Ident<Cow<str>>> = codec
             .registry(BiomeRegistry::KEY)
@@ -493,7 +493,7 @@ async fn main() -> anyhow::Result<()> {
     server().await
 }
 
-fn registry_codec_raw(codec: &RegistryCodec) -> Compound {
+fn registry_codec_raw(codec: &RegistryCodec) -> anyhow::Result<Compound> {
     // codec.cached_codec.clear();
 
     let mut compound = Compound::default();
@@ -502,8 +502,9 @@ fn registry_codec_raw(codec: &RegistryCodec) -> Compound {
         let mut value = vec![];
 
         for (id, v) in reg.iter().enumerate() {
+            let id = i32::try_from(id).context("id too large")?;
             value.push(compound! {
-                "id" => id as i32,
+                "id" => id,
                 "name" => v.name.as_str(),
                 "element" => v.element.clone(),
             });
@@ -517,5 +518,5 @@ fn registry_codec_raw(codec: &RegistryCodec) -> Compound {
         compound.insert(reg_name.as_str(), registry);
     }
 
-    compound
+    Ok(compound)
 }
