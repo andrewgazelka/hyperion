@@ -1,3 +1,5 @@
+#![allow(unused)]
+
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
@@ -7,15 +9,22 @@ use anyhow::{ensure, Context};
 use azalea_buf::McBufWritable;
 use bytes::BytesMut;
 use serde_json::json;
+use sha2::Digest;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::{TcpListener, TcpStream},
 };
 use tracing::{debug, error, info, instrument};
 use valence::{
-    math::DVec3, protocol as valence_protocol,
-    protocol::packets::play::player_position_look_s2c::PlayerPositionLookFlags,
-    registry::RegistryCodec, BlockPos,
+    ident,
+    math::DVec3,
+    prelude::{BiomeRegistry, Uuid},
+    protocol as valence_protocol,
+    protocol::packets::play::{
+        player_position_look_s2c::PlayerPositionLookFlags, SynchronizeTagsS2c,
+    },
+    registry::{RegistryCodec, TagsRegistry},
+    BlockPos,
 };
 use valence_protocol::{
     decode::PacketFrame,
@@ -38,6 +47,11 @@ pub const PROTOCOL_VERSION: i32 = 763;
 /// targets.
 pub const MINECRAFT_VERSION: &str = "1.20.1";
 
+fn offline_uuid(username: &str) -> anyhow::Result<Uuid> {
+    #[allow(clippy::indexing_slicing)]
+    Uuid::from_slice(&sha2::Sha256::digest(username)[..16]).map_err(Into::into)
+}
+
 struct Io {
     stream: TcpStream,
     dec: PacketDecoder,
@@ -53,15 +67,20 @@ impl Io {
         loop {
             if let Some(frame) = self.dec.try_next_packet()? {
                 self.frame = frame;
-                return self.frame.decode();
+                let decode: P = self.frame.decode()?;
+                info!("read packet {decode:#?}");
+                return Ok(decode);
             }
 
             self.dec.reserve(READ_BUF_SIZE);
             let mut buf = self.dec.take_capacity();
 
-            if self.stream.read_buf(&mut buf).await? == 0 {
+            let bytes_read = self.stream.read_buf(&mut buf).await?;
+            if bytes_read == 0 {
                 return Err(io::Error::from(ErrorKind::UnexpectedEof).into());
             }
+
+            debug!("read {bytes_read} bytes");
 
             // This should always be an O(1) unsplit because we reserved space earlier and
             // the call to `read_buf` shouldn't have grown the allocation.
@@ -72,6 +91,7 @@ impl Io {
     pub async fn recv_packet_raw(&mut self) -> anyhow::Result<PacketFrame> {
         loop {
             if let Some(frame) = self.dec.try_next_packet()? {
+                info!("read packet id {}", frame.id);
                 return Ok(frame);
             }
 
@@ -122,12 +142,16 @@ impl Io {
         );
 
         self.stream.write_all(&bytes).await?;
+        self.stream.flush().await?; // todo: remove
+
+        info!("wrote {pkt:#?}");
+
         Ok(())
     }
 
     #[instrument(skip(self))]
     async fn process(mut self, id: usize) -> anyhow::Result<()> {
-        self.stream.set_nodelay(true)?;
+        // self.stream.set_nodelay(true)?;
 
         info!("connection id {id}");
 
@@ -159,7 +183,7 @@ impl Io {
     }
 
     async fn login(mut self) -> anyhow::Result<()> {
-        debug!("login");
+        debug!("[[start login phase]]");
 
         // first
         let LoginHelloC2s {
@@ -167,21 +191,15 @@ impl Io {
             profile_id,
         } = self.recv_packet().await?;
 
-        let profile_id = profile_id.context("missing profile id")?;
+        profile_id.context("missing profile id")?;
 
-        debug!("username: {username}");
-        debug!("profile id: {profile_id:?}");
-
-        // let username: Box<str> = Box::from(username.0);
-        let username = "Emerald_Explorer";
+        let username: Box<str> = Box::from(username.0);
 
         let packet = LoginSuccessS2c {
-            uuid: profile_id,
-            username: Bounded::from(username),
-            properties: Cow::Borrowed(&[]),
+            uuid: offline_uuid(&username)?,
+            username: Bounded::from(&*username),
+            properties: Cow::default(),
         };
-
-        debug!("sending {packet:?}");
 
         // second
         self.send_packet(&packet).await?;
@@ -193,105 +211,115 @@ impl Io {
 
     async fn main_loop(mut self) -> anyhow::Result<()> {
         use valence_protocol::packets::play;
-        info!("main loop");
-
-        let overworld: Ident<Cow<'static, str>> = "minecraft:overworld".try_into()?;
-        let set: BTreeSet<_> = std::iter::once(overworld).collect();
+        info!("[[ start main phase ]]");
 
         // recv ack
 
-        let dimension_names = Cow::Owned(set);
+        let codec = RegistryCodec::default();
 
-        let default_codec = RegistryCodec::default();
+        let registry_codec = codec.cached_codec();
 
-        let registry_codec = default_codec.cached_codec();
+        let dimension_names: BTreeSet<Ident<Cow<str>>> = codec
+            .registry(BiomeRegistry::KEY)
+            .iter()
+            .map(|value| value.name.as_str_ident().into())
+            .collect();
+
+        let dimension_name = ident!("overworld");
+        // let dimension_name: Ident<Cow<str>> = chunk_layer.dimension_type_name().into();
 
         let pkt = play::GameJoinS2c {
-            entity_id: 123,
+            entity_id: 0,
             is_hardcore: false,
-            dimension_names,
+            dimension_names: Cow::Owned(dimension_names),
             registry_codec: Cow::Borrowed(registry_codec),
             max_players: 10_000.into(),
             view_distance: 10.into(),
             simulation_distance: 10.into(),
             reduced_debug_info: false,
             enable_respawn_screen: false,
-            dimension_name: "minecraft:overworld".try_into()?,
+            dimension_name: dimension_name.into(),
             hashed_seed: 0,
             game_mode: GameMode::Survival,
             is_flat: false,
             last_death_location: None,
-            portal_cooldown: 0.into(),
+            portal_cooldown: 60.into(),
             previous_game_mode: OptGameMode(None),
             dimension_type_name: "minecraft:overworld".try_into()?,
             is_debug: false,
         };
 
+        // self.enc.prepend_packet(&pkt)?;
         self.send_packet(&pkt).await?;
 
-        info!("wrote login");
-
-        let mut chunk = azalea_world::Chunk::default();
-
-        #[allow(clippy::indexing_slicing)]
-        let first_section = &mut chunk.sections[0];
-
-        let states = &mut first_section.states;
-
-        for x in 0..16 {
-            for z in 0..16 {
-                let id: u32 = 2;
-                states.set(x, 0, z, id);
-            }
-        }
-
-        let mut bytes = Vec::new();
-
-        chunk.write_into(&mut bytes)?;
-
-        let chunk = play::ChunkDataS2c {
-            pos: ChunkPos::new(0, 0),
-            heightmaps: Cow::Owned(Compound::new()),
-            blocks_and_biomes: &bytes,
-            block_entities: Cow::Borrowed(&[]),
-            sky_light_mask: Cow::Borrowed(&[]),
-            block_light_mask: Cow::Borrowed(&[]),
-            empty_sky_light_mask: Cow::Borrowed(&[]),
-            empty_block_light_mask: Cow::default(),
-            sky_light_arrays: Cow::default(),
-            block_light_arrays: Cow::Borrowed(&[]),
-        };
-
-        self.send_packet(&chunk).await?;
-        info!("wrote chunk");
-
-        let mut flags = PlayerPositionLookFlags::default();
-
-        flags.set_x(true);
-        flags.set_y(true);
-        flags.set_z(true);
-
-        // Synchronize Player Position
-        // Set Player Position and Rotation
-        let pos = play::PlayerPositionLookS2c {
-            position: DVec3::new(0.0, 2.0, 0.0),
-            yaw: 0.0,
-            pitch: 0.0,
-            flags,
-            teleport_id: 1.into(),
-        };
-        self.send_packet(&pos).await?;
-        info!("wrote pos");
-
-        // Spawn
-        let spawn = play::PlayerSpawnPositionS2c {
-            position: BlockPos::default(),
-            angle: 3.0,
-        };
-        self.send_packet(&spawn).await?;
-        info!("wrote spawn");
+        // // todo:
+        // let registry = TagsRegistry::default();
+        //
+        // let pkt = SynchronizeTagsS2c {
+        //     groups: Cow::Borrowed(&registry.registries),
+        // };
+        //
+        // self.send_packet(&pkt).await?;
+        //
+        // let mut chunk = azalea_world::Chunk::default();
+        //
+        // #[allow(clippy::indexing_slicing)]
+        // let first_section = &mut chunk.sections[0];
+        //
+        // let states = &mut first_section.states;
+        //
+        // for x in 0..16 {
+        //     for z in 0..16 {
+        //         let id: u32 = 2;
+        //         states.set(x, 0, z, id);
+        //     }
+        // }
+        //
+        // let mut bytes = Vec::new();
+        //
+        // chunk.write_into(&mut bytes)?;
+        //
+        // let chunk = play::ChunkDataS2c {
+        //     pos: ChunkPos::new(0, 0),
+        //     heightmaps: Cow::Owned(Compound::new()),
+        //     blocks_and_biomes: &bytes,
+        //     block_entities: Cow::Borrowed(&[]),
+        //     sky_light_mask: Cow::Borrowed(&[]),
+        //     block_light_mask: Cow::Borrowed(&[]),
+        //     empty_sky_light_mask: Cow::Borrowed(&[]),
+        //     empty_block_light_mask: Cow::default(),
+        //     sky_light_arrays: Cow::default(),
+        //     block_light_arrays: Cow::Borrowed(&[]),
+        // };
+        //
+        // let flags = PlayerPositionLookFlags::default();
+        //
+        // self.send_packet(&chunk).await?;
+        //
+        // // flags.set_x(true);
+        // // flags.set_y(true);
+        // // flags.set_z(true);
+        //
+        // // Synchronize Player Position
+        // // Set Player Position and Rotation
+        // let pos = play::PlayerPositionLookS2c {
+        //     position: DVec3::new(0.0, 2.0, 0.0),
+        //     yaw: 0.0,
+        //     pitch: 0.0,
+        //     flags,
+        //     teleport_id: 1.into(),
+        // };
+        // self.send_packet(&pos).await?;
+        //
+        // // Spawn
+        // let spawn = play::PlayerSpawnPositionS2c {
+        //     position: BlockPos::default(),
+        //     angle: 3.0,
+        // };
+        // self.send_packet(&spawn).await?;
 
         loop {
+            info!("start read loop");
             let raw = self.recv_packet_raw().await?;
 
             info!("read {raw:?}");
@@ -344,6 +372,7 @@ async fn print_errors(future: impl core::future::Future<Output = anyhow::Result<
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt::init();
+
     // start socket 25565
     let listener = TcpListener::bind("0.0.0.0:25565").await?;
 

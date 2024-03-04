@@ -25,6 +25,7 @@ azalea-world = { git = "https://github.com/azalea-rs/azalea", branch = "1.20.1" 
 
 # no secure alloc
 mimalloc = { version = "0.1.39" , default-features = false }
+sha2 = "0.10.8"
 
 
 [lints.rust]
