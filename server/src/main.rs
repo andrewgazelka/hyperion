@@ -1,4 +1,4 @@
-#![allow(unused)]
+// #![allow(unused)]
 
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
@@ -14,7 +14,7 @@ use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::{TcpListener, TcpStream},
 };
-use tracing::{debug, error, info, instrument};
+use tracing::{debug, error, info};
 use valence_protocol::{
     decode::PacketFrame,
     game_mode::OptGameMode,
@@ -24,14 +24,18 @@ use valence_protocol::{
     packets::{
         handshaking::{handshake_c2s::HandshakeNextState, HandshakeC2s},
         login::{LoginHelloC2s, LoginSuccessS2c},
-        play::player_position_look_s2c::PlayerPositionLookFlags,
+        play::{
+            player_list_s2c::{PlayerListActions, PlayerListEntry},
+            player_position_look_s2c::PlayerPositionLookFlags,
+            FullC2s, SynchronizeTagsS2c,
+        },
         status,
     },
     uuid::Uuid,
-    BlockPos, Bounded, ChunkPos, Decode, Encode, GameMode, Ident, PacketDecoder, PacketEncoder,
-    VarInt,
+    BlockPos, Bounded, ChunkPos, Decode, Encode, GameMode, Ident, Packet, PacketDecoder,
+    PacketEncoder, RawBytes, VarInt, VarLong,
 };
-use valence_registry::{BiomeRegistry, RegistryCodec};
+use valence_registry::{BiomeRegistry, RegistryCodec, TagsRegistry};
 
 const READ_BUF_SIZE: usize = 4096;
 
@@ -144,44 +148,44 @@ impl Io {
         Ok(())
     }
 
-    async fn client_process(mut self) -> anyhow::Result<()> {
-        use valence_protocol::packets::handshaking;
+    // async fn client_process(mut self) -> anyhow::Result<()> {
+    //     use valence_protocol::packets::handshaking;
+    //
+    //     let pkt = HandshakeC2s {
+    //         protocol_version: PROTOCOL_VERSION.into(),
+    //         server_address: "localhost:25565".into(),
+    //         server_port: 25565,
+    //         next_state: HandshakeNextState::Login,
+    //     };
+    //
+    //     self.send_packet(&pkt).await?;
+    //
+    //     self.client_login().await?;
+    //
+    //     Ok(())
+    // }
 
-        let pkt = HandshakeC2s {
-            protocol_version: PROTOCOL_VERSION.into(),
-            server_address: "localhost:25565".into(),
-            server_port: 25565,
-            next_state: HandshakeNextState::Login,
-        };
-
-        self.send_packet(&pkt).await?;
-
-        self.client_login().await?;
-
-        Ok(())
-    }
-
-    async fn client_login(mut self) -> anyhow::Result<()> {
-        use valence_protocol::packets::login;
-
-        let pkt = login::LoginHelloC2s {
-            username: "Emerald_Explorer".into(),
-            profile_id: Some(Uuid::from_u128(0)),
-        };
-
-        self.send_packet(&pkt).await?;
-
-        // let login::LoginCompressionS2c { threshold } = self.recv_packet().await?;
-        //
-        // let threshold = threshold.0;
-        // info!("compression threshold {threshold}");
-
-        let pkt: login::LoginSuccessS2c = self.recv_packet().await?;
-
-        // self.client_read_loop().await?;
-
-        Ok(())
-    }
+    // async fn client_login(mut self) -> anyhow::Result<()> {
+    //     use valence_protocol::packets::login;
+    //
+    //     let pkt = login::LoginHelloC2s {
+    //         username: "Emerald_Explorer".into(),
+    //         profile_id: Some(Uuid::from_u128(0)),
+    //     };
+    //
+    //     self.send_packet(&pkt).await?;
+    //
+    //     // let login::LoginCompressionS2c { threshold } = self.recv_packet().await?;
+    //     //
+    //     // let threshold = threshold.0;
+    //     // info!("compression threshold {threshold}");
+    //
+    //     let pkt: login::LoginSuccessS2c = self.recv_packet().await?;
+    //
+    //     // self.client_read_loop().await?;
+    //
+    //     Ok(())
+    // }
 
     // async fn client_read_loop(mut self) -> anyhow::Result<()> {
     //     let game_join: playGameJoinS2c = self.recv_packet().await?;
@@ -235,7 +239,7 @@ impl Io {
             profile_id,
         } = self.recv_packet().await?;
 
-        profile_id.context("missing profile id")?;
+        let profile_id = profile_id.context("missing profile id")?;
 
         let username: Box<str> = Box::from(username.0);
 
@@ -248,18 +252,19 @@ impl Io {
         // second
         self.send_packet(&packet).await?;
 
-        self.main_loop().await?;
+        self.main_loop(profile_id, username.as_ref()).await?;
 
         Ok(())
     }
 
-    async fn main_loop(mut self) -> anyhow::Result<()> {
+    #[allow(clippy::too_many_lines)]
+    async fn main_loop(mut self, uuid: Uuid, username: &str) -> anyhow::Result<()> {
         use valence_protocol::packets::play;
         info!("[[ start main phase ]]");
 
         // recv ack
 
-        let mut codec = RegistryCodec::default();
+        let codec = RegistryCodec::default();
 
         let registry_codec = registry_codec_raw(&codec)?;
 
@@ -297,11 +302,6 @@ impl Io {
         self.send_packet(&pkt).await?;
 
         // // todo:
-        // let registry = TagsRegistry::default();
-        //
-        // let pkt = SynchronizeTagsS2c {
-        //     groups: Cow::Borrowed(&registry.registries),
-        // };
         //
         // self.send_packet(&pkt).await?;
         //
@@ -315,11 +315,128 @@ impl Io {
 
         // todo: dont depend on this order
         info!("start read loop");
+
+        // 15. client information
         let x: play::ClientSettingsC2s = self.recv_packet().await?;
         info!("read {x:#?}");
 
-        // Set Held Item
-        self.send_packet(&play::UpdateSelectedSlotS2c { slot: 0 });
+        // 16. hand held item
+        self.send_packet(&play::UpdateSelectedSlotS2c { slot: 0 })
+            .await?;
+
+        // todo: maybe remove
+        let mut bytes = Vec::new();
+        // write varint with len 0
+        VarInt(0).encode(&mut bytes)?;
+
+        // Update Recipes
+        self.send_packet(&play::SynchronizeRecipesS2c {
+            recipes: RawBytes::from(bytes.as_slice()),
+        })
+        .await?;
+
+        // 11. Plugin Message
+        let pkt = self.recv_packet::<play::CustomPayloadC2s>().await?;
+        info!("read {pkt:?}");
+
+        // let brand = "minecraft:brand".into();
+        // 14. Plugin Message: minecraft:brand with the client's brand (Optional)
+        // self.send_packet(&play::CustomPayloadS2c {
+        //     channel: Ident::from(brand),
+        //     data: RawBytes::from("Valence".as_bytes()),
+        // });
+
+        // 18. Update Tags
+        let registry = TagsRegistry::default();
+
+        let pkt = SynchronizeTagsS2c {
+            groups: Cow::Borrowed(&registry.registries),
+        };
+        self.send_packet(&pkt).await?;
+
+        // 19. Entity Event
+
+        // self.send_packet(play::EntityStatusS2c {
+        //
+        // }
+
+        // 20. commands
+        // todo: remove?
+        // self.send_packet(&play::CommandTreeS2c {
+        //     commands: vec![],
+        //     root_index: VarInt::default(),
+        // });
+
+        // 21. Recipe
+
+        // 22. Player position Player Info Update (Add Player)
+
+        // player_uuid: Default::default(),
+        // username: "",
+        // properties: Default::default(),
+        // chat_data: None,
+        // listed: false,
+        // ping: 0,
+        // game_mode: Default::default(),
+        // display_name: None,
+        let player_list_entry = PlayerListEntry {
+            player_uuid: uuid,
+            username,
+            // todo: impl
+            properties: Cow::Borrowed(&[]),
+            chat_data: None,
+            listed: true, // show on player list
+            ping: 0,      // ms
+            game_mode: GameMode::Survival,
+            display_name: None,
+        };
+
+        let entries = &[player_list_entry];
+
+        // 23. Player Info (Add Player action)
+        self.send_packet(&play::PlayerListS2c {
+            actions: PlayerListActions::new().with_add_player(true),
+            entries: Cow::Borrowed(entries),
+        })
+        .await?;
+
+        // 24. Player Info (Add Player action)  (Update latency action)
+        self.send_packet(&play::PlayerListS2c {
+            actions: PlayerListActions::new().with_update_latency(true),
+            entries: Cow::Borrowed(entries),
+        })
+        .await?;
+
+        // 25. Set Center Chunk
+        self.send_packet(&play::ChunkRenderDistanceCenterS2c {
+            chunk_x: VarInt(0),
+            chunk_z: VarInt(0),
+        })
+        .await?;
+
+        // 26. Update light
+
+        let mut pkt = play::LightUpdateS2c {
+            chunk_x: VarInt::default(),
+            chunk_z: VarInt::default(),
+            sky_light_mask: Cow::default(),
+            block_light_mask: Cow::default(),
+            empty_sky_light_mask: Cow::default(),
+            empty_block_light_mask: Cow::default(),
+            sky_light_arrays: Cow::default(),
+            block_light_arrays: Cow::default(),
+        };
+
+        // -16..=16
+        for x in -16..=16 {
+            for z in -16..=16 {
+                pkt.chunk_x = VarInt(x);
+                pkt.chunk_z = VarInt(z);
+                self.send_packet(&pkt).await?;
+            }
+        }
+
+        // 27. Chunk Data
 
         let mut chunk = azalea_world::Chunk::default();
 
@@ -339,7 +456,7 @@ impl Io {
 
         chunk.write_into(&mut bytes)?;
 
-        let chunk = play::ChunkDataS2c {
+        let mut chunk = play::ChunkDataS2c {
             pos: ChunkPos::new(0, 0),
             heightmaps: Cow::Owned(Compound::new()),
             blocks_and_biomes: &bytes,
@@ -351,61 +468,110 @@ impl Io {
             sky_light_arrays: Cow::default(),
             block_light_arrays: Cow::Borrowed(&[]),
         };
-        self.send_packet(&chunk).await?;
 
-        let mut flags = PlayerPositionLookFlags::default();
+        for x in -16..=16 {
+            for z in -16..=16 {
+                chunk.pos = ChunkPos::new(x, z);
+                self.send_packet(&chunk).await?;
+            }
+        }
 
-        // flags.set_x(true);
-        // flags.set_y(true);
-        // flags.set_z(true);
+        // 28. Initialize World Border
+        self.send_packet(&play::WorldBorderInitializeS2c {
+            x: 0.0,
+            z: 0.0,
+            old_diameter: 1000.0,
+            new_diameter: 1000.0,
+            duration_millis: VarLong::default(),
+            portal_teleport_boundary: VarInt::default(),
+            warning_blocks: VarInt::default(),
+            warning_time: VarInt::default(),
+        })
+        .await?;
 
-        // Synchronize Player Position
-        // Set Player Position and Rotation
-        let pos = play::PlayerPositionLookS2c {
-            position: DVec3::new(0.0, 2.0, 0.0),
-            yaw: 0.0,
-            pitch: 0.0,
-            flags,
-            teleport_id: 1.into(),
-        };
-        self.send_packet(&pos).await?;
-
-        // let mut bytes = Vec::new();
-        // // write varint with len 0
-        // VarInt(0).encode(&mut bytes)?;
-        //
-        // // Update Recipes
-        // self.send_packet(&play::SynchronizeRecipesS2c {
-        //     recipes: RawBytes::from(bytes.as_slice()),
-        // });
-
-        // Update Tags
-
-        // Entity Event
-
-        // Commands
-
-        //
-
-        // Set Default Spawn Position 0x50
+        // 29. S → C: Set Default Spawn Position (“home” spawn, not where the client will spawn on
+        //     login)
         self.send_packet(&play::PlayerSpawnPositionS2c {
             position: BlockPos::new(0, 10, 0),
             angle: 0.0,
-        });
+        })
+        .await?;
 
-        // read 0xd Plugin Message
-        // read 0x15 Set Player Position and Rotation
-        // read 0x14 Set Player Position
+        // 32. C → S: Set Player Position and Rotation (to confirm the spawn position)
+        let pkt = self.recv_packet::<FullC2s>().await?;
+        info!("32. {pkt:#?}");
+
+        // Set Player Position
+        let pkt = self.recv_packet::<play::PositionAndOnGroundC2s>().await?;
+        info!("32. {pkt:#?}");
+
+        // 30.Synchronize Player Position (Required, tells the client they're ready to spawn)
+        self.send_packet(&play::PlayerPositionLookS2c {
+            position: DVec3::new(0.0, 3.0, 0.0),
+            yaw: 0.0,
+            pitch: 0.0,
+            flags: PlayerPositionLookFlags::default(),
+            teleport_id: 1.into(),
+        })
+        .await?;
+
+        // Synchronize Player Position ******
+
+        // raw
+        let recv = loop {
+            let frame = self.recv_packet_raw().await?;
+            let id = frame.id;
+            // if teleport confirm
+            if id == play::TeleportConfirmC2s::ID {
+                // 32
+                break frame.decode::<play::TeleportConfirmC2s>()?;
+            }
+
+            // Set Player Position
+            if id == play::PositionAndOnGroundC2s::ID {
+                let pkt = frame.decode::<play::PositionAndOnGroundC2s>()?;
+                info!("32. {pkt:#?}");
+            }
+        };
+
+        let teleport_id = recv.teleport_id.0;
+        info!("read {recv:#?}");
+        ensure!(
+            teleport_id == 1,
+            "expected teleport id 1, got {teleport_id}"
+        );
+
+        // 30.Synchronize Player Position (Required, tells the client they're ready to spawn)
+        self.send_packet(&play::PlayerPositionLookS2c {
+            position: DVec3::new(0.0, 4.0, 0.0),
+            yaw: 0.0,
+            pitch: 0.0,
+            flags: PlayerPositionLookFlags::default(),
+            teleport_id: 2.into(),
+        })
+        .await?;
+
+        // 33. C → S: Client Command (sent either before or while receiving chunks, further testing
+        //     needed, server handles correctly if not sent)
+        // let pkt = self.recv_packet::<play::ClientCommandC2s>().await?;
+        // info!("33. {pkt:#?}");
+
+        // 34. S → C: inventory, entities, etc
+        // todo
 
         // read packet
         loop {
             let frame = self.recv_packet_raw().await?;
             let id = frame.id;
             // hex
-            // info!("read packet id {id:#x}");
-        }
+            info!("read packet id {id:#x}");
 
-        Ok(())
+            // Set Player Position
+            if id == play::PositionAndOnGroundC2s::ID {
+                let pkt = frame.decode::<play::PositionAndOnGroundC2s>()?;
+                info!("{pkt:#?}");
+            }
+        }
     }
 
     async fn server_status(mut self) -> anyhow::Result<()> {
@@ -468,16 +634,15 @@ async fn server() -> anyhow::Result<()> {
         tokio::spawn(action);
         id += 1;
     }
-    Ok(())
 }
 
-async fn client() -> anyhow::Result<()> {
-    let stream = TcpStream::connect("localhost:25565").await?;
-    let process = Io::new(stream);
-    process.client_process().await?;
-    Ok(())
-}
-
+// async fn client() -> anyhow::Result<()> {
+//     let stream = TcpStream::connect("localhost:25565").await?;
+//     let process = Io::new(stream);
+//     process.client_process().await?;
+//     Ok(())
+// }
+//
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt::Subscriber::builder().init();
