@@ -11,6 +11,7 @@ use anyhow::{ensure, Context};
 use azalea_buf::McBufWritable;
 use bytes::BytesMut;
 use itertools::Itertools;
+use rand::random;
 use serde_json::json;
 use sha2::Digest;
 use tokio::{
@@ -18,17 +19,28 @@ use tokio::{
     net::{TcpListener, TcpStream},
 };
 use tracing::{debug, error, info};
-use valence_protocol::{decode::PacketFrame, game_mode::OptGameMode, ident, math::DVec3, nbt::{compound, Compound, List}, packets::{
-    handshaking::{handshake_c2s::HandshakeNextState, HandshakeC2s},
-    login::{LoginHelloC2s, LoginSuccessS2c},
-    play::{
-        player_list_s2c::{PlayerListActions, PlayerListEntry},
-        player_position_look_s2c::PlayerPositionLookFlags,
-        FullC2s, SynchronizeTagsS2c,
+use valence_protocol::{
+    decode::PacketFrame,
+    game_mode::OptGameMode,
+    ident,
+    math::DVec3,
+    nbt::{compound, Compound, List},
+    packets::{
+        handshaking::{handshake_c2s::HandshakeNextState, HandshakeC2s},
+        login::{LoginHelloC2s, LoginSuccessS2c},
+        play::{
+            player_list_s2c::{PlayerListActions, PlayerListEntry},
+            player_position_look_s2c::PlayerPositionLookFlags,
+            SynchronizeTagsS2c,
+        },
+        status,
     },
-    status,
-}, uuid::Uuid, BlockPos, Bounded, ChunkPos, Decode, Encode, GameMode, Ident, Packet, PacketDecoder, PacketEncoder, RawBytes, VarInt, VarLong, BlockState};
+    uuid::Uuid,
+    BlockPos, Bounded, ChunkPos, Decode, Encode, GameMode, Ident, Packet, PacketDecoder,
+    PacketEncoder, RawBytes, VarInt,
+};
 use valence_registry::{BiomeRegistry, RegistryCodec, TagsRegistry};
+
 use crate::chunk::heightmap;
 
 const READ_BUF_SIZE: usize = 4096;
@@ -75,8 +87,6 @@ struct Io {
 //     heightmap
 // }
 
-
-
 impl Io {
     pub async fn recv_packet<'a, P>(&'a mut self) -> anyhow::Result<P>
     where
@@ -109,7 +119,7 @@ impl Io {
     pub async fn recv_packet_raw(&mut self) -> anyhow::Result<PacketFrame> {
         loop {
             if let Some(frame) = self.dec.try_next_packet()? {
-                info!("read packet id {:#x}", frame.id);
+                // info!("read packet id {:#x}", frame.id);
                 return Ok(frame);
             }
 
@@ -256,7 +266,7 @@ impl Io {
             enable_respawn_screen: false,
             dimension_name: dimension_name.into(),
             hashed_seed: 0,
-            game_mode: GameMode::Survival,
+            game_mode: GameMode::Creative,
             is_flat: false,
             last_death_location: None,
             portal_cooldown: 60.into(),
@@ -354,7 +364,7 @@ impl Io {
             chat_data: None,
             listed: true, // show on player list
             ping: 0,      // ms
-            game_mode: GameMode::Survival,
+            game_mode: GameMode::Creative,
             display_name: None,
         };
 
@@ -395,18 +405,18 @@ impl Io {
             }
         }
 
-        // 28. Initialize World Border
-        self.send_packet(&play::WorldBorderInitializeS2c {
-            x: 0.0,
-            z: 0.0,
-            old_diameter: 1000.0,
-            new_diameter: 1000.0,
-            duration_millis: VarLong::default(),
-            portal_teleport_boundary: VarInt::default(),
-            warning_blocks: VarInt::default(),
-            warning_time: VarInt::default(),
-        })
-        .await?;
+        // // 28. Initialize World Border
+        // self.send_packet(&play::WorldBorderInitializeS2c {
+        //     x: 0.0,
+        //     z: 0.0,
+        //     old_diameter: 10.0,
+        //     new_diameter: 10.0,
+        //     duration_millis: VarLong::default(),
+        //     portal_teleport_boundary: VarInt::default(),
+        //     warning_blocks: VarInt::default(),
+        //     warning_time: VarInt::default(),
+        // })
+        // .await?;
 
         // 29. S → C: Set Default Spawn Position (“home” spawn, not where the client will spawn on
         //     login)
@@ -417,7 +427,7 @@ impl Io {
         .await?;
 
         // 32. C → S: Set Player Position and Rotation (to confirm the spawn position)
-        let pkt = self.recv_packet::<FullC2s>().await?;
+        let pkt = self.recv_packet::<play::FullC2s>().await?;
         info!("32. {pkt:?}");
 
         // Set Player Position
@@ -482,28 +492,36 @@ impl Io {
         let mut chunk = azalea_world::Chunk::default();
         let dimension_height = 384;
 
-        // blockstate
-        #[allow(clippy::cast_possible_truncation)]
-        let dirt = BlockState::DIRT.to_raw();
+        // // blockstate
+        // #[allow(clippy::cast_possible_truncation)]
+        // let dirt = BlockState::GRAN.to_raw();
+        //
+        // #[allow(clippy::indexing_slicing)]
+        // for section in &mut chunk.sections {
+        //
+        //     let states = &mut section.states;
+        //     for x in 0..16 {
+        //         for z in 0..16 {
+        //             for y in 0..16 {
+        //                 // let id: u32 = 2;
+        //                 states.set(x, y, z, 2);
+        //             }
+        //         }
+        //     }
+        // }
 
-        #[allow(clippy::indexing_slicing)]
-        for section in &mut chunk.sections {
+        for section in chunk.sections.iter_mut().take(1) {
+            // Sections with a block count of 0 are not rendered
+            section.block_count = 4096;
 
+            // Set the Palette to be a single value
             let states = &mut section.states;
-            for x in 0..16 {
-                for z in 0..16 {
-                    for y in 0..16 {
-                        // let id: u32 = 2;
-                        states.set(x, y, z, dirt as u32);
-                    }
-                }
-            }
+            states.palette = azalea_world::palette::Palette::SingleValue(2);
         }
 
         let map = heightmap(dimension_height, dimension_height - 3);
         let map: Vec<_> = map.into_iter().map(i64::try_from).try_collect()?;
-        
-        
+
         let mut bytes = Vec::new();
         chunk.write_into(&mut bytes)?;
 
@@ -536,15 +554,64 @@ impl Io {
         })
         .await?;
 
+        // // 28. Initialize World Border
+        // self.send_packet(&play::WorldBorderInitializeS2c {
+        //     x: 10.0,
+        //     z: 10.0,
+        //     old_diameter: 10.0,
+        //     new_diameter: 10.0,
+        //     duration_millis: VarLong::default(),
+        //     portal_teleport_boundary: VarInt::default(),
+        //     warning_blocks: VarInt::default(),
+        //     warning_time: VarInt::default(),
+        // })
+        //     .await?;
+        //
+        // // border center
+        // self.send_packet(&play::WorldBorderCenterChangedS2c {
+        //     x_pos: 0.0,
+        //     z_pos: 0.0,
+        // }).await?;
+        //
+        // // size
+        // self.send_packet(&play::WorldBorderSizeChangedS2c {
+        //     diameter: 30.0,
+        // }).await?;
+
         // read packet
         loop {
-            let frame = self.recv_packet_raw().await?;
-            let id = frame.id;
-            // Set Player Position
-            if id == play::PositionAndOnGroundC2s::ID {
-                let pkt = frame.decode::<play::PositionAndOnGroundC2s>()?;
-                info!("{pkt:?}");
-            }
+            // schedule every 2 seconds
+            tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+
+            self.send_packet(&play::KeepAliveS2c { id: random() })
+                .await?;
+
+            // let frame_read = self.recv_packet_raw();
+            //
+            //
+            // let id = frame.id;
+            // // Set Player Position
+            // match id {
+            //     play::PositionAndOnGroundC2s::ID
+            //     | play::LookAndOnGroundC2s::ID
+            //     | play::FullC2s::ID => {}
+            //
+            //     play::TeleportConfirmC2s::ID => {
+            //         // 0x00
+            //         let pkt = frame.decode::<play::TeleportConfirmC2s>()?;
+            //         info!("{pkt:?}");
+            //     }
+            //
+            //     play::UpdatePlayerAbilitiesC2s::ID => {
+            //         // 0x1C
+            //         let pkt = frame.decode::<play::UpdatePlayerAbilitiesC2s>()?;
+            //         info!("{pkt:?}");
+            //     }
+            //     _ => {
+            //         info!("ID: {id:#x}");
+            //     }
+            //
+            // }
         }
     }
 

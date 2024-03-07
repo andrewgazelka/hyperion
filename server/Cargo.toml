@@ -30,6 +30,7 @@ mimalloc = { version = "0.1.39" , default-features = false }
 sha2 = "0.10.8"
 itertools = "0.12.1"
 bytemuck = "1.14.3"
+rand = "0.8.5"
 
 
 [lints.rust]
