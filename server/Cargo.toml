@@ -29,7 +29,6 @@ azalea-world = { git = "https://github.com/azalea-rs/azalea", branch = "1.20.1" 
 mimalloc = { version = "0.1.39" , default-features = false }
 sha2 = "0.10.8"
 itertools = "0.12.1"
-bytemuck = "1.14.3"
 rand = "0.8.5"
 
 
