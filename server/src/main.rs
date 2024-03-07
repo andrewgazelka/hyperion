@@ -1,5 +1,7 @@
 // #![allow(unused)]
 
+mod chunk;
+
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
@@ -7,8 +9,8 @@ use std::{borrow::Cow, collections::BTreeSet, io, io::ErrorKind};
 
 use anyhow::{ensure, Context};
 use azalea_buf::McBufWritable;
-// use azalea_buf::McBufWritable;
 use bytes::BytesMut;
+use itertools::Itertools;
 use serde_json::json;
 use sha2::Digest;
 use tokio::{
@@ -16,27 +18,18 @@ use tokio::{
     net::{TcpListener, TcpStream},
 };
 use tracing::{debug, error, info};
-use valence_protocol::{
-    decode::PacketFrame,
-    game_mode::OptGameMode,
-    ident,
-    math::DVec3,
-    nbt::{compound, Compound, List},
-    packets::{
-        handshaking::{handshake_c2s::HandshakeNextState, HandshakeC2s},
-        login::{LoginHelloC2s, LoginSuccessS2c},
-        play::{
-            player_list_s2c::{PlayerListActions, PlayerListEntry},
-            player_position_look_s2c::PlayerPositionLookFlags,
-            FullC2s, SynchronizeTagsS2c,
-        },
-        status,
+use valence_protocol::{decode::PacketFrame, game_mode::OptGameMode, ident, math::DVec3, nbt::{compound, Compound, List}, packets::{
+    handshaking::{handshake_c2s::HandshakeNextState, HandshakeC2s},
+    login::{LoginHelloC2s, LoginSuccessS2c},
+    play::{
+        player_list_s2c::{PlayerListActions, PlayerListEntry},
+        player_position_look_s2c::PlayerPositionLookFlags,
+        FullC2s, SynchronizeTagsS2c,
     },
-    uuid::Uuid,
-    BlockPos, Bounded, ChunkPos, Decode, Encode, GameMode, Ident, Packet, PacketDecoder,
-    PacketEncoder, RawBytes, VarInt, VarLong,
-};
+    status,
+}, uuid::Uuid, BlockPos, Bounded, ChunkPos, Decode, Encode, GameMode, Ident, Packet, PacketDecoder, PacketEncoder, RawBytes, VarInt, VarLong, BlockState};
 use valence_registry::{BiomeRegistry, RegistryCodec, TagsRegistry};
+use crate::chunk::heightmap;
 
 const READ_BUF_SIZE: usize = 4096;
 
@@ -58,6 +51,31 @@ struct Io {
     enc: PacketEncoder,
     frame: PacketFrame,
 }
+// fn motion_blocking(chunk: &azalea_world::Chunk) -> Vec<Vec<u32>> {
+//     let mut heightmap: Vec<Vec<u32>> = vec![vec![0; 16]; 16];
+//
+//     let height = chunk.sections.len() as u32 * 16;
+//
+//     for z in 0..16 {
+//         for x in 0..16 {
+//             for y in (0..height).rev() {
+//                 let state = chunk.get(x as u32, y, z as u32);
+//                 // let state = self.block_state(x as u32, y, z as u32);
+//                 if state.blocks_motion()
+//                     || state.is_liquid()
+//                     || state.get(PropName::Waterlogged) == Some(PropValue::True)
+//                 {
+//                     heightmap[z][x] = y + 2;
+//                     break;
+//                 }
+//             }
+//         }
+//     }
+//
+//     heightmap
+// }
+
+
 
 impl Io {
     pub async fn recv_packet<'a, P>(&'a mut self) -> anyhow::Result<P>
@@ -232,7 +250,7 @@ impl Io {
             dimension_names: Cow::Owned(dimension_names),
             registry_codec: Cow::Borrowed(&registry_codec),
             max_players: 10_000.into(),
-            view_distance: 10.into(),
+            view_distance: 32.into(), // max view distance
             simulation_distance: 10.into(),
             reduced_debug_info: false,
             enable_respawn_screen: false,
@@ -452,37 +470,47 @@ impl Io {
         })
         .await?;
 
-
         // 25. Set Center Chunk
         self.send_packet(&play::ChunkRenderDistanceCenterS2c {
             chunk_x: VarInt(0),
             chunk_z: VarInt(0),
-        }).await?;
+        })
+        .await?;
 
         // 27. Chunk Data
+        #[allow(clippy::integer_division)]
         let mut chunk = azalea_world::Chunk::default();
+        let dimension_height = 384;
+
+        // blockstate
+        #[allow(clippy::cast_possible_truncation)]
+        let dirt = BlockState::DIRT.to_raw();
 
         #[allow(clippy::indexing_slicing)]
-        // filled with id = 2
         for section in &mut chunk.sections {
+
             let states = &mut section.states;
             for x in 0..16 {
                 for z in 0..16 {
                     for y in 0..16 {
-                        let id: u32 = 2;
-                        states.set(x, y, z, id);
+                        // let id: u32 = 2;
+                        states.set(x, y, z, dirt as u32);
                     }
                 }
             }
         }
 
+        let map = heightmap(dimension_height, dimension_height - 3);
+        let map: Vec<_> = map.into_iter().map(i64::try_from).try_collect()?;
+        
+        
         let mut bytes = Vec::new();
         chunk.write_into(&mut bytes)?;
 
         let mut pkt = play::ChunkDataS2c {
             pos: ChunkPos::new(0, 0),
             heightmaps: Cow::Owned(compound! {
-                "MOTION_BLOCKING" => List::Long(vec![120; 256]),
+                "MOTION_BLOCKING" => List::Long(map),
             }),
             blocks_and_biomes: &bytes,
             block_entities: Cow::Borrowed(&[]),
@@ -505,7 +533,8 @@ impl Io {
         self.send_packet(&play::ChunkRenderDistanceCenterS2c {
             chunk_x: VarInt(0),
             chunk_z: VarInt(0),
-        }).await?;
+        })
+        .await?;
 
         // read packet
         loop {

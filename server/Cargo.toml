@@ -18,6 +18,7 @@ bytes = "1.5.0"
 #valence = { git = "https://github.com/valence-rs/valence" }
 valence_protocol = { git = "https://github.com/andrewgazelka/valence" }
 valence_registry = { git = "https://github.com/andrewgazelka/valence" }
+#valence_server = { git = "https://github.com/andrewgazelka/valence" }
 
 #azalea = { git = "https://github.com/azalea-rs/azalea", branch = "1.20.1" }
 azalea-buf = { git = "https://github.com/azalea-rs/azalea", branch = "1.20.1" }
@@ -27,6 +28,8 @@ azalea-world = { git = "https://github.com/azalea-rs/azalea", branch = "1.20.1" 
 # no secure alloc
 mimalloc = { version = "0.1.39" , default-features = false }
 sha2 = "0.10.8"
+itertools = "0.12.1"
+bytemuck = "1.14.3"
 
 
 [lints.rust]
