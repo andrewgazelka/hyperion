@@ -1,5 +1,7 @@
 # Project 10k
 
+# Estimation
+
 How can we get 10k players to PvP at once on a Minecraft server?
 
 There are many faction servers which have 500 players on Start of The World (SOTW).

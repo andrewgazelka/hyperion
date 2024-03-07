@@ -1,41 +1,23 @@
 [package]
-name = "server"
+name = "prototype"
 version = "0.1.0"
 edition = "2021"
 authors = ["Andrew Gazelka <andrew.gazelka@gmail.com>"]
 readme = "README.md"
 
 [dependencies]
-tokio = { version = "1.36.0", features = ["full"] }
 anyhow = "1.0.80"
-tracing-subscriber = { version = "0.3.18", features = ["chrono"] }
-tracing = "0.1.40"
-serde_json = "1.0.114"
-bytes = "1.5.0"
-#azalea = { git = "https://github.com/azalea-rs/azalea" }
-#valence_protocol.workspace = true
-
-#valence = { git = "https://github.com/valence-rs/valence" }
-valence_protocol = { git = "https://github.com/andrewgazelka/valence" }
-valence_registry = { git = "https://github.com/andrewgazelka/valence" }
-
-#azalea = { git = "https://github.com/azalea-rs/azalea", branch = "1.20.1" }
-azalea-buf = { git = "https://github.com/azalea-rs/azalea", branch = "1.20.1" }
-azalea-world = { git = "https://github.com/azalea-rs/azalea", branch = "1.20.1" }
-
-
-# no secure alloc
-mimalloc = { version = "0.1.39" , default-features = false }
-sha2 = "0.10.8"
+flume = "0.11.0"
+rayon = "1.9.0"
 
 
 [lints.rust]
-warnings = "deny"
+#warnings = "deny"
 
 [lints.clippy]
 # cargo
 cargo_common_metadata = "allow"
-#multiple_crate_versions = "warn"
+multiple_crate_versions = "warn"
 negative_feature_names = "deny"
 redundant_feature_names = "deny"
 wildcard_dependencies = "deny"
@@ -66,7 +48,10 @@ infinite_loop = "allow"
 single_char_lifetime_names = "allow"
 min_ident_chars = "allow"
 std_instead_of_core = "allow"
-items_after_statements = "allow"
+panic_in_result_fn = "allow"
+panic = "allow"
+missing_trait_methods = "allow"
+todo = "allow"
 
 complexity = "deny"
 
@@ -80,6 +65,7 @@ cast_lossless = "allow"
 cast_possible_truncation = "allow" # consider denying
 cast_precision_loss = "allow" # consider denying
 missing_errors_doc = "allow" # consider denying
+struct_excessive_bools = "allow"
 wildcard_imports = "allow"
 
 perf = "deny"

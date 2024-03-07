@@ -7,6 +7,7 @@ use std::{borrow::Cow, collections::BTreeSet, io, io::ErrorKind};
 
 use anyhow::{ensure, Context};
 use azalea_buf::McBufWritable;
+// use azalea_buf::McBufWritable;
 use bytes::BytesMut;
 use serde_json::json;
 use sha2::Digest;
@@ -143,60 +144,8 @@ impl Io {
         self.stream.write_all(&bytes).await?;
         self.stream.flush().await?; // todo: remove
 
-        // info!("wrote {pkt:#?}");
-
         Ok(())
     }
-
-    // async fn client_process(mut self) -> anyhow::Result<()> {
-    //     use valence_protocol::packets::handshaking;
-    //
-    //     let pkt = HandshakeC2s {
-    //         protocol_version: PROTOCOL_VERSION.into(),
-    //         server_address: "localhost:25565".into(),
-    //         server_port: 25565,
-    //         next_state: HandshakeNextState::Login,
-    //     };
-    //
-    //     self.send_packet(&pkt).await?;
-    //
-    //     self.client_login().await?;
-    //
-    //     Ok(())
-    // }
-
-    // async fn client_login(mut self) -> anyhow::Result<()> {
-    //     use valence_protocol::packets::login;
-    //
-    //     let pkt = login::LoginHelloC2s {
-    //         username: "Emerald_Explorer".into(),
-    //         profile_id: Some(Uuid::from_u128(0)),
-    //     };
-    //
-    //     self.send_packet(&pkt).await?;
-    //
-    //     // let login::LoginCompressionS2c { threshold } = self.recv_packet().await?;
-    //     //
-    //     // let threshold = threshold.0;
-    //     // info!("compression threshold {threshold}");
-    //
-    //     let pkt: login::LoginSuccessS2c = self.recv_packet().await?;
-    //
-    //     // self.client_read_loop().await?;
-    //
-    //     Ok(())
-    // }
-
-    // async fn client_read_loop(mut self) -> anyhow::Result<()> {
-    //     let game_join: playGameJoinS2c = self.recv_packet().await?;
-    //
-    //     loop {
-    //         let frame = self.recv_packet_raw().await?;
-    //         let id = frame.id;
-    //         // hex
-    //         info!("read packet id {id:#x}");
-    //     }
-    // }
 
     async fn server_process(mut self, id: usize) -> anyhow::Result<()> {
         // self.stream.set_nodelay(true)?;
@@ -407,15 +356,7 @@ impl Io {
         })
         .await?;
 
-        // 25. Set Center Chunk
-        self.send_packet(&play::ChunkRenderDistanceCenterS2c {
-            chunk_x: VarInt(0),
-            chunk_z: VarInt(0),
-        })
-        .await?;
-
         // 26. Update light
-
         let mut pkt = play::LightUpdateS2c {
             chunk_x: VarInt::default(),
             chunk_z: VarInt::default(),
@@ -433,46 +374,6 @@ impl Io {
                 pkt.chunk_x = VarInt(x);
                 pkt.chunk_z = VarInt(z);
                 self.send_packet(&pkt).await?;
-            }
-        }
-
-        // 27. Chunk Data
-
-        let mut chunk = azalea_world::Chunk::default();
-
-        #[allow(clippy::indexing_slicing)]
-        let first_section = &mut chunk.sections[0];
-
-        let states = &mut first_section.states;
-
-        for x in 0..16 {
-            for z in 0..16 {
-                let id: u32 = 2;
-                states.set(x, 0, z, id);
-            }
-        }
-
-        let mut bytes = Vec::new();
-
-        chunk.write_into(&mut bytes)?;
-
-        let mut chunk = play::ChunkDataS2c {
-            pos: ChunkPos::new(0, 0),
-            heightmaps: Cow::Owned(Compound::new()),
-            blocks_and_biomes: &bytes,
-            block_entities: Cow::Borrowed(&[]),
-            sky_light_mask: Cow::Borrowed(&[]),
-            block_light_mask: Cow::Borrowed(&[]),
-            empty_sky_light_mask: Cow::Borrowed(&[]),
-            empty_block_light_mask: Cow::default(),
-            sky_light_arrays: Cow::default(),
-            block_light_arrays: Cow::Borrowed(&[]),
-        };
-
-        for x in -16..=16 {
-            for z in -16..=16 {
-                chunk.pos = ChunkPos::new(x, z);
-                self.send_packet(&chunk).await?;
             }
         }
 
@@ -499,11 +400,11 @@ impl Io {
 
         // 32. C → S: Set Player Position and Rotation (to confirm the spawn position)
         let pkt = self.recv_packet::<FullC2s>().await?;
-        info!("32. {pkt:#?}");
+        info!("32. {pkt:?}");
 
         // Set Player Position
         let pkt = self.recv_packet::<play::PositionAndOnGroundC2s>().await?;
-        info!("32. {pkt:#?}");
+        info!("32. {pkt:?}");
 
         // 30.Synchronize Player Position (Required, tells the client they're ready to spawn)
         self.send_packet(&play::PlayerPositionLookS2c {
@@ -530,12 +431,12 @@ impl Io {
             // Set Player Position
             if id == play::PositionAndOnGroundC2s::ID {
                 let pkt = frame.decode::<play::PositionAndOnGroundC2s>()?;
-                info!("32. {pkt:#?}");
+                info!("32. {pkt:?}");
             }
         };
 
         let teleport_id = recv.teleport_id.0;
-        info!("read {recv:#?}");
+        info!("read {recv:?}");
         ensure!(
             teleport_id == 1,
             "expected teleport id 1, got {teleport_id}"
@@ -543,7 +444,7 @@ impl Io {
 
         // 30.Synchronize Player Position (Required, tells the client they're ready to spawn)
         self.send_packet(&play::PlayerPositionLookS2c {
-            position: DVec3::new(0.0, 4.0, 0.0),
+            position: DVec3::new(0.0, 200.0, 0.0),
             yaw: 0.0,
             pitch: 0.0,
             flags: PlayerPositionLookFlags::default(),
@@ -551,25 +452,68 @@ impl Io {
         })
         .await?;
 
-        // 33. C → S: Client Command (sent either before or while receiving chunks, further testing
-        //     needed, server handles correctly if not sent)
-        // let pkt = self.recv_packet::<play::ClientCommandC2s>().await?;
-        // info!("33. {pkt:#?}");
+        // 27. Chunk Data
+        let mut chunk = azalea_world::Chunk::default();
 
-        // 34. S → C: inventory, entities, etc
-        // todo
+        #[allow(clippy::indexing_slicing)]
+        // filled with id = 2
+        for section in &mut chunk.sections {
+            let states = &mut section.states;
+            for x in 0..16 {
+                for z in 0..16 {
+                    for y in 0..16 {
+                        let id: u32 = 2;
+                        states.set(x, y, z, id);
+                    }
+                }
+            }
+        }
+
+        // 25. Set Center Chunk
+        self.send_packet(&play::ChunkRenderDistanceCenterS2c {
+            chunk_x: VarInt(0),
+            chunk_z: VarInt(0),
+        }).await?;
+
+        let mut bytes = Vec::new();
+        chunk.write_into(&mut bytes)?;
+
+        let mut pkt = play::ChunkDataS2c {
+            pos: ChunkPos::new(0, 0),
+            heightmaps: Cow::Owned(compound! {
+                "MOTION_BLOCKING" => List::Long(vec![120; 256]),
+            }),
+            blocks_and_biomes: &bytes,
+            block_entities: Cow::Borrowed(&[]),
+
+            sky_light_mask: Cow::Borrowed(&[]),
+            block_light_mask: Cow::Borrowed(&[]),
+            empty_sky_light_mask: Cow::Borrowed(&[]),
+            empty_block_light_mask: Cow::Borrowed(&[]),
+            sky_light_arrays: Cow::Borrowed(&[]),
+            block_light_arrays: Cow::Borrowed(&[]),
+        };
+        for x in -16..=16 {
+            for z in -16..=16 {
+                pkt.pos = ChunkPos::new(x, z);
+                self.send_packet(&pkt).await?;
+            }
+        }
+        
+        // 25. Set Center Chunk
+        self.send_packet(&play::ChunkRenderDistanceCenterS2c {
+            chunk_x: VarInt(0),
+            chunk_z: VarInt(0),
+        }).await?;
 
         // read packet
         loop {
             let frame = self.recv_packet_raw().await?;
             let id = frame.id;
-            // hex
-            info!("read packet id {id:#x}");
-
             // Set Player Position
             if id == play::PositionAndOnGroundC2s::ID {
                 let pkt = frame.decode::<play::PositionAndOnGroundC2s>()?;
-                info!("{pkt:#?}");
+                info!("{pkt:?}");
             }
         }
     }

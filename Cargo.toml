@@ -2,9 +2,8 @@
 resolver = "2"
 
 members = [
-#    "ser",
-#    "ser-macro",
     "server",
+#    "prototype"
 ]
 
 [workspace.dependencies]
