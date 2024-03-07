@@ -452,6 +452,13 @@ impl Io {
         })
         .await?;
 
+
+        // 25. Set Center Chunk
+        self.send_packet(&play::ChunkRenderDistanceCenterS2c {
+            chunk_x: VarInt(0),
+            chunk_z: VarInt(0),
+        }).await?;
+
         // 27. Chunk Data
         let mut chunk = azalea_world::Chunk::default();
 
@@ -468,12 +475,6 @@ impl Io {
                 }
             }
         }
-
-        // 25. Set Center Chunk
-        self.send_packet(&play::ChunkRenderDistanceCenterS2c {
-            chunk_x: VarInt(0),
-            chunk_z: VarInt(0),
-        }).await?;
 
         let mut bytes = Vec::new();
         chunk.write_into(&mut bytes)?;
@@ -499,7 +500,7 @@ impl Io {
                 self.send_packet(&pkt).await?;
             }
         }
-        
+
         // 25. Set Center Chunk
         self.send_packet(&play::ChunkRenderDistanceCenterS2c {
             chunk_x: VarInt(0),
