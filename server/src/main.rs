@@ -69,7 +69,7 @@ impl Game {
 }
 
 // The `Receiver<Tick>` parameter tells our handler to listen for the `Tick` event.
-fn update_positions(_: Receiver<Gametick>, mut fetcher: Fetcher<(&mut Player, &mut Position)>) {
+fn update_positions(_: Receiver<Gametick>, mut fetcher: Fetcher<(&mut Player, &mut Position)>, mut s: Sender<SendChat>) {
     fetcher.par_iter_mut().for_each(|(player| {
         while let Ok(packet) = player.input.try_recv() {
             match packet {
