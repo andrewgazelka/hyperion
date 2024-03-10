@@ -1,4 +1,4 @@
-use std::{borrow::Cow, io, io::ErrorKind, sync::Arc};
+use std::{borrow::Cow, cmp::Ord, io, io::ErrorKind, sync::Arc};
 
 use anyhow::{ensure, Context};
 use bytes::BytesMut;
@@ -28,7 +28,7 @@ use valence_protocol::{
     BlockPos, Bounded, ChunkPos, Decode, Encode, GameMode, Ident, Packet, PacketDecoder,
     PacketEncoder, RawBytes, VarInt,
 };
-use valence_registry::{RegistryCodec};
+use valence_registry::RegistryCodec;
 
 use crate::global::Global;
 
@@ -36,6 +36,12 @@ const READ_BUF_SIZE: usize = 4096;
 
 /// The Minecraft protocol version this library currently targets.
 pub const PROTOCOL_VERSION: i32 = 763;
+
+pub const MAX_JAVA_PACKET_SIZE: usize = 2097151;
+pub const MAX_BEDROCK_PACKET_SIZE: usize = 1048576;
+
+// max
+pub const MAX_PACKET_SIZE: usize = MAX_JAVA_PACKET_SIZE;
 
 /// The stringified name of the Minecraft version this library currently
 /// targets.
@@ -73,6 +79,10 @@ impl Io {
 
             self.dec.reserve(READ_BUF_SIZE);
             let mut buf = self.dec.take_capacity();
+
+            if buf.len() > MAX_PACKET_SIZE {
+                return Err(io::Error::from(ErrorKind::InvalidData).into());
+            }
 
             let bytes_read = self.stream.read_buf(&mut buf).await?;
             if bytes_read == 0 {

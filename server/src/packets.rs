@@ -1,9 +1,23 @@
-use core::slice::SlicePattern;
+//! <https://wiki.vg/index.php?title=Protocol&oldid=18375>
+
 
 use anyhow::bail;
 use valence_protocol::{decode::PacketFrame, packets::play, Decode, Packet};
 
 use crate::{FullEntityPose, Player};
+
+fn confirm_teleport(pkt: play::TeleportConfirmC2s) {
+    // ignore
+}
+
+fn message_ack(pkt: play::MessageAcknowledgmentC2s) {
+    // ignore
+}
+
+fn chat_command(pkt: play::CommandExecutionC2s) {
+
+    // ignore
+}
 
 fn client_settings(pkt: play::ClientSettingsC2s, player: &mut Player) {
     player.locale = Some(pkt.locale.to_string());
@@ -39,13 +53,17 @@ fn full(pkt: play::FullC2s, full_entity_pose: &mut FullEntityPose) -> anyhow::Re
     Ok(())
 }
 
-fn x(pkt: play::ChatMessageC2s, player: &mut Player) {
-    pkt.
-    // ignore
+fn chat_msg(pkt: play::ChatMessageC2s) {
+    // pkt.
+    // ignore for now
 }
 
+
+
+
+
 enum Action {
-    
+
 }
 
 fn switch(
@@ -59,6 +77,10 @@ fn switch(
     let data = &mut data;
 
     match id {
+        play::TeleportConfirmC2s::ID => {
+            let pkt = play::TeleportConfirmC2s::decode(data)?;
+            confirm_teleport(pkt);
+        }
         play::ClientSettingsC2s::ID => {
             let pkt = play::ClientSettingsC2s::decode(data)?;
             client_settings(pkt, player);
