@@ -1,12 +1,11 @@
 //! <https://wiki.vg/index.php?title=Protocol&oldid=18375>
 
-
 use anyhow::bail;
 use valence_protocol::{decode::PacketFrame, packets::play, Decode, Packet};
 
 use crate::{FullEntityPose, Player};
 
-fn confirm_teleport(pkt: play::TeleportConfirmC2s) {
+fn confirm_teleport(pkt: &[u8]) {
     // ignore
 }
 
@@ -15,19 +14,22 @@ fn message_ack(pkt: play::MessageAcknowledgmentC2s) {
 }
 
 fn chat_command(pkt: play::CommandExecutionC2s) {
-
     // ignore
 }
 
-fn client_settings(pkt: play::ClientSettingsC2s, player: &mut Player) {
+fn client_settings(mut data: &[u8], player: &mut Player) -> anyhow::Result<()> {
+    let pkt = play::ClientSettingsC2s::decode(&mut data)?;
     player.locale = Some(pkt.locale.to_string());
+    Ok(())
 }
 
-fn custom_payload(pkt: play::CustomPayloadC2s, player: &mut Player) {
+fn custom_payload(data: &[u8]) {
     // ignore
 }
 
-fn full(pkt: play::FullC2s, full_entity_pose: &mut FullEntityPose) -> anyhow::Result<()> {
+fn full(mut data: &[u8], full_entity_pose: &mut FullEntityPose) -> anyhow::Result<()> {
+    let pkt = play::FullC2s::decode(&mut data)?;
+
     let play::FullC2s {
         position,
         yaw,
@@ -58,13 +60,7 @@ fn chat_msg(pkt: play::ChatMessageC2s) {
     // ignore for now
 }
 
-
-
-
-
-enum Action {
-
-}
+enum Action {}
 
 fn switch(
     raw: PacketFrame,
@@ -73,26 +69,13 @@ fn switch(
 ) -> anyhow::Result<()> {
     let id = raw.id;
     let data = raw.body;
-    let mut data = &data[..];
-    let data = &mut data;
+    let data = &data[..];
 
     match id {
-        play::TeleportConfirmC2s::ID => {
-            let pkt = play::TeleportConfirmC2s::decode(data)?;
-            confirm_teleport(pkt);
-        }
-        play::ClientSettingsC2s::ID => {
-            let pkt = play::ClientSettingsC2s::decode(data)?;
-            client_settings(pkt, player);
-        }
-        play::CustomPayloadC2s::ID => {
-            let pkt = play::CustomPayloadC2s::decode(data)?;
-            custom_payload(pkt, player);
-        }
-        play::FullC2s::ID => {
-            let pkt = play::FullC2s::decode(data)?;
-            full(pkt, full_entity_pose)?;
-        }
+        play::TeleportConfirmC2s::ID => confirm_teleport(data),
+        play::ClientSettingsC2s::ID => client_settings(data, player)?,
+        play::CustomPayloadC2s::ID => custom_payload(data),
+        play::FullC2s::ID => full(data, full_entity_pose)?,
         _ => bail!("unknown packet id: {id}"),
     }
 
