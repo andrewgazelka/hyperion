@@ -12,6 +12,7 @@ use std::{
 };
 
 use evenio::{prelude::*, rayon::prelude::*};
+use tracing::info;
 use valence_protocol::math::DVec3;
 
 use crate::handshake::{server, Packets};
@@ -110,6 +111,8 @@ fn process_packets(
 
 fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt::init();
+
+    info!("Starting server");
 
     let server = server();
 

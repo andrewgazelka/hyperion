@@ -1,13 +1,16 @@
+#![allow(unused)]
 use std::{borrow::Cow, collections::BTreeSet, io, io::ErrorKind};
 
 use anyhow::{ensure, Context};
 use bytes::BytesMut;
-use serde_json::json;
-use sha2::Digest;
-use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt},
+use monoio::{
+    io::{
+        AsyncReadRent, AsyncWriteRent, AsyncWriteRentExt, OwnedReadHalf, OwnedWriteHalf, Splitable,
+    },
     net::{TcpListener, TcpStream},
 };
+use serde_json::json;
+use sha2::Digest;
 use tracing::{debug, error, info, warn};
 use valence_protocol::{
     decode::PacketFrame,
@@ -55,11 +58,11 @@ pub struct Io {
 }
 
 pub struct IoWrite {
-    write: tokio::net::tcp::OwnedWriteHalf,
+    write: OwnedWriteHalf<TcpStream>,
 }
 
 pub struct IoRead {
-    stream: tokio::net::tcp::OwnedReadHalf,
+    stream: OwnedReadHalf<TcpStream>,
     dec: PacketDecoder,
 }
 
@@ -143,25 +146,20 @@ impl WriterComm {
 impl IoRead {
     pub async fn recv_packet_raw(&mut self) -> anyhow::Result<PacketFrame> {
         loop {
-            // info!("start recv_packet_raw");
             if let Some(frame) = self.dec.try_next_packet()? {
-                // info!("ret recv_packet_raw");
-                // info!("read packet id {:#x}", frame.id);
                 return Ok(frame);
             }
 
             self.dec.reserve(READ_BUF_SIZE);
-            let mut buf = self.dec.take_capacity();
+            let buf = self.dec.take_capacity();
 
-            // info!("awaiting...");
-            // sleep
-            // tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-            // let x = self.stream.read_u8().await?;
+            let (bytes_read, buf) = self.stream.read(buf).await;
 
-            if self.stream.read_buf(&mut buf).await? == 0 {
+            let bytes_read = bytes_read?;
+
+            if bytes_read == 0 {
                 return Err(io::Error::from(ErrorKind::UnexpectedEof).into());
             }
-            // info!("yupppp");
 
             // This should always be an O(1) unsplit because we reserved space earlier and
             // the call to `read_buf` shouldn't have grown the allocation.
@@ -172,8 +170,12 @@ impl IoRead {
 
 impl IoWrite {
     pub(crate) async fn send_packet(&mut self, bytes: BytesMut) -> anyhow::Result<()> {
-        self.write.write_all(&bytes).await?;
-        self.write.flush().await?; // todo: remove
+        let (result, _) = self.write.write_all(bytes).await;
+
+        result?;
+
+        // todo: is flush needed?
+        self.write.flush().await?;
 
         Ok(())
     }
@@ -198,13 +200,15 @@ impl Io {
             }
 
             self.dec.reserve(READ_BUF_SIZE);
-            let mut buf = self.dec.take_capacity();
+            let buf = self.dec.take_capacity();
 
             if buf.len() > MAX_PACKET_SIZE {
                 return Err(io::Error::from(ErrorKind::InvalidData).into());
             }
 
-            let bytes_read = self.stream.read_buf(&mut buf).await?;
+            let (bytes_read, buf) = self.stream.read(buf).await;
+            let bytes_read = bytes_read?;
+
             if bytes_read == 0 {
                 return Err(io::Error::from(ErrorKind::UnexpectedEof).into());
             }
@@ -216,26 +220,6 @@ impl Io {
             self.dec.queue_bytes(buf);
         }
     }
-
-    // pub async fn recv_packet_raw(&mut self) -> anyhow::Result<PacketFrame> {
-    //     loop {
-    //         if let Some(frame) = self.dec.try_next_packet()? {
-    //             // info!("read packet id {:#x}", frame.id);
-    //             return Ok(frame);
-    //         }
-    //
-    //         self.dec.reserve(READ_BUF_SIZE);
-    //         let mut buf = self.dec.take_capacity();
-    //
-    //         if self.stream.read_buf(&mut buf).await? == 0 {
-    //             return Err(io::Error::from(ErrorKind::UnexpectedEof).into());
-    //         }
-    //
-    //         // This should always be an O(1) unsplit because we reserved space earlier and
-    //         // the call to `read_buf` shouldn't have grown the allocation.
-    //         self.dec.queue_bytes(buf);
-    //     }
-    // }
 
     fn new(stream: TcpStream) -> Self {
         Self {
@@ -270,8 +254,9 @@ impl Io {
             slice_len
         );
 
-        self.stream.write_all(&bytes).await?;
-        self.stream.flush().await?; // todo: remove
+        let (result, _) = self.stream.write_all(bytes).await;
+        result?;
+        // self.stream.flush().await?; // todo: remove
 
         Ok(())
     }
@@ -352,15 +337,17 @@ impl Io {
 
         info!("Finished handshake for {username}");
 
-        tokio::spawn(async move {
+        monoio::spawn(async move {
+            // sleep 1 second
+            // debug!("before");
+            debug!("start receiving packets");
             while let Ok(raw) = io_read.recv_packet_raw().await {
-                // info!("read packet id {:#x}", raw.id);
                 c2s_tx.send(raw).unwrap();
             }
         });
 
-        tokio::spawn(async move {
-            while let Ok(bytes) = s2c_rx.recv() {
+        monoio::spawn(async move {
+            while let Ok(bytes) = s2c_rx.recv_async().await {
                 io_write.send_packet(bytes).await.unwrap();
             }
         });
@@ -426,17 +413,15 @@ pub fn server() -> flume::Receiver<Packets> {
     let (tx, rx) = flume::unbounded();
 
     std::thread::spawn(move || {
-        // create tokio runtime
-        // todo: should this be single threaded?
-        let runtime = tokio::runtime::Builder::new_multi_thread()
-            .enable_all()
+        let mut runtime = monoio::RuntimeBuilder::<monoio::FusionDriver>::new()
+            // .enable_timer()
             .build()
             .unwrap();
 
         runtime.block_on(async {
             // start socket 25565
             // todo: remove unwrap
-            let listener = TcpListener::bind("0.0.0.0:25565").await.unwrap();
+            let listener = TcpListener::bind("0.0.0.0:25565").unwrap();
 
             let mut id = 0;
 
@@ -454,7 +439,7 @@ pub fn server() -> flume::Receiver<Packets> {
                 let action = process.server_process(id, tx);
                 let action = print_errors(action);
 
-                tokio::spawn(action);
+                monoio::spawn(action);
                 id += 1;
             }
         });

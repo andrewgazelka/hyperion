@@ -5,16 +5,6 @@ members = [
     "server",
 #    "prototype"
 ]
-
-[workspace.dependencies]
-#ser = { path = "ser" }
-#ser-macro = { path = "ser-macro" }
-
-valence_nbt = { git = "https://github.com/valence-rs/valence"}
-valence_protocol = { git = "https://github.com/valence-rs/valence" }
-
-# max perf
-[profile.release]
 #lto = true
 #codegen-units = 1
 
