@@ -31,10 +31,10 @@ COPY server/Cargo.toml ./server/Cargo.toml
 COPY server/src ./server/src
 
 
-# Build the source code using Rust Nightly
+# Build the source code using Rust Nightly with
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/app/target \
-    cargo build --release --locked -p server
+    RUSTFLAGS='-C target-cpu=native' cargo build --release --locked -p server
 
 # Copy the built executable from the cache to a clean directory
 RUN --mount=type=cache,target=/app/target \
