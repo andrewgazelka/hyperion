@@ -12,7 +12,8 @@ use std::{
 };
 
 use evenio::{prelude::*, rayon::prelude::*};
-use tracing::info;
+use signal_hook::iterator::Signals;
+use tracing::{info, warn};
 use valence_protocol::math::DVec3;
 
 use crate::handshake::{server, Packets};
@@ -109,12 +110,27 @@ fn process_packets(
     }
 }
 
-fn main() -> anyhow::Result<()> {
+static SHUTDOWN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+fn main() {
     tracing_subscriber::fmt::init();
 
-    info!("Starting server");
+    info!("Starting mc-server");
 
-    let server = server();
+    let mut signals =
+        Signals::new([signal_hook::consts::SIGINT, signal_hook::consts::SIGTERM]).unwrap();
+
+    let (shutdown_tx, shutdown_rx) = flume::bounded(1);
+
+    std::thread::spawn(move || {
+        for _ in signals.forever() {
+            warn!("Shutting down...");
+            SHUTDOWN.store(true, std::sync::atomic::Ordering::Relaxed);
+            shutdown_tx.send(()).unwrap();
+        }
+    });
+
+    let server = server(shutdown_rx);
 
     let mut last_tick = Instant::now();
     let tick_duration = Duration::from_millis(20);
@@ -131,7 +147,7 @@ fn main() -> anyhow::Result<()> {
         incoming: server,
     };
 
-    loop {
+    while !SHUTDOWN.load(std::sync::atomic::Ordering::Relaxed) {
         game.tick();
 
         // Calculate the elapsed time since the last tick

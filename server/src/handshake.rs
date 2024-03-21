@@ -11,6 +11,7 @@ use monoio::{
 };
 use serde_json::json;
 use sha2::Digest;
+use signal_hook::iterator::Signals;
 use tracing::{debug, error, info, warn};
 use valence_protocol::{
     decode::PacketFrame,
@@ -409,7 +410,45 @@ async fn print_errors(future: impl core::future::Future<Output = anyhow::Result<
     }
 }
 
-pub fn server() -> flume::Receiver<Packets> {
+async fn run(tx: flume::Sender<Packets>) {
+    // start socket 25565
+    // todo: remove unwrap
+    let addr = "0.0.0.0:25565";
+
+    let listener = match TcpListener::bind(addr) {
+        Ok(listener) => listener,
+        Err(e) => {
+            error!("failed to bind to {addr}: {e}");
+            return;
+        }
+    };
+
+    info!("listening on {addr}");
+
+    let mut id = 0;
+
+    // accept incoming connections
+    loop {
+        let Ok((stream, _)) = listener.accept().await else {
+            warn!("accept failed");
+            continue;
+        };
+
+        info!("accepted connection {id}");
+
+        let process = Io::new(stream);
+
+        let tx = tx.clone();
+
+        let action = process.server_process(id, tx);
+        let action = print_errors(action);
+
+        monoio::spawn(action);
+        id += 1;
+    }
+}
+
+pub fn server(shutdown: flume::Receiver<()>) -> flume::Receiver<Packets> {
     let (tx, rx) = flume::unbounded();
 
     std::thread::spawn(move || {
@@ -418,29 +457,13 @@ pub fn server() -> flume::Receiver<Packets> {
             .build()
             .unwrap();
 
-        runtime.block_on(async {
-            // start socket 25565
-            // todo: remove unwrap
-            let listener = TcpListener::bind("0.0.0.0:25565").unwrap();
+        runtime.block_on(async move {
+            let run = run(tx);
+            let shutdown = shutdown.recv_async();
 
-            let mut id = 0;
-
-            // accept incoming connections
-            loop {
-                let Ok((stream, _)) = listener.accept().await else {
-                    warn!("accept failed");
-                    continue;
-                };
-
-                let process = Io::new(stream);
-
-                let tx = tx.clone();
-
-                let action = process.server_process(id, tx);
-                let action = print_errors(action);
-
-                monoio::spawn(action);
-                id += 1;
+            monoio::select! {
+                () = run => {},
+                _ = shutdown => {},
             }
         });
     });
