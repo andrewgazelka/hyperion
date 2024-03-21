@@ -72,6 +72,10 @@ single_char_lifetime_names = "allow"
 min_ident_chars = "allow"
 std_instead_of_core = "allow"
 items_after_statements = "allow"
+shadow_same = "allow"
+let_underscore_must_use = "allow"
+mod_module_files = "deny"
+self_named_module_files = "allow"
 
 complexity = "deny"
 

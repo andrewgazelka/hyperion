@@ -1,4 +1,4 @@
-use std::{borrow::Cow, cmp::Ord, io, io::ErrorKind, sync::Arc};
+use std::{borrow::Cow, collections::BTreeSet, io, io::ErrorKind};
 
 use anyhow::{ensure, Context};
 use bytes::BytesMut;
@@ -8,37 +8,32 @@ use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::{TcpListener, TcpStream},
 };
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 use valence_protocol::{
     decode::PacketFrame,
+    game_mode::OptGameMode,
     ident,
-    math::DVec3,
     nbt::{compound, Compound, List},
     packets::{
         handshaking::{handshake_c2s::HandshakeNextState, HandshakeC2s},
         login::{LoginHelloC2s, LoginSuccessS2c},
-        play::{
-            player_list_s2c::{PlayerListActions, PlayerListEntry},
-            player_position_look_s2c::PlayerPositionLookFlags,
-            SynchronizeTagsS2c,
-        },
+        play::GameJoinS2c,
         status,
     },
     uuid::Uuid,
-    BlockPos, Bounded, ChunkPos, Decode, Encode, GameMode, Ident, Packet, PacketDecoder,
-    PacketEncoder, RawBytes, VarInt,
+    Bounded, Decode, Encode, GameMode, Ident, PacketDecoder, PacketEncoder, VarInt,
 };
-use valence_registry::RegistryCodec;
+use valence_registry::{BiomeRegistry, RegistryCodec};
 
-use crate::global::Global;
+use crate::GLOBAL;
 
 const READ_BUF_SIZE: usize = 4096;
 
 /// The Minecraft protocol version this library currently targets.
 pub const PROTOCOL_VERSION: i32 = 763;
 
-pub const MAX_JAVA_PACKET_SIZE: usize = 2097151;
-pub const MAX_BEDROCK_PACKET_SIZE: usize = 1048576;
+pub const MAX_JAVA_PACKET_SIZE: usize = 0x001F_FFFF;
+// pub const MAX_BEDROCK_PACKET_SIZE: usize = 0x0010_0000;
 
 // max
 pub const MAX_PACKET_SIZE: usize = MAX_JAVA_PACKET_SIZE;
@@ -59,9 +54,134 @@ pub struct Io {
     frame: PacketFrame,
 }
 
+pub struct IoWrite {
+    write: tokio::net::tcp::OwnedWriteHalf,
+}
+
+pub struct IoRead {
+    stream: tokio::net::tcp::OwnedReadHalf,
+    dec: PacketDecoder,
+}
+
+pub struct WriterComm {
+    tx: flume::Sender<BytesMut>,
+    enc: PacketEncoder,
+}
+
+type ReaderComm = flume::Receiver<PacketFrame>;
+
+impl WriterComm {
+    pub(crate) fn send_packet<P>(&mut self, pkt: &P) -> anyhow::Result<()>
+    where
+        P: valence_protocol::Packet + Encode,
+    {
+        self.enc.append_packet(pkt)?;
+        let bytes = self.enc.take();
+
+        let mut bytes_slice = &*bytes;
+        let slice = &mut bytes_slice;
+        #[allow(clippy::cast_sign_loss)]
+        let length = VarInt::decode_partial(slice)? as usize;
+
+        let slice_len = bytes_slice.len();
+
+        ensure!(
+            length == slice_len,
+            "length mismatch: var int length {}, got pkt length {}",
+            length,
+            slice_len
+        );
+
+        self.tx.send(bytes)?;
+
+        Ok(())
+    }
+
+    pub fn send_game_join_packet(&mut self) -> anyhow::Result<()> {
+        // recv ack
+
+        let codec = RegistryCodec::default();
+
+        let registry_codec = registry_codec_raw(&codec)?;
+
+        let dimension_names: BTreeSet<Ident<Cow<str>>> = codec
+            .registry(BiomeRegistry::KEY)
+            .iter()
+            .map(|value| value.name.as_str_ident().into())
+            .collect();
+
+        let dimension_name = ident!("overworld");
+        // let dimension_name: Ident<Cow<str>> = chunk_layer.dimension_type_name().into();
+
+        let pkt = GameJoinS2c {
+            entity_id: 0,
+            is_hardcore: false,
+            dimension_names: Cow::Owned(dimension_names),
+            registry_codec: Cow::Borrowed(&registry_codec),
+            max_players: 10_000.into(),
+            view_distance: 32.into(), // max view distance
+            simulation_distance: 10.into(),
+            reduced_debug_info: false,
+            enable_respawn_screen: false,
+            dimension_name: dimension_name.into(),
+            hashed_seed: 0,
+            game_mode: GameMode::Creative,
+            is_flat: false,
+            last_death_location: None,
+            portal_cooldown: 60.into(),
+            previous_game_mode: OptGameMode(Some(GameMode::Creative)),
+            dimension_type_name: "minecraft:overworld".try_into()?,
+            is_debug: false,
+        };
+
+        self.send_packet(&pkt)?;
+
+        Ok(())
+    }
+}
+
+impl IoRead {
+    pub async fn recv_packet_raw(&mut self) -> anyhow::Result<PacketFrame> {
+        loop {
+            // info!("start recv_packet_raw");
+            if let Some(frame) = self.dec.try_next_packet()? {
+                // info!("ret recv_packet_raw");
+                // info!("read packet id {:#x}", frame.id);
+                return Ok(frame);
+            }
+
+            self.dec.reserve(READ_BUF_SIZE);
+            let mut buf = self.dec.take_capacity();
+
+            // info!("awaiting...");
+            // sleep
+            // tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+            // let x = self.stream.read_u8().await?;
+
+            if self.stream.read_buf(&mut buf).await? == 0 {
+                return Err(io::Error::from(ErrorKind::UnexpectedEof).into());
+            }
+            // info!("yupppp");
+
+            // This should always be an O(1) unsplit because we reserved space earlier and
+            // the call to `read_buf` shouldn't have grown the allocation.
+            self.dec.queue_bytes(buf);
+        }
+    }
+}
+
+impl IoWrite {
+    pub(crate) async fn send_packet(&mut self, bytes: BytesMut) -> anyhow::Result<()> {
+        self.write.write_all(&bytes).await?;
+        self.write.flush().await?; // todo: remove
+
+        Ok(())
+    }
+}
+
 pub struct Packets {
-    pub tx: flume::Sender<PacketFrame>,
-    pub rx: flume::Receiver<PacketFrame>,
+    pub writer: WriterComm,
+    pub reader: ReaderComm,
 }
 
 impl Io {
@@ -97,25 +217,25 @@ impl Io {
         }
     }
 
-    pub async fn recv_packet_raw(&mut self) -> anyhow::Result<PacketFrame> {
-        loop {
-            if let Some(frame) = self.dec.try_next_packet()? {
-                // info!("read packet id {:#x}", frame.id);
-                return Ok(frame);
-            }
-
-            self.dec.reserve(READ_BUF_SIZE);
-            let mut buf = self.dec.take_capacity();
-
-            if self.stream.read_buf(&mut buf).await? == 0 {
-                return Err(io::Error::from(ErrorKind::UnexpectedEof).into());
-            }
-
-            // This should always be an O(1) unsplit because we reserved space earlier and
-            // the call to `read_buf` shouldn't have grown the allocation.
-            self.dec.queue_bytes(buf);
-        }
-    }
+    // pub async fn recv_packet_raw(&mut self) -> anyhow::Result<PacketFrame> {
+    //     loop {
+    //         if let Some(frame) = self.dec.try_next_packet()? {
+    //             // info!("read packet id {:#x}", frame.id);
+    //             return Ok(frame);
+    //         }
+    //
+    //         self.dec.reserve(READ_BUF_SIZE);
+    //         let mut buf = self.dec.take_capacity();
+    //
+    //         if self.stream.read_buf(&mut buf).await? == 0 {
+    //             return Err(io::Error::from(ErrorKind::UnexpectedEof).into());
+    //         }
+    //
+    //         // This should always be an O(1) unsplit because we reserved space earlier and
+    //         // the call to `read_buf` shouldn't have grown the allocation.
+    //         self.dec.queue_bytes(buf);
+    //     }
+    // }
 
     fn new(stream: TcpStream) -> Self {
         Self {
@@ -156,7 +276,7 @@ impl Io {
         Ok(())
     }
 
-    async fn server_process(mut self, id: usize, tx: flume::Sender<Io>) -> anyhow::Result<()> {
+    async fn server_process(mut self, id: usize, tx: flume::Sender<Packets>) -> anyhow::Result<()> {
         // self.stream.set_nodelay(true)?;
 
         info!("connection id {id}");
@@ -188,7 +308,7 @@ impl Io {
         Ok(())
     }
 
-    async fn server_login(mut self, tx: flume::Sender<Io>) -> anyhow::Result<()> {
+    async fn server_login(mut self, tx: flume::Sender<Packets>) -> anyhow::Result<()> {
         debug!("[[start login phase]]");
 
         // first
@@ -197,7 +317,8 @@ impl Io {
             profile_id,
         } = self.recv_packet().await?;
 
-        let profile_id = profile_id.context("missing profile id")?;
+        // todo: use
+        let _profile_id = profile_id.context("missing profile id")?;
 
         let username: Box<str> = Box::from(username.0);
 
@@ -210,344 +331,57 @@ impl Io {
         // second
         self.send_packet(&packet).await?;
 
-        // self.main_loop(profile_id, username.as_ref()).await?;
+        let (s2c_tx, s2c_rx) = flume::unbounded();
+        let (c2s_tx, c2s_rx) = flume::unbounded();
+
+        let (read, write) = self.stream.into_split();
+
+        let writer_comm = WriterComm {
+            tx: s2c_tx,
+            enc: self.enc,
+        };
+
+        let reader_comm = c2s_rx;
+
+        let mut io_write = IoWrite { write };
+
+        let mut io_read = IoRead {
+            stream: read,
+            dec: self.dec,
+        };
+
+        info!("Finished handshake for {username}");
+
+        tokio::spawn(async move {
+            while let Ok(raw) = io_read.recv_packet_raw().await {
+                // info!("read packet id {:#x}", raw.id);
+                c2s_tx.send(raw).unwrap();
+            }
+        });
+
+        tokio::spawn(async move {
+            while let Ok(bytes) = s2c_rx.recv() {
+                io_write.send_packet(bytes).await.unwrap();
+            }
+        });
+
+        let packets = Packets {
+            writer: writer_comm,
+            reader: reader_comm,
+        };
+
+        tx.send(packets).unwrap();
 
         Ok(())
     }
 
-    // #[allow(clippy::too_many_lines)]
-    // async fn main_loop(mut self, uuid: Uuid, username: &str) -> anyhow::Result<()> {
-    //     use valence_protocol::packets::play;
-    //     info!("[[ start main phase ]]");
-    //
-    //     // recv ack
-    //
-    //     let codec = RegistryCodec::default();
-    //
-    //     let registry_codec = registry_codec_raw(&codec)?;
-    //
-    //     let dimension_names: BTreeSet<Ident<Cow<str>>> = codec
-    //         .registry(BiomeRegistry::KEY)
-    //         .iter()
-    //         .map(|value| value.name.as_str_ident().into())
-    //         .collect();
-    //
-    //     let dimension_name = ident!("overworld");
-    //     // let dimension_name: Ident<Cow<str>> = chunk_layer.dimension_type_name().into();
-    //
-    //     let pkt = play::GameJoinS2c {
-    //         entity_id: 0,
-    //         is_hardcore: false,
-    //         dimension_names: Cow::Owned(dimension_names),
-    //         registry_codec: Cow::Borrowed(&registry_codec),
-    //         max_players: 10_000.into(),
-    //         view_distance: 32.into(), // max view distance
-    //         simulation_distance: 10.into(),
-    //         reduced_debug_info: false,
-    //         enable_respawn_screen: false,
-    //         dimension_name: dimension_name.into(),
-    //         hashed_seed: 0,
-    //         game_mode: GameMode::Creative,
-    //         is_flat: false,
-    //         last_death_location: None,
-    //         portal_cooldown: 60.into(),
-    //         previous_game_mode: OptGameMode(Some(GameMode::Creative)),
-    //         dimension_type_name: "minecraft:overworld".try_into()?,
-    //         is_debug: false,
-    //     };
-    //
-    //     // self.enc.prepend_packet(&pkt)?;
-    //     self.send_packet(&pkt).await?;
-    //
-    //     // // todo:
-    //     //
-    //     // self.send_packet(&pkt).await?;
-    //     //
-    //
-    //     // // Spawn
-    //     // let spawn = play::PlayerSpawnPositionS2c {
-    //     //     position: BlockPos::default(),
-    //     //     angle: 3.0,
-    //     // };
-    //     // self.send_packet(&spawn).await?;
-    //
-    //     // todo: dont depend on this order
-    //     info!("start read loop");
-    //
-    //     // 15. client information
-    //     let x: play::ClientSettingsC2s = self.recv_packet().await?;
-    //     info!("read {x:#?}");
-    //
-    //     // 16. hand held item
-    //     self.send_packet(&play::UpdateSelectedSlotS2c { slot: 0 })
-    //         .await?;
-    //
-    //     // todo: maybe remove
-    //     let mut bytes = Vec::new();
-    //     // write varint with len 0
-    //     VarInt(0).encode(&mut bytes)?;
-    //
-    //     // Update Recipes
-    //     self.send_packet(&play::SynchronizeRecipesS2c {
-    //         recipes: RawBytes::from(bytes.as_slice()),
-    //     })
-    //     .await?;
-    //
-    //     // 11. Plugin Message
-    //     let pkt = self.recv_packet::<play::CustomPayloadC2s>().await?;
-    //     info!("read {pkt:?}");
-    //
-    //     // let brand = "minecraft:brand".into();
-    //     // 14. Plugin Message: minecraft:brand with the client's brand (Optional)
-    //     // self.send_packet(&play::CustomPayloadS2c {
-    //     //     channel: Ident::from(brand),
-    //     //     data: RawBytes::from("Valence".as_bytes()),
-    //     // });
-    //
-    //     // 18. Update Tags
-    //     let registry = TagsRegistry::default();
-    //
-    //     let pkt = SynchronizeTagsS2c {
-    //         groups: Cow::Borrowed(&registry.registries),
-    //     };
-    //     self.send_packet(&pkt).await?;
-    //
-    //     // 19. Entity Event
-    //
-    //     // self.send_packet(play::EntityStatusS2c {
-    //     //
-    //     // }
-    //
-    //     // 20. commands
-    //     // todo: remove?
-    //     // self.send_packet(&play::CommandTreeS2c {
-    //     //     commands: vec![],
-    //     //     root_index: VarInt::default(),
-    //     // });
-    //
-    //     // 21. Recipe
-    //
-    //     // 22. Player position Player Info Update (Add Player)
-    //
-    //     // player_uuid: Default::default(),
-    //     // username: "",
-    //     // properties: Default::default(),
-    //     // chat_data: None,
-    //     // listed: false,
-    //     // ping: 0,
-    //     // game_mode: Default::default(),
-    //     // display_name: None,
-    //     let player_list_entry = PlayerListEntry {
-    //         player_uuid: uuid,
-    //         username,
-    //         // todo: impl
-    //         properties: Cow::Borrowed(&[]),
-    //         chat_data: None,
-    //         listed: true, // show on player list
-    //         ping: 0,      // ms
-    //         game_mode: GameMode::Creative,
-    //         display_name: None,
-    //     };
-    //
-    //     let entries = &[player_list_entry];
-    //
-    //     // 23. Player Info (Add Player action)
-    //     self.send_packet(&play::PlayerListS2c {
-    //         actions: PlayerListActions::new().with_add_player(true),
-    //         entries: Cow::Borrowed(entries),
-    //     })
-    //     .await?;
-    //
-    //     // 24. Player Info (Add Player action)  (Update latency action)
-    //     self.send_packet(&play::PlayerListS2c {
-    //         actions: PlayerListActions::new().with_update_latency(true),
-    //         entries: Cow::Borrowed(entries),
-    //     })
-    //     .await?;
-    //
-    //     // 26. Update light
-    //     let mut pkt = play::LightUpdateS2c {
-    //         chunk_x: VarInt::default(),
-    //         chunk_z: VarInt::default(),
-    //         sky_light_mask: Cow::default(),
-    //         block_light_mask: Cow::default(),
-    //         empty_sky_light_mask: Cow::default(),
-    //         empty_block_light_mask: Cow::default(),
-    //         sky_light_arrays: Cow::default(),
-    //         block_light_arrays: Cow::default(),
-    //     };
-    //
-    //     // -16..=16
-    //     for x in -16..=16 {
-    //         for z in -16..=16 {
-    //             pkt.chunk_x = VarInt(x);
-    //             pkt.chunk_z = VarInt(z);
-    //             self.send_packet(&pkt).await?;
-    //         }
-    //     }
-    //
-    //     // // 28. Initialize World Border
-    //     // self.send_packet(&play::WorldBorderInitializeS2c {
-    //     //     x: 0.0,
-    //     //     z: 0.0,
-    //     //     old_diameter: 10.0,
-    //     //     new_diameter: 10.0,
-    //     //     duration_millis: VarLong::default(),
-    //     //     portal_teleport_boundary: VarInt::default(),
-    //     //     warning_blocks: VarInt::default(),
-    //     //     warning_time: VarInt::default(),
-    //     // })
-    //     // .await?;
-    //
-    //     // 29. S → C: Set Default Spawn Position (“home” spawn, not where the client will spawn
-    // on     //     login)
-    //     self.send_packet(&play::PlayerSpawnPositionS2c {
-    //         position: BlockPos::new(0, 10, 0),
-    //         angle: 0.0,
-    //     })
-    //     .await?;
-    //
-    //     // 32. C → S: Set Player Position and Rotation (to confirm the spawn position)
-    //     let pkt = self.recv_packet::<play::FullC2s>().await?;
-    //     info!("32. {pkt:?}");
-    //
-    //     // Set Player Position
-    //     let pkt = self.recv_packet::<play::PositionAndOnGroundC2s>().await?;
-    //     info!("32. {pkt:?}");
-    //
-    //     // 30.Synchronize Player Position (Required, tells the client they're ready to spawn)
-    //     self.send_packet(&play::PlayerPositionLookS2c {
-    //         position: DVec3::new(0.0, 3.0, 0.0),
-    //         yaw: 0.0,
-    //         pitch: 0.0,
-    //         flags: PlayerPositionLookFlags::default(),
-    //         teleport_id: 1.into(),
-    //     })
-    //     .await?;
-    //
-    //     // Synchronize Player Position ******
-    //
-    //     // raw
-    //     let recv = loop {
-    //         let frame = self.recv_packet_raw().await?;
-    //         let id = frame.id;
-    //         // if teleport confirm
-    //         if id == play::TeleportConfirmC2s::ID {
-    //             // 32
-    //             break frame.decode::<play::TeleportConfirmC2s>()?;
-    //         }
-    //
-    //         // Set Player Position
-    //         if id == play::PositionAndOnGroundC2s::ID {
-    //             let pkt = frame.decode::<play::PositionAndOnGroundC2s>()?;
-    //             info!("32. {pkt:?}");
-    //         }
-    //     };
-    //
-    //     let teleport_id = recv.teleport_id.0;
-    //     info!("read {recv:?}");
-    //     ensure!(
-    //         teleport_id == 1,
-    //         "expected teleport id 1, got {teleport_id}"
-    //     );
-    //
-    //     // 30.Synchronize Player Position (Required, tells the client they're ready to spawn)
-    //     self.send_packet(&play::PlayerPositionLookS2c {
-    //         position: DVec3::new(0.0, 200.0, 0.0),
-    //         yaw: 0.0,
-    //         pitch: 0.0,
-    //         flags: PlayerPositionLookFlags::default(),
-    //         teleport_id: 2.into(),
-    //     })
-    //     .await?;
-    //
-    //     // 25. Set Center Chunk
-    //     self.send_packet(&play::ChunkRenderDistanceCenterS2c {
-    //         chunk_x: VarInt(0),
-    //         chunk_z: VarInt(0),
-    //     })
-    //     .await?;
-    //
-    //     // 27. Chunk Data
-    //     #[allow(clippy::integer_division)]
-    //     let mut chunk = azalea_world::Chunk::default();
-    //     let dimension_height = 384;
-    //
-    //     // // blockstate
-    //     // #[allow(clippy::cast_possible_truncation)]
-    //     // let dirt = BlockState::GRAN.to_raw();
-    //     //
-    //     // #[allow(clippy::indexing_slicing)]
-    //     // for section in &mut chunk.sections {
-    //     //
-    //     //     let states = &mut section.states;
-    //     //     for x in 0..16 {
-    //     //         for z in 0..16 {
-    //     //             for y in 0..16 {
-    //     //                 // let id: u32 = 2;
-    //     //                 states.set(x, y, z, 2);
-    //     //             }
-    //     //         }
-    //     //     }
-    //     // }
-    //
-    //     for section in chunk.sections.iter_mut().take(1) {
-    //         // Sections with a block count of 0 are not rendered
-    //         section.block_count = 4096;
-    //
-    //         // Set the Palette to be a single value
-    //         let states = &mut section.states;
-    //         states.palette = azalea_world::palette::Palette::SingleValue(2);
-    //     }
-    //
-    //     let map = heightmap(dimension_height, dimension_height - 3);
-    //     let map: Vec<_> = map.into_iter().map(i64::try_from).try_collect()?;
-    //
-    //     let mut bytes = Vec::new();
-    //     chunk.write_into(&mut bytes)?;
-    //
-    //     let mut pkt = play::ChunkDataS2c {
-    //         pos: ChunkPos::new(0, 0),
-    //         heightmaps: Cow::Owned(compound! {
-    //             "MOTION_BLOCKING" => List::Long(map),
-    //         }),
-    //         blocks_and_biomes: &bytes,
-    //         block_entities: Cow::Borrowed(&[]),
-    //
-    //         sky_light_mask: Cow::Borrowed(&[]),
-    //         block_light_mask: Cow::Borrowed(&[]),
-    //         empty_sky_light_mask: Cow::Borrowed(&[]),
-    //         empty_block_light_mask: Cow::Borrowed(&[]),
-    //         sky_light_arrays: Cow::Borrowed(&[]),
-    //         block_light_arrays: Cow::Borrowed(&[]),
-    //     };
-    //     for x in -16..=16 {
-    //         for z in -16..=16 {
-    //             pkt.pos = ChunkPos::new(x, z);
-    //             self.send_packet(&pkt).await?;
-    //         }
-    //     }
-    //
-    //     // 25. Set Center Chunk
-    //     self.send_packet(&play::ChunkRenderDistanceCenterS2c {
-    //         chunk_x: VarInt(0),
-    //         chunk_z: VarInt(0),
-    //     })
-    //     .await?;
-    //
-    //     // read packet
-    //     loop {
-    //         // schedule every 2 seconds
-    //         tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
-    //
-    //         self.send_packet(&play::KeepAliveS2c { id: random() })
-    //             .await?;
-    //     }
-    // }
-
     async fn server_status(mut self) -> anyhow::Result<()> {
         debug!("status");
         let status::QueryRequestC2s = self.recv_packet().await?;
+
+        let player_count = GLOBAL
+            .player_count
+            .load(std::sync::atomic::Ordering::Relaxed);
 
         let json = json!({
             "version": {
@@ -555,7 +389,7 @@ impl Io {
                 "protocol": PROTOCOL_VERSION,
             },
             "players": {
-                "online": 0,
+                "online": player_count,
                 "max": 10_000,
                 "sample": [],
             },
@@ -588,31 +422,45 @@ async fn print_errors(future: impl core::future::Future<Output = anyhow::Result<
     }
 }
 
-pub fn server(state: Arc<Global>) -> anyhow::Result<flume::Receiver<Io>> {
+pub fn server() -> flume::Receiver<Packets> {
     let (tx, rx) = flume::unbounded();
-    tokio::spawn(async move {
-        // start socket 25565
-        let listener = TcpListener::bind("0.0.0.0:25565").await?;
 
-        let mut id = 0;
+    std::thread::spawn(move || {
+        // create tokio runtime
+        // todo: should this be single threaded?
+        let runtime = tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .unwrap();
 
-        // accept incoming connections
-        loop {
-            let (stream, _) = listener.accept().await?;
+        runtime.block_on(async {
+            // start socket 25565
+            // todo: remove unwrap
+            let listener = TcpListener::bind("0.0.0.0:25565").await.unwrap();
 
-            let process = Io::new(stream);
+            let mut id = 0;
 
-            let tx = tx.clone();
+            // accept incoming connections
+            loop {
+                let Ok((stream, _)) = listener.accept().await else {
+                    warn!("accept failed");
+                    continue;
+                };
 
-            let action = process.server_process(id, tx);
-            let action = print_errors(action);
+                let process = Io::new(stream);
 
-            tokio::spawn(action);
-            id += 1;
-        }
+                let tx = tx.clone();
+
+                let action = process.server_process(id, tx);
+                let action = print_errors(action);
+
+                tokio::spawn(action);
+                id += 1;
+            }
+        });
     });
 
-    Ok(rx)
+    rx
 }
 
 fn registry_codec_raw(codec: &RegistryCodec) -> anyhow::Result<Compound> {

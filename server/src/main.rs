@@ -1,52 +1,64 @@
 #![allow(clippy::many_single_char_names)]
-// #![allow(unused)]
 
 extern crate core;
 mod chunk;
 
 #[global_allocator]
-static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
-use std::sync::Arc;
-use std::time::{Duration, Instant};
-use evenio::prelude::*;
-use evenio::rayon::prelude::*;
-use valence_protocol::decode::PacketFrame;
+use std::{
+    sync::atomic::AtomicU32,
+    time::{Duration, Instant},
+};
+
+use evenio::{prelude::*, rayon::prelude::*};
 use valence_protocol::math::DVec3;
 
-use crate::handshake::{Io, server};
+use crate::handshake::{server, Packets};
 
-mod handshake;
 mod global;
+mod handshake;
 
 mod packets;
+mod system;
 
 // A zero-sized component, often called a "marker" or "tag".
 #[derive(Component)]
 struct Player {
-    input: flume::Receiver<PacketFrame>,
+    packets: Packets,
     locale: Option<String>,
 }
 
 #[derive(Event)]
 struct InitPlayer {
-    player: EntityId,
-    io: Io,
-    pos: [f32; 3],
+    entity: EntityId,
+    io: Packets,
+    pos: FullEntityPose,
 }
 
 #[derive(Event)]
-struct SendChat<'a> {
-    x: &'a str
+struct PlayerJoinWorld {
+    #[event(target)]
+    target: EntityId,
+}
+
+#[derive(Event)]
+struct KickPlayer {
+    #[event(target)] // Works on tuple struct fields as well.
+    target: EntityId,
+    reason: String,
 }
 
 #[derive(Event)]
 struct Gametick;
 
+static GLOBAL: global::Global = global::Global {
+    player_count: AtomicU32::new(0),
+};
+
 struct Game {
     world: World,
-    global: Arc<global::Global>,
-    incoming: flume::Receiver<Io>,
+    incoming: flume::Receiver<Packets>,
 }
 
 impl Game {
@@ -55,74 +67,69 @@ impl Game {
             let player = self.world.spawn();
 
             let event = InitPlayer {
-                player,
+                entity: player,
                 io,
-                pos: [0.0, 0.0, 0.0],
+                pos: FullEntityPose {
+                    position: DVec3::new(0.0, 2.0, 0.0),
+                    yaw: 0.0,
+                    pitch: 0.0,
+                },
             };
 
             self.world.send(event);
         }
 
-
+        self.world.send(Gametick);
     }
 }
 
 // The `Receiver<Tick>` parameter tells our handler to listen for the `Tick` event.
-fn update_positions(_: Receiver<Gametick>, mut fetcher: Fetcher<(&mut Player, &mut Position)>, mut s: Sender<SendChat>) {
-    fetcher.par_iter_mut().for_each(|(player| {
-        while let Ok(packet) = player.input.try_recv() {
-            match packet {
-                PacketFrame::TeleportConfirmC2s(packet) => {
-                    println!("Teleport confirm: {:?}", packet);
-                }
-                _ => {}
+fn process_packets(
+    _: Receiver<Gametick>,
+    mut fetcher: Fetcher<(EntityId, &mut Player, &mut FullEntityPose)>,
+    mut sender: Sender<KickPlayer>,
+) {
+    // todo: flume the best things to use here? also this really ust needs to be mpsc not mpmc
+    let (tx, rx) = flume::unbounded();
+
+    fetcher.par_iter_mut().for_each(|(id, player, position)| {
+        // info!("Processing packets for player: {:?}", id);
+        while let Ok(packet) = player.packets.reader.try_recv() {
+            // info!("Received packet: {:?}", packet);
+            if let Err(e) = packets::switch(packet, player, position) {
+                let reason = format!("Invalid packet: {}", e);
+                let _ = tx.send(KickPlayer { target: id, reason });
             }
         }
+    });
+
+    for kick in rx.drain() {
+        sender.send(kick);
     }
 }
 
-
-
-
-fn tick() -> anyhow::Result<()> {
-
-}
-
 fn main() -> anyhow::Result<()> {
-    tracing_subscriber::fmt::Subscriber::builder().init();
-    
-    let global = global::Global {
-        player_count: 0,
-    };
-    
-    let global = Arc::new(global);
+    tracing_subscriber::fmt::init();
 
-    let server = server(global)?;
+    let server = server();
 
     let mut last_tick = Instant::now();
     let tick_duration = Duration::from_millis(20);
 
     let mut world = World::new();
 
-    world.add_handler(init_player_system);
-    world.add_handler(update_positions);
+    world.add_handler(system::init_player);
+    world.add_handler(system::player_join_world);
+    world.add_handler(system::player_kick);
+    world.add_handler(process_packets);
+
+    let mut game = Game {
+        world,
+        incoming: server,
+    };
 
     loop {
-        // Perform your tick logic here
-        println!("Tick!");
-
-        //         server.try_recv()
-        while let Ok(io) = server.try_recv() {
-            let player = world.spawn();
-
-            let event = InitPlayer {
-                player,
-                io,
-                pos: [0.0, 0.0, 0.0],
-            };
-
-            world.send(event);
-        }
+        game.tick();
 
         // Calculate the elapsed time since the last tick
         let elapsed = last_tick.elapsed();
@@ -131,31 +138,13 @@ fn main() -> anyhow::Result<()> {
         // skip the sleep to catch up
         if elapsed < tick_duration {
             let sleep_duration = tick_duration - elapsed;
+            // println!("Sleeping for {:?}", sleep_duration);
             std::thread::sleep(sleep_duration);
         }
 
         // Update the last tick time
         last_tick = Instant::now();
     }
-
-    // let entity = world.spawn();
-    // 
-    // world.send(InitPlayer {
-    //     player: entity,
-    //     pos: [24.0, 24.0, 24.0],
-    // });
-
-    // Ok(())
-}
-
-#[derive(Component)]
-struct Health(i32);
-
-#[derive(Component)]
-struct Position {
-    x: f32,
-    y: f32,
-    z: f32,
 }
 
 #[derive(Component)]
@@ -163,21 +152,4 @@ struct FullEntityPose {
     position: DVec3,
     yaw: f32,
     pitch: f32,
-}
-
-#[derive(Component)]
-struct Monster;
-
-fn init_player_system(
-    r: Receiver<InitPlayer>,
-    mut s: Sender<(Insert<Health>, Insert<Position>, Insert<Player>)>,
-) {
-    // let InitPlayer {
-    //     player: entity,
-    //     pos: [x, y, z],
-    // } = *r.event;
-    // 
-    // s.insert(entity, Health(20));
-    // s.insert(entity, Position { x, y, z });
-    // s.insert(entity, Player);
 }
