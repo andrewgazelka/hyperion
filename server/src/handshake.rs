@@ -24,6 +24,7 @@ use valence_protocol::{
         play::GameJoinS2c,
         status,
     },
+    text::IntoText,
     uuid::Uuid,
     Bounded, Decode, Encode, GameMode, Ident, PacketDecoder, PacketEncoder, VarInt,
 };
@@ -102,6 +103,19 @@ impl WriterComm {
         );
 
         self.tx.send(bytes)?;
+
+        Ok(())
+    }
+
+    pub fn send_chat_message(&mut self, message: &str) -> anyhow::Result<()> {
+        let text = message.to_owned().into_text();
+        // system chat message
+        // System Chat Message
+        let pkt = valence_protocol::packets::play::OverlayMessageS2c {
+            action_bar_text: text.into(),
+        };
+
+        self.send_packet(&pkt)?;
 
         Ok(())
     }
