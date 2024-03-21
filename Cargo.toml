@@ -3,11 +3,7 @@ resolver = "2"
 
 members = [
     "server",
-#    "prototype"
 ]
-#lto = true
-#codegen-units = 1
-
 
 [profile.dev]
 opt-level = 1
@@ -15,6 +11,6 @@ opt-level = 1
 [profile.dev.package."*"]
 opt-level = 3
 
-
-
-
+[profile.release]
+#lto = true
+#codegen-units = 1
