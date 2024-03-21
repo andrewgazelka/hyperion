@@ -30,6 +30,8 @@ mimalloc = { version = "0.1.39" , default-features = false }
 sha2 = "0.10.8"
 itertools = "0.12.1"
 rand = "0.8.5"
+evenio = { git = "https://github.com/rj00a/evenio", features = ["rayon"] }
+flume = "0.11.0"
 
 
 [lints.rust]
@@ -70,6 +72,10 @@ single_char_lifetime_names = "allow"
 min_ident_chars = "allow"
 std_instead_of_core = "allow"
 items_after_statements = "allow"
+shadow_same = "allow"
+let_underscore_must_use = "allow"
+mod_module_files = "deny"
+self_named_module_files = "allow"
 
 complexity = "deny"
 
