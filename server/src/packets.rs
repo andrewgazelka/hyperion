@@ -2,7 +2,8 @@
 //! <https://wiki.vg/index.php?title=Protocol&oldid=18375>
 
 use anyhow::bail;
-use tracing::{debug, warn};
+use itertools::Itertools;
+use tracing::{debug, info, warn};
 use valence_protocol::{decode::PacketFrame, packets::play, Decode, Packet};
 
 use crate::{FullEntityPose, Player};
@@ -106,6 +107,28 @@ fn update_selected_slot(mut data: &[u8]) -> anyhow::Result<()> {
     Ok(())
 }
 
+fn chat_command(mut data: &[u8], player: &mut Player) -> anyhow::Result<()> {
+    let pkt = play::CommandExecutionC2s::decode(&mut data)?;
+    info!("chat command packet: {:?}", pkt);
+
+    let mut cmd = pkt.command.0.split(' ');
+
+    let first = cmd.next();
+
+    if first == Some("add") {
+        let numbers: Vec<_> = cmd.map(|arg| arg.parse::<f64>()).try_collect()?;
+
+        let sum: f64 = numbers.iter().sum();
+
+        player
+            .packets
+            .writer
+            .send_chat_message(&format!("The sum of the numbers is: {}", sum))?;
+    }
+
+    Ok(())
+}
+
 pub fn switch(
     raw: PacketFrame,
     player: &mut Player,
@@ -125,6 +148,8 @@ pub fn switch(
         play::ClientCommandC2s::ID => player_command(data)?,
         play::UpdatePlayerAbilitiesC2s::ID => update_player_abilities(data)?,
         play::UpdateSelectedSlotC2s::ID => update_selected_slot(data)?,
+        play::KeepAliveC2s::ID => (), // todo: implement
+        play::CommandExecutionC2s::ID => chat_command(data, player)?,
         _ => warn!("unknown packet id: 0x{:02X}", id),
     }
 
