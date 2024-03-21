@@ -51,6 +51,11 @@ fn offline_uuid(username: &str) -> anyhow::Result<Uuid> {
     Uuid::from_slice(&sha2::Sha256::digest(username)[..16]).map_err(Into::into)
 }
 
+pub struct ClientConnection {
+    pub packets: Packets,
+    pub name: Box<str>,
+}
+
 pub struct Io {
     stream: TcpStream,
     dec: PacketDecoder,
@@ -97,6 +102,18 @@ impl WriterComm {
         );
 
         self.tx.send(bytes)?;
+
+        Ok(())
+    }
+
+    pub fn send_keep_alive(&mut self) -> anyhow::Result<()> {
+        // todo: handle error
+        let pkt = valence_protocol::packets::play::KeepAliveS2c {
+            // todo: this might be inefficient
+            id: rand::random(),
+        };
+
+        self.send_packet(&pkt)?;
 
         Ok(())
     }
@@ -262,7 +279,11 @@ impl Io {
         Ok(())
     }
 
-    async fn server_process(mut self, id: usize, tx: flume::Sender<Packets>) -> anyhow::Result<()> {
+    async fn server_process(
+        mut self,
+        id: usize,
+        tx: flume::Sender<ClientConnection>,
+    ) -> anyhow::Result<()> {
         // self.stream.set_nodelay(true)?;
 
         info!("connection id {id}");
@@ -294,7 +315,7 @@ impl Io {
         Ok(())
     }
 
-    async fn server_login(mut self, tx: flume::Sender<Packets>) -> anyhow::Result<()> {
+    async fn server_login(mut self, tx: flume::Sender<ClientConnection>) -> anyhow::Result<()> {
         debug!("[[start login phase]]");
 
         // first
@@ -358,7 +379,12 @@ impl Io {
             reader: reader_comm,
         };
 
-        tx.send(packets).unwrap();
+        let conn = ClientConnection {
+            packets,
+            name: username,
+        };
+
+        tx.send(conn).unwrap();
 
         Ok(())
     }
@@ -410,7 +436,7 @@ async fn print_errors(future: impl core::future::Future<Output = anyhow::Result<
     }
 }
 
-async fn run(tx: flume::Sender<Packets>) {
+async fn run(tx: flume::Sender<ClientConnection>) {
     // start socket 25565
     // todo: remove unwrap
     let addr = "0.0.0.0:25565";
@@ -448,7 +474,7 @@ async fn run(tx: flume::Sender<Packets>) {
     }
 }
 
-pub fn server(shutdown: flume::Receiver<()>) -> flume::Receiver<Packets> {
+pub fn server(shutdown: flume::Receiver<()>) -> flume::Receiver<ClientConnection> {
     let (tx, rx) = flume::unbounded();
 
     std::thread::spawn(move || {

@@ -16,7 +16,7 @@ use signal_hook::iterator::Signals;
 use tracing::{info, warn};
 use valence_protocol::math::DVec3;
 
-use crate::handshake::{server, Packets};
+use crate::handshake::{server, ClientConnection, Packets};
 
 mod global;
 mod handshake;
@@ -28,6 +28,8 @@ mod system;
 #[derive(Component)]
 struct Player {
     packets: Packets,
+    name: Box<str>,
+    last_keep_alive_sent: Instant,
     locale: Option<String>,
 }
 
@@ -35,6 +37,7 @@ struct Player {
 struct InitPlayer {
     entity: EntityId,
     io: Packets,
+    name: Box<str>,
     pos: FullEntityPose,
 }
 
@@ -60,17 +63,20 @@ static GLOBAL: global::Global = global::Global {
 
 struct Game {
     world: World,
-    incoming: flume::Receiver<Packets>,
+    incoming: flume::Receiver<ClientConnection>,
 }
 
 impl Game {
     fn tick(&mut self) {
-        while let Ok(io) = self.incoming.try_recv() {
+        while let Ok(connection) = self.incoming.try_recv() {
+            let ClientConnection { packets, name } = connection;
+
             let player = self.world.spawn();
 
             let event = InitPlayer {
                 entity: player,
-                io,
+                io: packets,
+                name,
                 pos: FullEntityPose {
                     position: DVec3::new(0.0, 2.0, 0.0),
                     yaw: 0.0,
@@ -140,6 +146,8 @@ fn main() {
     world.add_handler(system::init_player);
     world.add_handler(system::player_join_world);
     world.add_handler(system::player_kick);
+
+    world.add_handler(system::keep_alive);
     world.add_handler(process_packets);
 
     let mut game = Game {

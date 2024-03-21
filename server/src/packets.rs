@@ -125,7 +125,7 @@ pub fn switch(
         play::ClientCommandC2s::ID => player_command(data)?,
         play::UpdatePlayerAbilitiesC2s::ID => update_player_abilities(data)?,
         play::UpdateSelectedSlotC2s::ID => update_selected_slot(data)?,
-        _ => warn!("unknown packet id: 0x{:X}", id),
+        _ => warn!("unknown packet id: 0x{:02X}", id),
     }
 
     Ok(())

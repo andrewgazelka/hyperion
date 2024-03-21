@@ -19,7 +19,7 @@ pub fn player_join_world(
 ) {
     let (id, player) = r.query;
 
-    info!("Player {:?} joined the world", id);
+    info!("Player {} joined the world", player.name);
 
     if let Err(e) = inner(player) {
         s.send(KickPlayer {
