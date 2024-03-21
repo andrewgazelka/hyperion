@@ -9,11 +9,18 @@ pub fn init_player(
     // take ownership
     let event = EventMut::take(r.event);
 
-    let InitPlayer { entity, io, pos } = event;
+    let InitPlayer {
+        entity,
+        io,
+        name,
+        pos,
+    } = event;
 
     s.insert(entity, pos);
     s.insert(entity, Player {
         packets: io,
+        last_keep_alive_sent: std::time::Instant::now(),
+        name,
         locale: None,
     });
 
