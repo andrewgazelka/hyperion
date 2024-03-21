@@ -1,3 +1,6 @@
+# Define an argument for the Rust nightly version
+ARG RUST_NIGHTLY_VERSION=nightly-2024-03-16
+
 # Use Alpine as base image
 FROM alpine:3.19 as packages
 
@@ -7,42 +10,41 @@ RUN apk update && \
 
 FROM packages as builder
 
-# Install Rust
-RUN curl https://sh.rustup.rs -sSf | sh -s -- -y
+# Install Rust Nightly
+ARG RUST_NIGHTLY_VERSION
+RUN curl https://sh.rustup.rs -sSf | sh -s -- -y && \
+   $HOME/.cargo/bin/rustup default ${RUST_NIGHTLY_VERSION}
+
 ENV PATH="/root/.cargo/bin:${PATH}"
 
 # Set the working directory
 WORKDIR /app
 
-# Copy
-#COPY Cargo.toml Cargo.lock ./
-#
-#COPY backend/src ./backend/src
-#COPY backend/Cargo.toml ./backend/
-#
-#COPY recompositor/src ./recompositor/src
-#COPY recompositor/Cargo.toml ./recompositor/
-#
-#COPY protocol/src ./protocol/src
-#COPY protocol/Cargo.toml ./protocol/
-#
-#COPY client/src ./client/src
-#COPY client/Cargo.toml ./client/
+# Copy the Cargo configuration and source code
 
-# Build the source code
+COPY Cargo.toml Cargo.lock ./
+
+COPY prototype/Cargo.toml ./prototype/Cargo.toml
+COPY prototype/src ./prototype/src
+
+COPY server/Cargo.toml ./server/Cargo.toml
+COPY server/src ./server/src
+
+
+# Build the source code using Rust Nightly
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/app/target \
-    cargo build --release --locked -p backend
+    cargo build --release --locked -p server
 
-# copy the target/release/backend outside of cache
+# Copy the built executable from the cache to a clean directory
 RUN --mount=type=cache,target=/app/target \
     mkdir -p /build && \
-    cp target/release/backend /build/backend
+    cp target/release/server /build/server
 
 FROM scratch
 
-COPY --from=builder /build/backend /
+# Copy the built executable into the final image
+COPY --from=builder /build/server /
 
 EXPOSE 8080
-ENTRYPOINT ["/backend"]
-
+ENTRYPOINT ["/server"]
