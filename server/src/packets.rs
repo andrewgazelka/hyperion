@@ -110,17 +110,12 @@ fn update_selected_slot(mut data: &[u8]) -> anyhow::Result<()> {
 fn chat_command(mut data: &[u8], player: &mut Player) -> anyhow::Result<()> {
     let pkt = play::CommandExecutionC2s::decode(&mut data)?;
 
-
-
-    
     let mut cmd = pkt.command.0.split(' ');
 
     let first = cmd.next();
 
     if first == Some("add") {
         let numbers: Vec<_> = cmd.map(str::parse).try_collect()?;
-
-
 
         let sum: f64 = numbers.iter().sum();
 

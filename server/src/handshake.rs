@@ -2,6 +2,7 @@
 use std::{borrow::Cow, collections::BTreeSet, io, io::ErrorKind};
 
 use anyhow::{ensure, Context};
+use base64::Engine;
 use bytes::BytesMut;
 use monoio::{
     io::{
@@ -411,6 +412,19 @@ impl Io {
             .player_count
             .load(std::sync::atomic::Ordering::Relaxed);
 
+        //  64x64 pixels image
+        let bytes = include_bytes!("saul.png");
+        let base64 = base64::engine::GeneralPurpose::new(
+            &base64::alphabet::STANDARD,
+            base64::engine::general_purpose::NO_PAD,
+        );
+
+        let result = base64.encode(bytes);
+
+        // data:image/png;base64,{result}
+        let favicon = format!("data:image/png;base64,{result}");
+
+        // https://wiki.vg/Server_List_Ping#Response
         let json = json!({
             "version": {
                 "name": MINECRAFT_VERSION,
@@ -421,6 +435,7 @@ impl Io {
                 "max": 10_000,
                 "sample": [],
             },
+            "favicon": favicon,
             "description": "10k babyyyyy",
         });
 
