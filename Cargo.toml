@@ -3,6 +3,7 @@ resolver = "2"
 
 members = [
     "server",
+    "quadtree"
 ]
 
 [profile.dev]
