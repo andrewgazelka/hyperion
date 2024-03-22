@@ -30,6 +30,7 @@ flume = "0.11.0"
 # todo: how much will adding "sync" wakers hurt performance?
 monoio = { version = "0.2.3", features = ["sync"] }
 signal-hook = "0.3.17"
+base64 = "0.21.7"
 
 
 [lints.rust]

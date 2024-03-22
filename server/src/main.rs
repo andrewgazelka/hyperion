@@ -105,7 +105,7 @@ fn process_packets(
         while let Ok(packet) = player.packets.reader.try_recv() {
             // info!("Received packet: {:?}", packet);
             if let Err(e) = packets::switch(packet, player, position) {
-                let reason = format!("Invalid packet: {}", e);
+                let reason = format!("Invalid packet: {e}");
                 let _ = tx.send(KickPlayer { target: id, reason });
             }
         }
