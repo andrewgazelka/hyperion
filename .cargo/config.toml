@@ -33,3 +33,6 @@ rustflags = ["-Zshare-generics=n"]
 # In most cases the gains are negligible, but if you are on macos and have slow compile times you should see significant gains.
 #[profile.dev]
 #debug = 1
+
+[registries.crates-io]
+protocol = "sparse"

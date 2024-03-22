@@ -3,7 +3,7 @@
 
 use anyhow::bail;
 use itertools::Itertools;
-use tracing::{debug, info, warn};
+use tracing::{debug, warn};
 use valence_protocol::{decode::PacketFrame, packets::play, Decode, Packet};
 
 use crate::{FullEntityPose, Player};
@@ -109,14 +109,18 @@ fn update_selected_slot(mut data: &[u8]) -> anyhow::Result<()> {
 
 fn chat_command(mut data: &[u8], player: &mut Player) -> anyhow::Result<()> {
     let pkt = play::CommandExecutionC2s::decode(&mut data)?;
-    info!("chat command packet: {:?}", pkt);
 
+
+
+    
     let mut cmd = pkt.command.0.split(' ');
 
     let first = cmd.next();
 
     if first == Some("add") {
-        let numbers: Vec<_> = cmd.map(|arg| arg.parse::<f64>()).try_collect()?;
+        let numbers: Vec<_> = cmd.map(str::parse).try_collect()?;
+
+
 
         let sum: f64 = numbers.iter().sum();
 

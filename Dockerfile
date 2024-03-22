@@ -22,17 +22,19 @@ WORKDIR /app
 
 # Copy the Cargo configuration and source code
 
-COPY Cargo.toml Cargo.lock ./
+COPY .cargo ./.cargo
 
-COPY prototype/Cargo.toml ./prototype/Cargo.toml
-COPY prototype/src ./prototype/src
+COPY Cargo.toml Cargo.lock ./
 
 COPY server/Cargo.toml ./server/Cargo.toml
 COPY server/src ./server/src
 
+# Define environment variable for Cargo home, if not using the default
+ENV CARGO_HOME=/usr/local/cargo
 
 # Build the source code using Rust Nightly with
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/usr/local/cargo/git \
     --mount=type=cache,target=/app/target \
     RUSTFLAGS='-C target-cpu=native' cargo build --release --locked -p server
 
