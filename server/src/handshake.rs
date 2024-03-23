@@ -1,5 +1,10 @@
 #![allow(unused)]
-use std::{borrow::Cow, collections::BTreeSet, io, io::ErrorKind};
+use std::{
+    borrow::Cow,
+    collections::BTreeSet,
+    io,
+    io::{ErrorKind, Read},
+};
 
 use anyhow::{ensure, Context};
 use base64::Engine;
@@ -75,14 +80,14 @@ pub struct IoRead {
 }
 
 pub struct WriterComm {
-    tx: flume::Sender<BytesMut>,
+    tx: flume::Sender<bytes::Bytes>,
     enc: PacketEncoder,
 }
 
 type ReaderComm = flume::Receiver<PacketFrame>;
 
 impl WriterComm {
-    pub(crate) fn send_packet<P>(&mut self, pkt: &P) -> anyhow::Result<()>
+    pub fn serialize<P>(&mut self, pkt: &P) -> anyhow::Result<bytes::Bytes>
     where
         P: valence_protocol::Packet + Encode,
     {
@@ -103,8 +108,20 @@ impl WriterComm {
             slice_len
         );
 
-        self.tx.send(bytes)?;
+        Ok(bytes.freeze())
+    }
 
+    pub fn send_raw(&mut self, bytes: bytes::Bytes) -> anyhow::Result<()> {
+        self.tx.send(bytes)?;
+        Ok(())
+    }
+
+    pub(crate) fn send_packet<P>(&mut self, pkt: &P) -> anyhow::Result<()>
+    where
+        P: valence_protocol::Packet + Encode,
+    {
+        let bytes = self.serialize(pkt)?;
+        self.send_raw(bytes)?;
         Ok(())
     }
 
@@ -202,7 +219,7 @@ impl IoRead {
 }
 
 impl IoWrite {
-    pub(crate) async fn send_packet(&mut self, bytes: BytesMut) -> anyhow::Result<()> {
+    pub(crate) async fn send_packet(&mut self, bytes: bytes::Bytes) -> anyhow::Result<()> {
         let (result, _) = self.write.write_all(bytes).await;
 
         result?;

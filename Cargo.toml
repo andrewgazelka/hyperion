@@ -3,7 +3,9 @@ resolver = "2"
 
 members = [
     "server",
-    "chunk"
+    "chunk",
+    "generator-build",
+    "generator"
 ]
 
 [profile.dev]
@@ -18,3 +20,5 @@ opt-level = 3
 
 [workspace.dependencies]
 chunk = { path = "chunk" }
+generator-build = { path = "generator-build" }
+generator = { path = "generator" }
