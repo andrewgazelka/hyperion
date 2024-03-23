@@ -38,7 +38,7 @@ fn main() {
 
     let generated_zip = root.join("generated.zip");
 
-    unzip_file_to_location(&generated_zip, &out_dir).unwrap();
+    unzip_file_to_location(&generated_zip, out_dir).unwrap();
 
     generator_build::GeneratorConfig {
         input: out_dir.join("generated"),
