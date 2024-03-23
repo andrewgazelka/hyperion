@@ -1,21 +1,20 @@
 # Project 10k
+_How can we get 10k players to PvP at once on a Minecraft server to break the Guinness World Record?_
 
-How can we get 10k players to PvP at once on a Minecraft server to break the Guinness World Record?
+<p align="center">
+  <img src="https://github.com/andrewgazelka/mc-server/assets/7644264/5cb83738-3e85-47e9-b73c-40e75257c5a3" height="200"  />
+  <img src="https://github.com/andrewgazelka/hyperion/assets/7644264/00bc5b06-8db4-41c2-80f3-d3022edec516" width = "200"/>
+</p>
 
-![image](https://github.com/andrewgazelka/mc-server/assets/7644264/5cb83738-3e85-47e9-b73c-40e75257c5a3)
+
 
 
 # Running
-
 ```bash
 docker compose up
 ```
 
 # Internals
-
-![image](https://github.com/andrewgazelka/mc-server/assets/7644264/8fb3cd33-4dd7-42fc-a3e0-17e167c64509)
-![image](https://github.com/andrewgazelka/mc-server/assets/7644264/5272317f-48c3-4e15-a032-73d9229a4413)
-
 
 There are many faction servers which have 500 players on Start of The World (SOTW).
 Usually this is around the upper limit for the number of players that can be in one world in vanilla Minecraft.
