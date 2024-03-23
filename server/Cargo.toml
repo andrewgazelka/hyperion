@@ -40,6 +40,7 @@ monoio = { version = "0.2.3", features = ["sync"] }
 signal-hook = "0.3.17"
 base64 = "0.21.7"
 uuid = "1.8.0"
+rand_distr = "0.4.3"
 #bit-set = "0.5.3"
 
 

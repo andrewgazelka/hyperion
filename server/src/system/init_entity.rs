@@ -5,7 +5,10 @@ use evenio::{
 use generator::EntityType;
 use valence_protocol::{ByteAngle, VarInt, Velocity};
 
-use crate::{FullEntityPose, InitEntity, Player, Uuid, Zombie};
+
+use rand_distr::{Distribution, LogNormal};
+
+use crate::{FullEntityPose, InitEntity, Player, MinecraftEntity, Uuid, RunningSpeed};
 
 // Packet ID	State	Bound To	Field Name	Field Type	Notes
 // 0x01	Play	Client	Entity ID	VarInt	A unique integer ID mostly used in the protocol to identify the
@@ -23,7 +26,7 @@ use crate::{FullEntityPose, InitEntity, Player, Uuid, Zombie};
 pub fn call(
     r: Receiver<InitEntity>,
     mut players: Fetcher<&mut Player>,
-    mut s: Sender<(Insert<FullEntityPose>, Insert<Zombie>, Insert<Uuid>, Spawn)>,
+    mut s: Sender<(Insert<FullEntityPose>, Insert<MinecraftEntity>, Insert<Uuid>, Insert<RunningSpeed>, Spawn)>,
 ) {
     use valence_protocol::packets::play;
 
@@ -35,9 +38,18 @@ pub fn call(
 
     let uuid = Uuid(uuid::Uuid::new_v4());
 
-    s.insert(id, Zombie);
+    s.insert(id, MinecraftEntity);
     s.insert(id, event.pose);
     s.insert(id, uuid);
+
+    // speed normal dist centered at 0.1
+    // Parameters for the Log-Normal distribution
+    let mean = 0.10; // Mean of the underlying Normal distribution
+    let std_dev = 0.20; // Standard deviation of the underlying Normal distribution
+    let log_normal = LogNormal::new(mean, std_dev).unwrap();
+
+    let speed = log_normal.sample(&mut rand::thread_rng()) * 0.1;
+    s.insert(id, RunningSpeed(speed));
 
     #[allow(clippy::cast_possible_wrap)]
     let entity_id = VarInt(id.index().0 as i32);

@@ -1,15 +1,30 @@
 #![allow(unused)]
 
-use evenio::{entity::EntityId, event::Receiver, fetch::Fetcher, query::Not};
+use std::process::id;
+
+use evenio::{
+    entity::EntityId,
+    event::Receiver,
+    fetch::Fetcher,
+    query::{Not, Query},
+};
 use tracing::info;
 use valence_protocol::{math::DVec2, ByteAngle, VarInt};
 
-use crate::{FullEntityPose, Gametick, Player, Zombie};
+use crate::{FullEntityPose, Gametick, MinecraftEntity, Player, RunningSpeed};
+
+#[derive(Query, Debug)]
+pub struct EntityQuery<'a> {
+    id: EntityId,
+    entity: &'a MinecraftEntity,
+    running_speed: Option<&'a RunningSpeed>,
+    pose: &'a mut FullEntityPose,
+}
 
 pub fn call(
     _: Receiver<Gametick>,
-    mut zombies: Fetcher<(&Zombie, Not<&mut Player>, EntityId, &mut FullEntityPose)>,
-    mut player: Fetcher<(&mut Player, Not<&Zombie>, &FullEntityPose)>,
+    mut entities: Fetcher<EntityQuery>,
+    mut player: Fetcher<(&mut Player, Not<&MinecraftEntity>, &FullEntityPose)>,
 ) {
     use valence_protocol::packets::play;
 
@@ -20,12 +35,15 @@ pub fn call(
 
     let target = target.position;
 
-    // info!("tick");
+    entities.iter_mut().for_each(|query| {
+        let EntityQuery {
+            id,
+            entity,
+            running_speed,
+            pose,
+        } = query;
 
-    zombies.iter_mut().for_each(|(_, _, id, pose)| {
         let current = pose.position;
-
-        // info!("zombie: {:?} target: {:?}", current, target);
 
         let dif = target - current;
 
@@ -38,15 +56,15 @@ pub fn call(
 
         let pitch = 0.0;
 
-        if dif2d.length_squared() < 0.1 {
+        if dif2d.length_squared() < 0.01 {
             return;
         }
 
         // normalize
         let dif2d = dif2d.normalize();
 
-        // make 0.1
-        let dif2d = dif2d * 0.1;
+        let speed = running_speed.copied().unwrap_or_default();
+        let dif2d = dif2d * speed.0;
 
         pose.position.x += dif2d.x;
         pose.position.z += dif2d.y;
