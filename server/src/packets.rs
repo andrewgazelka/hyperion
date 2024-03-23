@@ -1,7 +1,9 @@
 #![allow(clippy::missing_const_for_fn)]
 //! <https://wiki.vg/index.php?title=Protocol&oldid=18375>
 
-use anyhow::bail;
+use std::str::FromStr;
+
+use anyhow::{bail, ensure};
 use evenio::event::Sender;
 use itertools::Itertools;
 use tracing::{debug, warn};
@@ -108,9 +110,38 @@ fn update_selected_slot(mut data: &[u8]) -> anyhow::Result<()> {
     Ok(())
 }
 
+#[derive(Debug, Copy, Clone)]
+enum HybridPos {
+    Absolute(f64),
+    Relative(f64),
+}
+
+// impl parse
+
+impl FromStr for HybridPos {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if let Some((l, r)) = s.split_once('~') {
+            ensure!(l.is_empty(), "expected ~ to be at the start of the string");
+
+            if r.is_empty() {
+                return Ok(Self::Relative(0.0));
+            }
+
+            let num = r.parse()?;
+            return Ok(Self::Relative(num));
+        }
+
+        let num = s.parse()?;
+        Ok(Self::Absolute(num))
+    }
+}
+
 fn chat_command(
     mut data: &[u8],
     player: &mut Player,
+    full_entity_pose: &FullEntityPose,
     sender: &mut Sender<(KickPlayer, InitEntity)>,
 ) -> anyhow::Result<()> {
     let pkt = play::CommandExecutionC2s::decode(&mut data)?;
@@ -120,11 +151,29 @@ fn chat_command(
     let first = cmd.next();
 
     if first == Some("spawn") {
-        let numbers: Vec<f64> = cmd.map(str::parse).try_collect()?;
+        let numbers: Vec<HybridPos> = cmd.map(str::parse).try_collect()?;
 
-        // if [x,y,z]
-        let &[x, y, z] = numbers.as_slice() else {
-            bail!("oop")
+        let [x, y, z] = match numbers.as_slice() {
+            &[x, y, z] => [x, y, z],
+            [] => [HybridPos::Relative(0.0); 3],
+            _ => bail!("expected 3 numbers"),
+        };
+
+        let loc = full_entity_pose.position;
+
+        let x = match x {
+            HybridPos::Absolute(x) => x,
+            HybridPos::Relative(x) => loc.x + x,
+        };
+
+        let y = match y {
+            HybridPos::Absolute(y) => y,
+            HybridPos::Relative(y) => loc.y + y,
+        };
+
+        let z = match z {
+            HybridPos::Absolute(z) => z,
+            HybridPos::Relative(z) => loc.z + z,
         };
 
         player
@@ -165,7 +214,7 @@ pub fn switch(
         play::UpdatePlayerAbilitiesC2s::ID => update_player_abilities(data)?,
         play::UpdateSelectedSlotC2s::ID => update_selected_slot(data)?,
         play::KeepAliveC2s::ID => (), // todo: implement
-        play::CommandExecutionC2s::ID => chat_command(data, player, sender)?,
+        play::CommandExecutionC2s::ID => chat_command(data, player, full_entity_pose, sender)?,
         _ => warn!("unknown packet id: 0x{:02X}", id),
     }
 

@@ -109,22 +109,26 @@ fn process_packets(
     mut sender: Sender<(KickPlayer, InitEntity)>,
 ) {
     // todo: flume the best things to use here? also this really ust needs to be mpsc not mpmc
-    let (tx, rx) = flume::unbounded();
+    // let (tx, rx) = flume::unbounded();
 
-    fetcher.iter_mut().for_each(|(id, player, position)| {
+    fetcher.iter_mut().for_each(|(_id, player, position)| {
         // info!("Processing packets for player: {:?}", id);
         while let Ok(packet) = player.packets.reader.try_recv() {
             // info!("Received packet: {:?}", packet);
             if let Err(e) = packets::switch(packet, player, position, &mut sender) {
-                let reason = format!("Invalid packet: {e}");
-                let _ = tx.send(KickPlayer { target: id, reason });
+                let reason = format!("error: {e}");
+
+                player.packets.writer.send_chat_message(&reason).unwrap();
+
+                warn!("invalid packet: {reason}");
+                // let _ = tx.send(KickPlayer { target: id, reason });
             }
         }
     });
 
-    for kick in rx.drain() {
-        sender.send(kick);
-    }
+    // for kick in rx.drain() {
+    //     sender.send(kick);
+    // }
 }
 
 static SHUTDOWN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);

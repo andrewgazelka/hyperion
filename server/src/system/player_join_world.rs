@@ -12,11 +12,11 @@ use valence_protocol::{
     math::DVec3,
     nbt::{compound, List},
     packets::{play, play::player_position_look_s2c::PlayerPositionLookFlags},
-    BlockPos, BlockState, ChunkPos, Encode, FixedArray,
+    BlockPos, BlockState, ChunkPos, Encode, FixedArray, VarInt,
 };
 use valence_registry::{biome::BiomeId, RegistryIdx};
 
-use crate::{chunk::heightmap, KickPlayer, Player, PlayerJoinWorld, GLOBAL};
+use crate::{chunk::heightmap, handshake::Packets, KickPlayer, Player, PlayerJoinWorld, GLOBAL};
 
 pub fn player_join_world(
     r: Receiver<PlayerJoinWorld, (EntityId, &mut Player)>,
@@ -74,6 +74,48 @@ impl<T, const N: usize> Array3d for [T; N] {
     fn get3_mut(&mut self, x: usize, y: usize, z: usize) -> &mut Self::Item {
         &mut self[x + z * 16 + y * 16 * 16]
     }
+}
+
+fn send_commands(io: &mut Packets) -> anyhow::Result<()> {
+    // https://wiki.vg/Command_Data
+    use valence_protocol::packets::play::command_tree_s2c::*;
+
+    // id 0
+    let root = Node {
+        data: NodeData::Root,
+        executable: false,
+        children: vec![VarInt(1)],
+        redirect_node: None,
+    };
+
+    // id 1
+    let spawn = Node {
+        data: NodeData::Literal {
+            name: "spawn".to_owned(),
+        },
+        executable: true,
+        children: vec![VarInt(2)],
+        redirect_node: None,
+    };
+
+    // id 2
+    let spawn_arg = Node {
+        data: NodeData::Argument {
+            name: "position".to_owned(),
+            parser: Parser::BlockPos,
+            suggestion: None,
+        },
+        executable: true,
+        children: vec![],
+        redirect_node: None,
+    };
+
+    io.writer.send_packet(&play::CommandTreeS2c {
+        commands: vec![root, spawn, spawn_arg],
+        root_index: VarInt(0),
+    })?;
+
+    Ok(())
 }
 
 fn air_section() -> Vec<u8> {
@@ -250,6 +292,8 @@ fn inner(io: &mut Player) -> anyhow::Result<()> {
             io.writer.send_packet(&pkt)?;
         }
     }
+
+    send_commands(io)?;
 
     GLOBAL
         .player_count
