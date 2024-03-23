@@ -14,8 +14,8 @@ pub fn heightmap(max_height: u32, current_height: u32) -> Vec<u64> {
     let bits = ceil_log2(max_height + 1);
     let mut data = BitStorage::new(bits as usize, 16 * 16, None).unwrap();
 
-    for x in 0usize..16 {
-        for z in 0usize..16 {
+    for x in 0_usize..16 {
+        for z in 0_usize..16 {
             let index = x + z * 16;
             data.set(index, current_height as u64 + 1);
         }

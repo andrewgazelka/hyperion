@@ -208,7 +208,7 @@ impl IoWrite {
         result?;
 
         // todo: is flush needed?
-        self.write.flush().await?;
+        // self.write.flush().await?;
 
         Ok(())
     }
@@ -379,13 +379,19 @@ impl Io {
             // debug!("before");
             debug!("start receiving packets");
             while let Ok(raw) = io_read.recv_packet_raw().await {
-                c2s_tx.send(raw).unwrap();
+                if let Err(e) = c2s_tx.send(raw) {
+                    error!("{e:?}");
+                    break;
+                }
             }
         });
 
         monoio::spawn(async move {
             while let Ok(bytes) = s2c_rx.recv_async().await {
-                io_write.send_packet(bytes).await.unwrap();
+                if let Err(e) = io_write.send_packet(bytes).await {
+                    error!("{e:?}");
+                    break;
+                }
             }
         });
 

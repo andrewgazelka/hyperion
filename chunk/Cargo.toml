@@ -1,50 +1,25 @@
 [package]
-name = "server"
+name = "chunk"
 version = "0.1.0"
 edition = "2021"
 authors = ["Andrew Gazelka <andrew.gazelka@gmail.com>"]
 readme = "README.md"
 
 [dependencies]
-anyhow = "1.0.80"
-tracing-subscriber = { version = "0.3.18", features = ["chrono"] }
-tracing = "0.1.40"
-serde_json = "1.0.114"
-bytes = "1.5.0"
-
+anyhow = "1.0.81"
+byteorder = "1.5.0"
 valence_protocol = { git = "https://github.com/valence-rs/valence" }
 valence_registry = { git = "https://github.com/valence-rs/valence" }
-#valence_server = { git = "https://github.com/valence-rs/valence" }
+arrayvec = "0.7.4"
 
-chunk.workspace = true
-
-#azalea-buf = { git = "https://github.com/azalea-rs/azalea", branch = "1.20.1" }
-#azalea-world = { git = "https://github.com/azalea-rs/azalea", branch = "1.20.1" }
-#azalea-buf = { git = "https://github.com/azalea-rs/azalea" }
-azalea-world = { git = "https://github.com/azalea-rs/azalea" }
-
-
-# no secure alloc
-mimalloc = { version = "0.1.39" , default-features = false }
-sha2 = "0.10.8"
-itertools = "0.12.1"
-rand = "0.8.5"
-evenio = { git = "https://github.com/rj00a/evenio", features = ["rayon"] }
-flume = "0.11.0"
-
-# todo: how much will adding "sync" wakers hurt performance?
-monoio = { version = "0.2.3", features = ["sync"] }
-signal-hook = "0.3.17"
-base64 = "0.21.7"
-
+[dev-dependencies]
+rand = "0.9.0-alpha.1"
 
 [lints.rust]
 warnings = "deny"
 
 [lints.clippy]
-# cargo
 cargo_common_metadata = "allow"
-#multiple_crate_versions = "warn"
 negative_feature_names = "deny"
 redundant_feature_names = "deny"
 wildcard_dependencies = "deny"
@@ -63,6 +38,7 @@ default_numeric_fallback = "allow"
 as_conversions = "allow"
 arithmetic_side_effects = "allow"
 shadow_unrelated = "allow"
+unseparated_literal_suffix = "allow"
 else_if_without_else = "allow"
 float_arithmetic = "allow"
 single_call_fn = "allow"
@@ -74,20 +50,24 @@ infinite_loop = "allow"
 single_char_lifetime_names = "allow"
 min_ident_chars = "allow"
 std_instead_of_core = "allow"
-items_after_statements = "allow"
-shadow_same = "allow"
 let_underscore_must_use = "allow"
+pattern_type_mismatch = "allow"
+print_stderr = "allow"
+missing_assert_message = "allow"
+shadow_same = "allow"
 mod_module_files = "deny"
 self_named_module_files = "allow"
-pattern_type_mismatch = "allow"
+items_after_statements = "allow"
 integer_division = "allow"
-separated_literal_suffix = "allow"
-unseparated_literal_suffix = "deny"
+missing_trait_methods = "allow"
+exhaustive_enums = "allow"
+impl_trait_in_params = "allow"
 
-complexity = "deny"
+complexity = { level = "deny", priority = -1 }
 
 nursery = { level = "deny", priority = -1 }
 future_not_send = "allow"
+redundant_pub_crate = "allow"
 
 pedantic = { level = "deny", priority = -1 }
 uninlined_format_args = "allow" # consider denying; this is allowed because Copilot often generates code that triggers this lint
@@ -96,11 +76,12 @@ cast_lossless = "allow"
 cast_possible_truncation = "allow" # consider denying
 cast_precision_loss = "allow" # consider denying
 missing_errors_doc = "allow" # consider denying
+struct_excessive_bools = "allow"
 wildcard_imports = "allow"
 
-perf = "deny"
+perf = { level = "deny", priority = -1 }
 
-style = "deny"
+style = { level = "deny", priority = -1 }
 
 suspicious = { level = "deny", priority = -1 }
 blanket_clippy_restriction_lints = "allow"

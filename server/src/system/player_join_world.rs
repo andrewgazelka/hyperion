@@ -1,6 +1,10 @@
-use std::borrow::Cow;
+use std::{borrow::Cow, io::Write};
 
-use azalea_buf::McBufWritable;
+use chunk::{
+    bit_width,
+    chunk::{BiomeContainer, BlockStateContainer, SECTION_BLOCK_COUNT},
+    palette::{BlockGetter, DirectEncoding},
+};
 use evenio::prelude::*;
 use itertools::Itertools;
 use tracing::info;
@@ -8,10 +12,19 @@ use valence_protocol::{
     math::DVec3,
     nbt::{compound, List},
     packets::{play, play::player_position_look_s2c::PlayerPositionLookFlags},
-    BlockPos, ChunkPos,
+    BlockPos, BlockState, ChunkPos, Encode,
 };
+use valence_registry::{biome::BiomeId, RegistryIdx};
 
 use crate::{chunk::heightmap, KickPlayer, Player, PlayerJoinWorld, GLOBAL};
+
+struct AllBlock2;
+
+impl BlockGetter for AllBlock2 {
+    fn get_state(&self, _x: usize, _y: usize, _z: usize) -> u64 {
+        2
+    }
+}
 
 pub fn player_join_world(
     r: Receiver<PlayerJoinWorld, (EntityId, &mut Player)>,
@@ -24,9 +37,68 @@ pub fn player_join_world(
     if let Err(e) = inner(player) {
         s.send(KickPlayer {
             target: id,
-            reason: format!("Failed to join world: {}", e),
+            reason: format!("Failed to join world: {e}"),
         });
     }
+}
+
+fn write_block_states(states: BlockStateContainer, writer: &mut impl Write) -> anyhow::Result<()> {
+    states.encode_mc_format(
+        writer,
+        |b| b.to_raw().into(),
+        4,
+        8,
+        bit_width(BlockState::max_raw().into()),
+    )?;
+    Ok(())
+}
+
+fn write_biomes(biomes: BiomeContainer, writer: &mut impl Write) -> anyhow::Result<()> {
+    biomes.encode_mc_format(
+        writer,
+        |b| b.to_index() as u64,
+        0,
+        3,
+        6, // bit_width(info.biome_registry_len - 1),
+    )?;
+    Ok(())
+}
+
+fn air_section() -> Vec<u8> {
+    let mut section_bytes = Vec::new();
+    0_u16.encode(&mut section_bytes).unwrap();
+
+    let block_states = BlockStateContainer::Single(BlockState::AIR);
+    write_block_states(block_states, &mut section_bytes).unwrap();
+
+    let biomes = BiomeContainer::Single(BiomeId::DEFAULT);
+    write_biomes(biomes, &mut section_bytes).unwrap();
+
+    section_bytes
+}
+
+fn ground_section() -> Vec<u8> {
+    let mut section_bytes = Vec::new();
+
+    let number_blocks: u16 = 16 * 16;
+    number_blocks.encode(&mut section_bytes).unwrap();
+
+    let blocks: [_; SECTION_BLOCK_COUNT] = std::array::from_fn(|i| {
+        if i < 16 * 16 {
+            BlockState::GRASS_BLOCK
+        } else {
+            BlockState::AIR
+        }
+    });
+
+    let block_states = BlockStateContainer::Direct(Box::new(blocks));
+
+    write_block_states(block_states, &mut section_bytes).unwrap();
+
+    let biomes = BiomeContainer::Single(BiomeId::DEFAULT);
+    write_biomes(biomes, &mut section_bytes).unwrap();
+
+    section_bytes
 }
 
 fn inner(io: &mut Player) -> anyhow::Result<()> {
@@ -52,22 +124,19 @@ fn inner(io: &mut Player) -> anyhow::Result<()> {
         chunk_z: 0.into(),
     })?;
 
-    // 27. Chunk Data
-    #[allow(clippy::integer_division)]
-    let mut chunk = azalea_world::Chunk::default();
-    let dimension_height = 384;
-
-    for section in chunk.sections.iter_mut().take(1) {
-        // Sections with a block count of 0 are not rendered
-        section.block_count = 4096;
-
-        // Set the Palette to be a single value
-        let states = &mut section.states;
-        states.palette = azalea_world::palette::Palette::SingleValue(2);
-    }
+    let section_count = 384 / 16;
+    let air_section = air_section();
+    let ground_section = ground_section();
 
     let mut bytes = Vec::new();
-    chunk.write_into(&mut bytes)?;
+
+    bytes.extend_from_slice(&ground_section);
+
+    for _ in (0..section_count).skip(1) {
+        bytes.extend_from_slice(&air_section);
+    }
+
+    let dimension_height = 384;
 
     let map = heightmap(dimension_height, dimension_height - 3);
     let map: Vec<_> = map.into_iter().map(i64::try_from).try_collect()?;
