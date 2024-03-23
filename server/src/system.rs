@@ -2,6 +2,7 @@ mod init_player;
 mod keep_alive;
 mod player_join_world;
 mod player_kick;
+mod send_zombies;
 
 pub use init_player::init_player;
 pub use keep_alive::keep_alive;

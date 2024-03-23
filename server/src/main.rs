@@ -1,3 +1,4 @@
+#![allow(unused)]
 #![allow(clippy::many_single_char_names)]
 
 extern crate core;
@@ -24,6 +25,8 @@ mod handshake;
 mod packets;
 mod system;
 
+mod blocks;
+
 // A zero-sized component, often called a "marker" or "tag".
 #[derive(Component)]
 struct Player {
@@ -45,6 +48,11 @@ struct InitPlayer {
 struct PlayerJoinWorld {
     #[event(target)]
     target: EntityId,
+}
+
+#[derive(Component)]
+struct Zombie {
+    location: FullEntityPose,
 }
 
 #[derive(Event)]

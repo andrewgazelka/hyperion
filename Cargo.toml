@@ -3,6 +3,7 @@ resolver = "2"
 
 members = [
     "server",
+    "chunk"
 ]
 
 [profile.dev]
@@ -14,3 +15,6 @@ opt-level = 3
 [profile.release]
 #lto = true
 #codegen-units = 1
+
+[workspace.dependencies]
+chunk = { path = "chunk" }
