@@ -83,6 +83,6 @@ jobs:
       - uses: Swatinem/rust-cache@v2
 
       - name: Clippy check
-        run: cargo clippy
+        run: cargo clippy --workspace --tests --examples --all-features
 
 

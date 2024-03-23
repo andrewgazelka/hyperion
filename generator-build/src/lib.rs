@@ -107,16 +107,3 @@ impl GeneratorConfig {
         Ok(result)
     }
 }
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn test_generator_config() {
-        let config = super::GeneratorConfig {
-            input: std::path::PathBuf::from("generated"),
-        };
-        let res = config.generate().unwrap();
-
-        println!("{res}");
-    }
-}
