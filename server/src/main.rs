@@ -25,8 +25,6 @@ mod handshake;
 mod packets;
 mod system;
 
-mod blocks;
-
 // A zero-sized component, often called a "marker" or "tag".
 #[derive(Component)]
 struct Player {

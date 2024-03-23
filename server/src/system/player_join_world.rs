@@ -1,8 +1,9 @@
 use std::{borrow::Cow, io::Write};
 
+use azalea_world::BitStorage;
 use chunk::{
     bit_width,
-    chunk::{BiomeContainer, BlockStateContainer, SECTION_BLOCK_COUNT},
+    chunk::{BiomeContainer, BlockStateContainer, SECTION_BLOCK_COUNT, SLICE_BLOCK_COUNT},
     palette::{BlockGetter, DirectEncoding},
 };
 use evenio::prelude::*;
@@ -12,7 +13,7 @@ use valence_protocol::{
     math::DVec3,
     nbt::{compound, List},
     packets::{play, play::player_position_look_s2c::PlayerPositionLookFlags},
-    BlockPos, BlockState, ChunkPos, Encode,
+    BlockPos, BlockState, ChunkPos, Encode, FixedArray,
 };
 use valence_registry::{biome::BiomeId, RegistryIdx};
 
@@ -64,11 +65,46 @@ fn write_biomes(biomes: BiomeContainer, writer: &mut impl Write) -> anyhow::Resu
     Ok(())
 }
 
+trait Array3d {
+    type Item;
+    fn get3(&self, x: usize, y: usize, z: usize) -> &Self::Item;
+    fn get3_mut(&mut self, x: usize, y: usize, z: usize) -> &mut Self::Item;
+}
+
+#[allow(clippy::indexing_slicing)]
+impl<T, const N: usize> Array3d for [T; N] {
+    type Item = T;
+
+    fn get3(&self, x: usize, y: usize, z: usize) -> &Self::Item {
+        &self[x + z * 16 + y * 16 * 16]
+    }
+
+    fn get3_mut(&mut self, x: usize, y: usize, z: usize) -> &mut Self::Item {
+        &mut self[x + z * 16 + y * 16 * 16]
+    }
+}
+
 fn air_section() -> Vec<u8> {
     let mut section_bytes = Vec::new();
     0_u16.encode(&mut section_bytes).unwrap();
 
     let block_states = BlockStateContainer::Single(BlockState::AIR);
+    write_block_states(block_states, &mut section_bytes).unwrap();
+
+    let biomes = BiomeContainer::Single(BiomeId::DEFAULT);
+    write_biomes(biomes, &mut section_bytes).unwrap();
+
+    section_bytes
+}
+
+fn stone_section() -> Vec<u8> {
+    let mut section_bytes = Vec::new();
+    (SECTION_BLOCK_COUNT as u16)
+        .encode(&mut section_bytes)
+        .unwrap();
+
+    let mut blocks = [BlockState::STONE; SECTION_BLOCK_COUNT];
+    let block_states = BlockStateContainer::Direct(Box::new(blocks));
     write_block_states(block_states, &mut section_bytes).unwrap();
 
     let biomes = BiomeContainer::Single(BiomeId::DEFAULT);
@@ -83,13 +119,32 @@ fn ground_section() -> Vec<u8> {
     let number_blocks: u16 = 16 * 16;
     number_blocks.encode(&mut section_bytes).unwrap();
 
-    let blocks: [_; SECTION_BLOCK_COUNT] = std::array::from_fn(|i| {
-        if i < 16 * 16 {
-            BlockState::GRASS_BLOCK
-        } else {
-            BlockState::AIR
+    let mut blocks = [BlockState::AIR; SECTION_BLOCK_COUNT];
+    // set sin wave with peak at center of chunk
+
+    let bedrock_layers = 3;
+
+    for block in blocks.iter_mut().take(SLICE_BLOCK_COUNT * bedrock_layers) {
+        *block = BlockState::BEDROCK;
+    }
+
+    #[allow(clippy::cast_sign_loss)]
+    #[allow(clippy::suboptimal_flops)]
+    #[allow(clippy::indexing_slicing)]
+    for x in 0..16 {
+        for z in 0..16 {
+            let dist_from_center = (x as f64 - 8.0).hypot(z as f64 - 8.0);
+
+            // based on x and z
+            // should be highest at center of chunk
+            let height = (16.0 - dist_from_center) * 0.5 + 3.0;
+            let height = height as usize;
+            let height = height.min(16);
+            for y in 0..height {
+                *blocks.get3_mut(x, y, z) = BlockState::SAND;
+            }
         }
-    });
+    }
 
     let block_states = BlockStateContainer::Direct(Box::new(blocks));
 
@@ -112,7 +167,7 @@ fn inner(io: &mut Player) -> anyhow::Result<()> {
     })?;
 
     io.writer.send_packet(&play::PlayerPositionLookS2c {
-        position: DVec3::new(0.0, 3.0, 0.0),
+        position: DVec3::new(0.0, 30.0, 0.0),
         yaw: 0.0,
         pitch: 0.0,
         flags: PlayerPositionLookFlags::default(),
@@ -124,15 +179,24 @@ fn inner(io: &mut Player) -> anyhow::Result<()> {
         chunk_z: 0.into(),
     })?;
 
-    let section_count = 384 / 16;
+    let section_count = 384 / 16_usize;
     let air_section = air_section();
     let ground_section = ground_section();
+    let stone_section = stone_section();
 
     let mut bytes = Vec::new();
 
+    bytes.extend_from_slice(&stone_section);
+    bytes.extend_from_slice(&stone_section);
+    bytes.extend_from_slice(&stone_section);
+    bytes.extend_from_slice(&stone_section);
     bytes.extend_from_slice(&ground_section);
 
-    for _ in (0..section_count).skip(1) {
+    // 2048 bytes per section -> long count = 2048 / 8 = 256
+    let sky_light_array = FixedArray([0xFF_u8; 2048]);
+    let sky_light_arrays = vec![sky_light_array; section_count + 2];
+
+    for _ in (0..section_count).skip(5) {
         bytes.extend_from_slice(&air_section);
     }
 
@@ -140,6 +204,13 @@ fn inner(io: &mut Player) -> anyhow::Result<()> {
 
     let map = heightmap(dimension_height, dimension_height - 3);
     let map: Vec<_> = map.into_iter().map(i64::try_from).try_collect()?;
+
+    // convert section_count + 2 0b1s into u64 array
+    let mut bits = BitStorage::new(1, section_count + 2, None).unwrap();
+
+    for i in 0..section_count + 2 {
+        bits.set(i, 1);
+    }
 
     let mut pkt = play::ChunkDataS2c {
         pos: ChunkPos::new(0, 0),
@@ -149,11 +220,11 @@ fn inner(io: &mut Player) -> anyhow::Result<()> {
         blocks_and_biomes: &bytes,
         block_entities: Cow::Borrowed(&[]),
 
-        sky_light_mask: Cow::Borrowed(&[]),
+        sky_light_mask: Cow::Owned(bits.data),
         block_light_mask: Cow::Borrowed(&[]),
         empty_sky_light_mask: Cow::Borrowed(&[]),
         empty_block_light_mask: Cow::Borrowed(&[]),
-        sky_light_arrays: Cow::Borrowed(&[]),
+        sky_light_arrays: Cow::Owned(sky_light_arrays),
         block_light_arrays: Cow::Borrowed(&[]),
     };
     for x in -16..=16 {

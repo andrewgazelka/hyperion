@@ -26,6 +26,9 @@ COPY .cargo ./.cargo
 
 COPY Cargo.toml Cargo.lock ./
 
+COPY chunk/Cargo.toml ./chunk/Cargo.toml
+COPY chunk/src ./chunk/src
+
 COPY server/Cargo.toml ./server/Cargo.toml
 COPY server/src ./server/src
 
