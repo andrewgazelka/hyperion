@@ -271,6 +271,8 @@ impl IntoBlock for BlockState {
 }
 
 pub const SECTION_BLOCK_COUNT: usize = 16 * 16 * 16;
+pub const SLICE_BLOCK_COUNT: usize = 16 * 16;
+
 pub const SECTION_BIOME_COUNT: usize = 4 * 4 * 4;
 
 /// The maximum height of a chunk.
