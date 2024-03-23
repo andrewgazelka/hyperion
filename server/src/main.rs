@@ -7,10 +7,10 @@ mod chunk;
 static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 use std::{
+    collections::VecDeque,
     sync::atomic::AtomicU32,
     time::{Duration, Instant},
 };
-use std::collections::VecDeque;
 
 use evenio::prelude::*;
 use signal_hook::iterator::Signals;
@@ -122,7 +122,6 @@ impl Game {
             info!("Ticks per second: {:?}", ticks_per_second);
         }
 
-
         while let Ok(connection) = self.incoming.try_recv() {
             let ClientConnection { packets, name } = connection;
 
@@ -143,6 +142,10 @@ impl Game {
         }
 
         self.world.send(Gametick);
+
+        let ms = now.elapsed().as_nanos() as f64 / 1_000_000.0;
+
+        info!("Tick took: {:02.8}ms", ms);
     }
 }
 

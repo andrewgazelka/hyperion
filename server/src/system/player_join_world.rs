@@ -11,10 +11,15 @@ use tracing::info;
 use valence_protocol::{
     math::DVec3,
     nbt::{compound, List},
-    packets::{play, play::player_position_look_s2c::PlayerPositionLookFlags},
+    packets::{
+        play,
+        play::{
+            player_abilities_s2c::PlayerAbilitiesFlags,
+            player_position_look_s2c::PlayerPositionLookFlags,
+        },
+    },
     BlockPos, BlockState, ChunkPos, Encode, FixedArray, VarInt,
 };
-use valence_protocol::packets::play::player_abilities_s2c::PlayerAbilitiesFlags;
 use valence_registry::{biome::BiomeId, RegistryIdx};
 
 use crate::{chunk::heightmap, handshake::Packets, KickPlayer, Player, PlayerJoinWorld, GLOBAL};
@@ -296,7 +301,6 @@ fn inner(io: &mut Player) -> anyhow::Result<()> {
 
     send_commands(io)?;
 
-
     // set fly speed
 
     io.writer.send_packet(&play::PlayerAbilitiesS2c {
@@ -308,12 +312,9 @@ fn inner(io: &mut Player) -> anyhow::Result<()> {
     })?;
     // io.writer.send_packet(&play::EntityA
 
-
-
     GLOBAL
         .player_count
         .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-
 
     Ok(())
 }

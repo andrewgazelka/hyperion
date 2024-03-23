@@ -3,12 +3,10 @@ use evenio::{
     fetch::Fetcher,
 };
 use generator::EntityType;
+use rand_distr::{Distribution, LogNormal};
 use valence_protocol::{ByteAngle, VarInt, Velocity};
 
-
-use rand_distr::{Distribution, LogNormal};
-
-use crate::{FullEntityPose, InitEntity, Player, MinecraftEntity, Uuid, RunningSpeed};
+use crate::{FullEntityPose, InitEntity, MinecraftEntity, Player, RunningSpeed, Uuid};
 
 // Packet ID	State	Bound To	Field Name	Field Type	Notes
 // 0x01	Play	Client	Entity ID	VarInt	A unique integer ID mostly used in the protocol to identify the
@@ -26,7 +24,13 @@ use crate::{FullEntityPose, InitEntity, Player, MinecraftEntity, Uuid, RunningSp
 pub fn call(
     r: Receiver<InitEntity>,
     mut players: Fetcher<&mut Player>,
-    mut s: Sender<(Insert<FullEntityPose>, Insert<MinecraftEntity>, Insert<Uuid>, Insert<RunningSpeed>, Spawn)>,
+    mut s: Sender<(
+        Insert<FullEntityPose>,
+        Insert<MinecraftEntity>,
+        Insert<Uuid>,
+        Insert<RunningSpeed>,
+        Spawn,
+    )>,
 ) {
     use valence_protocol::packets::play;
 
