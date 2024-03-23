@@ -10,23 +10,8 @@ use std::io::Write;
 use byteorder::{BigEndian, WriteBytesExt};
 use valence_protocol::Encode;
 
-use crate::palette::BlockGetter;
-
 pub mod chunk;
-pub mod palette;
 pub mod paletted_container;
-
-pub struct Section<B> {
-    pub block_count: u16,
-    pub blocks: palette::DirectEncoding<B>,
-}
-
-impl<B: BlockGetter> Encode for Section<B> {
-    fn encode(&self, mut writer: impl Write) -> anyhow::Result<()> {
-        writer.write_u16::<BigEndian>(self.block_count)?;
-        self.blocks.encode(writer)
-    }
-}
 
 /// Returns the minimum number of bits needed to represent the integer `n`.
 #[must_use]

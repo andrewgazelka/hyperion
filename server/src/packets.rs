@@ -2,11 +2,12 @@
 //! <https://wiki.vg/index.php?title=Protocol&oldid=18375>
 
 use anyhow::bail;
+use evenio::event::Sender;
 use itertools::Itertools;
 use tracing::{debug, warn};
-use valence_protocol::{decode::PacketFrame, packets::play, Decode, Packet};
+use valence_protocol::{decode::PacketFrame, math::DVec3, packets::play, Decode, Packet};
 
-use crate::{FullEntityPose, Player};
+use crate::{FullEntityPose, InitEntity, KickPlayer, Player};
 
 fn confirm_teleport(_pkt: &[u8]) {
     // ignore
@@ -107,22 +108,37 @@ fn update_selected_slot(mut data: &[u8]) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn chat_command(mut data: &[u8], player: &mut Player) -> anyhow::Result<()> {
+fn chat_command(
+    mut data: &[u8],
+    player: &mut Player,
+    sender: &mut Sender<(KickPlayer, InitEntity)>,
+) -> anyhow::Result<()> {
     let pkt = play::CommandExecutionC2s::decode(&mut data)?;
 
     let mut cmd = pkt.command.0.split(' ');
 
     let first = cmd.next();
 
-    if first == Some("add") {
-        let numbers: Vec<_> = cmd.map(str::parse).try_collect()?;
+    if first == Some("spawn") {
+        let numbers: Vec<f64> = cmd.map(str::parse).try_collect()?;
 
-        let sum: f64 = numbers.iter().sum();
+        // if [x,y,z]
+        let &[x, y, z] = numbers.as_slice() else {
+            bail!("oop")
+        };
 
         player
             .packets
             .writer
-            .send_chat_message(&format!("The sum of the numbers is: {}", sum))?;
+            .send_chat_message(&format!("Spawning zombie at {x}, {y}, {z}"))?;
+
+        sender.send(InitEntity {
+            pose: FullEntityPose {
+                position: DVec3::new(x, y, z),
+                yaw: 0.0,
+                pitch: 0.0,
+            },
+        });
     }
 
     Ok(())
@@ -132,6 +148,7 @@ pub fn switch(
     raw: PacketFrame,
     player: &mut Player,
     full_entity_pose: &mut FullEntityPose,
+    sender: &mut Sender<(KickPlayer, InitEntity)>,
 ) -> anyhow::Result<()> {
     let id = raw.id;
     let data = raw.body;
@@ -148,7 +165,7 @@ pub fn switch(
         play::UpdatePlayerAbilitiesC2s::ID => update_player_abilities(data)?,
         play::UpdateSelectedSlotC2s::ID => update_selected_slot(data)?,
         play::KeepAliveC2s::ID => (), // todo: implement
-        play::CommandExecutionC2s::ID => chat_command(data, player)?,
+        play::CommandExecutionC2s::ID => chat_command(data, player, sender)?,
         _ => warn!("unknown packet id: 0x{:02X}", id),
     }
 

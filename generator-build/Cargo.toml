@@ -1,5 +1,5 @@
 [package]
-name = "chunk"
+name = "generator-build"
 version = "0.1.0"
 edition = "2021"
 authors = ["Andrew Gazelka <andrew.gazelka@gmail.com>"]
@@ -7,13 +7,14 @@ readme = "README.md"
 
 [dependencies]
 anyhow = "1.0.81"
-byteorder = "1.5.0"
-valence_protocol = { git = "https://github.com/valence-rs/valence" }
-valence_registry = { git = "https://github.com/valence-rs/valence" }
-arrayvec = "0.7.4"
-
-[dev-dependencies]
-rand = "0.9.0-alpha.1"
+heck = "0.5.0"
+itertools = "0.12.1"
+prettyplease = "0.2.16"
+proc-macro2 = "1.0.79"
+quote = "1.0.35"
+serde = { version = "1.0.197", features = ["derive"] }
+serde_json = "1.0.114"
+syn = "2.0.53"
 
 [lints.rust]
 warnings = "deny"
@@ -38,7 +39,6 @@ default_numeric_fallback = "allow"
 as_conversions = "allow"
 arithmetic_side_effects = "allow"
 shadow_unrelated = "allow"
-unseparated_literal_suffix = "allow"
 else_if_without_else = "allow"
 float_arithmetic = "allow"
 single_call_fn = "allow"
@@ -62,6 +62,8 @@ integer_division = "allow"
 missing_trait_methods = "allow"
 exhaustive_enums = "allow"
 impl_trait_in_params = "allow"
+unseparated_literal_suffix = "deny"
+separated_literal_suffix = "allow"
 integer_division_remainder_used = "allow"
 
 complexity = { level = "deny", priority = -1 }

@@ -1,4 +1,3 @@
-#![allow(unused)]
 #![allow(clippy::many_single_char_names)]
 
 extern crate core;
@@ -12,7 +11,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use evenio::{prelude::*, rayon::prelude::*};
+use evenio::prelude::*;
 use signal_hook::iterator::Signals;
 use tracing::{info, warn};
 use valence_protocol::math::DVec3;
@@ -42,6 +41,14 @@ struct InitPlayer {
     pos: FullEntityPose,
 }
 
+#[derive(Component, Copy, Clone)]
+struct Uuid(uuid::Uuid);
+
+#[derive(Event)]
+struct InitEntity {
+    pose: FullEntityPose,
+}
+
 #[derive(Event)]
 struct PlayerJoinWorld {
     #[event(target)]
@@ -49,9 +56,7 @@ struct PlayerJoinWorld {
 }
 
 #[derive(Component)]
-struct Zombie {
-    location: FullEntityPose,
-}
+struct Zombie;
 
 #[derive(Event)]
 struct KickPlayer {
@@ -101,16 +106,16 @@ impl Game {
 fn process_packets(
     _: Receiver<Gametick>,
     mut fetcher: Fetcher<(EntityId, &mut Player, &mut FullEntityPose)>,
-    mut sender: Sender<KickPlayer>,
+    mut sender: Sender<(KickPlayer, InitEntity)>,
 ) {
     // todo: flume the best things to use here? also this really ust needs to be mpsc not mpmc
     let (tx, rx) = flume::unbounded();
 
-    fetcher.par_iter_mut().for_each(|(id, player, position)| {
+    fetcher.iter_mut().for_each(|(id, player, position)| {
         // info!("Processing packets for player: {:?}", id);
         while let Ok(packet) = player.packets.reader.try_recv() {
             // info!("Received packet: {:?}", packet);
-            if let Err(e) = packets::switch(packet, player, position) {
+            if let Err(e) = packets::switch(packet, player, position, &mut sender) {
                 let reason = format!("Invalid packet: {e}");
                 let _ = tx.send(KickPlayer { target: id, reason });
             }
@@ -152,6 +157,8 @@ fn main() {
     world.add_handler(system::init_player);
     world.add_handler(system::player_join_world);
     world.add_handler(system::player_kick);
+    world.add_handler(system::entity_spawn);
+    world.add_handler(system::entity_move_logic);
 
     world.add_handler(system::keep_alive);
     world.add_handler(process_packets);
@@ -180,7 +187,7 @@ fn main() {
     }
 }
 
-#[derive(Component)]
+#[derive(Component, Copy, Clone)]
 struct FullEntityPose {
     position: DVec3,
     yaw: f32,

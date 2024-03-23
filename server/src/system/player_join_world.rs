@@ -3,8 +3,7 @@ use std::{borrow::Cow, io::Write};
 use azalea_world::BitStorage;
 use chunk::{
     bit_width,
-    chunk::{BiomeContainer, BlockStateContainer, SECTION_BLOCK_COUNT, SLICE_BLOCK_COUNT},
-    palette::{BlockGetter, DirectEncoding},
+    chunk::{BiomeContainer, BlockStateContainer, SECTION_BLOCK_COUNT},
 };
 use evenio::prelude::*;
 use itertools::Itertools;
@@ -18,14 +17,6 @@ use valence_protocol::{
 use valence_registry::{biome::BiomeId, RegistryIdx};
 
 use crate::{chunk::heightmap, KickPlayer, Player, PlayerJoinWorld, GLOBAL};
-
-struct AllBlock2;
-
-impl BlockGetter for AllBlock2 {
-    fn get_state(&self, _x: usize, _y: usize, _z: usize) -> u64 {
-        2
-    }
-}
 
 pub fn player_join_world(
     r: Receiver<PlayerJoinWorld, (EntityId, &mut Player)>,
@@ -67,6 +58,7 @@ fn write_biomes(biomes: BiomeContainer, writer: &mut impl Write) -> anyhow::Resu
 
 trait Array3d {
     type Item;
+    #[allow(dead_code)]
     fn get3(&self, x: usize, y: usize, z: usize) -> &Self::Item;
     fn get3_mut(&mut self, x: usize, y: usize, z: usize) -> &mut Self::Item;
 }
@@ -103,7 +95,7 @@ fn stone_section() -> Vec<u8> {
         .encode(&mut section_bytes)
         .unwrap();
 
-    let mut blocks = [BlockState::STONE; SECTION_BLOCK_COUNT];
+    let blocks = [BlockState::STONE; SECTION_BLOCK_COUNT];
     let block_states = BlockStateContainer::Direct(Box::new(blocks));
     write_block_states(block_states, &mut section_bytes).unwrap();
 
@@ -120,28 +112,53 @@ fn ground_section() -> Vec<u8> {
     number_blocks.encode(&mut section_bytes).unwrap();
 
     let mut blocks = [BlockState::AIR; SECTION_BLOCK_COUNT];
-    // set sin wave with peak at center of chunk
 
-    let bedrock_layers = 3;
+    let surface_blocks = [
+        BlockState::END_STONE,
+        BlockState::SAND,
+        BlockState::GRAVEL,
+        BlockState::END_STONE,
+        BlockState::END_STONE,
+        BlockState::END_STONE,
+        BlockState::END_STONE,
+        BlockState::END_STONE,
+        BlockState::END_STONE,
+        BlockState::END_STONE,
+        BlockState::END_STONE,
+        BlockState::END_STONE,
+        BlockState::END_STONE,
+        BlockState::END_STONE,
+        BlockState::END_STONE,
+        BlockState::END_STONE,
+        BlockState::END_STONE,
+        BlockState::END_STONE,
+        BlockState::END_STONE,
+        BlockState::END_STONE,
+        BlockState::END_STONE,
+        BlockState::END_STONE,
+        BlockState::END_STONE,
+        BlockState::END_STONE,
+    ];
 
-    for block in blocks.iter_mut().take(SLICE_BLOCK_COUNT * bedrock_layers) {
-        *block = BlockState::BEDROCK;
-    }
+    let mut rnd = rand::thread_rng();
 
     #[allow(clippy::cast_sign_loss)]
     #[allow(clippy::suboptimal_flops)]
     #[allow(clippy::indexing_slicing)]
     for x in 0..16 {
         for z in 0..16 {
-            let dist_from_center = (x as f64 - 8.0).hypot(z as f64 - 8.0);
+            // let dist_from_center = (x as f64 - 8.0).hypot(z as f64 - 8.0);
 
             // based on x and z
             // should be highest at center of chunk
-            let height = (16.0 - dist_from_center) * 0.5 + 3.0;
+            // let height = (16.0 - dist_from_center) * 0.5 + 3.0;
+            let height = 5.0;
             let height = height as usize;
             let height = height.min(16);
             for y in 0..height {
-                *blocks.get3_mut(x, y, z) = BlockState::SAND;
+                use rand::seq::SliceRandom;
+                let block = surface_blocks.choose(&mut rnd).unwrap();
+                *blocks.get3_mut(x, y, z) = *block;
             }
         }
     }

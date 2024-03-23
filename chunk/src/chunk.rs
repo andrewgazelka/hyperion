@@ -88,7 +88,7 @@ pub trait Chunk {
     /// **NOTE:** This is a low-level function which may break expected
     /// invariants for block entities. Prefer [`Self::fill_blocks`] instead.
     fn fill_block_states(&mut self, block: BlockState) {
-        for sect_y in 0..self.height() / 16 {
+        for sect_y in 0..self.height() >> 4 {
             self.fill_block_state_section(sect_y, block);
         }
     }
@@ -181,7 +181,7 @@ pub trait Chunk {
 
     /// Sets all the biomes in the entire chunk to the provided biome.
     fn fill_biomes(&mut self, biome: BiomeId) {
-        for sect_y in 0..self.height() / 16 {
+        for sect_y in 0..self.height() >> 4 {
             self.fill_biome_section(sect_y, biome);
         }
     }
@@ -279,10 +279,10 @@ pub const SECTION_BIOME_COUNT: usize = 4 * 4 * 4;
 pub const MAX_HEIGHT: u32 = 4096;
 
 pub type BlockStateContainer =
-    PalettedContainer<BlockState, SECTION_BLOCK_COUNT, { SECTION_BLOCK_COUNT / 2 }>;
+    PalettedContainer<BlockState, SECTION_BLOCK_COUNT, { SECTION_BLOCK_COUNT >> 1 }>;
 
 pub type BiomeContainer =
-    PalettedContainer<BiomeId, SECTION_BIOME_COUNT, { SECTION_BIOME_COUNT / 2 }>;
+    PalettedContainer<BiomeId, SECTION_BIOME_COUNT, { SECTION_BIOME_COUNT >> 1 }>;
 
 #[inline]
 #[track_caller]
@@ -297,7 +297,7 @@ pub fn check_block_oob(chunk: &impl Chunk, x: u32, y: u32, z: u32) {
 #[track_caller]
 pub fn check_biome_oob(chunk: &impl Chunk, x: u32, y: u32, z: u32) {
     assert!(
-        x < 4 && y < chunk.height() / 4 && z < 4,
+        x < 4 && y < chunk.height() >> 2 && z < 4,
         "chunk biome offsets of ({x}, {y}, {z}) are out of bounds"
     );
 }
@@ -306,7 +306,7 @@ pub fn check_biome_oob(chunk: &impl Chunk, x: u32, y: u32, z: u32) {
 #[track_caller]
 pub fn check_section_oob(chunk: &impl Chunk, sect_y: u32) {
     assert!(
-        sect_y < chunk.height() / 16,
+        sect_y < chunk.height() >> 4,
         "chunk section offset of {sect_y} is out of bounds"
     );
 }
