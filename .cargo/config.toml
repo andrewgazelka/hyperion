@@ -1,26 +1,30 @@
 # https://github.com/bevyengine/bevy/blob/main/.cargo/config_fast_builds.toml
-
-# Add the contents of this file to `config.toml` to enable "fast build" configuration. Please read the notes below.
-
-# NOTE: For maximum performance, build using a nightly compiler
-# If you are using rust stable, remove the "-Zshare-generics=y" below.
+# https://nnethercote.github.io/perf-book/build-configuration.html
 
 [target.x86_64-unknown-linux-gnu]
 linker = "clang"
 rustflags = [
+    "-Ctarget-cpu=native",
     "-Clink-arg=-fuse-ld=lld",
     "-Zshare-generics=y",
     "-Zthreads=0",
 ]
 
 [target.x86_64-unknown-linux-musl]
+linker = "clang"
 rustflags = [
+    "-Ctarget-cpu=native",
+    "-Clink-arg=-fuse-ld=/usr/bin/mold",
+    "link-arg=--ld-path=/usr/local/bin/mold",
     "-Zshare-generics=y",
     "-Zthreads=0",
 ]
 
 [target.aarch64-unknown-linux-musl]
+linker = "clang"
 rustflags = [
+    "-Ctarget-cpu=native",
+    "-Clink-arg=-fuse-ld=/usr/bin/mold",
     "-Zshare-generics=y",
     "-Zthreads=0",
 ]
@@ -30,6 +34,7 @@ rustflags = [
 # `brew install llvm`
 [target.x86_64-apple-darwin]
 rustflags = [
+    "-Ctarget-cpu=native",
     "-C",
     "link-arg=-fuse-ld=/usr/local/opt/llvm/bin/ld64.lld",
     "-Zshare-generics=y",
@@ -38,8 +43,8 @@ rustflags = [
 
 [target.aarch64-apple-darwin]
 rustflags = [
-    "-C",
-    "link-arg=-fuse-ld=/opt/homebrew/opt/llvm/bin/ld64.lld",
+    "-Ctarget-cpu=native",
+    "-Clink-arg=-fuse-ld=/opt/homebrew/opt/llvm/bin/ld64.lld",
     "-Zshare-generics=y",
     "-Zthreads=0",
 ]
@@ -47,6 +52,7 @@ rustflags = [
 [target.x86_64-pc-windows-msvc]
 linker = "rust-lld.exe"
 rustflags = [
+    "-Ctarget-cpu=native",
     "-Zshare-generics=n",
     "-Zthreads=0",
 ]
@@ -58,7 +64,3 @@ rustflags = [
 
 [registries.crates-io]
 protocol = "sparse"
-
-# https://nnethercote.github.io/perf-book/build-configuration.html
-[build]
-rustflags = ["-C", "target-cpu=native"]

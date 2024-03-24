@@ -19,7 +19,10 @@ git lfs install
 
 git clone https://github.com/andrewgazelka/hyperion
 cd hyperion
-docker compose up
+docker compose up --build release
+
+# if you want to run in debug
+# docker compose up --build debug
 ```
 
 # Internals

@@ -22,6 +22,7 @@ use crate::{
 pub struct EntityQuery<'a> {
     id: EntityId,
     entity: &'a MinecraftEntity,
+
     running_speed: Option<&'a RunningSpeed>,
     pose: &'a mut FullEntityPose,
 }
@@ -36,7 +37,7 @@ pub fn call(
     let entity_bounding_boxes = entity_bounding_boxes.0;
 
     // todo: make par iterator
-    poses_fetcher.iter().for_each(|(id, pose, reaction)| {
+    poses_fetcher.par_iter().for_each(|(id, pose, reaction)| {
         let context = CollisionContext {
             bounding: pose.bounding,
             id,
