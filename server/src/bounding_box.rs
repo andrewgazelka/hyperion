@@ -127,7 +127,7 @@ impl EntityBoundingBoxes {
         self.query.clear();
     }
 
-    pub fn get_collisions(
+    #[must_use] pub fn get_collisions(
         &self,
         current: CollisionContext,
         fetcher: &Fetcher<(EntityId, &FullEntityPose, &EntityReaction)>,

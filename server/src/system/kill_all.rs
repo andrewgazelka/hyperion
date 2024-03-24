@@ -15,13 +15,13 @@ pub fn kill_all(
     let entity_ids = ids.iter().map(|id| VarInt(id.index().0 as i32)).collect();
 
     let despawn_packet = valence_protocol::packets::play::EntitiesDestroyS2c { entity_ids };
-
+    
     players.par_iter_mut().for_each(|player| {
         // todo: handle error
         let _ = player.packets.writer.send_packet(&despawn_packet);
     });
 
-    for &id in &ids {
+    for id in ids {
         s.send(Despawn(id));
     }
 }

@@ -37,6 +37,7 @@ uuid = "1.8.0"
 rand_distr = "0.4.3"
 smallvec = { git = "https://github.com/servo/rust-smallvec" }
 fnv = "1.0.7"
+rayon = "1.10.0"
 #pprof = { version = "0.13.0", features = ["flamegraph"] }
 
 
@@ -112,3 +113,10 @@ style = "deny"
 
 suspicious = { level = "deny", priority = -1 }
 blanket_clippy_restriction_lints = "allow"
+
+[dev-dependencies]
+criterion = { version = "0.5.1", features = ["html_reports"] }
+
+[[bench]]
+name = "many_zombies"
+harness = false

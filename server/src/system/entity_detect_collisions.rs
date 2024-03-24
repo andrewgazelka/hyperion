@@ -10,6 +10,7 @@ use evenio::{
     query::{Not, Query},
     rayon::prelude::*,
 };
+use sha2::digest::generic_array::arr;
 use tracing::info;
 use valence_protocol::{math::DVec2, ByteAngle, VarInt};
 
@@ -36,7 +37,6 @@ pub fn call(
 
     let entity_bounding_boxes = entity_bounding_boxes.0;
 
-    // todo: make par iterator
     poses_fetcher.par_iter().for_each(|(id, pose, reaction)| {
         let context = CollisionContext {
             bounding: pose.bounding,

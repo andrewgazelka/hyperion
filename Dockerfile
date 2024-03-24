@@ -67,28 +67,17 @@ RUN --mount=type=cache,target=/app/target \
     cp target/debug/server /build/server && \
     cp target/cargo-timings/cargo-timing.html /build/cargo-timing.html
 
-#FROM scratch
-#FROM alpine:3.19
+FROM rust as cli
 
-# debian
-#FROM rust
-#
-#RUN apt-get update && apt-get install -y linux-perf
-#
-#RUN cargo install flamegraph
-#
-## Copy the built executable into the final image
-#COPY --from=builder /build/server /
-#
-#EXPOSE 25565
-#
-#
-## ENTRYPOINT ["flamegraph", "-o", "/app/profiling/flamegraph.svg", "--", "./server"]
-#
-## entrypoint is bash
-##ENTRYPOINT ["bash"]
-#
-#ENTRYPOINT ["./server"]
+RUN apt-get update && apt-get install -y linux-perf
+
+RUN cargo install flamegraph
+
+COPY --from=release /build/server /
+
+EXPOSE 25565
+
+ENTRYPOINT ["bash"]
 
 FROM scratch as debug-bin
 COPY --from=debug /build/server /

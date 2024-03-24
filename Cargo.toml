@@ -17,8 +17,12 @@ opt-level = 3
 [profile.release]
 lto = "fat"
 codegen-units = 1
-strip = "debuginfo"
-panic = "abort"
+#panic = "abort"
+
+[profile.bench]
+lto = "fat"
+codegen-units = 1
+#panic = "abort"
 
 [workspace.dependencies]
 chunk = { path = "chunk" }

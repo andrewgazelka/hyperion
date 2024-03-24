@@ -1,3 +1,5 @@
+#![allow(unused)]
+
 use evenio::{
     entity::EntityId,
     event::Receiver,
@@ -94,8 +96,6 @@ pub fn call(
         };
 
         player.iter_mut().for_each(|(player, ..)| {
-            // todo: this is inefficient we want to serialize once
-            // todo: remove _
             let _ = player.packets.writer.send_packet(&pos);
             let _ = player.packets.writer.send_packet(&look);
         });
