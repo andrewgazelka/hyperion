@@ -17,7 +17,7 @@ pub struct EntityQuery<'a> {
     running_speed: Option<&'a RunningSpeed>,
     reaction: &'a mut EntityReaction,
     pose: &'a mut FullEntityPose,
-    
+
     // todo: add With
     _entity: &'a MinecraftEntity,
 }
