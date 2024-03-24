@@ -656,7 +656,6 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "arrayvec",
- "byteorder",
  "rand 0.9.0-alpha.1",
  "valence_protocol",
  "valence_registry",
@@ -1746,7 +1745,6 @@ name = "server"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "azalea-buf",
  "azalea-world",
  "base64 0.22.0",
  "bytes",
@@ -1767,7 +1765,6 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "uuid",
- "valence_generated",
  "valence_protocol",
  "valence_registry",
 ]

@@ -14,16 +14,11 @@ bytes = "1.6.0"
 
 valence_protocol = { git = "https://github.com/valence-rs/valence" }
 valence_registry = { git = "https://github.com/valence-rs/valence" }
-valence_generated = { git = "https://github.com/valence-rs/valence" }
-#valence_server = { git = "https://github.com/valence-rs/valence" }
 
 generator.workspace = true
 
 chunk.workspace = true
 
-#azalea-buf = { git = "https://github.com/azalea-rs/azalea", branch = "1.20.1" }
-#azalea-world = { git = "https://github.com/azalea-rs/azalea", branch = "1.20.1" }
-azalea-buf = { git = "https://github.com/azalea-rs/azalea" }
 azalea-world = { git = "https://github.com/azalea-rs/azalea" }
 
 

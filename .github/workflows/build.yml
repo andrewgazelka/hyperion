@@ -13,26 +13,24 @@ env:
 
 
 jobs:
-  udeps:
+  machete:
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          lfs: true
 
       - name: Install rust toolchain
         uses: dtolnay/rust-toolchain@nightly
 
       - uses: Swatinem/rust-cache@v2
 
-      - name: Install cargo-udeps
-        run: cargo install cargo-udeps
+      - name: Install cargo-machete
+        run: cargo install cargo-machete
 
-      - name: Run cargo udeps
+      - name: Run cargo machete
         run: |
-          cargo +nightly udeps --all
+          cargo machete
   test:
     runs-on: ubuntu-latest
 
