@@ -1,6 +1,7 @@
 # https://github.com/bevyengine/bevy/blob/main/.cargo/config_fast_builds.toml
 # https://nnethercote.github.io/perf-book/build-configuration.html
 
+# this is not ideal but we have to comment out to make GitHub Actions runners work on stable
 #[target.x86_64-unknown-linux-gnu]
 #linker = "clang"
 #rustflags = [
