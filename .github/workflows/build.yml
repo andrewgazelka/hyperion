@@ -46,6 +46,25 @@ jobs:
 
       - name: Run cargo nextest
         run: cargo nextest run
+
+  deny:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@nightly
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install cargo-deny
+        run: cargo install cargo-deny
+
+      - name: Run cargo deny
+        run: |
+          cargo deny check
+
   fmt:
     runs-on: ubuntu-latest
 

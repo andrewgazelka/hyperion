@@ -1,6 +1,5 @@
 use std::{borrow::Cow, io::Write};
 
-use azalea_world::BitStorage;
 use chunk::{
     bit_width,
     chunk::{BiomeContainer, BlockStateContainer, SECTION_BLOCK_COUNT},
@@ -22,7 +21,10 @@ use valence_protocol::{
 };
 use valence_registry::{biome::BiomeId, RegistryIdx};
 
-use crate::{chunk::heightmap, handshake::Packets, KickPlayer, Player, PlayerJoinWorld, GLOBAL};
+use crate::{
+    bits::BitStorage, chunk::heightmap, handshake::Packets, KickPlayer, Player, PlayerJoinWorld,
+    GLOBAL,
+};
 
 pub fn player_join_world(
     r: Receiver<PlayerJoinWorld, (EntityId, &mut Player)>,
@@ -285,7 +287,7 @@ fn inner(io: &mut Player) -> anyhow::Result<()> {
         blocks_and_biomes: &bytes,
         block_entities: Cow::Borrowed(&[]),
 
-        sky_light_mask: Cow::Owned(bits.data),
+        sky_light_mask: Cow::Owned(bits.into_data()),
         block_light_mask: Cow::Borrowed(&[]),
         empty_sky_light_mask: Cow::Borrowed(&[]),
         empty_block_light_mask: Cow::Borrowed(&[]),

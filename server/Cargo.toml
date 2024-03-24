@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 authors = ["Andrew Gazelka <andrew.gazelka@gmail.com>"]
 readme = "README.md"
+publish = false
 
 [dependencies]
 anyhow = "1.0.81"
@@ -18,8 +19,6 @@ valence_registry = { git = "https://github.com/valence-rs/valence" }
 generator.workspace = true
 
 chunk.workspace = true
-
-azalea-world = { git = "https://github.com/azalea-rs/azalea" }
 
 
 # no secure alloc
@@ -90,6 +89,7 @@ integer_division_remainder_used = "allow"
 str_to_string = "allow"
 missing_assert_message = "allow"
 multiple_inherent_impl = "allow"
+missing_trait_methods = "allow"
 
 complexity = { level = "deny", priority = -1 }
 type_complexity = "allow"

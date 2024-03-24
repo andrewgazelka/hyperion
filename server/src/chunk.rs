@@ -4,7 +4,7 @@
 // ceil(log2(height + 1))). The Notchian server also adds a WORLD_SURFACE long array, the purpose of
 // which is unknown, but it's not required for the chunk to be accepted.
 
-use azalea_world::BitStorage;
+use crate::bits::BitStorage;
 
 pub const fn ceil_log2(x: u32) -> u32 {
     u32::BITS - x.leading_zeros()
@@ -21,5 +21,5 @@ pub fn heightmap(max_height: u32, current_height: u32) -> Vec<u64> {
         }
     }
 
-    data.data
+    data.into_data()
 }
