@@ -48,7 +48,7 @@ RUN --mount=type=cache,target=/cargo-home \
     --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/usr/local/cargo/git \
     --mount=type=cache,target=/app/target \
-    cargo build --release --locked -p server
+    CARGO_TERM_COLOR=never cargo build --release --locked -p server
 
 RUN --mount=type=cache,target=/app/target \
     mkdir -p /build && \
@@ -60,7 +60,7 @@ RUN --mount=type=cache,target=/cargo-home \
     --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/usr/local/cargo/git \
     --mount=type=cache,target=/app/target \
-    cargo build --timings --locked -p server
+    CARGO_TERM_COLOR=never cargo build --timings --locked -p server
 
 RUN --mount=type=cache,target=/app/target \
     mkdir -p /build && \

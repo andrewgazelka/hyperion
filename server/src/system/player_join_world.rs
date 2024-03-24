@@ -92,7 +92,7 @@ fn send_commands(io: &mut Packets) -> anyhow::Result<()> {
     let root = Node {
         data: NodeData::Root,
         executable: false,
-        children: vec![VarInt(1)],
+        children: vec![VarInt(1), VarInt(3)],
         redirect_node: None,
     };
 
@@ -117,9 +117,19 @@ fn send_commands(io: &mut Packets) -> anyhow::Result<()> {
         children: vec![],
         redirect_node: None,
     };
+    
+    // id 3 = "killall"
+    let clear = Node {
+        data: NodeData::Literal {
+            name: "killall".to_owned(),
+        },
+        executable: true,
+        children: vec![],
+        redirect_node: None,
+    };
 
-    io.writer.send_packet(&play::CommandTreeS2c {
-        commands: vec![root, spawn, spawn_arg],
+    io.writer.send_packet(&CommandTreeS2c {
+        commands: vec![root, spawn, spawn_arg, clear],
         root_index: VarInt(0),
     })?;
 

@@ -86,6 +86,14 @@ struct KickPlayer {
 }
 
 #[derive(Event)]
+struct KillAllEntities;
+
+#[derive(Event)]
+struct TpsEvent {
+    ms_per_tick: f64,
+}
+
+#[derive(Event)]
 struct Gametick;
 
 static GLOBAL: global::Global = global::Global {
@@ -95,6 +103,8 @@ static GLOBAL: global::Global = global::Global {
 struct Game {
     world: World,
     last_ticks: VecDeque<Instant>,
+    last_ms_per_tick: VecDeque<f64>,
+
     incoming: flume::Receiver<ClientConnection>,
 }
 
@@ -125,10 +135,11 @@ impl Game {
         let now = Instant::now();
         self.last_ticks.push_back(now);
 
+        // let mut tps = None;
         if self.last_ticks.len() > HISTORY_SIZE {
             let _front = self.last_ticks.pop_front().unwrap();
             // let ticks_per_second = 100.0 / (now - front).as_secs_f64();
-            // info!("Ticks per second: {:?}", ticks_per_second);
+            // tps = Some(ticks_per_second);
         }
 
         while let Ok(connection) = self.incoming.try_recv() {
@@ -153,7 +164,17 @@ impl Game {
 
         self.world.send(Gametick);
 
-        // let ms = now.elapsed().as_nanos() as f64 / 1_000_000.0;
+        let ms = now.elapsed().as_nanos() as f64 / 1_000_000.0;
+        self.last_ms_per_tick.push_back(ms);
+
+        if self.last_ms_per_tick.len() > HISTORY_SIZE {
+            self.last_ms_per_tick.pop_front().unwrap();
+
+            let ms_per_tick =
+                self.last_ms_per_tick.iter().sum::<f64>() / self.last_ms_per_tick.len() as f64;
+            
+            self.world.send(TpsEvent { ms_per_tick });
+        }
 
         // info!("Tick took: {:02.8}ms", ms);
     }
@@ -163,7 +184,7 @@ impl Game {
 fn process_packets(
     _: Receiver<Gametick>,
     mut fetcher: Fetcher<(EntityId, &mut Player, &mut FullEntityPose)>,
-    mut sender: Sender<(KickPlayer, InitEntity)>,
+    mut sender: Sender<(KickPlayer, InitEntity, KillAllEntities)>,
 ) {
     // todo: flume the best things to use here? also this really ust needs to be mpsc not mpmc
     // let (tx, rx) = flume::unbounded();
@@ -223,6 +244,8 @@ fn main() {
 
     world.add_handler(system::keep_alive);
     world.add_handler(process_packets);
+    world.add_handler(system::tps_message);
+    world.add_handler(system::kill_all);
 
     let bounding_boxes = world.spawn();
     world.insert(bounding_boxes, bounding_box::EntityBoundingBoxes::default());
@@ -230,6 +253,7 @@ fn main() {
     let mut game = Game {
         world,
         last_ticks: VecDeque::default(),
+        last_ms_per_tick: VecDeque::default(),
         incoming: server,
     };
 

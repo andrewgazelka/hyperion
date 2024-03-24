@@ -8,7 +8,7 @@ use evenio::event::Sender;
 use tracing::{debug, warn};
 use valence_protocol::{decode::PacketFrame, math::DVec3, packets::play, Decode, Packet};
 
-use crate::{bounding_box::BoundingBox, FullEntityPose, InitEntity, KickPlayer, Player};
+use crate::{bounding_box::BoundingBox, FullEntityPose, InitEntity, KickPlayer, KillAllEntities, Player};
 
 fn confirm_teleport(_pkt: &[u8]) {
     // ignore
@@ -141,13 +141,17 @@ fn chat_command(
     mut data: &[u8],
     player: &mut Player,
     full_entity_pose: &FullEntityPose,
-    sender: &mut Sender<(KickPlayer, InitEntity)>,
+    sender: &mut Sender<(KickPlayer, InitEntity, KillAllEntities)>,
 ) -> anyhow::Result<()> {
     let pkt = play::CommandExecutionC2s::decode(&mut data)?;
 
     let mut cmd = pkt.command.0.split(' ');
 
     let first = cmd.next();
+    
+    if first == Some("killall") {
+        sender.send(KillAllEntities);
+    }
 
     if first == Some("spawn") {
         let args: Vec<_> = cmd.collect();
@@ -223,7 +227,7 @@ pub fn switch(
     raw: PacketFrame,
     player: &mut Player,
     full_entity_pose: &mut FullEntityPose,
-    sender: &mut Sender<(KickPlayer, InitEntity)>,
+    sender: &mut Sender<(KickPlayer, InitEntity, KillAllEntities)>,
 ) -> anyhow::Result<()> {
     let id = raw.id;
     let data = raw.body;
