@@ -1,15 +1,31 @@
-#![allow(unused)]
+use evenio::{
+    entity::EntityId,
+    event::Receiver,
+    fetch::Fetcher,
+    query::{Not, Query},
+};
+use valence_protocol::{
+    math::{DVec2, DVec3},
+    ByteAngle, VarInt,
+};
 
-use evenio::{entity::EntityId, event::Receiver, fetch::Fetcher, query::Not};
-use tracing::info;
-use valence_protocol::{math::DVec2, ByteAngle, VarInt};
+use crate::{EntityReaction, FullEntityPose, Gametick, MinecraftEntity, Player, RunningSpeed};
 
-use crate::{FullEntityPose, Gametick, Player, Zombie};
+#[derive(Query, Debug)]
+pub struct EntityQuery<'a> {
+    id: EntityId,
+    running_speed: Option<&'a RunningSpeed>,
+    reaction: &'a mut EntityReaction,
+    pose: &'a mut FullEntityPose,
+    
+    // todo: add With
+    _entity: &'a MinecraftEntity,
+}
 
 pub fn call(
     _: Receiver<Gametick>,
-    mut zombies: Fetcher<(&Zombie, Not<&mut Player>, EntityId, &mut FullEntityPose)>,
-    mut player: Fetcher<(&mut Player, Not<&Zombie>, &FullEntityPose)>,
+    mut entities: Fetcher<EntityQuery>,
+    mut player: Fetcher<(&mut Player, Not<&MinecraftEntity>, &FullEntityPose)>,
 ) {
     use valence_protocol::packets::play;
 
@@ -20,12 +36,16 @@ pub fn call(
 
     let target = target.position;
 
-    // info!("tick");
+    entities.iter_mut().for_each(|query| {
+        let EntityQuery {
+            id,
+            running_speed,
+            pose,
+            reaction,
+            ..
+        } = query;
 
-    zombies.iter_mut().for_each(|(_, _, id, pose)| {
         let current = pose.position;
-
-        // info!("zombie: {:?} target: {:?}", current, target);
 
         let dif = target - current;
 
@@ -38,18 +58,24 @@ pub fn call(
 
         let pitch = 0.0;
 
-        if dif2d.length_squared() < 0.1 {
-            return;
+        let reaction = reaction.get_mut();
+
+        if dif2d.length_squared() < 0.01 {
+            // info!("Moving entity {:?} by {:?}", id, reaction.velocity);
+            pose.move_by(reaction.velocity);
+        } else {
+            // normalize
+            let dif2d = dif2d.normalize();
+
+            let speed = running_speed.copied().unwrap_or_default();
+            let dif2d = dif2d * speed.0;
+
+            let vec = DVec3::new(dif2d.x, 0.0, dif2d.y) + reaction.velocity;
+
+            pose.move_by(vec);
         }
 
-        // normalize
-        let dif2d = dif2d.normalize();
-
-        // make 0.1
-        let dif2d = dif2d * 0.1;
-
-        pose.position.x += dif2d.x;
-        pose.position.z += dif2d.y;
+        reaction.velocity = DVec3::ZERO;
 
         #[allow(clippy::cast_possible_wrap)]
         let entity_id = VarInt(id.index().0 as i32);

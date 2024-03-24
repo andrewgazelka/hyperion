@@ -54,10 +54,31 @@ RUN --mount=type=cache,target=/app/target \
     mkdir -p /build && \
     cp target/release/server /build/server
 
+#FROM scratch
+#FROM alpine:3.19
+
+# debian
+#FROM rust
+#
+#RUN apt-get update && apt-get install -y linux-perf
+#
+#RUN cargo install flamegraph
+#
+## Copy the built executable into the final image
+#COPY --from=builder /build/server /
+#
+#EXPOSE 25565
+#
+#
+## ENTRYPOINT ["flamegraph", "-o", "/app/profiling/flamegraph.svg", "--", "./server"]
+#
+## entrypoint is bash
+##ENTRYPOINT ["bash"]
+#
+#ENTRYPOINT ["./server"]
+
 FROM scratch
 
-# Copy the built executable into the final image
 COPY --from=builder /build/server /
 
-EXPOSE 25565
 ENTRYPOINT ["/server"]

@@ -7,6 +7,8 @@ mod chunk;
 static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 use std::{
+    cell::UnsafeCell,
+    collections::VecDeque,
     sync::atomic::AtomicU32,
     time::{Duration, Instant},
 };
@@ -16,13 +18,20 @@ use signal_hook::iterator::Signals;
 use tracing::{info, warn};
 use valence_protocol::math::DVec3;
 
-use crate::handshake::{server, ClientConnection, Packets};
+use crate::{
+    bounding_box::BoundingBox,
+    handshake::{server, ClientConnection, Packets},
+};
 
 mod global;
 mod handshake;
 
 mod packets;
 mod system;
+
+mod quad_tree;
+
+pub mod bounding_box;
 
 // A zero-sized component, often called a "marker" or "tag".
 #[derive(Component)]
@@ -55,8 +64,17 @@ struct PlayerJoinWorld {
     target: EntityId,
 }
 
-#[derive(Component)]
-struct Zombie;
+#[derive(Component, Debug)]
+pub struct MinecraftEntity;
+
+#[derive(Component, Debug, Copy, Clone)]
+pub struct RunningSpeed(f64);
+
+impl Default for RunningSpeed {
+    fn default() -> Self {
+        Self(0.1)
+    }
+}
 
 #[derive(Event)]
 struct KickPlayer {
@@ -74,11 +92,44 @@ static GLOBAL: global::Global = global::Global {
 
 struct Game {
     world: World,
+    last_ticks: VecDeque<Instant>,
     incoming: flume::Receiver<ClientConnection>,
 }
 
 impl Game {
+    fn wait_duration(&self) -> Option<Duration> {
+        let &first_tick = self.last_ticks.front()?;
+
+        let count = self.last_ticks.len();
+
+        let time_for_20_tps = first_tick + Duration::from_secs_f64(count as f64 / 20.0);
+
+        // aim for 20 ticks per second
+        let now = Instant::now();
+
+        if time_for_20_tps < now {
+            return None;
+        }
+
+        let duration = time_for_20_tps - now;
+
+        // this is a bit of a hack to be conservative when sleeping
+        Some(duration.mul_f64(0.8))
+    }
+
     fn tick(&mut self) {
+        const HISTORY_SIZE: usize = 100;
+
+        let now = Instant::now();
+        self.last_ticks.push_back(now);
+
+        if self.last_ticks.len() > HISTORY_SIZE {
+            let front = self.last_ticks.pop_front().unwrap();
+            let ticks_per_second = 100.0 / (now - front).as_secs_f64();
+
+            info!("Ticks per second: {:?}", ticks_per_second);
+        }
+
         while let Ok(connection) = self.incoming.try_recv() {
             let ClientConnection { packets, name } = connection;
 
@@ -90,6 +141,7 @@ impl Game {
                 name,
                 pos: FullEntityPose {
                     position: DVec3::new(0.0, 2.0, 0.0),
+                    bounding: BoundingBox::create(DVec3::new(0.0, 2.0, 0.0), 0.6, 1.8),
                     yaw: 0.0,
                     pitch: 0.0,
                 },
@@ -99,6 +151,10 @@ impl Game {
         }
 
         self.world.send(Gametick);
+
+        let ms = now.elapsed().as_nanos() as f64 / 1_000_000.0;
+
+        info!("Tick took: {:02.8}ms", ms);
     }
 }
 
@@ -125,10 +181,6 @@ fn process_packets(
             }
         }
     });
-
-    // for kick in rx.drain() {
-    //     sender.send(kick);
-    // }
 }
 
 static SHUTDOWN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
@@ -147,14 +199,11 @@ fn main() {
         for _ in signals.forever() {
             warn!("Shutting down...");
             SHUTDOWN.store(true, std::sync::atomic::Ordering::Relaxed);
-            shutdown_tx.send(()).unwrap();
+            let _ = shutdown_tx.send(());
         }
     });
 
     let server = server(shutdown_rx);
-
-    let mut last_tick = Instant::now();
-    let tick_duration = Duration::from_millis(20);
 
     let mut world = World::new();
 
@@ -162,38 +211,65 @@ fn main() {
     world.add_handler(system::player_join_world);
     world.add_handler(system::player_kick);
     world.add_handler(system::entity_spawn);
+    world.add_handler(system::entity_detect_collisions);
     world.add_handler(system::entity_move_logic);
+    world.add_handler(system::reset_bounding_boxes);
 
     world.add_handler(system::keep_alive);
     world.add_handler(process_packets);
 
+    let bounding_boxes = world.spawn();
+    world.insert(bounding_boxes, bounding_box::EntityBoundingBoxes::default());
+
     let mut game = Game {
         world,
+        last_ticks: VecDeque::default(),
         incoming: server,
     };
+
+    game.last_ticks.push_back(Instant::now());
 
     while !SHUTDOWN.load(std::sync::atomic::Ordering::Relaxed) {
         game.tick();
 
-        // Calculate the elapsed time since the last tick
-        let elapsed = last_tick.elapsed();
-
-        // If the elapsed time is greater than the desired tick duration,
-        // skip the sleep to catch up
-        if elapsed < tick_duration {
-            let sleep_duration = tick_duration - elapsed;
-            // println!("Sleeping for {:?}", sleep_duration);
-            std::thread::sleep(sleep_duration);
+        if let Some(wait_duration) = game.wait_duration() {
+            std::thread::sleep(wait_duration);
         }
-
-        // Update the last tick time
-        last_tick = Instant::now();
     }
 }
 
-#[derive(Component, Copy, Clone)]
-struct FullEntityPose {
-    position: DVec3,
-    yaw: f32,
-    pitch: f32,
+#[derive(Component, Copy, Clone, Debug)]
+pub struct FullEntityPose {
+    pub position: DVec3,
+    pub yaw: f32,
+    pub pitch: f32,
+    pub bounding: BoundingBox,
 }
+
+impl FullEntityPose {
+    fn move_by(&mut self, vec: DVec3) {
+        self.position += vec;
+        self.bounding = self.bounding.move_by(vec);
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct EntityReactionInner {
+    velocity: DVec3,
+}
+
+#[derive(Component, Debug, Default)]
+pub struct EntityReaction(UnsafeCell<EntityReactionInner>);
+
+impl EntityReaction {
+    #[allow(dead_code)]
+    fn get_mut(&mut self) -> &mut EntityReactionInner {
+        self.0.get_mut()
+    }
+}
+
+#[allow(clippy::undocumented_unsafe_blocks)]
+unsafe impl Send for EntityReaction {}
+
+#[allow(clippy::undocumented_unsafe_blocks)]
+unsafe impl Sync for EntityReaction {}

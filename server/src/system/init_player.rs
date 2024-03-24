@@ -1,10 +1,15 @@
 use evenio::prelude::*;
 
-use crate::{FullEntityPose, InitPlayer, Player, PlayerJoinWorld};
+use crate::{EntityReaction, FullEntityPose, InitPlayer, Player, PlayerJoinWorld};
 
 pub fn init_player(
     r: ReceiverMut<InitPlayer>,
-    mut s: Sender<(Insert<FullEntityPose>, Insert<Player>, PlayerJoinWorld)>,
+    mut s: Sender<(
+        Insert<FullEntityPose>,
+        Insert<Player>,
+        Insert<EntityReaction>,
+        PlayerJoinWorld,
+    )>,
 ) {
     // take ownership
     let event = EventMut::take(r.event);
@@ -23,6 +28,8 @@ pub fn init_player(
         name,
         locale: None,
     });
+
+    s.insert(entity, EntityReaction::default());
 
     s.send(PlayerJoinWorld { target: entity });
 }

@@ -5,11 +5,10 @@ use std::str::FromStr;
 
 use anyhow::{bail, ensure};
 use evenio::event::Sender;
-use itertools::Itertools;
 use tracing::{debug, warn};
 use valence_protocol::{decode::PacketFrame, math::DVec3, packets::play, Decode, Packet};
 
-use crate::{FullEntityPose, InitEntity, KickPlayer, Player};
+use crate::{bounding_box::BoundingBox, FullEntityPose, InitEntity, KickPlayer, Player};
 
 fn confirm_teleport(_pkt: &[u8]) {
     // ignore
@@ -151,15 +150,37 @@ fn chat_command(
     let first = cmd.next();
 
     if first == Some("spawn") {
-        let numbers: Vec<HybridPos> = cmd.map(str::parse).try_collect()?;
+        let args: Vec<_> = cmd.collect();
 
-        let [x, y, z] = match numbers.as_slice() {
-            &[x, y, z] => [x, y, z],
+        let loc = full_entity_pose.position;
+
+        let [x, y, z] = match args.as_slice() {
+            &[x, y, z] => [x.parse()?, y.parse()?, z.parse()?],
+            [x] => {
+                let count = x.parse()?;
+
+                for _ in 0..count {
+                    const RADIUS: f64 = 300.0;
+                    // spawn in 100 block radius
+                    let x = (rand::random::<f64>() - 0.5).mul_add(RADIUS, loc.x);
+                    let y = loc.y;
+                    let z = (rand::random::<f64>() - 0.5).mul_add(RADIUS, loc.z);
+
+                    sender.send(InitEntity {
+                        pose: FullEntityPose {
+                            position: DVec3::new(x, y, z),
+                            yaw: 0.0,
+                            pitch: 0.0,
+                            bounding: BoundingBox::create(DVec3::new(x, y, z), 0.6, 1.8),
+                        },
+                    });
+                }
+
+                return Ok(());
+            }
             [] => [HybridPos::Relative(0.0); 3],
             _ => bail!("expected 3 numbers"),
         };
-
-        let loc = full_entity_pose.position;
 
         let x = match x {
             HybridPos::Absolute(x) => x,
@@ -186,6 +207,7 @@ fn chat_command(
                 position: DVec3::new(x, y, z),
                 yaw: 0.0,
                 pitch: 0.0,
+                bounding: BoundingBox::create(DVec3::new(x, y, z), 0.6, 1.8),
             },
         });
     }

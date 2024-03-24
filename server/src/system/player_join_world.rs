@@ -11,7 +11,13 @@ use tracing::info;
 use valence_protocol::{
     math::DVec3,
     nbt::{compound, List},
-    packets::{play, play::player_position_look_s2c::PlayerPositionLookFlags},
+    packets::{
+        play,
+        play::{
+            player_abilities_s2c::PlayerAbilitiesFlags,
+            player_position_look_s2c::PlayerPositionLookFlags,
+        },
+    },
     BlockPos, BlockState, ChunkPos, Encode, FixedArray, VarInt,
 };
 use valence_registry::{biome::BiomeId, RegistryIdx};
@@ -294,6 +300,17 @@ fn inner(io: &mut Player) -> anyhow::Result<()> {
     }
 
     send_commands(io)?;
+
+    // set fly speed
+
+    io.writer.send_packet(&play::PlayerAbilitiesS2c {
+        flags: PlayerAbilitiesFlags::default()
+            .with_flying(true)
+            .with_allow_flying(true),
+        flying_speed: 1.0,
+        fov_modifier: 0.0,
+    })?;
+    // io.writer.send_packet(&play::EntityA
 
     GLOBAL
         .player_count
