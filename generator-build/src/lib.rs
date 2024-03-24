@@ -8,9 +8,6 @@ use std::{
 };
 
 use anyhow::{ensure, Context};
-use heck::ToUpperCamelCase;
-use itertools::Itertools;
-use quote::quote;
 
 use crate::schema::MinecraftData;
 
@@ -62,36 +59,7 @@ impl GeneratorConfig {
 
         let data: MinecraftData = serde_json::from_str(&s)?;
 
-        let entity = data.entity_type.entries;
-        let entity: Vec<_> = entity
-            .into_iter()
-            .map(|(name, id)| {
-                // remove minecraft: prefix
-                let name = name
-                    .split(':')
-                    .last()
-                    .context("missing minecraft: prefix")?;
-                let id = id.protocol_id;
-
-                // use heck to turn into UpperCamelCase
-                let name = name.to_upper_camel_case();
-
-                // turn name into ident
-                let name = syn::Ident::new(&name, proc_macro2::Span::call_site());
-
-                anyhow::Ok((name, id))
-            })
-            .try_collect()?;
-
-        let (names, ids): (Vec<_>, Vec<_>) = entity.into_iter().unzip();
-
-        let result = quote! {
-            #[repr(i32)]
-            #[non_exhaustive]
-            pub enum EntityType {
-              #( #names = #ids, )*
-            }
-        };
+        let result = data.entity_type.to_token_stream("EntityType")?;
 
         let item = syn::parse2(result).context("failed to parse generated code")?;
 
