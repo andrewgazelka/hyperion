@@ -20,13 +20,10 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install rust toolchain
-        uses: dtolnay/rust-toolchain@nightly
-
-      - uses: Swatinem/rust-cache@v2
-
       - name: Install cargo-machete
-        run: cargo install cargo-machete
+        uses: baptiste0928/cargo-install@v3
+        with:
+          crate: cargo-machete
 
       - name: Run cargo machete
         run: |
@@ -40,9 +37,8 @@ jobs:
         with:
           lfs: true
 
-      - uses: dtolnay/rust-toolchain@nightly
-      - uses: Swatinem/rust-cache@v2
-      - uses: taiki-e/install-action@nextest
+      - name: Setup Rust toolchain and cache
+        uses: actions-rust-lang/setup-rust-toolchain@v1
 
       - name: Run cargo nextest
         run: cargo nextest run
@@ -54,12 +50,10 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - uses: dtolnay/rust-toolchain@nightly
-
-      - uses: Swatinem/rust-cache@v2
-
       - name: Install cargo-deny
-        run: cargo install cargo-deny
+        uses: baptiste0928/cargo-install@v3
+        with:
+          crate: cargo-deny
 
       - name: Run cargo deny
         run: |
@@ -71,15 +65,12 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain and cache
+        uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
-          lfs: true
-
-
-      - uses: dtolnay/rust-toolchain@nightly
-        with:
-          components: rustfmt
-
-      - uses: Swatinem/rust-cache@v2
+          toolchain: nightly
+          components: clippy
 
       - name: Run rustfmt
         run: |
@@ -93,11 +84,11 @@ jobs:
         with:
           lfs: true
 
-      - uses: dtolnay/rust-toolchain@nightly
+      - name: Setup Rust toolchain and cache
+        uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
+          toolchain: nightly
           components: clippy
-
-      - uses: Swatinem/rust-cache@v2
 
       - name: Clippy check
         run: cargo clippy --workspace --tests --examples --all-features
