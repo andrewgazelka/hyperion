@@ -29,6 +29,8 @@ mod handshake;
 mod packets;
 mod system;
 
+mod bits;
+
 mod quad_tree;
 
 pub mod bounding_box;
