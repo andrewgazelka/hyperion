@@ -104,7 +104,7 @@ impl BitStorage {
     pub fn into_data(self) -> Vec<u64> {
         self.data
     }
-    
+
     /// Create a new `BitStorage` with the given number of bits per entry.
     /// `size` is the number of entries in the `BitStorage`.
     pub fn new(bits: usize, size: usize, data: Option<Vec<u64>>) -> Result<Self, BitStorageError> {

@@ -21,8 +21,10 @@ use valence_protocol::{
 };
 use valence_registry::{biome::BiomeId, RegistryIdx};
 
-use crate::{chunk::heightmap, handshake::Packets, KickPlayer, Player, PlayerJoinWorld, GLOBAL};
-use crate::bits::BitStorage;
+use crate::{
+    bits::BitStorage, chunk::heightmap, handshake::Packets, KickPlayer, Player, PlayerJoinWorld,
+    GLOBAL,
+};
 
 pub fn player_join_world(
     r: Receiver<PlayerJoinWorld, (EntityId, &mut Player)>,
