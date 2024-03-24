@@ -159,12 +159,16 @@ fn chat_command(
             [x] => {
                 let count = x.parse()?;
 
+                const BASE_RADIUS: f64 = 4.0;
+
+                // normalize over the number
+                let radius = BASE_RADIUS * (count as f64).sqrt();
+
                 for _ in 0..count {
-                    const RADIUS: f64 = 300.0;
                     // spawn in 100 block radius
-                    let x = (rand::random::<f64>() - 0.5).mul_add(RADIUS, loc.x);
+                    let x = (rand::random::<f64>() - 0.5).mul_add(radius, loc.x);
                     let y = loc.y;
-                    let z = (rand::random::<f64>() - 0.5).mul_add(RADIUS, loc.z);
+                    let z = (rand::random::<f64>() - 0.5).mul_add(radius, loc.z);
 
                     sender.send(InitEntity {
                         pose: FullEntityPose {

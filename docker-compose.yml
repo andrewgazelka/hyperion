@@ -1,9 +1,23 @@
 version: '3.8'
 
 services:
-  server:
+  release:
     build:
       context: .
+      target: release-bin
+
+    ports:
+      - "25565:25565"
+    environment:
+      - RUST_LOG=${RUST_LOG:-info}
+    volumes:
+      - type: bind
+        source: ./profiling
+        target: /app/profiling
+  debug:
+    build:
+      context: .
+      target: debug-bin
     ports:
       - "25565:25565"
     environment:

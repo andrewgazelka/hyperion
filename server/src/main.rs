@@ -124,10 +124,9 @@ impl Game {
         self.last_ticks.push_back(now);
 
         if self.last_ticks.len() > HISTORY_SIZE {
-            let front = self.last_ticks.pop_front().unwrap();
-            let ticks_per_second = 100.0 / (now - front).as_secs_f64();
-
-            info!("Ticks per second: {:?}", ticks_per_second);
+            let _front = self.last_ticks.pop_front().unwrap();
+            // let ticks_per_second = 100.0 / (now - front).as_secs_f64();
+            // info!("Ticks per second: {:?}", ticks_per_second);
         }
 
         while let Ok(connection) = self.incoming.try_recv() {
@@ -152,9 +151,9 @@ impl Game {
 
         self.world.send(Gametick);
 
-        let ms = now.elapsed().as_nanos() as f64 / 1_000_000.0;
+        // let ms = now.elapsed().as_nanos() as f64 / 1_000_000.0;
 
-        info!("Tick took: {:02.8}ms", ms);
+        // info!("Tick took: {:02.8}ms", ms);
     }
 }
 
@@ -190,6 +189,11 @@ fn main() {
 
     info!("Starting mc-server");
 
+    let current_threads = evenio::rayon::current_num_threads();
+    let max_threads = evenio::rayon::max_num_threads();
+
+    info!("rayon\tcurrent threads: {current_threads}, max threads: {max_threads}");
+
     let mut signals =
         Signals::new([signal_hook::consts::SIGINT, signal_hook::consts::SIGTERM]).unwrap();
 
@@ -211,8 +215,8 @@ fn main() {
     world.add_handler(system::player_join_world);
     world.add_handler(system::player_kick);
     world.add_handler(system::entity_spawn);
-    world.add_handler(system::entity_detect_collisions);
     world.add_handler(system::entity_move_logic);
+    world.add_handler(system::entity_detect_collisions);
     world.add_handler(system::reset_bounding_boxes);
 
     world.add_handler(system::keep_alive);

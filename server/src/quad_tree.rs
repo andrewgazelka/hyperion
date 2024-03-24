@@ -14,6 +14,8 @@ impl FullEntityPose {
             let mut vz = dz / 20.0;
 
             if largest_distance < 1.0 {
+                // 1 / sqrt(x) increases exponentially as x approaches 0
+
                 vx /= largest_distance.sqrt();
                 vz /= largest_distance.sqrt();
             } else {
@@ -22,8 +24,11 @@ impl FullEntityPose {
             }
 
             let reaction = &mut *reaction.0.get();
-            reaction.velocity.x -= vx;
-            reaction.velocity.z -= vz;
+
+            const MULT_FACTOR: f64 = 2.0;
+
+            reaction.velocity.x -= vx * MULT_FACTOR;
+            reaction.velocity.z -= vz * MULT_FACTOR;
 
             // todo: more efficient to do this OR
             // more efficient to just have par iter

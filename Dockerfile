@@ -1,12 +1,12 @@
 # Define an argument for the Rust nightly version
-ARG RUST_NIGHTLY_VERSION=nightly-2024-03-16
+ARG RUST_NIGHTLY_VERSION=nightly-2024-03-23
 
 # Use Alpine as base image
 FROM alpine:3.19 as packages
 
 # Install curl, build-base (Alpine's equivalent of build-essential), and OpenSSL development packages
 RUN apk update && \
-    apk add --no-cache curl build-base openssl-dev pkgconfig musl-dev
+    apk add --no-cache curl build-base openssl-dev pkgconfig musl-dev clang llvm lld mold
 
 FROM packages as builder
 
@@ -21,8 +21,7 @@ ENV PATH="/root/.cargo/bin:${PATH}"
 WORKDIR /app
 
 # Copy the Cargo configuration and source code
-
-COPY .cargo ./.cargo
+COPY .cargo/config.toml .cargo/config.toml
 
 COPY Cargo.toml Cargo.lock ./
 
@@ -41,18 +40,32 @@ COPY server/Cargo.toml ./server/Cargo.toml
 COPY server/src ./server/src
 
 # Define environment variable for Cargo home, if not using the default
-ENV CARGO_HOME=/usr/local/cargo
+ENV CARGO_HOME=/cargo-home
 
-# Build the source code using Rust Nightly with
-RUN --mount=type=cache,target=/usr/local/cargo/registry \
+FROM builder as release
+
+RUN --mount=type=cache,target=/cargo-home \
+    --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/usr/local/cargo/git \
     --mount=type=cache,target=/app/target \
-    RUSTFLAGS='-C target-cpu=native' cargo build --release --locked -p server
+    cargo build --release --locked -p server
 
-# Copy the built executable from the cache to a clean directory
 RUN --mount=type=cache,target=/app/target \
     mkdir -p /build && \
     cp target/release/server /build/server
+
+FROM builder as debug
+
+RUN --mount=type=cache,target=/cargo-home \
+    --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/usr/local/cargo/git \
+    --mount=type=cache,target=/app/target \
+    cargo build --timings --locked -p server
+
+RUN --mount=type=cache,target=/app/target \
+    mkdir -p /build && \
+    cp target/debug/server /build/server && \
+    cp target/cargo-timings/cargo-timing.html /build/cargo-timing.html
 
 #FROM scratch
 #FROM alpine:3.19
@@ -77,8 +90,18 @@ RUN --mount=type=cache,target=/app/target \
 #
 #ENTRYPOINT ["./server"]
 
-FROM scratch
-
-COPY --from=builder /build/server /
-
+FROM scratch as debug-bin
+COPY --from=debug /build/server /
 ENTRYPOINT ["/server"]
+
+
+FROM scratch as release-bin
+COPY --from=release /build/server /
+ENTRYPOINT ["/server"]
+
+
+#FROM alpine:3.19 as cli
+#
+## timings
+#COPY --from=debug /build/cargo-timing.html /app/cargo-timing.html
+
