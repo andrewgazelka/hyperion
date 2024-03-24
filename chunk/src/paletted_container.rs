@@ -29,7 +29,8 @@ pub struct Indirect<T, const LEN: usize, const HALF_LEN: usize> {
 impl<T: Copy + Eq + Default, const LEN: usize, const HALF_LEN: usize>
     PalettedContainer<T, LEN, HALF_LEN>
 {
-    #[must_use] pub fn new() -> Self {
+    #[must_use]
+    pub fn new() -> Self {
         assert_eq!(LEN.div_ceil(2), HALF_LEN);
         assert_ne!(LEN, 0);
 
