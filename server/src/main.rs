@@ -7,6 +7,7 @@ mod chunk;
 static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 use std::{
+    cell::UnsafeCell,
     collections::VecDeque,
     sync::atomic::AtomicU32,
     time::{Duration, Instant},
@@ -17,13 +18,20 @@ use signal_hook::iterator::Signals;
 use tracing::{info, warn};
 use valence_protocol::math::DVec3;
 
-use crate::handshake::{server, ClientConnection, Packets};
+use crate::{
+    bounding_box::BoundingBox,
+    handshake::{server, ClientConnection, Packets},
+};
 
 mod global;
 mod handshake;
 
 mod packets;
 mod system;
+
+mod quad_tree;
+
+pub mod bounding_box;
 
 // A zero-sized component, often called a "marker" or "tag".
 #[derive(Component)]
@@ -133,6 +141,7 @@ impl Game {
                 name,
                 pos: FullEntityPose {
                     position: DVec3::new(0.0, 2.0, 0.0),
+                    bounding: BoundingBox::create(DVec3::new(0.0, 2.0, 0.0), 0.6, 1.8),
                     yaw: 0.0,
                     pitch: 0.0,
                 },
@@ -190,7 +199,7 @@ fn main() {
         for _ in signals.forever() {
             warn!("Shutting down...");
             SHUTDOWN.store(true, std::sync::atomic::Ordering::Relaxed);
-            shutdown_tx.send(()).unwrap();
+            let _ = shutdown_tx.send(());
         }
     });
 
@@ -202,10 +211,15 @@ fn main() {
     world.add_handler(system::player_join_world);
     world.add_handler(system::player_kick);
     world.add_handler(system::entity_spawn);
+    world.add_handler(system::entity_detect_collisions);
     world.add_handler(system::entity_move_logic);
+    world.add_handler(system::reset_bounding_boxes);
 
     world.add_handler(system::keep_alive);
     world.add_handler(process_packets);
+
+    let bounding_boxes = world.spawn();
+    world.insert(bounding_boxes, bounding_box::EntityBoundingBoxes::default());
 
     let mut game = Game {
         world,
@@ -229,4 +243,33 @@ pub struct FullEntityPose {
     pub position: DVec3,
     pub yaw: f32,
     pub pitch: f32,
+    pub bounding: BoundingBox,
 }
+
+impl FullEntityPose {
+    fn move_by(&mut self, vec: DVec3) {
+        self.position += vec;
+        self.bounding = self.bounding.move_by(vec);
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct EntityReactionInner {
+    velocity: DVec3,
+}
+
+#[derive(Component, Debug, Default)]
+pub struct EntityReaction(UnsafeCell<EntityReactionInner>);
+
+impl EntityReaction {
+    #[allow(dead_code)]
+    fn get_mut(&mut self) -> &mut EntityReactionInner {
+        self.0.get_mut()
+    }
+}
+
+#[allow(clippy::undocumented_unsafe_blocks)]
+unsafe impl Send for EntityReaction {}
+
+#[allow(clippy::undocumented_unsafe_blocks)]
+unsafe impl Sync for EntityReaction {}

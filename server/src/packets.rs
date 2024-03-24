@@ -8,7 +8,7 @@ use evenio::event::Sender;
 use tracing::{debug, warn};
 use valence_protocol::{decode::PacketFrame, math::DVec3, packets::play, Decode, Packet};
 
-use crate::{FullEntityPose, InitEntity, KickPlayer, Player};
+use crate::{bounding_box::BoundingBox, FullEntityPose, InitEntity, KickPlayer, Player};
 
 fn confirm_teleport(_pkt: &[u8]) {
     // ignore
@@ -171,6 +171,7 @@ fn chat_command(
                             position: DVec3::new(x, y, z),
                             yaw: 0.0,
                             pitch: 0.0,
+                            bounding: BoundingBox::create(DVec3::new(x, y, z), 0.6, 1.8),
                         },
                     });
                 }
@@ -206,6 +207,7 @@ fn chat_command(
                 position: DVec3::new(x, y, z),
                 yaw: 0.0,
                 pitch: 0.0,
+                bounding: BoundingBox::create(DVec3::new(x, y, z), 0.6, 1.8),
             },
         });
     }

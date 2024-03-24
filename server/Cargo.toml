@@ -41,7 +41,10 @@ signal-hook = "0.3.17"
 base64 = "0.21.7"
 uuid = "1.8.0"
 rand_distr = "0.4.3"
-#bit-set = "0.5.3"
+quadtree = { version = "0.1.3" , package = "quadtree_rs" }
+smallvec = { git = "https://github.com/servo/rust-smallvec" }
+fnv = "1.0.7"
+#pprof = { version = "0.13.0", features = ["flamegraph"] }
 
 
 [lints.rust]
@@ -90,6 +93,9 @@ integer_division = "allow"
 separated_literal_suffix = "allow"
 unseparated_literal_suffix = "deny"
 integer_division_remainder_used = "allow"
+str_to_string = "allow"
+missing_assert_message = "allow"
+multiple_inherent_impl = "allow"
 
 complexity = { level = "deny", priority = -1 }
 type_complexity = "allow"

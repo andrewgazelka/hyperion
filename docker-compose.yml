@@ -8,3 +8,8 @@ services:
       - "25565:25565"
     environment:
       - RUST_LOG=${RUST_LOG:-info}
+    volumes:
+      - type: bind
+        source: ./profiling
+        target: /app/profiling
+

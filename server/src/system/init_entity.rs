@@ -6,7 +6,9 @@ use generator::EntityType;
 use rand_distr::{Distribution, LogNormal};
 use valence_protocol::{ByteAngle, VarInt, Velocity};
 
-use crate::{FullEntityPose, InitEntity, MinecraftEntity, Player, RunningSpeed, Uuid};
+use crate::{
+    EntityReaction, FullEntityPose, InitEntity, MinecraftEntity, Player, RunningSpeed, Uuid,
+};
 
 // Packet ID	State	Bound To	Field Name	Field Type	Notes
 // 0x01	Play	Client	Entity ID	VarInt	A unique integer ID mostly used in the protocol to identify the
@@ -29,6 +31,7 @@ pub fn call(
         Insert<MinecraftEntity>,
         Insert<Uuid>,
         Insert<RunningSpeed>,
+        Insert<EntityReaction>,
         Spawn,
     )>,
 ) {
@@ -45,6 +48,7 @@ pub fn call(
     s.insert(id, MinecraftEntity);
     s.insert(id, event.pose);
     s.insert(id, uuid);
+    s.insert(id, EntityReaction::default());
 
     // speed normal dist centered at 0.1
     // Parameters for the Log-Normal distribution

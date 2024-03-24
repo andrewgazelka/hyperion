@@ -1,23 +1,14 @@
-#![allow(unused)]
-use std::{
-    borrow::Cow,
-    collections::BTreeSet,
-    io,
-    io::{ErrorKind, Read},
-};
+use std::{borrow::Cow, collections::BTreeSet, io, io::ErrorKind};
 
 use anyhow::{ensure, Context};
 use base64::Engine;
 use bytes::BytesMut;
 use monoio::{
-    io::{
-        AsyncReadRent, AsyncWriteRent, AsyncWriteRentExt, OwnedReadHalf, OwnedWriteHalf, Splitable,
-    },
+    io::{AsyncReadRent, AsyncWriteRentExt, OwnedReadHalf, OwnedWriteHalf, Splitable},
     net::{TcpListener, TcpStream},
 };
 use serde_json::json;
 use sha2::Digest;
-use signal_hook::iterator::Signals;
 use tracing::{debug, error, info, warn};
 use valence_protocol::{
     decode::PacketFrame,

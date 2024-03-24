@@ -1,24 +1,25 @@
-#![allow(unused)]
-
-use std::process::id;
-
 use evenio::{
     entity::EntityId,
     event::Receiver,
     fetch::Fetcher,
     query::{Not, Query},
 };
-use tracing::info;
-use valence_protocol::{math::DVec2, ByteAngle, VarInt};
+use valence_protocol::{
+    math::{DVec2, DVec3},
+    ByteAngle, VarInt,
+};
 
-use crate::{FullEntityPose, Gametick, MinecraftEntity, Player, RunningSpeed};
+use crate::{EntityReaction, FullEntityPose, Gametick, MinecraftEntity, Player, RunningSpeed};
 
 #[derive(Query, Debug)]
 pub struct EntityQuery<'a> {
     id: EntityId,
-    entity: &'a MinecraftEntity,
     running_speed: Option<&'a RunningSpeed>,
+    reaction: &'a mut EntityReaction,
     pose: &'a mut FullEntityPose,
+    
+    // todo: add With
+    _entity: &'a MinecraftEntity,
 }
 
 pub fn call(
@@ -38,9 +39,10 @@ pub fn call(
     entities.iter_mut().for_each(|query| {
         let EntityQuery {
             id,
-            entity,
             running_speed,
             pose,
+            reaction,
+            ..
         } = query;
 
         let current = pose.position;
@@ -56,18 +58,24 @@ pub fn call(
 
         let pitch = 0.0;
 
+        let reaction = reaction.get_mut();
+
         if dif2d.length_squared() < 0.01 {
-            return;
+            // info!("Moving entity {:?} by {:?}", id, reaction.velocity);
+            pose.move_by(reaction.velocity);
+        } else {
+            // normalize
+            let dif2d = dif2d.normalize();
+
+            let speed = running_speed.copied().unwrap_or_default();
+            let dif2d = dif2d * speed.0;
+
+            let vec = DVec3::new(dif2d.x, 0.0, dif2d.y) + reaction.velocity;
+
+            pose.move_by(vec);
         }
 
-        // normalize
-        let dif2d = dif2d.normalize();
-
-        let speed = running_speed.copied().unwrap_or_default();
-        let dif2d = dif2d * speed.0;
-
-        pose.position.x += dif2d.x;
-        pose.position.z += dif2d.y;
+        reaction.velocity = DVec3::ZERO;
 
         #[allow(clippy::cast_possible_wrap)]
         let entity_id = VarInt(id.index().0 as i32);
