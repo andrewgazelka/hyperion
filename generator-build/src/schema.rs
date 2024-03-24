@@ -2,6 +2,10 @@
 
 use std::collections::BTreeMap;
 
+use anyhow::Context;
+use heck::ToUpperCamelCase;
+use itertools::Itertools;
+use quote::quote;
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
@@ -153,6 +157,45 @@ pub struct ProtocolEntryWithDefault {
     pub entries: BTreeMap<String, ProtocolId>,
     #[serde(rename = "protocol_id")]
     pub protocol_id: i32,
+}
+
+impl ProtocolEntryWithDefault {
+    pub fn to_token_stream(&self, name: &str) -> anyhow::Result<proc_macro2::TokenStream> {
+        let name = syn::Ident::new(name, proc_macro2::Span::call_site());
+
+        let entries = &self.entries;
+        let entries: Vec<_> = entries
+            .iter()
+            .map(|(name, id)| {
+                // remove minecraft: prefix
+                let name = name
+                    .split(':')
+                    .last()
+                    .context("missing minecraft: prefix")?;
+                let id = id.protocol_id;
+
+                // use heck to turn into UpperCamelCase
+                let name = name.to_upper_camel_case();
+
+                // turn name into ident
+                let name = syn::Ident::new(&name, proc_macro2::Span::call_site());
+
+                anyhow::Ok((name, id))
+            })
+            .try_collect()?;
+
+        let (names, ids): (Vec<_>, Vec<_>) = entries.into_iter().unzip();
+
+        let result = quote! {
+            #[repr(i32)]
+            #[non_exhaustive]
+            pub enum #name {
+              #( #names = #ids, )*
+            }
+        };
+
+        Ok(result)
+    }
 }
 
 #[derive(Debug, Deserialize, Copy, Clone)]
