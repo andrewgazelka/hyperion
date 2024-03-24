@@ -10,6 +10,7 @@ env:
 jobs:
   runBenchmark:
     name: run benchmark
+
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -17,6 +18,8 @@ jobs:
           lfs: true
           
       - uses: boa-dev/criterion-compare-action@v3
+        with:
+          branchName: ${{ github.base_ref }}
 
 #jobs:
 #  machete:
