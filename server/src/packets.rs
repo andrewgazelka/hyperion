@@ -1,3 +1,4 @@
+#![allow(unused)]
 #![allow(clippy::missing_const_for_fn)]
 //! <https://wiki.vg/index.php?title=Protocol&oldid=18375>
 
@@ -8,7 +9,9 @@ use evenio::event::Sender;
 use tracing::{debug, warn};
 use valence_protocol::{decode::PacketFrame, math::DVec3, packets::play, Decode, Packet};
 
-use crate::{bounding_box::BoundingBox, FullEntityPose, InitEntity, KickPlayer, KillAllEntities, Player};
+use crate::{
+    bounding_box::BoundingBox, FullEntityPose, InitEntity, KickPlayer, KillAllEntities, Player,
+};
 
 fn confirm_teleport(_pkt: &[u8]) {
     // ignore
@@ -70,12 +73,10 @@ fn look_and_on_ground(
     Ok(())
 }
 
-fn player_command(mut data: &[u8]) -> anyhow::Result<()> {
-    let pkt = play::ClientCommandC2s::decode(&mut data)?;
+fn player_command(mut data: &[u8]) {
+    // let pkt = play::ClientCommandC2s::decode(&mut data)?;
 
-    debug!("player command packet: {:?}", pkt);
-
-    Ok(())
+    // debug!("player command packet: {:?}", pkt);
 }
 
 fn position_and_on_ground(
@@ -96,7 +97,7 @@ fn position_and_on_ground(
 fn update_player_abilities(mut data: &[u8]) -> anyhow::Result<()> {
     let pkt = play::UpdatePlayerAbilitiesC2s::decode(&mut data)?;
 
-    debug!("update player abilities packet: {:?}", pkt);
+    // debug!("update player abilities packet: {:?}", pkt);
 
     Ok(())
 }
@@ -104,7 +105,7 @@ fn update_player_abilities(mut data: &[u8]) -> anyhow::Result<()> {
 fn update_selected_slot(mut data: &[u8]) -> anyhow::Result<()> {
     let pkt = play::UpdateSelectedSlotC2s::decode(&mut data)?;
 
-    debug!("update selected slot packet: {:?}", pkt);
+    // debug!("update selected slot packet: {:?}", pkt);
 
     Ok(())
 }
@@ -148,7 +149,7 @@ fn chat_command(
     let mut cmd = pkt.command.0.split(' ');
 
     let first = cmd.next();
-    
+
     if first == Some("killall") {
         sender.send(KillAllEntities);
     }
@@ -240,7 +241,7 @@ pub fn switch(
         play::FullC2s::ID => full(data, full_entity_pose)?,
         play::PositionAndOnGroundC2s::ID => position_and_on_ground(data, full_entity_pose)?,
         play::LookAndOnGroundC2s::ID => look_and_on_ground(data, full_entity_pose)?,
-        play::ClientCommandC2s::ID => player_command(data)?,
+        play::ClientCommandC2s::ID => player_command(data),
         play::UpdatePlayerAbilitiesC2s::ID => update_player_abilities(data)?,
         play::UpdateSelectedSlotC2s::ID => update_selected_slot(data)?,
         play::KeepAliveC2s::ID => (), // todo: implement

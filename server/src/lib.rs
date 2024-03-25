@@ -16,7 +16,7 @@ use std::{
 use anyhow::Context;
 use evenio::prelude::*;
 use signal_hook::iterator::Signals;
-use tracing::{info, warn};
+use tracing::{info, instrument, warn};
 use valence_protocol::math::DVec3;
 
 use crate::{
@@ -113,11 +113,12 @@ impl Game {
     pub const fn world(&self) -> &World {
         &self.world
     }
-    
+
     pub fn world_mut(&mut self) -> &mut World {
         &mut self.world
     }
-    
+
+    #[instrument]
     pub fn init() -> anyhow::Result<Self> {
         info!("Starting mc-server");
 
@@ -191,6 +192,7 @@ impl Game {
         Some(duration.mul_f64(0.8))
     }
 
+    #[instrument(skip_all)]
     pub fn game_loop(&mut self) {
         while !SHUTDOWN.load(std::sync::atomic::Ordering::Relaxed) {
             self.tick();
@@ -201,6 +203,7 @@ impl Game {
         }
     }
 
+    #[instrument(skip_all)]
     pub fn tick(&mut self) {
         const HISTORY_SIZE: usize = 100;
 
@@ -253,6 +256,7 @@ impl Game {
 }
 
 // The `Receiver<Tick>` parameter tells our handler to listen for the `Tick` event.
+#[instrument(skip_all)]
 fn process_packets(
     _: Receiver<Gametick>,
     mut fetcher: Fetcher<(EntityId, &mut Player, &mut FullEntityPose)>,

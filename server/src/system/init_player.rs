@@ -1,7 +1,9 @@
 use evenio::prelude::*;
+use tracing::instrument;
 
 use crate::{EntityReaction, FullEntityPose, InitPlayer, Player, PlayerJoinWorld};
 
+#[instrument(skip_all)]
 pub fn init_player(
     r: ReceiverMut<InitPlayer>,
     mut s: Sender<(

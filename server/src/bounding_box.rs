@@ -3,6 +3,7 @@ use std::iter::Zip;
 use evenio::{component::Component, entity::EntityId, fetch::Fetcher};
 use fnv::FnvHashMap;
 use smallvec::SmallVec;
+use tracing::instrument;
 use valence_protocol::math::{DVec2, DVec3, IVec2};
 
 use crate::{EntityReaction, FullEntityPose};
@@ -127,7 +128,9 @@ impl EntityBoundingBoxes {
         self.query.clear();
     }
 
-    #[must_use] pub fn get_collisions(
+    #[must_use]
+    #[instrument(skip_all, name = "get_collisions")]
+    pub fn get_collisions(
         &self,
         current: CollisionContext,
         fetcher: &Fetcher<(EntityId, &FullEntityPose, &EntityReaction)>,
@@ -163,7 +166,6 @@ impl EntityBoundingBoxes {
                         // the entity is probably expired / has been removed
                         continue;
                     };
-
 
                     // todo: see which way ordering this has the most performance
                     if bounding.collides(other_pose.bounding) && !collisions_ids.contains(&id) {

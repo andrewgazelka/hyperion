@@ -5,6 +5,7 @@ use evenio::{
 };
 use generator::EntityType;
 use rand_distr::{Distribution, LogNormal};
+use tracing::instrument;
 use valence_protocol::{ByteAngle, VarInt, Velocity};
 
 use crate::{
@@ -24,6 +25,7 @@ use crate::{
 // general body rotation. Data	VarInt	Meaning dependent on the value of the Type field, see Object
 // Data for details. Velocity X	Short	Same units as Set Entity Velocity.
 
+#[instrument(skip_all, name = "init_entity")]
 pub fn call(
     r: Receiver<InitEntity>,
     mut players: Fetcher<&mut Player>,

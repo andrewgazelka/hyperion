@@ -6,7 +6,7 @@ use chunk::{
 };
 use evenio::prelude::*;
 use itertools::Itertools;
-use tracing::info;
+use tracing::{info, instrument};
 use valence_protocol::{
     math::DVec3,
     nbt::{compound, List},
@@ -26,6 +26,7 @@ use crate::{
     GLOBAL,
 };
 
+#[instrument(skip_all)]
 pub fn player_join_world(
     r: Receiver<PlayerJoinWorld, (EntityId, &mut Player)>,
     mut s: Sender<KickPlayer>,
@@ -117,7 +118,7 @@ fn send_commands(io: &mut Packets) -> anyhow::Result<()> {
         children: vec![],
         redirect_node: None,
     };
-    
+
     // id 3 = "killall"
     let clear = Node {
         data: NodeData::Literal {

@@ -6,9 +6,13 @@ authors = ["Andrew Gazelka <andrew.gazelka@gmail.com>"]
 readme = "README.md"
 publish = false
 
+[features]
+trace = []
+full = ["trace"]
+
+
 [dependencies]
 anyhow = "1.0.81"
-tracing-subscriber = { version = "0.3.18", features = ["chrono"] }
 tracing = "0.1.40"
 serde_json = "1.0.114"
 bytes = "1.6.0"
@@ -38,7 +42,8 @@ rand_distr = "0.4.3"
 smallvec = { git = "https://github.com/servo/rust-smallvec" }
 fnv = "1.0.7"
 rayon = "1.10.0"
-#pprof = { version = "0.13.0", features = ["flamegraph"] }
+tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
+tracing-flame = "0.2.0"
 
 
 [lints.rust]
@@ -115,7 +120,9 @@ suspicious = { level = "deny", priority = -1 }
 blanket_clippy_restriction_lints = "allow"
 
 [dev-dependencies]
-criterion = { version = "0.5.1", features = ["html_reports"] }
+#criterion = { version = "0.5.1", features = ["html_reports"] }
+#iai = "0.1"
+iai-callgrind = "0.10.2"
 
 [[bench]]
 name = "many_zombies"

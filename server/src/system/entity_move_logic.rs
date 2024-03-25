@@ -6,6 +6,7 @@ use evenio::{
     fetch::Fetcher,
     query::{Not, Query},
 };
+use tracing::instrument;
 use valence_protocol::{
     math::{DVec2, DVec3},
     ByteAngle, VarInt,
@@ -24,6 +25,7 @@ pub struct EntityQuery<'a> {
     _entity: &'a MinecraftEntity,
 }
 
+#[instrument(skip_all, name = "entity_move_logic")]
 pub fn call(
     _: Receiver<Gametick>,
     mut entities: Fetcher<EntityQuery>,

@@ -1,11 +1,15 @@
-use std::time::Duration;
+// https://bheisler.github.io/criterion.rs/book/faq.html#cargo-bench-gives-unrecognized-option-errors-for-valid-command-line-options
+// https://github.com/bheisler/iai/issues/37
+// https://github.com/osiewicz/calliper
+// https://github.com/iai-callgrind/iai-callgrind
 
-use criterion::{criterion_group, criterion_main, Criterion};
+use iai_callgrind::{library_benchmark, library_benchmark_group, main};
 use server::{bounding_box::BoundingBox, FullEntityPose, Game, InitEntity};
 use valence_protocol::math::DVec3;
 
-fn criterion_benchmark(c: &mut Criterion) {
-    // so we can have reliable benchmarks even when we are using our laptop for other 
+#[library_benchmark]
+fn world() {
+    // so we can have reliable benchmarks even when we are using our laptop for other
     // things
     rayon::ThreadPoolBuilder::new()
         .num_threads(4)
@@ -40,16 +44,25 @@ fn criterion_benchmark(c: &mut Criterion) {
     }
 
     // just a tick to setup
-    game.tick();
+    for _ in 0..5 {
+        game.tick();
+    }
 
-    c.bench_function("world", |b| b.iter(|| game.tick()));
+    // c.bench_function("world", |b| b.iter(|| game.tick()));
 }
 
-criterion_group! {
-  name = benches;
-  config = Criterion::default().measurement_time(Duration::from_secs(20));
-  targets = criterion_benchmark
-}
+// criterion_group! {
+//   name = benches;
+//   config = Criterion::default().measurement_time(Duration::from_secs(20));
+//   targets = criterion_benchmark
+// }
+//
+// // criterion_group!(benches, criterion_benchmark);
+// criterion_main!(benches);
 
-// criterion_group!(benches, criterion_benchmark);
-criterion_main!(benches);
+library_benchmark_group!(
+    name = zombie_group;
+    benchmarks = world,
+);
+
+main!(library_benchmark_groups = zombie_group);

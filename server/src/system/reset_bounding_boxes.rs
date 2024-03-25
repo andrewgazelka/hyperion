@@ -4,6 +4,7 @@ use evenio::{
     fetch::{Fetcher, Single},
     query::Query,
 };
+use tracing::instrument;
 
 use crate::{bounding_box::EntityBoundingBoxes, FullEntityPose, Gametick};
 
@@ -13,6 +14,7 @@ pub struct EntityQuery<'a> {
     pose: &'a mut FullEntityPose,
 }
 
+#[instrument(skip_all, name = "reset_bounding_boxes")]
 pub fn call(
     _: Receiver<Gametick>,
     entity_bounding_boxes: Single<&mut EntityBoundingBoxes>,

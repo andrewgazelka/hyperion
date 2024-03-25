@@ -37,3 +37,14 @@ services:
       - type: bind
         source: ./profiling
         target: /app/profiling
+
+  bench:
+    build:
+      context: .
+      target: bench
+    environment:
+      - RUST_LOG=${RUST_LOG:-info}
+#    volumes:
+#      - type: bind
+#        source: ./profiling
+#        target: /app/profiling

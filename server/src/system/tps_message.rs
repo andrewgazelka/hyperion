@@ -1,11 +1,10 @@
 use evenio::prelude::*;
+use tracing::instrument;
 
 use crate::{Player, TpsEvent};
 
-pub fn call(
-    r: Receiver<TpsEvent>,
-    mut players: Fetcher<&mut Player>,
-) {
+#[instrument(skip_all, name = "tps_message")]
+pub fn call(r: Receiver<TpsEvent>, mut players: Fetcher<&mut Player>) {
     let ms_per_tick = r.event.ms_per_tick;
 
     // with 4 zeroes

@@ -11,7 +11,7 @@ use evenio::{
     rayon::prelude::*,
 };
 use sha2::digest::generic_array::arr;
-use tracing::info;
+use tracing::{info, instrument};
 use valence_protocol::{math::DVec2, ByteAngle, VarInt};
 
 use crate::{
@@ -28,6 +28,7 @@ pub struct EntityQuery<'a> {
     pose: &'a mut FullEntityPose,
 }
 
+#[instrument(skip_all, name = "entity_detect_collisions")]
 pub fn call(
     _: Receiver<Gametick>,
     entity_bounding_boxes: Single<&EntityBoundingBoxes>,
