@@ -10,7 +10,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-
+  RUST_NIGHTLY_TOOLCHAIN: nightly-2024-03-24
 
 jobs:
   machete:
@@ -70,7 +70,7 @@ jobs:
       - name: Setup Rust toolchain and cache
         uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
-          toolchain: nightly
+          toolchain: ${{ env.RUST_NIGHTLY_TOOLCHAIN }}
           components: rustfmt
 
       - name: Run rustfmt
@@ -88,7 +88,7 @@ jobs:
       - name: Setup Rust toolchain and cache
         uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
-          toolchain: nightly
+          toolchain: ${{ env.RUST_NIGHTLY_TOOLCHAIN }}
           components: clippy
 
       - name: Clippy check
