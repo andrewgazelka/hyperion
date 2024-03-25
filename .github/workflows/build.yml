@@ -75,7 +75,7 @@ jobs:
 
       - name: Run rustfmt
         run: |
-          cargo +nightly fmt --all -- --check
+          cargo fmt --all -- --check
   clippy:
     runs-on: ubuntu-latest
 
