@@ -10,6 +10,8 @@ _How can we get 10k players to PvP at once on a Minecraft server to break the Gu
 
 
 # Running
+
+## Docker (Recommended)
 ```bash
 # Install Git LFS
 pkg-manager install git-lfs
@@ -23,6 +25,19 @@ docker compose up --build release
 
 # if you want to run in debug
 # docker compose up --build debug
+```
+
+## Manual
+```bash
+# Install Git LFS
+pkg-manager install git-lfs
+
+# Setup Git LFS
+git lfs install
+
+git clone https://github.com/andrewgazelka/hyperion
+cd hyperion
+cargo run --release
 ```
 
 # Internals
