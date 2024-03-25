@@ -44,6 +44,7 @@ fnv = "1.0.7"
 rayon = "1.10.0"
 tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
 tracing-flame = "0.2.0"
+pprof = { version = "0.13.0", features = ["flamegraph", "frame-pointer"] }
 
 
 [lints.rust]
@@ -121,8 +122,12 @@ blanket_clippy_restriction_lints = "allow"
 
 [dev-dependencies]
 #criterion = { version = "0.5.1", features = ["html_reports"] }
+divan = "0.1.14"
+#tango-bench = "0.4.0"
 #iai = "0.1"
-iai-callgrind = "0.10.2"
+#iai-callgrind = "0.10.2"
+thread-priority = "0.16.0"
+
 
 [[bench]]
 name = "many_zombies"

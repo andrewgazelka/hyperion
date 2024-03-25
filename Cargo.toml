@@ -15,11 +15,14 @@ opt-level = 1
 opt-level = 3
 
 [profile.release]
+#debug = true
 lto = "fat"
 codegen-units = 1
+#strip = false
 #panic = "abort"
 
 [profile.bench]
+debug = true
 lto = "fat"
 codegen-units = 1
 #panic = "abort"

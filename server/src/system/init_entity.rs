@@ -26,7 +26,7 @@ use crate::{
 // Data for details. Velocity X	Short	Same units as Set Entity Velocity.
 
 #[instrument(skip_all, name = "init_entity")]
-pub fn call(
+pub fn init_entity(
     r: Receiver<InitEntity>,
     mut players: Fetcher<&mut Player>,
     mut s: Sender<(

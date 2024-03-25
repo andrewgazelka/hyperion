@@ -28,8 +28,9 @@ pub struct EntityQuery<'a> {
     pose: &'a mut FullEntityPose,
 }
 
+// #[no_mangle]
 #[instrument(skip_all, name = "entity_detect_collisions")]
-pub fn call(
+pub fn entity_detect_collisions(
     _: Receiver<Gametick>,
     entity_bounding_boxes: Single<&EntityBoundingBoxes>,
     mut poses_fetcher: Fetcher<(EntityId, &FullEntityPose, &EntityReaction)>,

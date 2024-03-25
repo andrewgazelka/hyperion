@@ -14,7 +14,7 @@ _How can we get 10k players to PvP at once on a Minecraft server to break the Gu
 # Install Git LFS
 pkg-manager install git-lfs
 
-# Setup Git LFS
+# Setup Git LFS
 git lfs install
 
 git clone https://github.com/andrewgazelka/hyperion

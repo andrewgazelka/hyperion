@@ -1,3 +1,5 @@
+#![allow(clippy::module_name_repetitions)]
+
 use std::{borrow::Cow, collections::BTreeSet, io, io::ErrorKind};
 
 use anyhow::{ensure, Context};
@@ -75,6 +77,17 @@ pub struct WriterComm {
     enc: PacketEncoder,
 }
 
+pub fn encode_packet<P>(pkt: &P) -> anyhow::Result<bytes::Bytes>
+where
+    P: valence_protocol::Packet + Encode,
+{
+    let mut enc = PacketEncoder::default();
+    enc.append_packet(pkt)?;
+    let bytes = enc.take();
+
+    Ok(bytes.freeze())
+}
+
 type ReaderComm = flume::Receiver<PacketFrame>;
 
 impl WriterComm {
@@ -85,24 +98,10 @@ impl WriterComm {
         self.enc.append_packet(pkt)?;
         let bytes = self.enc.take();
 
-        let mut bytes_slice = &*bytes;
-        let slice = &mut bytes_slice;
-        #[allow(clippy::cast_sign_loss)]
-        let length = VarInt::decode_partial(slice)? as usize;
-
-        let slice_len = bytes_slice.len();
-
-        ensure!(
-            length == slice_len,
-            "length mismatch: var int length {}, got pkt length {}",
-            length,
-            slice_len
-        );
-
         Ok(bytes.freeze())
     }
 
-    pub fn send_raw(&mut self, bytes: bytes::Bytes) -> anyhow::Result<()> {
+    pub fn send_raw(&self, bytes: bytes::Bytes) -> anyhow::Result<()> {
         self.tx.send(bytes)?;
         Ok(())
     }
@@ -517,27 +516,29 @@ async fn run(tx: flume::Sender<ClientConnection>) {
     }
 }
 
-pub fn server(shutdown: flume::Receiver<()>) -> flume::Receiver<ClientConnection> {
+pub fn server(shutdown: flume::Receiver<()>) -> anyhow::Result<flume::Receiver<ClientConnection>> {
     let (tx, rx) = flume::unbounded();
 
-    std::thread::spawn(move || {
-        let mut runtime = monoio::RuntimeBuilder::<monoio::FusionDriver>::new()
-            // .enable_timer()
-            .build()
-            .unwrap();
+    std::thread::Builder::new()
+        .name("io".to_string())
+        .spawn(move || {
+            let mut runtime = monoio::RuntimeBuilder::<monoio::FusionDriver>::new()
+                .build()
+                .unwrap();
 
-        runtime.block_on(async move {
-            let run = run(tx);
-            let shutdown = shutdown.recv_async();
+            runtime.block_on(async move {
+                let run = run(tx);
+                let shutdown = shutdown.recv_async();
 
-            monoio::select! {
-                () = run => {},
-                _ = shutdown => {},
-            }
-        });
-    });
+                monoio::select! {
+                    () = run => {},
+                    _ = shutdown => {},
+                }
+            });
+        })
+        .context("failed to spawn io thread")?;
 
-    rx
+    Ok(rx)
 }
 
 fn registry_codec_raw(codec: &RegistryCodec) -> anyhow::Result<Compound> {

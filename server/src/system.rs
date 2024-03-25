@@ -9,13 +9,13 @@ mod player_kick;
 mod reset_bounding_boxes;
 mod tps_message;
 
-pub use entity_detect_collisions::call as entity_detect_collisions;
-pub use entity_move_logic::call as entity_move_logic;
-pub use init_entity::call as entity_spawn;
+pub use entity_detect_collisions::entity_detect_collisions;
+pub use entity_move_logic::entity_move_logic;
+pub use init_entity::init_entity as entity_spawn;
 pub use init_player::init_player;
 pub use keep_alive::keep_alive;
 pub use kill_all::kill_all;
 pub use player_join_world::player_join_world;
 pub use player_kick::player_kick;
-pub use reset_bounding_boxes::call as reset_bounding_boxes;
-pub use tps_message::call as tps_message;
+pub use reset_bounding_boxes::reset_bounding_boxes;
+pub use tps_message::tps_message;

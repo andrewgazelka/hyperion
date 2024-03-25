@@ -1,10 +1,8 @@
+#![allow(unused)]
 #![allow(clippy::many_single_char_names)]
 
 extern crate core;
 mod chunk;
-
-#[global_allocator]
-static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 use std::{
     cell::UnsafeCell,
@@ -21,11 +19,11 @@ use valence_protocol::math::DVec3;
 
 use crate::{
     bounding_box::BoundingBox,
-    handshake::{server, ClientConnection, Packets},
+    io::{server, ClientConnection, Packets},
 };
 
 mod global;
-mod handshake;
+mod io;
 
 mod packets;
 mod system;
@@ -60,6 +58,10 @@ struct Uuid(uuid::Uuid);
 pub struct InitEntity {
     pub pose: FullEntityPose,
 }
+
+/// If the entity can be targeted by non-player entities.
+#[derive(Component)]
+pub struct Targetable;
 
 #[derive(Event)]
 struct PlayerJoinWorld {
@@ -140,7 +142,7 @@ impl Game {
             }
         });
 
-        let server = server(shutdown_rx);
+        let server = server(shutdown_rx)?;
 
         let mut world = World::new();
 

@@ -1,38 +1,3 @@
-# https://github.com/bevyengine/bevy/blob/main/.cargo/config_fast_builds.toml
-# https://nnethercote.github.io/perf-book/build-configuration.html
-
-# this is not ideal but we have to comment out to make GitHub Actions runners work on stable
-#[target.x86_64-unknown-linux-gnu]
-#linker = "clang"
-#rustflags = [
-#    "-Ctarget-cpu=native",
-#    "-Clink-arg=-fuse-ld=lld",
-#    "-Zshare-generics=y",
-#    "-Zthreads=0",
-#]
-
-[target.x86_64-unknown-linux-musl]
-linker = "clang"
-rustflags = [
-    "-Ctarget-cpu=native",
-    "-Clink-arg=-fuse-ld=/usr/bin/mold",
-    "link-arg=--ld-path=/usr/local/bin/mold",
-    "-Zshare-generics=y",
-    "-Zthreads=0",
-]
-
-[target.aarch64-unknown-linux-musl]
-linker = "clang"
-rustflags = [
-    "-Ctarget-cpu=native",
-    "-Clink-arg=-fuse-ld=/usr/bin/mold",
-    "-Zshare-generics=y",
-    "-Zthreads=0",
-]
-
-
-# NOTE: you must install [Mach-O LLD Port](https://lld.llvm.org/MachO/index.html) on mac. you can easily do this by installing llvm which includes lld with the "brew" package manager:
-# `brew install llvm`
 [target.x86_64-apple-darwin]
 rustflags = [
     "-Ctarget-cpu=native",
@@ -49,19 +14,6 @@ rustflags = [
     "-Zshare-generics=y",
     "-Zthreads=0",
 ]
-
-[target.x86_64-pc-windows-msvc]
-linker = "rust-lld.exe"
-rustflags = [
-    "-Ctarget-cpu=native",
-    "-Zshare-generics=n",
-    "-Zthreads=0",
-]
-
-# Optional: Uncommenting the following improves compile times, but reduces the amount of debug info to 'line number tables only'
-# In most cases the gains are negligible, but if you are on macos and have slow compile times you should see significant gains.
-#[profile.dev]
-#debug = 1
 
 [registries.crates-io]
 protocol = "sparse"

@@ -4,7 +4,7 @@ use tracing::instrument;
 use crate::{Player, TpsEvent};
 
 #[instrument(skip_all, name = "tps_message")]
-pub fn call(r: Receiver<TpsEvent>, mut players: Fetcher<&mut Player>) {
+pub fn tps_message(r: Receiver<TpsEvent>, mut players: Fetcher<&mut Player>) {
     let ms_per_tick = r.event.ms_per_tick;
 
     // with 4 zeroes

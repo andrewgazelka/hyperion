@@ -2,16 +2,30 @@
 // https://github.com/bheisler/iai/issues/37
 // https://github.com/osiewicz/calliper
 // https://github.com/iai-callgrind/iai-callgrind
+// https://nikolaivazquez.com/blog/divan/#measure-allocations
 
-use iai_callgrind::{library_benchmark, library_benchmark_group, main};
-use server::{bounding_box::BoundingBox, FullEntityPose, Game, InitEntity};
+use divan::{AllocProfiler, Bencher};
+// use thread_priority::{ThreadBuilderExt, ThreadPriority};
+use server::{bounding_box::BoundingBox, FullEntityPose, Game, InitEntity, Targetable};
 use valence_protocol::math::DVec3;
 
-#[library_benchmark]
-fn world() {
+#[global_allocator]
+static ALLOC: AllocProfiler = AllocProfiler::system();
+
+fn main() {
+    // Run registered benchmarks.
+    divan::main();
+}
+
+#[divan::bench]
+fn world_bench(bencher: Bencher) {
     // so we can have reliable benchmarks even when we are using our laptop for other
     // things
     rayon::ThreadPoolBuilder::new()
+        // .spawn_handler(|t| {
+        //     std::thread::Builder::new().spawn_with_priority(ThreadPriority::Max, |_| t.run())?;
+        //     Ok(())
+        // })
         .num_threads(4)
         .build_global()
         .unwrap();
@@ -43,26 +57,22 @@ fn world() {
         });
     }
 
-    // just a tick to setup
-    for _ in 0..5 {
+    game.tick();
+
+    let world = game.world_mut();
+
+    let id = world.spawn();
+
+    world.insert(id, FullEntityPose {
+        position: DVec3::new(0.0, 2.0, 0.0),
+        bounding: BoundingBox::create(DVec3::new(0.0, 2.0, 0.0), 0.6, 1.8),
+        yaw: 0.0,
+        pitch: 0.0,
+    });
+
+    world.insert(id, Targetable);
+
+    bencher.bench_local(|| {
         game.tick();
-    }
-
-    // c.bench_function("world", |b| b.iter(|| game.tick()));
+    });
 }
-
-// criterion_group! {
-//   name = benches;
-//   config = Criterion::default().measurement_time(Duration::from_secs(20));
-//   targets = criterion_benchmark
-// }
-//
-// // criterion_group!(benches, criterion_benchmark);
-// criterion_main!(benches);
-
-library_benchmark_group!(
-    name = zombie_group;
-    benchmarks = world,
-);
-
-main!(library_benchmark_groups = zombie_group);

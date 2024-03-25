@@ -22,8 +22,7 @@ use valence_protocol::{
 use valence_registry::{biome::BiomeId, RegistryIdx};
 
 use crate::{
-    bits::BitStorage, chunk::heightmap, handshake::Packets, KickPlayer, Player, PlayerJoinWorld,
-    GLOBAL,
+    bits::BitStorage, chunk::heightmap, io::Packets, KickPlayer, Player, PlayerJoinWorld, GLOBAL,
 };
 
 #[instrument(skip_all)]

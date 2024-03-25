@@ -1,9 +1,12 @@
-use server::Game;
-use tracing_flame::FlameLayer;
-use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
+#[global_allocator]
+static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
-#[allow(dead_code)]
+use server::Game;
+
+#[cfg(feature = "trace")]
 fn setup_global_subscriber() -> impl Drop {
+    use tracing_flame::FlameLayer;
+    use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
     let fmt_layer = fmt::Layer::default();
 
     let (flame_layer, guard) = FlameLayer::with_file("./tracing.folded").unwrap();
@@ -28,8 +31,19 @@ fn main() -> anyhow::Result<()> {
     #[cfg(feature = "trace")]
     let _guard = setup_global_subscriber();
 
+    // let guard = pprof::ProfilerGuardBuilder::default()
+    //     .frequency(2999)
+    //     .blocklist(&["libc", "libgcc", "pthread", "vdso", "rayon"])
+    //     .build()
+    //     .unwrap();
+
     let mut game = Game::init()?;
     game.game_loop();
+
+    // if let Ok(report) = guard.report().build() {
+    //     let file = File::create("flamegraph.svg").unwrap();
+    //     report.flamegraph(file).unwrap();
+    // };
 
     Ok(())
 }

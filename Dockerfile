@@ -18,6 +18,9 @@ RUN curl https://sh.rustup.rs -sSf | sh -s -- -y && \
 ENV PATH="/root/.cargo/bin:${PATH}"
 ENV CARGO_HOME=/root/.cargo
 
+# rust flags
+ENV RUSTFLAGS="-Ctarget-cpu=native -Zshare-generics=y -Zthreads=0"
+
 RUN cargo install --version 0.10.2 iai-callgrind-runner
 
 # Set the working directory
@@ -41,6 +44,7 @@ COPY generator-build/src ./generator-build/src
 
 COPY server/Cargo.toml ./server/Cargo.toml
 COPY server/src ./server/src
+COPY server/benches ./server/benches
 
 FROM builder as release
 
@@ -90,8 +94,6 @@ FROM builder as bench
 
 # install valgrind
 RUN apk add --no-cache valgrind
-
-COPY server/benches ./server/benches
 
 RUN valgrind --version
 

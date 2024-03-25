@@ -3,7 +3,6 @@ use std::iter::Zip;
 use evenio::{component::Component, entity::EntityId, fetch::Fetcher};
 use fnv::FnvHashMap;
 use smallvec::SmallVec;
-use tracing::instrument;
 use valence_protocol::math::{DVec2, DVec3, IVec2};
 
 use crate::{EntityReaction, FullEntityPose};
@@ -129,7 +128,7 @@ impl EntityBoundingBoxes {
     }
 
     #[must_use]
-    #[instrument(skip_all, name = "get_collisions")]
+    // #[instrument(skip_all, name = "get_collisions")]
     pub fn get_collisions(
         &self,
         current: CollisionContext,
