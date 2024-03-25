@@ -16,7 +16,6 @@ linker = "clang"
 rustflags = [
     "-Ctarget-cpu=native",
     "-Clink-arg=-fuse-ld=/usr/bin/mold",
-    "link-arg=--ld-path=/usr/local/bin/mold",
     "-Zshare-generics=y",
     "-Zthreads=0",
 ]
