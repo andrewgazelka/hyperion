@@ -50,6 +50,7 @@ tracing-flame = "0.2.0"
 ndarray = "0.15.6"
 jemallocator = "0.5.4"
 jemalloc-ctl = "0.5.4"
+kanal = "0.1.0-pre8"
 
 # removing this because jemalloc-ctl is nice for memory stats also
 # https://github.com/rust-lang/rust-analyzer/issues/1441#issuecomment-509506279

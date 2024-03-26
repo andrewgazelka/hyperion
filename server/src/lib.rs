@@ -124,6 +124,7 @@ pub struct Game {
     last_ms_per_tick: VecDeque<f64>,
     tick_on: u64,
     incoming: flume::Receiver<ClientConnection>,
+    req_packets: flume::Sender<()>,
 }
 
 impl Game {
@@ -157,7 +158,7 @@ impl Game {
             }
         });
 
-        let server = server(shutdown_rx)?;
+        let (incoming, req_packets) = server(shutdown_rx)?;
 
         let mut world = World::new();
 
@@ -185,7 +186,8 @@ impl Game {
             last_ticks: VecDeque::default(),
             last_ms_per_tick: VecDeque::default(),
             tick_on: 0,
-            incoming: server,
+            incoming,
+            req_packets,
         };
 
         game.last_ticks.push_back(Instant::now());
@@ -258,6 +260,8 @@ impl Game {
         }
 
         self.world.send(Gametick);
+        
+        self.req_packets.send(()).unwrap();
 
         let ms = now.elapsed().as_nanos() as f64 / 1_000_000.0;
         self.last_ms_per_tick.push_back(ms);
