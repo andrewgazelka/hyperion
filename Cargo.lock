@@ -269,7 +269,7 @@ dependencies = [
  "ahash",
  "bevy_utils_proc_macros",
  "getrandom",
- "hashbrown 0.14.3",
+ "hashbrown",
  "instant",
  "nonmax",
  "petgraph",
@@ -628,8 +628,8 @@ dependencies = [
  "ahash",
  "bumpalo",
  "evenio_macros",
- "hashbrown 0.14.3",
- "indexmap 2.2.6",
+ "hashbrown",
+ "indexmap",
  "rayon",
  "slab",
 ]
@@ -811,7 +811,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "heck",
- "itertools 0.12.1",
+ "itertools",
  "prettyplease",
  "proc-macro2",
  "quote",
@@ -857,12 +857,6 @@ checksum = "bebe52f2c58f1eea4d6fd3307058cf818c74181435a3620502d1651db07ff018"
 
 [[package]]
 name = "hashbrown"
-version = "0.12.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8a9ee70c43aaf417c914396645a0fa852624801b24ebb7ae78fe8272889ac888"
-
-[[package]]
-name = "hashbrown"
 version = "0.14.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "290f1a1d9242c78d09ce40a5e87e7554ee637af1351968159f4952f028f75604"
@@ -905,22 +899,12 @@ dependencies = [
 
 [[package]]
 name = "indexmap"
-version = "1.9.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bd070e393353796e801d209ad339e89596eb4c8d430d18ede6a1cced8fafbd99"
-dependencies = [
- "autocfg",
- "hashbrown 0.12.3",
-]
-
-[[package]]
-name = "indexmap"
 version = "2.2.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "168fb715dda47215e360912c096649d23d58bf392ac62f73919e831745e40f26"
 dependencies = [
  "equivalent",
- "hashbrown 0.14.3",
+ "hashbrown",
  "serde",
 ]
 
@@ -931,7 +915,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "321f0f839cd44a4686e9504b0a62b4d69a50b62072144c71c68f5873c167b8d9"
 dependencies = [
  "ahash",
- "indexmap 2.2.6",
+ "indexmap",
  "is-terminal",
  "itoa",
  "log",
@@ -982,15 +966,6 @@ dependencies = [
  "hermit-abi",
  "libc",
  "windows-sys 0.52.0",
-]
-
-[[package]]
-name = "itertools"
-version = "0.10.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b0fd2260e829bddf4cb6ea802289de2f86d6a7a690192fbe91b3f46e0f2c8473"
-dependencies = [
- "either",
 ]
 
 [[package]]
@@ -1218,21 +1193,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ndarray-stats"
-version = "0.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "af5a8477ac96877b5bd1fd67e0c28736c12943aba24eda92b127e036b0c8f400"
-dependencies = [
- "indexmap 1.9.3",
- "itertools 0.10.5",
- "ndarray",
- "noisy_float",
- "num-integer",
- "num-traits",
- "rand 0.8.5",
-]
-
-[[package]]
 name = "nix"
 version = "0.26.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1243,15 +1203,6 @@ dependencies = [
  "libc",
  "memoffset",
  "pin-utils",
-]
-
-[[package]]
-name = "noisy_float"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "978fe6e6ebc0bf53de533cd456ca2d9de13de13856eda1518a285d7705a213af"
-dependencies = [
- "num-traits",
 ]
 
 [[package]]
@@ -1416,7 +1367,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e1d3afd2628e69da2be385eb6f2fd57c8ac7977ceeff6dc166ff1657b0e386a9"
 dependencies = [
  "fixedbitset",
- "indexmap 2.2.6",
+ "indexmap",
 ]
 
 [[package]]
@@ -1759,12 +1710,11 @@ dependencies = [
  "flume",
  "fnv",
  "generator",
- "itertools 0.12.1",
+ "itertools",
  "jemalloc-ctl",
  "jemallocator",
  "monoio",
  "ndarray",
- "ndarray-stats",
  "pprof",
  "rand 0.8.5",
  "rand_distr",
@@ -2044,7 +1994,7 @@ version = "0.20.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "70f427fce4d84c72b5b732388bf4a9f4531b53f74e2887e3ecb2481f68f66d81"
 dependencies = [
- "indexmap 2.2.6",
+ "indexmap",
  "toml_datetime",
  "winnow",
 ]
@@ -2232,7 +2182,7 @@ source = "git+https://github.com/valence-rs/valence#7e91ca0f6d4608258524052bd521
 dependencies = [
  "byteorder",
  "cesu8",
- "indexmap 2.2.6",
+ "indexmap",
  "serde",
  "thiserror",
  "uuid",
@@ -2283,7 +2233,7 @@ dependencies = [
  "anyhow",
  "bevy_app",
  "bevy_ecs",
- "indexmap 2.2.6",
+ "indexmap",
  "serde",
  "serde_json",
  "tracing",
