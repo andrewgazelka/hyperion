@@ -1,7 +1,7 @@
 use evenio::{
     entity::EntityId,
     event::Receiver,
-    fetch::Fetcher,
+    fetch::{Fetcher, Single},
     query::{Not, Query, With},
     rayon::prelude::*,
 };
@@ -12,8 +12,8 @@ use valence_protocol::{
 };
 
 use crate::{
-    io::encode_packet, EntityReaction, FullEntityPose, Gametick, MinecraftEntity, Player,
-    RunningSpeed, Targetable,
+    singleton::encoder::Encoder, EntityReaction, FullEntityPose, Gametick,
+    MinecraftEntity, Player, RunningSpeed, Targetable,
 };
 
 // 0 &mut FullEntityPose
@@ -46,6 +46,7 @@ pub fn entity_move_logic(
         &Player,               // 3
         Not<&MinecraftEntity>, // not 1
     )>,
+    encoder: Single<&mut Encoder>,
 ) {
     use valence_protocol::packets::play;
 
@@ -55,6 +56,8 @@ pub fn entity_move_logic(
     };
 
     let target = target.position;
+
+    let encoder = encoder.0;
 
     entities.par_iter_mut().for_each(|query| {
         let EntityQuery {
@@ -114,12 +117,13 @@ pub fn entity_move_logic(
         };
 
         // todo: remove unwrap
-        let pos = encode_packet(&pos).unwrap();
-        let look = encode_packet(&look).unwrap();
-
-        player.iter().for_each(|(_, player, ..)| {
-            let _ = player.packets.writer.send_raw(pos.clone());
-            let _ = player.packets.writer.send_raw(look.clone());
-        });
+        encoder.append(&pos).unwrap();
+        encoder.append(&look).unwrap();
     });
+
+    for bytes in encoder.drain() {
+        player.par_iter().for_each(|(_, player, _)| {
+            let _ = player.packets.writer.send_raw(bytes.clone());
+        });
+    }
 }

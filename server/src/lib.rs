@@ -1,10 +1,13 @@
 #![allow(clippy::many_single_char_names)]
+#![feature(thread_local)]
 
 #[global_allocator]
 static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
 
+
 extern crate core;
 mod chunk;
+mod singleton;
 
 use std::{
     cell::UnsafeCell,
@@ -16,6 +19,7 @@ use std::{
 use anyhow::Context;
 use evenio::prelude::*;
 use jemalloc_ctl::{epoch, stats};
+use ndarray::s;
 use signal_hook::iterator::Signals;
 use tracing::{info, instrument, warn};
 use valence_protocol::math::DVec3;
@@ -24,6 +28,7 @@ use crate::{
     bounding_box::BoundingBox,
     io::{server, ClientConnection, Packets},
 };
+use crate::singleton::encoder::Encoder;
 
 mod global;
 mod io;
@@ -97,8 +102,8 @@ struct KillAllEntities;
 #[derive(Event, Copy, Clone)]
 #[allow(dead_code)]
 struct StatsEvent {
-    ms_per_tick_mean: f64,
-    ms_per_tick_std_dev: f64,
+    ms_per_tick_mean_1s: f64,
+    ms_per_tick_mean_5s: f64,
     allocated: usize,
     resident: usize,
 }
@@ -172,6 +177,10 @@ impl Game {
 
         let bounding_boxes = world.spawn();
         world.insert(bounding_boxes, bounding_box::EntityBoundingBoxes::default());
+        
+        let encoder = world.spawn();
+        world.insert(encoder, Encoder::default());
+        
 
         let mut game = Self {
             world,
@@ -220,7 +229,7 @@ impl Game {
     #[instrument(skip_all)]
     pub fn tick(&mut self) {
         const LAST_TICK_HISTORY_SIZE: usize = 100;
-        const MSPT_HISTORY_SIZE: usize = 20;
+        const MSPT_HISTORY_SIZE: usize = 100;
 
         let now = Instant::now();
         self.last_ticks.push_back(now);
@@ -257,10 +266,11 @@ impl Game {
 
         if self.last_ms_per_tick.len() > MSPT_HISTORY_SIZE {
             // efficient
-            let arr = ndarray::Array::from_iter(self.last_ms_per_tick.iter().copied());
+            let arr = ndarray::Array::from_iter(self.last_ms_per_tick.iter().copied().rev());
 
-            let std_dev = arr.std(0.0);
-            let mean = arr.mean().unwrap();
+            // last 1 second (20 ticks) 5 seconds (100 ticks) and 25 seconds (500 ticks)
+            let mean_1_second = arr.slice(s![..20]).mean().unwrap();
+            let mean_5_seconds = arr.slice(s![..100]).mean().unwrap();
 
             let allocated = stats::allocated::mib().unwrap();
             let resident = stats::resident::mib().unwrap();
@@ -276,8 +286,8 @@ impl Game {
             let resident = resident.read().unwrap();
 
             self.world.send(StatsEvent {
-                ms_per_tick_mean: mean,
-                ms_per_tick_std_dev: std_dev,
+                ms_per_tick_mean_1s: mean_1_second,
+                ms_per_tick_mean_5s: mean_5_seconds,
                 allocated,
                 resident,
             });

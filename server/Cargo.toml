@@ -54,7 +54,8 @@ jemalloc-ctl = "0.5.4"
 # removing this because jemalloc-ctl is nice for memory stats also
 # https://github.com/rust-lang/rust-analyzer/issues/1441#issuecomment-509506279
 # jemalloc uses significantly less memory
-#mimalloc = { version = "0.1.39" , default-features = false }
+mimalloc = { version = "0.1.39" , default-features = false }
+thread_local = { version = "1.1.8", features = ["nightly"] }
 
 
 [lints.rust]
@@ -123,6 +124,7 @@ cast_precision_loss = "allow" # consider denying
 missing_errors_doc = "allow" # consider denying
 wildcard_imports = "allow"
 non_ascii_literal = "allow"
+no_mangle_with_rust_abi = "allow"
 
 perf = "deny"
 
