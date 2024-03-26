@@ -1,9 +1,11 @@
-# Project 10k
-_How can we get 10k players to PvP at once on a Minecraft server to break the Guinness World Record?_
+# Hyperion
+**How can we get 10k players to PvP at once on a Minecraft server to break the Guinness World Record?** 
+
+_The image below shows 30k zombies (with collisions) running at 8 ms/tick on an M2 MacBook Pro._
 
 <p align="center">
-  <img src="https://github.com/andrewgazelka/mc-server/assets/7644264/5cb83738-3e85-47e9-b73c-40e75257c5a3" height="200"  />
-  <img src="https://github.com/andrewgazelka/hyperion/assets/7644264/00bc5b06-8db4-41c2-80f3-d3022edec516" width = "200"/>
+  <img src="https://github.com/andrewgazelka/hyperion/assets/7644264/d842d7c9-ee0c-4df3-85d6-46d91e455be5"/>
+<img src="https://github.com/andrewgazelka/mc-server/assets/7644264/5cb83738-3e85-47e9-b73c-40e75257c5a3" height="200"  />
 </p>
 
 
