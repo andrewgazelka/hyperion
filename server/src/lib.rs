@@ -1,5 +1,7 @@
-#![allow(unused)]
 #![allow(clippy::many_single_char_names)]
+
+#[global_allocator]
+static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
 
 extern crate core;
 mod chunk;
@@ -13,6 +15,7 @@ use std::{
 
 use anyhow::Context;
 use evenio::prelude::*;
+use jemalloc_ctl::{epoch, stats};
 use signal_hook::iterator::Signals;
 use tracing::{info, instrument, warn};
 use valence_protocol::math::DVec3;
@@ -91,9 +94,17 @@ struct KickPlayer {
 #[derive(Event)]
 struct KillAllEntities;
 
-#[derive(Event)]
-struct TpsEvent {
-    ms_per_tick: f64,
+#[derive(Event, Copy, Clone)]
+#[allow(dead_code)]
+struct StatsEvent {
+    ms_per_tick_mean: f64,
+    ms_per_tick_std_dev: f64,
+    allocated: usize,
+    resident: usize,
+}
+
+fn bytes_to_mb(bytes: usize) -> f64 {
+    bytes as f64 / 1024.0 / 1024.0
 }
 
 #[derive(Event)]
@@ -107,7 +118,7 @@ pub struct Game {
     world: World,
     last_ticks: VecDeque<Instant>,
     last_ms_per_tick: VecDeque<f64>,
-
+    tick_on: u64,
     incoming: flume::Receiver<ClientConnection>,
 }
 
@@ -124,8 +135,8 @@ impl Game {
     pub fn init() -> anyhow::Result<Self> {
         info!("Starting mc-server");
 
-        let current_threads = evenio::rayon::current_num_threads();
-        let max_threads = evenio::rayon::max_num_threads();
+        let current_threads = rayon::current_num_threads();
+        let max_threads = rayon::max_num_threads();
 
         info!("rayon\tcurrent threads: {current_threads}, max threads: {max_threads}");
 
@@ -166,6 +177,7 @@ impl Game {
             world,
             last_ticks: VecDeque::default(),
             last_ms_per_tick: VecDeque::default(),
+            tick_on: 0,
             incoming: server,
         };
 
@@ -207,16 +219,15 @@ impl Game {
 
     #[instrument(skip_all)]
     pub fn tick(&mut self) {
-        const HISTORY_SIZE: usize = 100;
+        const LAST_TICK_HISTORY_SIZE: usize = 100;
+        const MSPT_HISTORY_SIZE: usize = 20;
 
         let now = Instant::now();
         self.last_ticks.push_back(now);
 
         // let mut tps = None;
-        if self.last_ticks.len() > HISTORY_SIZE {
+        if self.last_ticks.len() > LAST_TICK_HISTORY_SIZE {
             self.last_ticks.pop_front();
-            // let ticks_per_second = 100.0 / (now - front).as_secs_f64();
-            // tps = Some(ticks_per_second);
         }
 
         while let Ok(connection) = self.incoming.try_recv() {
@@ -244,14 +255,37 @@ impl Game {
         let ms = now.elapsed().as_nanos() as f64 / 1_000_000.0;
         self.last_ms_per_tick.push_back(ms);
 
-        if self.last_ms_per_tick.len() > HISTORY_SIZE {
+        if self.last_ms_per_tick.len() > MSPT_HISTORY_SIZE {
+            // efficient
+            let arr = ndarray::Array::from_iter(self.last_ms_per_tick.iter().copied());
+
+            let std_dev = arr.std(0.0);
+            let mean = arr.mean().unwrap();
+
+            let allocated = stats::allocated::mib().unwrap();
+            let resident = stats::resident::mib().unwrap();
+
+            let e = epoch::mib().unwrap();
+
+            // todo: profile; does this need to be done in a separate thread?
+            // if self.tick_on % 100 == 0 {
+            e.advance().unwrap();
+            // }
+
+            let allocated = allocated.read().unwrap();
+            let resident = resident.read().unwrap();
+
+            self.world.send(StatsEvent {
+                ms_per_tick_mean: mean,
+                ms_per_tick_std_dev: std_dev,
+                allocated,
+                resident,
+            });
+
             self.last_ms_per_tick.pop_front();
-
-            let ms_per_tick =
-                self.last_ms_per_tick.iter().sum::<f64>() / self.last_ms_per_tick.len() as f64;
-
-            self.world.send(TpsEvent { ms_per_tick });
         }
+
+        self.tick_on += 1;
 
         // info!("Tick took: {:02.8}ms", ms);
     }

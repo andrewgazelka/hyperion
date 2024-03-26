@@ -9,6 +9,7 @@ publish = false
 [features]
 trace = []
 full = ["trace"]
+pprof = ["dep:pprof"]
 
 
 [dependencies]
@@ -16,6 +17,9 @@ anyhow = "1.0.81"
 tracing = "0.1.40"
 serde_json = "1.0.114"
 bytes = "1.6.0"
+
+# get terminated by signal SIGBUS (Misaligned address error) without frame-pointer
+pprof = { version =  "0.13.0", optional = true , features = ["flamegraph", "frame-pointer"] }
 
 valence_protocol = { git = "https://github.com/valence-rs/valence" }
 valence_registry = { git = "https://github.com/valence-rs/valence" }
@@ -26,11 +30,10 @@ chunk.workspace = true
 
 
 # no secure alloc
-mimalloc = { version = "0.1.39" , default-features = false }
 sha2 = "0.10.8"
 itertools = "0.12.1"
 rand = "0.8.5"
-evenio = { git = "https://github.com/rj00a/evenio", features = ["rayon"] }
+evenio = { git = "https://github.com/andrewgazelka/evenio", features = ["rayon"], branch = "fix-collisions-gt-2" }
 flume = "0.11.0"
 
 # todo: how much will adding "sync" wakers hurt performance?
@@ -44,7 +47,15 @@ fnv = "1.0.7"
 rayon = "1.10.0"
 tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
 tracing-flame = "0.2.0"
-pprof = { version = "0.13.0", features = ["flamegraph", "frame-pointer"] }
+ndarray = "0.15.6"
+ndarray-stats = "0.5.1"
+jemallocator = "0.5.4"
+jemalloc-ctl = "0.5.4"
+
+# removing this because jemalloc-ctl is nice for memory stats also
+# https://github.com/rust-lang/rust-analyzer/issues/1441#issuecomment-509506279
+# jemalloc uses significantly less memory
+#mimalloc = { version = "0.1.39" , default-features = false }
 
 
 [lints.rust]
@@ -112,6 +123,7 @@ cast_possible_truncation = "allow" # consider denying
 cast_precision_loss = "allow" # consider denying
 missing_errors_doc = "allow" # consider denying
 wildcard_imports = "allow"
+non_ascii_literal = "allow"
 
 perf = "deny"
 

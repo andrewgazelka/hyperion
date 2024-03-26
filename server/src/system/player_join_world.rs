@@ -10,13 +10,7 @@ use tracing::{info, instrument};
 use valence_protocol::{
     math::DVec3,
     nbt::{compound, List},
-    packets::{
-        play,
-        play::{
-            player_abilities_s2c::PlayerAbilitiesFlags,
-            player_position_look_s2c::PlayerPositionLookFlags,
-        },
-    },
+    packets::{play, play::player_position_look_s2c::PlayerPositionLookFlags},
     BlockPos, BlockState, ChunkPos, Encode, FixedArray, VarInt,
 };
 use valence_registry::{biome::BiomeId, RegistryIdx};
@@ -121,12 +115,22 @@ fn send_commands(io: &mut Packets) -> anyhow::Result<()> {
     // id 3 = "killall"
     let clear = Node {
         data: NodeData::Literal {
-            name: "killall".to_owned(),
+            name: "ka".to_owned(),
         },
         executable: true,
         children: vec![],
         redirect_node: None,
     };
+
+    // id 4 = "ka" replace with "killall"
+    // let ka = Node {
+    //     data: NodeData::Literal {
+    //         name: "ka".to_owned(),
+    //     },
+    //     executable: false,
+    //     children: vec![],
+    //     redirect_node: Some(VarInt(3)),
+    // };
 
     io.writer.send_packet(&CommandTreeS2c {
         commands: vec![root, spawn, spawn_arg, clear],
@@ -315,13 +319,13 @@ fn inner(io: &mut Player) -> anyhow::Result<()> {
 
     // set fly speed
 
-    io.writer.send_packet(&play::PlayerAbilitiesS2c {
-        flags: PlayerAbilitiesFlags::default()
-            .with_flying(true)
-            .with_allow_flying(true),
-        flying_speed: 1.0,
-        fov_modifier: 0.0,
-    })?;
+    // io.writer.send_packet(&play::PlayerAbilitiesS2c {
+    //     flags: PlayerAbilitiesFlags::default()
+    //         .with_flying(true)
+    //         .with_allow_flying(true),
+    //     flying_speed: 1.0,
+    //     fov_modifier: 0.0,
+    // })?;
     // io.writer.send_packet(&play::EntityA
 
     GLOBAL

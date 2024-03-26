@@ -4,13 +4,16 @@
 // https://github.com/iai-callgrind/iai-callgrind
 // https://nikolaivazquez.com/blog/divan/#measure-allocations
 
-use divan::{AllocProfiler, Bencher};
+use divan::Bencher;
 // use thread_priority::{ThreadBuilderExt, ThreadPriority};
 use server::{bounding_box::BoundingBox, FullEntityPose, Game, InitEntity, Targetable};
 use valence_protocol::math::DVec3;
 
+// #[global_allocator]
+// static ALLOC: AllocProfiler = AllocProfiler::system();
+
 #[global_allocator]
-static ALLOC: AllocProfiler = AllocProfiler::system();
+static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 fn main() {
     // Run registered benchmarks.

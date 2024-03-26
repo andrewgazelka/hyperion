@@ -1,5 +1,5 @@
-#![allow(unused)]
 #![allow(clippy::missing_const_for_fn)]
+#![allow(unused_variables)]
 //! <https://wiki.vg/index.php?title=Protocol&oldid=18375>
 
 use std::str::FromStr;
@@ -73,7 +73,7 @@ fn look_and_on_ground(
     Ok(())
 }
 
-fn player_command(mut data: &[u8]) {
+fn player_command(data: &[u8]) {
     // let pkt = play::ClientCommandC2s::decode(&mut data)?;
 
     // debug!("player command packet: {:?}", pkt);
@@ -150,7 +150,7 @@ fn chat_command(
 
     let first = cmd.next();
 
-    if first == Some("killall") {
+    if first == Some("ka") {
         sender.send(KillAllEntities);
     }
 

@@ -1,6 +1,3 @@
-#[global_allocator]
-static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
-
 use server::Game;
 
 #[cfg(feature = "trace")]
@@ -31,19 +28,21 @@ fn main() -> anyhow::Result<()> {
     #[cfg(feature = "trace")]
     let _guard = setup_global_subscriber();
 
-    // let guard = pprof::ProfilerGuardBuilder::default()
-    //     .frequency(2999)
-    //     .blocklist(&["libc", "libgcc", "pthread", "vdso", "rayon"])
-    //     .build()
-    //     .unwrap();
+    #[cfg(feature = "pprof")]
+    let guard = pprof::ProfilerGuardBuilder::default()
+        .frequency(2999)
+        .blocklist(&["libc", "libgcc", "pthread", "vdso", "rayon"])
+        .build()
+        .unwrap();
 
     let mut game = Game::init()?;
     game.game_loop();
 
-    // if let Ok(report) = guard.report().build() {
-    //     let file = File::create("flamegraph.svg").unwrap();
-    //     report.flamegraph(file).unwrap();
-    // };
+    #[cfg(feature = "pprof")]
+    if let Ok(report) = guard.report().build() {
+        let file = std::fs::File::create("flamegraph.svg").unwrap();
+        report.flamegraph(file).unwrap();
+    };
 
     Ok(())
 }

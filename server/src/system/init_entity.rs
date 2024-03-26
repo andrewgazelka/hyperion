@@ -1,4 +1,3 @@
-#![allow(unused)]
 use evenio::{
     event::{Insert, Receiver, Sender, Spawn},
     fetch::Fetcher,

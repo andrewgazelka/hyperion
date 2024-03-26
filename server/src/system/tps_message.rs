@@ -1,15 +1,22 @@
 use evenio::prelude::*;
 use tracing::instrument;
 
-use crate::{Player, TpsEvent};
+use crate::{bytes_to_mb, Player, StatsEvent};
 
 #[instrument(skip_all, name = "tps_message")]
-pub fn tps_message(r: Receiver<TpsEvent>, mut players: Fetcher<&mut Player>) {
-    let ms_per_tick = r.event.ms_per_tick;
+pub fn tps_message(r: Receiver<StatsEvent>, mut players: Fetcher<&mut Player>) {
+    let StatsEvent {
+        ms_per_tick_mean,
+        ms_per_tick_std_dev,
+        resident,
+        ..
+    } = r.event;
 
-    // with 4 zeroes
-    // lead 2 zeroes
-    let message = format!("MSPT: {ms_per_tick:07.4}");
+    // let allocated = bytes_to_mb(*allocated);
+    let resident = bytes_to_mb(*resident);
+
+    // make sexy with stddev & mean symbol
+    let message = format!("µ={ms_per_tick_mean:.2}, σ={ms_per_tick_std_dev:.2}, {resident:.2}MiB");
 
     players.iter_mut().for_each(|player| {
         // todo: handle error

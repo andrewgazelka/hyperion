@@ -1,3 +1,6 @@
+# https://doc.rust-lang.org/rustc/profile-guided-optimization.html
+# https://nikolaivazquez.com/blog/divan/#measure-allocations
+
 [workspace]
 resolver = "2"
 

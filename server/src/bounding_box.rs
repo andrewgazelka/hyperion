@@ -44,11 +44,17 @@ impl BoundingBox {
         let other_min = other.min.as_ref();
         let other_max = other.max.as_ref();
 
-        itertools::izip!(self_min, self_max, other_min, other_max).all(
-            |(self_min, self_max, other_min, other_max)| {
-                self_min < other_max && self_max > other_min
-            },
-        )
+        // SIMD vectorized
+
+        let mut collide = 0b1_u8;
+
+        #[allow(clippy::indexing_slicing)]
+        for i in 0..3 {
+            collide &= (self_min[i] <= other_max[i]) as u8;
+            collide &= (self_max[i] >= other_min[i]) as u8;
+        }
+
+        collide == 1
     }
 
     #[must_use]
