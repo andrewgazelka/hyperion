@@ -4,7 +4,6 @@
 #[global_allocator]
 static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
 
-
 extern crate core;
 mod chunk;
 mod singleton;
@@ -27,8 +26,8 @@ use valence_protocol::math::DVec3;
 use crate::{
     bounding_box::BoundingBox,
     io::{server, ClientConnection, Packets},
+    singleton::encoder::Encoder,
 };
-use crate::singleton::encoder::Encoder;
 
 mod global;
 mod io;
@@ -177,10 +176,9 @@ impl Game {
 
         let bounding_boxes = world.spawn();
         world.insert(bounding_boxes, bounding_box::EntityBoundingBoxes::default());
-        
+
         let encoder = world.spawn();
         world.insert(encoder, Encoder::default());
-        
 
         let mut game = Self {
             world,

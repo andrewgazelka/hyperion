@@ -12,8 +12,8 @@ use valence_protocol::{
 };
 
 use crate::{
-    singleton::encoder::Encoder, EntityReaction, FullEntityPose, Gametick,
-    MinecraftEntity, Player, RunningSpeed, Targetable,
+    singleton::encoder::Encoder, EntityReaction, FullEntityPose, Gametick, MinecraftEntity, Player,
+    RunningSpeed, Targetable,
 };
 
 // 0 &mut FullEntityPose
