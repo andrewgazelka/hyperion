@@ -15,6 +15,46 @@ impl Default for Aabb {
     }
 }
 
+pub trait Containable {
+    fn contains(bounding_box: &Aabb, elem: Self) -> bool;
+}
+
+impl Containable for Vec2 {
+    fn contains(bounding_box: &Aabb, elem: Self) -> bool {
+        let min = bounding_box.min.as_ref();
+        let max = bounding_box.max.as_ref();
+        let elem = elem.as_ref();
+
+        let mut contains = 0b1u8;
+
+        #[allow(clippy::indexing_slicing)]
+        for i in 0..2 {
+            contains &= (elem[i] >= min[i]) as u8;
+            contains &= (elem[i] <= max[i]) as u8;
+        }
+
+        contains == 1
+    }
+}
+
+impl Containable for Aabb {
+    fn contains(bounding_box: &Aabb, elem: Self) -> bool {
+        let this_min = bounding_box.min.as_ref();
+        let this_max = bounding_box.max.as_ref();
+        let other_min = elem.min.as_ref();
+        let other_max = elem.max.as_ref();
+
+        let mut contains = 0b1u8;
+
+        #[allow(clippy::indexing_slicing)]
+        for i in 0..2 {
+            contains &= (other_min[i] >= this_min[i]) as u8;
+            contains &= (other_max[i] <= this_max[i]) as u8;
+        }
+        contains == 1
+    }
+}
+
 impl Aabb {
     pub const fn new(min: Vec2, max: Vec2) -> Self {
         Self { min, max }
@@ -37,6 +77,29 @@ impl Aabb {
         }
 
         aabb
+    }
+
+    pub fn intersects(&self, other: &Self) -> bool {
+        let this_min = self.min.as_ref();
+        let this_max = self.max.as_ref();
+
+        let other_min = other.min.as_ref();
+        let other_max = other.max.as_ref();
+
+        let mut intersects = 0b1u8;
+
+        #[allow(clippy::indexing_slicing)]
+        for i in 0..2 {
+            intersects &= (this_min[i] <= other_max[i]) as u8;
+            intersects &= (this_max[i] >= other_min[i]) as u8;
+        }
+
+        intersects == 1
+    }
+
+    #[allow(clippy::same_name_method)]
+    pub fn contains<A: Containable>(&self, other: A) -> bool {
+        A::contains(self, other)
     }
 }
 
@@ -75,6 +138,16 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::similar_names)]
+    fn test_mid() {
+        let min = Vec2::new(0.0, 0.0);
+        let max = Vec2::new(2.0, 2.0);
+        let aabb = Aabb::new(min, max);
+        let mid = aabb.mid();
+        assert_eq!(mid, Vec2::splat(1.0));
+    }
+
+    #[test]
     fn test_aabb_from_points() {
         let points = vec![
             Vec2::new(0.0, 0.0),
@@ -84,5 +157,67 @@ mod tests {
         let aabb = Aabb::from_points(&points);
         assert_eq!(aabb.min, Vec2::new(0.0, 0.0));
         assert_eq!(aabb.max, Vec2::new(10.0, 10.0));
+    }
+
+    #[test]
+    fn test_intersects() {
+        let aabb1 = Aabb::new(Vec2::new(0.0, 0.0), Vec2::new(2.0, 2.0));
+        let aabb2 = Aabb::new(Vec2::new(1.0, 1.0), Vec2::new(3.0, 3.0));
+        let aabb3 = Aabb::new(Vec2::new(3.0, 3.0), Vec2::new(4.0, 4.0));
+
+        assert!(aabb1.intersects(&aabb2));
+        assert!(aabb2.intersects(&aabb1));
+        assert!(!aabb1.intersects(&aabb3));
+        assert!(!aabb3.intersects(&aabb1));
+    }
+
+    #[test]
+    fn test_no_intersection() {
+        let aabb1 = Aabb::new(Vec2::new(0.0, 0.0), Vec2::new(1.0, 1.0));
+        let aabb2 = Aabb::new(Vec2::new(2.0, 2.0), Vec2::new(3.0, 3.0));
+
+        assert!(!aabb1.intersects(&aabb2));
+        assert!(!aabb2.intersects(&aabb1));
+    }
+
+    #[test]
+    fn test_intersection_on_edge() {
+        let aabb1 = Aabb::new(Vec2::new(0.0, 0.0), Vec2::new(1.0, 1.0));
+        let aabb2 = Aabb::new(Vec2::new(1.0, 1.0), Vec2::new(2.0, 2.0));
+
+        assert!(aabb1.intersects(&aabb2));
+        assert!(aabb2.intersects(&aabb1));
+    }
+
+    #[test]
+    fn test_intersection() {
+        let aabb1 = Aabb::new(Vec2::new(0.0, 0.0), Vec2::new(3.0, 3.0));
+        let aabb2 = Aabb::new(Vec2::new(1.0, 1.0), Vec2::new(2.0, 2.0));
+
+        assert!(aabb1.intersects(&aabb2));
+        assert!(aabb2.intersects(&aabb1));
+    }
+
+    #[test]
+    fn test_contains_aabb() {
+        let aabb1 = Aabb::new(Vec2::new(0.0, 0.0), Vec2::new(3.0, 3.0));
+        let aabb2 = Aabb::new(Vec2::new(1.0, 1.0), Vec2::new(2.0, 2.0));
+        let aabb3 = Aabb::new(Vec2::new(2.0, 2.0), Vec2::new(4.0, 4.0));
+
+        assert!(aabb1.contains(aabb2));
+        assert!(!aabb2.contains(aabb1));
+        assert!(!aabb1.contains(aabb3));
+        assert!(!aabb3.contains(aabb1));
+    }
+
+    #[test]
+    fn test_contains_vec2() {
+        let aabb = Aabb::new(Vec2::new(0.0, 0.0), Vec2::new(2.0, 2.0));
+
+        assert!(aabb.contains(Vec2::new(1.0, 1.0)));
+        assert!(aabb.contains(Vec2::new(0.0, 0.0)));
+        assert!(aabb.contains(Vec2::new(2.0, 2.0)));
+        assert!(!aabb.contains(Vec2::new(-1.0, 1.0)));
+        assert!(!aabb.contains(Vec2::new(1.0, 3.0)));
     }
 }

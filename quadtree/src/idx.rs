@@ -1,10 +1,10 @@
 #![allow(clippy::module_name_repetitions)]
 use std::fmt::Debug;
 
-pub type Idx = u32;
+pub type Idx = u16;
 
 #[derive(Copy, Clone, Eq, PartialEq)]
-pub struct OptionalIdx(pub Idx);
+pub struct OptionalIdx(Idx);
 
 impl TryFrom<OptionalIdx> for Idx {
     type Error = ();
