@@ -9,12 +9,6 @@ use divan::Bencher;
 use server::{bounding_box::BoundingBox, FullEntityPose, Game, InitEntity, Targetable};
 use valence_protocol::math::DVec3;
 
-// #[global_allocator]
-// static ALLOC: AllocProfiler = AllocProfiler::system();
-
-#[global_allocator]
-static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
-
 fn main() {
     // Run registered benchmarks.
     divan::main();
