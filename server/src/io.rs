@@ -77,17 +77,6 @@ pub struct WriterComm {
     enc: PacketEncoder,
 }
 
-pub fn encode_packet<P>(pkt: &P) -> anyhow::Result<bytes::Bytes>
-where
-    P: valence_protocol::Packet + Encode,
-{
-    let mut enc = PacketEncoder::default();
-    enc.append_packet(pkt)?;
-    let bytes = enc.take();
-
-    Ok(bytes.freeze())
-}
-
 type ReaderComm = flume::Receiver<PacketFrame>;
 
 impl WriterComm {
@@ -394,60 +383,9 @@ impl Io {
 
         monoio::spawn(async move {
             while let Ok(bytes) = s2c_rx.recv_async().await {
-                // if macos
-                // if there are multiple elements in the channel, batch them.
-                // This is especially useful on macOS which does not support
-                // io_uring and has a high cost for each write (context switch for each syscall).
-                #[cfg(target_os = "macos")]
-                {
-                    if s2c_rx.is_empty() {
-                        if let Err(e) = io_write.send_packet(bytes).await {
-                            error!("{e:?}");
-                            break;
-                        }
-                        continue;
-                    }
-
-                    let mut byte_collect = bytes.to_vec();
-
-                    // we are using drain so we do not go in infinite loop
-                    for other_byte in s2c_rx.drain() {
-                        let other_byte = other_byte.to_vec();
-                        // todo: or extend slice
-                        byte_collect.extend(other_byte);
-                    }
-
-                    let bytes = bytes::Bytes::from(byte_collect);
-
-                    if let Err(e) = io_write.send_packet(bytes).await {
-                        error!("{e:?}");
-                        break;
-                    }
-                    continue;
-                }
-
-                // if linux
-                #[cfg(target_os = "linux")]
-                {
-                    if let Err(e) = io_write.send_packet(bytes).await {
-                        error!("{e:?}");
-                        break;
-                    }
-                    continue;
-                }
-
-                // if windows panic
-                #[cfg(target_os = "windows")]
-                {
-                    panic!("windows not supported");
-                    continue;
-                }
-
-                // if other panic
-                #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
-                {
-                    panic!("unsupported os");
-                    continue;
+                if let Err(e) = io_write.send_packet(bytes).await {
+                    error!("{e:?}");
+                    break;
                 }
             }
         });

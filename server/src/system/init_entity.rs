@@ -79,6 +79,7 @@ pub fn init_entity(
     };
 
     players.iter_mut().for_each(|player| {
-        player.packets.writer.send_packet(&pkt).unwrap();
+        // todo: handle error
+        let _ = player.packets.writer.send_packet(&pkt);
     });
 }

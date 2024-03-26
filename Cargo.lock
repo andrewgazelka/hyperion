@@ -1724,6 +1724,7 @@ dependencies = [
  "signal-hook",
  "smallvec 2.0.0-alpha.5",
  "thread-priority",
+ "thread_local",
  "tracing",
  "tracing-flame",
  "tracing-subscriber",

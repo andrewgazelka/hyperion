@@ -13,8 +13,6 @@ pub struct EntityQuery<'a> {
     pose: &'a mut FullEntityPose,
 }
 
-// #[no_mangle]
-// #[instrument(skip_all, name = "reset_bounding_boxes")]
 pub fn reset_bounding_boxes(
     _: Receiver<Gametick>,
     entity_bounding_boxes: Single<&mut EntityBoundingBoxes>,
