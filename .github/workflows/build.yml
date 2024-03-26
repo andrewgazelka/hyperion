@@ -40,6 +40,8 @@ jobs:
 
       - name: Setup Rust toolchain and cache
         uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: ${{ env.RUST_NIGHTLY_TOOLCHAIN }}
 
       - name: Run cargo test
         run: cargo test --workspace --all-features
