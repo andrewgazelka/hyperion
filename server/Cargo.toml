@@ -56,9 +56,6 @@ jemalloc-ctl = "0.5.4"
 # jemalloc uses significantly less memory
 #mimalloc = { version = "0.1.39" , default-features = false }
 
-thread_local = { version = "1.1.8", features = ["nightly"] }
-
-
 [lints.rust]
 warnings = "deny"
 

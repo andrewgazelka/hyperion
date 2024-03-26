@@ -2,19 +2,64 @@
 // https://matklad.github.io/2020/10/03/fast-thread-locals-in-rust.html
 use std::cell::UnsafeCell;
 
+use anyhow::ensure;
+use bytes::{BufMut, Bytes};
 use evenio::component::Component;
-use thread_local::ThreadLocal;
-use valence_protocol::{Encode, Packet, PacketEncoder};
+use valence_protocol::{Encode, Packet, VarInt};
 
-#[derive(Default, Component)]
-pub struct Encoder {
-    local: ThreadLocal<UnsafeCell<PacketEncoder>>,
+#[derive(Default)]
+struct ConstPacketEncoder {
+    buf: Vec<u8>,
 }
 
-impl Encoder {
-    pub fn append<P: Packet + Encode>(&self, packet: &P) -> anyhow::Result<()> {
-        let encoder = self.local.get_or_default();
+impl ConstPacketEncoder {
+    pub const fn new() -> Self {
+        Self { buf: Vec::new() }
+    }
 
+    pub fn append_packet<P>(&mut self, pkt: &P) -> anyhow::Result<()>
+    where
+        P: Packet + Encode,
+    {
+        let start_len = self.buf.len();
+
+        pkt.encode_with_id((&mut self.buf).writer())?;
+
+        let data_len = self.buf.len() - start_len;
+
+        let packet_len = data_len;
+
+        ensure!(
+            packet_len <= valence_protocol::MAX_PACKET_SIZE as usize,
+            "packet exceeds maximum length"
+        );
+
+        #[allow(clippy::cast_possible_wrap)]
+        let packet_len_size = VarInt(packet_len as i32).written_size();
+
+        self.buf.put_bytes(0, packet_len_size);
+        self.buf
+            .copy_within(start_len..start_len + data_len, start_len + packet_len_size);
+
+        #[allow(clippy::indexing_slicing)]
+        let front = &mut self.buf[start_len..];
+
+        #[allow(clippy::cast_possible_wrap)]
+        VarInt(packet_len as i32).encode(front)?;
+
+        Ok(())
+    }
+}
+
+#[thread_local]
+static ENCODER: UnsafeCell<ConstPacketEncoder> = UnsafeCell::new(ConstPacketEncoder::new());
+
+#[derive(Component)]
+pub struct Encoder;
+
+impl Encoder {
+    #[allow(clippy::unused_self)]
+    pub fn append<P: Packet + Encode>(&self, packet: &P) -> anyhow::Result<()> {
         // Safety:
         // The use of `unsafe` here is justified by the guarantees provided by the `ThreadLocal` and
         // `UnsafeCell` usage patterns:
@@ -34,15 +79,22 @@ impl Encoder {
         // Therefore, the use of `unsafe` is encapsulated within this method and does not leak
         // unsafe guarantees to the caller, provided the `Encoder` struct itself is used in a
         // thread-safe manner.
-        let encoder = unsafe { &mut *encoder.get() };
+        let encoder = unsafe { &mut *ENCODER.get() };
         encoder.append_packet(packet)
     }
 
-    pub fn drain(&mut self) -> impl Iterator<Item = bytes::Bytes> + '_ {
-        self.local.iter_mut().map(|encoder| {
-            let encoder = encoder.get_mut();
-            encoder.take().freeze()
-        })
+    #[allow(clippy::unused_self)]
+    pub fn par_drain<F>(&self, f: F)
+    where
+        F: Fn(Bytes) + Sync,
+    {
+        rayon::broadcast(move |_| {
+            // Safety:
+            // ditto
+            let encoder = unsafe { &mut *ENCODER.get() };
+            let buf = core::mem::take(&mut encoder.buf);
+            f(Bytes::from(buf));
+        });
     }
 }
 

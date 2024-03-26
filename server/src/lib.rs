@@ -178,7 +178,7 @@ impl Game {
         world.insert(bounding_boxes, bounding_box::EntityBoundingBoxes::default());
 
         let encoder = world.spawn();
-        world.insert(encoder, Encoder::default());
+        world.insert(encoder, Encoder);
 
         let mut game = Self {
             world,

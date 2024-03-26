@@ -121,9 +121,9 @@ pub fn entity_move_logic(
         encoder.append(&look).unwrap();
     });
 
-    for bytes in encoder.drain() {
-        player.par_iter().for_each(|(_, player, _)| {
+    encoder.par_drain(|bytes| {
+        for (_, player, _) in &player {
             let _ = player.packets.writer.send_raw(bytes.clone());
-        });
-    }
+        }
+    });
 }
