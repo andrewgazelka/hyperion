@@ -1,17 +1,16 @@
-#![allow(unused)]
+#![allow(clippy::module_name_repetitions)]
+
 use std::{borrow::Cow, collections::BTreeSet, io, io::ErrorKind};
 
 use anyhow::{ensure, Context};
+use base64::Engine;
 use bytes::BytesMut;
 use monoio::{
-    io::{
-        AsyncReadRent, AsyncWriteRent, AsyncWriteRentExt, OwnedReadHalf, OwnedWriteHalf, Splitable,
-    },
+    io::{AsyncReadRent, AsyncWriteRentExt, OwnedReadHalf, OwnedWriteHalf, Splitable},
     net::{TcpListener, TcpStream},
 };
 use serde_json::json;
 use sha2::Digest;
-use signal_hook::iterator::Signals;
 use tracing::{debug, error, info, warn};
 use valence_protocol::{
     decode::PacketFrame,
@@ -74,36 +73,34 @@ pub struct IoRead {
 }
 
 pub struct WriterComm {
-    tx: flume::Sender<BytesMut>,
+    tx: flume::Sender<bytes::Bytes>,
     enc: PacketEncoder,
 }
 
 type ReaderComm = flume::Receiver<PacketFrame>;
 
 impl WriterComm {
-    pub(crate) fn send_packet<P>(&mut self, pkt: &P) -> anyhow::Result<()>
+    pub fn serialize<P>(&mut self, pkt: &P) -> anyhow::Result<bytes::Bytes>
     where
         P: valence_protocol::Packet + Encode,
     {
         self.enc.append_packet(pkt)?;
         let bytes = self.enc.take();
 
-        let mut bytes_slice = &*bytes;
-        let slice = &mut bytes_slice;
-        #[allow(clippy::cast_sign_loss)]
-        let length = VarInt::decode_partial(slice)? as usize;
+        Ok(bytes.freeze())
+    }
 
-        let slice_len = bytes_slice.len();
-
-        ensure!(
-            length == slice_len,
-            "length mismatch: var int length {}, got pkt length {}",
-            length,
-            slice_len
-        );
-
+    pub fn send_raw(&self, bytes: bytes::Bytes) -> anyhow::Result<()> {
         self.tx.send(bytes)?;
+        Ok(())
+    }
 
+    pub(crate) fn send_packet<P>(&mut self, pkt: &P) -> anyhow::Result<()>
+    where
+        P: valence_protocol::Packet + Encode,
+    {
+        let bytes = self.serialize(pkt)?;
+        self.send_raw(bytes)?;
         Ok(())
     }
 
@@ -201,13 +198,13 @@ impl IoRead {
 }
 
 impl IoWrite {
-    pub(crate) async fn send_packet(&mut self, bytes: BytesMut) -> anyhow::Result<()> {
+    pub(crate) async fn send_packet(&mut self, bytes: bytes::Bytes) -> anyhow::Result<()> {
         let (result, _) = self.write.write_all(bytes).await;
 
         result?;
 
         // todo: is flush needed?
-        self.write.flush().await?;
+        // self.write.flush().await?;
 
         Ok(())
     }
@@ -352,6 +349,7 @@ impl Io {
         // second
         self.send_packet(&packet).await?;
 
+        // bound at 1024 packets
         let (s2c_tx, s2c_rx) = flume::unbounded();
         let (c2s_tx, c2s_rx) = flume::unbounded();
 
@@ -374,17 +372,21 @@ impl Io {
         info!("Finished handshake for {username}");
 
         monoio::spawn(async move {
-            // sleep 1 second
-            // debug!("before");
             debug!("start receiving packets");
             while let Ok(raw) = io_read.recv_packet_raw().await {
-                c2s_tx.send(raw).unwrap();
+                if let Err(e) = c2s_tx.send(raw) {
+                    error!("{e:?}");
+                    break;
+                }
             }
         });
 
         monoio::spawn(async move {
             while let Ok(bytes) = s2c_rx.recv_async().await {
-                io_write.send_packet(bytes).await.unwrap();
+                if let Err(e) = io_write.send_packet(bytes).await {
+                    error!("{e:?}");
+                    break;
+                }
             }
         });
 
@@ -411,6 +413,19 @@ impl Io {
             .player_count
             .load(std::sync::atomic::Ordering::Relaxed);
 
+        //  64x64 pixels image
+        let bytes = include_bytes!("saul.png");
+        let base64 = base64::engine::GeneralPurpose::new(
+            &base64::alphabet::STANDARD,
+            base64::engine::general_purpose::NO_PAD,
+        );
+
+        let result = base64.encode(bytes);
+
+        // data:image/png;base64,{result}
+        let favicon = format!("data:image/png;base64,{result}");
+
+        // https://wiki.vg/Server_List_Ping#Response
         let json = json!({
             "version": {
                 "name": MINECRAFT_VERSION,
@@ -421,6 +436,7 @@ impl Io {
                 "max": 10_000,
                 "sample": [],
             },
+            "favicon": favicon,
             "description": "10k babyyyyy",
         });
 
@@ -488,27 +504,29 @@ async fn run(tx: flume::Sender<ClientConnection>) {
     }
 }
 
-pub fn server(shutdown: flume::Receiver<()>) -> flume::Receiver<ClientConnection> {
+pub fn server(shutdown: flume::Receiver<()>) -> anyhow::Result<flume::Receiver<ClientConnection>> {
     let (tx, rx) = flume::unbounded();
 
-    std::thread::spawn(move || {
-        let mut runtime = monoio::RuntimeBuilder::<monoio::FusionDriver>::new()
-            // .enable_timer()
-            .build()
-            .unwrap();
+    std::thread::Builder::new()
+        .name("io".to_string())
+        .spawn(move || {
+            let mut runtime = monoio::RuntimeBuilder::<monoio::FusionDriver>::new()
+                .build()
+                .unwrap();
 
-        runtime.block_on(async move {
-            let run = run(tx);
-            let shutdown = shutdown.recv_async();
+            runtime.block_on(async move {
+                let run = run(tx);
+                let shutdown = shutdown.recv_async();
 
-            monoio::select! {
-                () = run => {},
-                _ = shutdown => {},
-            }
-        });
-    });
+                monoio::select! {
+                    () = run => {},
+                    _ = shutdown => {},
+                }
+            });
+        })
+        .context("failed to spawn io thread")?;
 
-    rx
+    Ok(rx)
 }
 
 fn registry_codec_raw(codec: &RegistryCodec) -> anyhow::Result<Compound> {

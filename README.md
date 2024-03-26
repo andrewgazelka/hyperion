@@ -1,21 +1,50 @@
-# Project 10k
+# Hyperion
+_From the creator of [SwarmBot](https://github.com/SwarmBotMC/SwarmBot):_
 
-How can we get 10k players to PvP at once on a Minecraft server to break the Guinness World Record?
+**How can we get 10k players to PvP at once on a Minecraft server to break the Guinness World Record for largest PvP battle in any game?** 
 
-![image](https://github.com/andrewgazelka/mc-server/assets/7644264/5cb83738-3e85-47e9-b73c-40e75257c5a3)
+_The image below shows 30k zombies (with collisions) running at 8 ms/tick on an M2 MacBook Pro._
+
+<p align="center">
+  <img src="https://github.com/andrewgazelka/hyperion/assets/7644264/d842d7c9-ee0c-4df3-85d6-46d91e455be5"/>
+<img src="https://github.com/andrewgazelka/mc-server/assets/7644264/5cb83738-3e85-47e9-b73c-40e75257c5a3" height="200"  />
+</p>
+
+
 
 
 # Running
 
+## Docker (Recommended)
 ```bash
-docker compose up
+# Install Git LFS
+pkg-manager install git-lfs
+
+# Setup Git LFS
+git lfs install
+
+git clone https://github.com/andrewgazelka/hyperion
+cd hyperion
+docker compose up --build release
+
+# if you want to run in debug
+# docker compose up --build debug
+```
+
+## Manual
+```bash
+# Install Git LFS
+pkg-manager install git-lfs
+
+# Setup Git LFS
+git lfs install
+
+git clone https://github.com/andrewgazelka/hyperion
+cd hyperion
+cargo run --release
 ```
 
 # Internals
-
-![image](https://github.com/andrewgazelka/mc-server/assets/7644264/8fb3cd33-4dd7-42fc-a3e0-17e167c64509)
-![image](https://github.com/andrewgazelka/mc-server/assets/7644264/5272317f-48c3-4e15-a032-73d9229a4413)
-
 
 There are many faction servers which have 500 players on Start of The World (SOTW).
 Usually this is around the upper limit for the number of players that can be in one world in vanilla Minecraft.

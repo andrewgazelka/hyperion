@@ -1,6 +1,7 @@
 use std::sync::atomic::Ordering;
 
 use evenio::prelude::*;
+use tracing::instrument;
 use valence_protocol::{
     packets::play,
     text::{Color, IntoText},
@@ -8,6 +9,7 @@ use valence_protocol::{
 
 use crate::{KickPlayer, Player, GLOBAL};
 
+#[instrument(skip_all)]
 pub fn player_kick(r: Receiver<KickPlayer, (EntityId, &mut Player)>, mut s: Sender<Despawn>) {
     let (id, player) = r.query;
 

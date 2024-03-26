@@ -1,9 +1,15 @@
+# https://doc.rust-lang.org/rustc/profile-guided-optimization.html
+# https://nikolaivazquez.com/blog/divan/#measure-allocations
+
 [workspace]
 resolver = "2"
 
 members = [
     "server",
-    "quadtree"
+    "quadtree",
+    "chunk",
+    "generator-build",
+    "generator"
 ]
 
 [profile.dev]
@@ -13,5 +19,19 @@ opt-level = 1
 opt-level = 3
 
 [profile.release]
-#lto = true
-#codegen-units = 1
+#debug = true
+lto = "fat"
+codegen-units = 1
+#strip = false
+#panic = "abort"
+
+[profile.bench]
+#debug = true
+lto = "fat"
+codegen-units = 1
+#panic = "abort"
+
+[workspace.dependencies]
+chunk = { path = "chunk" }
+generator-build = { path = "generator-build" }
+generator = { path = "generator" }

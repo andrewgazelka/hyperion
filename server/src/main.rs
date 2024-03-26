@@ -1,182 +1,48 @@
-#![allow(clippy::many_single_char_names)]
+use server::Game;
 
-extern crate core;
-mod chunk;
+#[cfg(feature = "trace")]
+fn setup_global_subscriber() -> impl Drop {
+    use tracing_flame::FlameLayer;
+    use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
+    let fmt_layer = fmt::Layer::default();
 
-#[global_allocator]
-static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
+    let (flame_layer, guard) = FlameLayer::with_file("./tracing.folded").unwrap();
 
-use std::{
-    sync::atomic::AtomicU32,
-    time::{Duration, Instant},
-};
+    // Define an environment filter layer
+    // This reads the `RUST_LOG` environment variable to set the log level
+    let filter_layer = EnvFilter::try_from_default_env()
+        .or_else(|_| EnvFilter::try_new("info")) // Fallback to "info" level if `RUST_LOG` is not set
+        .unwrap();
 
-use evenio::{prelude::*, rayon::prelude::*};
-use signal_hook::iterator::Signals;
-use tracing::{info, warn};
-use valence_protocol::math::DVec3;
+    tracing_subscriber::registry()
+        .with(filter_layer)
+        .with(fmt_layer)
+        .with(flame_layer)
+        .init();
 
-use crate::handshake::{server, ClientConnection, Packets};
-
-mod global;
-mod handshake;
-
-mod packets;
-mod system;
-
-// A zero-sized component, often called a "marker" or "tag".
-#[derive(Component)]
-struct Player {
-    packets: Packets,
-    name: Box<str>,
-    last_keep_alive_sent: Instant,
-    locale: Option<String>,
+    guard
 }
 
-#[derive(Event)]
-struct InitPlayer {
-    entity: EntityId,
-    io: Packets,
-    name: Box<str>,
-    pos: FullEntityPose,
-}
+// https://tracing-rs.netlify.app/tracing/
+fn main() -> anyhow::Result<()> {
+    #[cfg(feature = "trace")]
+    let _guard = setup_global_subscriber();
 
-#[derive(Event)]
-struct PlayerJoinWorld {
-    #[event(target)]
-    target: EntityId,
-}
+    #[cfg(feature = "pprof")]
+    let guard = pprof::ProfilerGuardBuilder::default()
+        .frequency(2999)
+        .blocklist(&["libc", "libgcc", "pthread", "vdso", "rayon"])
+        .build()
+        .unwrap();
 
-#[derive(Event)]
-struct KickPlayer {
-    #[event(target)] // Works on tuple struct fields as well.
-    target: EntityId,
-    reason: String,
-}
+    let mut game = Game::init()?;
+    game.game_loop();
 
-#[derive(Event)]
-struct Gametick;
-
-static GLOBAL: global::Global = global::Global {
-    player_count: AtomicU32::new(0),
-};
-
-struct Game {
-    world: World,
-    incoming: flume::Receiver<ClientConnection>,
-}
-
-impl Game {
-    fn tick(&mut self) {
-        while let Ok(connection) = self.incoming.try_recv() {
-            let ClientConnection { packets, name } = connection;
-
-            let player = self.world.spawn();
-
-            let event = InitPlayer {
-                entity: player,
-                io: packets,
-                name,
-                pos: FullEntityPose {
-                    position: DVec3::new(0.0, 2.0, 0.0),
-                    yaw: 0.0,
-                    pitch: 0.0,
-                },
-            };
-
-            self.world.send(event);
-        }
-
-        self.world.send(Gametick);
-    }
-}
-
-// The `Receiver<Tick>` parameter tells our handler to listen for the `Tick` event.
-fn process_packets(
-    _: Receiver<Gametick>,
-    mut fetcher: Fetcher<(EntityId, &mut Player, &mut FullEntityPose)>,
-    mut sender: Sender<KickPlayer>,
-) {
-    // todo: flume the best things to use here? also this really ust needs to be mpsc not mpmc
-    let (tx, rx) = flume::unbounded();
-
-    fetcher.par_iter_mut().for_each(|(id, player, position)| {
-        // info!("Processing packets for player: {:?}", id);
-        while let Ok(packet) = player.packets.reader.try_recv() {
-            // info!("Received packet: {:?}", packet);
-            if let Err(e) = packets::switch(packet, player, position) {
-                let reason = format!("Invalid packet: {}", e);
-                let _ = tx.send(KickPlayer { target: id, reason });
-            }
-        }
-    });
-
-    for kick in rx.drain() {
-        sender.send(kick);
-    }
-}
-
-static SHUTDOWN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-
-fn main() {
-    tracing_subscriber::fmt::init();
-
-    info!("Starting mc-server");
-
-    let mut signals =
-        Signals::new([signal_hook::consts::SIGINT, signal_hook::consts::SIGTERM]).unwrap();
-
-    let (shutdown_tx, shutdown_rx) = flume::bounded(1);
-
-    std::thread::spawn(move || {
-        for _ in signals.forever() {
-            warn!("Shutting down...");
-            SHUTDOWN.store(true, std::sync::atomic::Ordering::Relaxed);
-            shutdown_tx.send(()).unwrap();
-        }
-    });
-
-    let server = server(shutdown_rx);
-
-    let mut last_tick = Instant::now();
-    let tick_duration = Duration::from_millis(20);
-
-    let mut world = World::new();
-
-    world.add_handler(system::init_player);
-    world.add_handler(system::player_join_world);
-    world.add_handler(system::player_kick);
-
-    world.add_handler(system::keep_alive);
-    world.add_handler(process_packets);
-
-    let mut game = Game {
-        world,
-        incoming: server,
+    #[cfg(feature = "pprof")]
+    if let Ok(report) = guard.report().build() {
+        let file = std::fs::File::create("flamegraph.svg").unwrap();
+        report.flamegraph(file).unwrap();
     };
 
-    while !SHUTDOWN.load(std::sync::atomic::Ordering::Relaxed) {
-        game.tick();
-
-        // Calculate the elapsed time since the last tick
-        let elapsed = last_tick.elapsed();
-
-        // If the elapsed time is greater than the desired tick duration,
-        // skip the sleep to catch up
-        if elapsed < tick_duration {
-            let sleep_duration = tick_duration - elapsed;
-            // println!("Sleeping for {:?}", sleep_duration);
-            std::thread::sleep(sleep_duration);
-        }
-
-        // Update the last tick time
-        last_tick = Instant::now();
-    }
-}
-
-#[derive(Component)]
-struct FullEntityPose {
-    position: DVec3,
-    yaw: f32,
-    pitch: f32,
+    Ok(())
 }
