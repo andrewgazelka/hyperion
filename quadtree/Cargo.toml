@@ -1,5 +1,5 @@
 [package]
-name = "generator-build"
+name = "quadtree"
 version = "0.1.0"
 edition = "2021"
 authors = ["Andrew Gazelka <andrew.gazelka@gmail.com>"]
@@ -7,15 +7,9 @@ readme = "README.md"
 publish = false
 
 [dependencies]
-anyhow = "1.0.81"
-heck = "0.5.0"
+glam = "0.27.0"
 itertools = "0.12.1"
-prettyplease = "0.2.17"
-proc-macro2 = "1.0.79"
-quote = "1.0.35"
-serde = { version = "1.0.197", features = ["derive"] }
-serde_json = "1.0.115"
-syn = "2.0.55"
+
 
 [lints.rust]
 warnings = "deny"
@@ -40,6 +34,7 @@ default_numeric_fallback = "allow"
 as_conversions = "allow"
 arithmetic_side_effects = "allow"
 shadow_unrelated = "allow"
+unseparated_literal_suffix = "allow"
 else_if_without_else = "allow"
 float_arithmetic = "allow"
 single_call_fn = "allow"
@@ -58,14 +53,7 @@ missing_assert_message = "allow"
 shadow_same = "allow"
 mod_module_files = "deny"
 self_named_module_files = "allow"
-items_after_statements = "allow"
-integer_division = "allow"
 missing_trait_methods = "allow"
-exhaustive_enums = "allow"
-impl_trait_in_params = "allow"
-unseparated_literal_suffix = "deny"
-separated_literal_suffix = "allow"
-integer_division_remainder_used = "allow"
 
 complexity = { level = "deny", priority = -1 }
 

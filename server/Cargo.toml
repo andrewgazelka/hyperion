@@ -15,7 +15,7 @@ pprof = ["dep:pprof"]
 [dependencies]
 anyhow = "1.0.81"
 tracing = "0.1.40"
-serde_json = "1.0.114"
+serde_json = "1.0.115"
 bytes = "1.6.0"
 
 # get terminated by signal SIGBUS (Misaligned address error) without frame-pointer

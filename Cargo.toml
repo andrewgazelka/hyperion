@@ -6,6 +6,7 @@ resolver = "2"
 
 members = [
     "server",
+    "quadtree",
     "chunk",
     "generator-build",
     "generator"
