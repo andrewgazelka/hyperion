@@ -6,7 +6,7 @@ authors = ["Andrew Gazelka <andrew.gazelka@gmail.com>"]
 readme = "README.md"
 
 [dependencies]
-glam = "0.26.0"
+glam = "0.27.0"
 itertools = "0.12.1"
 
 
@@ -52,6 +52,7 @@ missing_assert_message = "allow"
 shadow_same = "allow"
 mod_module_files = "deny"
 self_named_module_files = "allow"
+missing_trait_methods = "allow"
 
 complexity = { level = "deny", priority = -1 }
 

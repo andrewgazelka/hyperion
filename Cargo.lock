@@ -856,6 +856,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bebe52f2c58f1eea4d6fd3307058cf818c74181435a3620502d1651db07ff018"
 
 [[package]]
+name = "glam"
+version = "0.27.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9e05e7e6723e3455f4818c7b26e855439f7546cf617ef669d1adedb8669e5cb9"
+
+[[package]]
 name = "hashbrown"
 version = "0.14.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1444,7 +1450,7 @@ dependencies = [
 name = "quadtree"
 version = "0.1.0"
 dependencies = [
- "glam",
+ "glam 0.27.0",
  "itertools",
 ]
 
@@ -2180,7 +2186,7 @@ name = "valence_math"
 version = "0.2.0-alpha.1+mc.1.20.1"
 source = "git+https://github.com/valence-rs/valence#7e91ca0f6d4608258524052bd521c5a6cbf221d4"
 dependencies = [
- "glam",
+ "glam 0.26.0",
 ]
 
 [[package]]
