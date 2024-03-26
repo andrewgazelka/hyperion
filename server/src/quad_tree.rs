@@ -3,6 +3,7 @@ use crate::{EntityReaction, FullEntityPose};
 impl FullEntityPose {
     /// # Safety
     /// This is only safe is this is not done in tandem with another `EntityReaction`
+    // #[instrument(skip_all)]
     pub unsafe fn apply_entity_collision(&self, other: &Self, reaction: &EntityReaction) {
         let dx = other.position.x - self.position.x;
         let dz = other.position.z - self.position.z;

@@ -2,14 +2,26 @@ use evenio::{
     entity::EntityId,
     event::Receiver,
     fetch::Fetcher,
-    query::{Not, Query},
+    query::{Not, Query, With},
+    rayon::prelude::*,
 };
+use tracing::instrument;
 use valence_protocol::{
     math::{DVec2, DVec3},
     ByteAngle, VarInt,
 };
 
-use crate::{EntityReaction, FullEntityPose, Gametick, MinecraftEntity, Player, RunningSpeed};
+use crate::{
+    io::encode_packet, EntityReaction, FullEntityPose, Gametick, MinecraftEntity, Player,
+    RunningSpeed, Targetable,
+};
+
+// 0 &mut FullEntityPose
+// 1 &'static MinecraftEntity
+
+// 2 &Targetable
+
+// 3 &Player
 
 #[derive(Query, Debug)]
 pub struct EntityQuery<'a> {
@@ -17,26 +29,34 @@ pub struct EntityQuery<'a> {
     running_speed: Option<&'a RunningSpeed>,
     reaction: &'a mut EntityReaction,
     pose: &'a mut FullEntityPose,
-
-    // todo: add With
-    _entity: &'a MinecraftEntity,
+    _entity: With<&'static MinecraftEntity>,
 }
 
-pub fn call(
+#[instrument(skip_all, name = "entity_move_logic")]
+pub fn entity_move_logic(
     _: Receiver<Gametick>,
     mut entities: Fetcher<EntityQuery>,
-    mut player: Fetcher<(&mut Player, Not<&MinecraftEntity>, &FullEntityPose)>,
+    mut target: Fetcher<(
+        &FullEntityPose,       // 0
+        &Targetable,           // 2
+        Not<&MinecraftEntity>, // not 1
+    )>,
+    player: Fetcher<(
+        &FullEntityPose,       // 0
+        &Player,               // 3
+        Not<&MinecraftEntity>, // not 1
+    )>,
 ) {
     use valence_protocol::packets::play;
 
-    let Some((_, _, &target)) = player.iter_mut().next() else {
+    let Some((&target, ..)) = target.iter_mut().next() else {
         // no movement if not a single player
         return;
     };
 
     let target = target.position;
 
-    entities.iter_mut().for_each(|query| {
+    entities.par_iter_mut().for_each(|query| {
         let EntityQuery {
             id,
             running_speed,
@@ -93,11 +113,13 @@ pub fn call(
             head_yaw: ByteAngle::from_degrees(yaw),
         };
 
-        player.iter_mut().for_each(|(player, ..)| {
-            // todo: this is inefficient we want to serialize once
-            // todo: remove _
-            let _ = player.packets.writer.send_packet(&pos);
-            let _ = player.packets.writer.send_packet(&look);
+        // todo: remove unwrap
+        let pos = encode_packet(&pos).unwrap();
+        let look = encode_packet(&look).unwrap();
+
+        player.iter().for_each(|(_, player, ..)| {
+            let _ = player.packets.writer.send_raw(pos.clone());
+            let _ = player.packets.writer.send_raw(look.clone());
         });
     });
 }

@@ -1,3 +1,5 @@
+#![allow(clippy::module_name_repetitions)]
+
 use std::{borrow::Cow, collections::BTreeSet, io, io::ErrorKind};
 
 use anyhow::{ensure, Context};
@@ -75,6 +77,17 @@ pub struct WriterComm {
     enc: PacketEncoder,
 }
 
+pub fn encode_packet<P>(pkt: &P) -> anyhow::Result<bytes::Bytes>
+where
+    P: valence_protocol::Packet + Encode,
+{
+    let mut enc = PacketEncoder::default();
+    enc.append_packet(pkt)?;
+    let bytes = enc.take();
+
+    Ok(bytes.freeze())
+}
+
 type ReaderComm = flume::Receiver<PacketFrame>;
 
 impl WriterComm {
@@ -85,24 +98,10 @@ impl WriterComm {
         self.enc.append_packet(pkt)?;
         let bytes = self.enc.take();
 
-        let mut bytes_slice = &*bytes;
-        let slice = &mut bytes_slice;
-        #[allow(clippy::cast_sign_loss)]
-        let length = VarInt::decode_partial(slice)? as usize;
-
-        let slice_len = bytes_slice.len();
-
-        ensure!(
-            length == slice_len,
-            "length mismatch: var int length {}, got pkt length {}",
-            length,
-            slice_len
-        );
-
         Ok(bytes.freeze())
     }
 
-    pub fn send_raw(&mut self, bytes: bytes::Bytes) -> anyhow::Result<()> {
+    pub fn send_raw(&self, bytes: bytes::Bytes) -> anyhow::Result<()> {
         self.tx.send(bytes)?;
         Ok(())
     }
@@ -361,6 +360,7 @@ impl Io {
         // second
         self.send_packet(&packet).await?;
 
+        // bound at 1024 packets
         let (s2c_tx, s2c_rx) = flume::unbounded();
         let (c2s_tx, c2s_rx) = flume::unbounded();
 
@@ -383,8 +383,6 @@ impl Io {
         info!("Finished handshake for {username}");
 
         monoio::spawn(async move {
-            // sleep 1 second
-            // debug!("before");
             debug!("start receiving packets");
             while let Ok(raw) = io_read.recv_packet_raw().await {
                 if let Err(e) = c2s_tx.send(raw) {
@@ -396,9 +394,60 @@ impl Io {
 
         monoio::spawn(async move {
             while let Ok(bytes) = s2c_rx.recv_async().await {
-                if let Err(e) = io_write.send_packet(bytes).await {
-                    error!("{e:?}");
-                    break;
+                // if macos
+                // if there are multiple elements in the channel, batch them.
+                // This is especially useful on macOS which does not support
+                // io_uring and has a high cost for each write (context switch for each syscall).
+                #[cfg(target_os = "macos")]
+                {
+                    if s2c_rx.is_empty() {
+                        if let Err(e) = io_write.send_packet(bytes).await {
+                            error!("{e:?}");
+                            break;
+                        }
+                        continue;
+                    }
+
+                    let mut byte_collect = bytes.to_vec();
+
+                    // we are using drain so we do not go in infinite loop
+                    for other_byte in s2c_rx.drain() {
+                        let other_byte = other_byte.to_vec();
+                        // todo: or extend slice
+                        byte_collect.extend(other_byte);
+                    }
+
+                    let bytes = bytes::Bytes::from(byte_collect);
+
+                    if let Err(e) = io_write.send_packet(bytes).await {
+                        error!("{e:?}");
+                        break;
+                    }
+                    continue;
+                }
+
+                // if linux
+                #[cfg(target_os = "linux")]
+                {
+                    if let Err(e) = io_write.send_packet(bytes).await {
+                        error!("{e:?}");
+                        break;
+                    }
+                    continue;
+                }
+
+                // if windows panic
+                #[cfg(target_os = "windows")]
+                {
+                    panic!("windows not supported");
+                    continue;
+                }
+
+                // if other panic
+                #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
+                {
+                    panic!("unsupported os");
+                    continue;
                 }
             }
         });
@@ -517,27 +566,29 @@ async fn run(tx: flume::Sender<ClientConnection>) {
     }
 }
 
-pub fn server(shutdown: flume::Receiver<()>) -> flume::Receiver<ClientConnection> {
+pub fn server(shutdown: flume::Receiver<()>) -> anyhow::Result<flume::Receiver<ClientConnection>> {
     let (tx, rx) = flume::unbounded();
 
-    std::thread::spawn(move || {
-        let mut runtime = monoio::RuntimeBuilder::<monoio::FusionDriver>::new()
-            // .enable_timer()
-            .build()
-            .unwrap();
+    std::thread::Builder::new()
+        .name("io".to_string())
+        .spawn(move || {
+            let mut runtime = monoio::RuntimeBuilder::<monoio::FusionDriver>::new()
+                .build()
+                .unwrap();
 
-        runtime.block_on(async move {
-            let run = run(tx);
-            let shutdown = shutdown.recv_async();
+            runtime.block_on(async move {
+                let run = run(tx);
+                let shutdown = shutdown.recv_async();
 
-            monoio::select! {
-                () = run => {},
-                _ = shutdown => {},
-            }
-        });
-    });
+                monoio::select! {
+                    () = run => {},
+                    _ = shutdown => {},
+                }
+            });
+        })
+        .context("failed to spawn io thread")?;
 
-    rx
+    Ok(rx)
 }
 
 fn registry_codec_raw(codec: &RegistryCodec) -> anyhow::Result<Compound> {

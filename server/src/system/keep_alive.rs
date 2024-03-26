@@ -1,10 +1,11 @@
 use std::time::Instant;
 
 use evenio::{prelude::*, rayon::prelude::*};
-use tracing::debug;
+use tracing::{debug, instrument};
 
 use crate::{Gametick, Player};
 
+#[instrument(skip_all)]
 pub fn keep_alive(_: Receiver<Gametick>, mut fetcher: Fetcher<&mut Player>) {
     fetcher.par_iter_mut().for_each(|player| {
         // if we haven't sent a keep alive packet in 5 seconds, send one

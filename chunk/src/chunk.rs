@@ -3,9 +3,6 @@ use valence_registry::biome::BiomeId;
 
 use super::paletted_container::PalettedContainer;
 
-/// Common operations on chunks. Notable implementors are
-/// [`LoadedChunk`](super::loaded::LoadedChunk) and
-/// [`UnloadedChunk`](super::unloaded::UnloadedChunk).
 pub trait Chunk {
     /// Gets the height of this chunk in meters or blocks.
     fn height(&self) -> u32;

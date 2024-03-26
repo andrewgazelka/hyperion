@@ -6,7 +6,7 @@ FROM alpine:3.19 as packages
 
 # Install curl, build-base (Alpine's equivalent of build-essential), and OpenSSL development packages
 RUN apk update && \
-    apk add --no-cache curl build-base openssl-dev pkgconfig musl-dev clang llvm lld mold
+    apk add --no-cache curl build-base openssl-dev pkgconfig musl-dev clang llvm lld mold valgrind
 
 FROM packages as builder
 
@@ -16,6 +16,12 @@ RUN curl https://sh.rustup.rs -sSf | sh -s -- -y && \
    $HOME/.cargo/bin/rustup default ${RUST_NIGHTLY_VERSION}
 
 ENV PATH="/root/.cargo/bin:${PATH}"
+ENV CARGO_HOME=/root/.cargo
+
+# rust flags
+ENV RUSTFLAGS="-Ctarget-cpu=native -Zshare-generics=y -Zthreads=0"
+
+RUN cargo install --version 0.10.2 iai-callgrind-runner
 
 # Set the working directory
 WORKDIR /app
@@ -38,17 +44,14 @@ COPY generator-build/src ./generator-build/src
 
 COPY server/Cargo.toml ./server/Cargo.toml
 COPY server/src ./server/src
-
-# Define environment variable for Cargo home, if not using the default
-ENV CARGO_HOME=/cargo-home
+COPY server/benches ./server/benches
 
 FROM builder as release
 
-RUN --mount=type=cache,target=/cargo-home \
-    --mount=type=cache,target=/usr/local/cargo/registry \
-    --mount=type=cache,target=/usr/local/cargo/git \
+RUN --mount=type=cache,target=/root/.cargo/registry \
+    --mount=type=cache,target=/root/.cargo/git \
     --mount=type=cache,target=/app/target \
-    cargo build --release --locked -p server
+    CARGO_TERM_COLOR=never cargo build --release --locked -p server
 
 RUN --mount=type=cache,target=/app/target \
     mkdir -p /build && \
@@ -56,39 +59,27 @@ RUN --mount=type=cache,target=/app/target \
 
 FROM builder as debug
 
-RUN --mount=type=cache,target=/cargo-home \
-    --mount=type=cache,target=/usr/local/cargo/registry \
-    --mount=type=cache,target=/usr/local/cargo/git \
+RUN --mount=type=cache,target=/root/.cargo/registry \
+    --mount=type=cache,target=/root/.cargo/git \
     --mount=type=cache,target=/app/target \
-    cargo build --timings --locked -p server
+    CARGO_TERM_COLOR=never cargo build --timings --locked -p server
 
 RUN --mount=type=cache,target=/app/target \
     mkdir -p /build && \
     cp target/debug/server /build/server && \
     cp target/cargo-timings/cargo-timing.html /build/cargo-timing.html
 
-#FROM scratch
-#FROM alpine:3.19
+FROM rust as cli
 
-# debian
-#FROM rust
-#
-#RUN apt-get update && apt-get install -y linux-perf
-#
-#RUN cargo install flamegraph
-#
-## Copy the built executable into the final image
-#COPY --from=builder /build/server /
-#
-#EXPOSE 25565
-#
-#
-## ENTRYPOINT ["flamegraph", "-o", "/app/profiling/flamegraph.svg", "--", "./server"]
-#
-## entrypoint is bash
-##ENTRYPOINT ["bash"]
-#
-#ENTRYPOINT ["./server"]
+RUN apt-get update && apt-get install -y linux-perf
+
+RUN cargo install flamegraph
+
+COPY --from=release /build/server /
+
+EXPOSE 25565
+
+ENTRYPOINT ["bash"]
 
 FROM scratch as debug-bin
 COPY --from=debug /build/server /
@@ -98,6 +89,28 @@ ENTRYPOINT ["/server"]
 FROM scratch as release-bin
 COPY --from=release /build/server /
 ENTRYPOINT ["/server"]
+
+FROM builder as bench
+
+# install valgrind
+RUN apk add --no-cache valgrind
+
+RUN valgrind --version
+
+ENV IAI_CALLGRIND_RUNNER=/cargo-home/bin/iai-callgrind-runner
+ENV PATH="/cargo-home/bin:${PATH}"
+
+RUN echo hi
+
+RUN --mount=type=cache,target=/cargo-home \
+    --mount=type=cache,target=/root/.cargo/registry \
+    --mount=type=cache,target=/root/.cargo/git \
+    --mount=type=cache,target=/app/target \
+    IAI_CALLGRIND_RUNNER=/cargo-home/bin/iai-callgrind-runner cargo bench --locked > /app/bench.txt
+
+RUN cat /app/bench.txt
+
+
 
 
 #FROM alpine:3.19 as cli
