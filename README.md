@@ -115,22 +115,22 @@ However, we probably do not want to do this.
 
 Suppose the world is 20 blocks deep. This means the total volume of the map is
 
-$10\text{k} \times 10\text{k} \times 20 \text{blocks} = 2,000,000,000 \text{blocks}$
+$10\text{k} \times 10\text{k} \times 20 \hspace{0.16667em} \text{blocks} = 2,000,000,000 \hspace{0.16667em} \text{blocks}$
 
 If we have one byte per block (which is realistic if we restrict the number of blocks) we get this only taking
 
-$2,000,000,000 \text{bytes} = 2 \text{GB}$
+$2,000,000,000 \hspace{0.16667em} \text{bytes} = 2 \hspace{0.16667em} \text{GB}$
 
 This is absolutely feasible. 
 
 In fact, if we had a normal size world
 
-$10\text{k} \times 10\text{k} \times 256$ and one byte per block this would only take $25.6  \text{GB}$
+$10\text{k} \times 10\text{k} \times 256$ and one byte per block this would only take $25.6 \hspace{0.16667em} \text{GB}$
 
 ## Core Count
 
 Suppose we get a 64-core machine. This means that we can allocate 
-$10\text{k} / 64 = 156.25 \text{players} / \text{core}$.
+$10\text{k} / 64 = 156.25 \hspace{0.16667em} \hspace{0.16667em} \text{players} / \text{core}$.
 This is much under what a normal vanilla server can do on one core.
 
 ## Network
