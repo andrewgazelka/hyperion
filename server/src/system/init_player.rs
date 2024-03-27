@@ -1,7 +1,9 @@
 use evenio::prelude::*;
 use tracing::instrument;
 
-use crate::{EntityReaction, FullEntityPose, InitPlayer, Player, PlayerJoinWorld, Targetable};
+use crate::{
+    EntityReaction, FullEntityPose, InitPlayer, Player, PlayerJoinWorld, Targetable, Uuid,
+};
 
 #[instrument(skip_all)]
 pub fn init_player(
@@ -10,6 +12,7 @@ pub fn init_player(
         Insert<FullEntityPose>,
         Insert<Player>,
         Insert<EntityReaction>,
+        Insert<Uuid>,
         Insert<Targetable>,
         PlayerJoinWorld,
     )>,
@@ -21,6 +24,7 @@ pub fn init_player(
         entity,
         io,
         name,
+        uuid,
         pos,
     } = event;
 
@@ -32,6 +36,7 @@ pub fn init_player(
         name,
         locale: None,
     });
+    s.insert(entity, Uuid(uuid));
 
     s.insert(entity, EntityReaction::default());
 

@@ -16,15 +16,19 @@ use valence_protocol::{
 use valence_registry::{biome::BiomeId, RegistryIdx};
 
 use crate::{
-    bits::BitStorage, chunk::heightmap, io::Packets, KickPlayer, Player, PlayerJoinWorld, GLOBAL,
+    bits::BitStorage, chunk::heightmap, io::Packets, singleton::player_lookup::PlayerLookup,
+    KickPlayer, Player, PlayerJoinWorld, Uuid, GLOBAL,
 };
 
 #[instrument(skip_all)]
 pub fn player_join_world(
-    r: Receiver<PlayerJoinWorld, (EntityId, &mut Player)>,
+    r: Receiver<PlayerJoinWorld, (EntityId, &mut Player, &Uuid)>,
+    lookup: Single<&mut PlayerLookup>,
     mut s: Sender<KickPlayer>,
 ) {
-    let (id, player) = r.query;
+    let (id, player, uuid) = r.query;
+
+    lookup.0.insert(uuid.0, id);
 
     info!("Player {} joined the world", player.name);
 

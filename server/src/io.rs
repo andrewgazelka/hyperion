@@ -54,6 +54,7 @@ fn offline_uuid(username: &str) -> anyhow::Result<Uuid> {
 pub struct ClientConnection {
     pub packets: Packets,
     pub name: Box<str>,
+    pub uuid: Uuid,
 }
 
 pub struct Io {
@@ -76,8 +77,6 @@ pub struct WriterComm {
     tx: flume::Sender<bytes::Bytes>,
     enc: PacketEncoder,
 }
-
-type ReaderComm = flume::Receiver<PacketFrame>;
 
 impl WriterComm {
     pub fn serialize<P>(&mut self, pkt: &P) -> anyhow::Result<bytes::Bytes>
@@ -172,9 +171,9 @@ impl WriterComm {
     }
 }
 
-struct UserPacketFrame {
-    packet: PacketFrame,
-    user: Uuid,
+pub struct UserPacketFrame {
+    pub packet: PacketFrame,
+    pub user: Uuid,
 }
 
 impl IoRead {
@@ -375,6 +374,7 @@ impl Io {
 
         monoio::spawn(async move {
             while let Ok(packet) = io_read.recv_packet_raw().await {
+                #[allow(clippy::undocumented_unsafe_blocks)]
                 let packets = unsafe { &mut *LOCAL_PACKETS.get() };
                 packets.push(UserPacketFrame { packet, user: uuid });
             }
@@ -396,6 +396,7 @@ impl Io {
         let conn = ClientConnection {
             packets,
             name: username,
+            uuid,
         };
 
         tx.send(conn).unwrap();
@@ -466,6 +467,7 @@ async fn print_errors(future: impl core::future::Future<Output = anyhow::Result<
 
 #[thread_local]
 static LOCAL_PACKETS: UnsafeCell<Vec<UserPacketFrame>> = UnsafeCell::new(Vec::new());
+
 pub static GLOBAL_PACKETS: Mutex<Vec<UserPacketFrame>> = Mutex::new(Vec::new());
 
 async fn run(tx: flume::Sender<ClientConnection>, update_global: flume::Receiver<()>) {
@@ -486,7 +488,8 @@ async fn run(tx: flume::Sender<ClientConnection>, update_global: flume::Receiver
     let mut id = 0;
 
     monoio::spawn(async move {
-        while let Ok(()) = update_global.recv_async().await {
+        while update_global.recv_async().await == Ok(()) {
+            #[allow(clippy::undocumented_unsafe_blocks)]
             let packets = unsafe { &mut *LOCAL_PACKETS.get() };
             let mut global_packets = GLOBAL_PACKETS.lock().unwrap();
             global_packets.append(packets);
