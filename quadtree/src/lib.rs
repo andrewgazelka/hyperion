@@ -175,7 +175,7 @@ fn build_impl<T>(
 
 type SimpleQuadtree = Quadtree<()>;
 
-impl <T> Quadtree<T> {
+impl<T> Quadtree<T> {
     #[must_use]
     pub const fn aaabb(&self) -> &Aabb {
         &self.aabb
@@ -291,6 +291,56 @@ impl <T> Quadtree<T> {
         result
     }
 
+    #[must_use]
+    pub fn insert(&self, point: Vec2) -> Option<Idx> {
+        self.insert_recursive(self.root, &self.aabb, point)
+    }
+
+    fn insert_recursive(
+        &self,
+        node: OptionalIdx,
+        node_bbox: &Aabb,
+        point: Vec2,
+    ) -> Option<Idx> {
+        let Some(node_idx) = node.inner() else {
+            return None;
+        };
+
+        if !node_bbox.contains(point) {
+            return None;
+        }
+
+        if self.is_leaf(node_idx).unwrap_or(false) {
+            return Some(node_idx);
+        }
+
+        let center = node_bbox.mid();
+        let child_bboxes = [
+            Aabb::new(node_bbox.min, center),
+            Aabb::new(
+                Vec2::new(center.x, node_bbox.min.y),
+                Vec2::new(node_bbox.max.x, center.y),
+            ),
+            Aabb::new(
+                Vec2::new(node_bbox.min.x, center.y),
+                Vec2::new(center.x, node_bbox.max.y),
+            ),
+            Aabb::new(center, node_bbox.max),
+        ];
+
+        let node = self.get_node(node_idx).unwrap();
+        for (i, &child) in node.children.iter().flatten().enumerate() {
+            #[allow(clippy::indexing_slicing)]
+            if let Some(child_node_idx) =
+                self.insert_recursive(child, &child_bboxes[i], point)
+            {
+                return Some(child_node_idx);
+            }
+        }
+
+        None
+    }
+
     fn query_bbox_recursive(
         &self,
         node: OptionalIdx,
@@ -335,27 +385,31 @@ impl <T> Quadtree<T> {
             self.query_bbox_recursive(child, &child_bboxes[i], query_bbox, result);
         }
     }
-    
+
     pub fn move_point(&mut self, node_idx: Idx, local_idx: usize, new_point: Vec2) {
         let mut node = self.nodes.get(node_idx as usize).unwrap();
         let range = self.points_range_for(node_idx).unwrap();
-        
+
         let points = &mut self.points[range];
-        
+
         if node.aabb.contains(new_point) {
             points[local_idx] = new_point;
             return;
         }
-        
-        // we need to expand the node
-        
-        loop {
-            
-        }
-        
-        
 
-        
+        // up cycle
+        // we need to expand the node
+        let (up_idx, up_aabb) = loop {
+            // todo: expand if None
+            let parent_idx = node.parent().unwrap();
+            let parent = self.nodes.get(parent_idx as usize).unwrap();
+            let parent_aabb = &parent.aabb;
+            if parent_aabb.contains(new_point) {
+                break (parent_idx, parent_aabb);
+            }
+        };
+
+        let idx = self.insert_recursive(OptionalIdx::some(up_idx), up_aabb, new_point);
     }
 }
 
