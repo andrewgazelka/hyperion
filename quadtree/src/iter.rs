@@ -1,19 +1,19 @@
 use crate::{idx::Idx, Quadtree};
 
-pub struct LeafNodes<'a> {
-    tree: &'a Quadtree,
+pub struct LeafNodes<'a, T> {
+    tree: &'a Quadtree<T>,
     stack: Vec<Idx>,
 }
 
-impl<'a> LeafNodes<'a> {
+impl<'a, T> LeafNodes<'a, T> {
     #[must_use]
-    pub(crate) fn new(tree: &'a Quadtree, root: Idx) -> Self {
+    pub(crate) fn new(tree: &'a Quadtree<T>, root: Idx) -> Self {
         let stack = vec![root];
         Self { tree, stack }
     }
 
     #[must_use]
-    pub(crate) const fn empty(tree: &'a Quadtree) -> Self {
+    pub(crate) const fn empty(tree: &'a Quadtree<T>) -> Self {
         Self {
             tree,
             stack: Vec::new(),
@@ -21,7 +21,7 @@ impl<'a> LeafNodes<'a> {
     }
 }
 
-impl<'a> Iterator for LeafNodes<'a> {
+impl<'a, T> Iterator for LeafNodes<'a, T> {
     type Item = Idx;
 
     #[allow(clippy::unwrap_in_result)]

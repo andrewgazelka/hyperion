@@ -1,5 +1,4 @@
 // https://lisyarus.github.io/blog/programming/2022/12/21/quadtrees.html
-
 // https://snorrwe.onrender.com/posts/morton-table/
 
 use std::ops::Range;
@@ -20,6 +19,7 @@ mod nearest;
 pub struct Node {
     children: [[OptionalIdx; 2]; 2],
     parent: OptionalIdx,
+    aabb: Aabb,
 }
 
 impl Node {
@@ -53,11 +53,13 @@ impl Default for Node {
     }
 }
 
-pub struct Quadtree {
+pub struct Quadtree<T> {
     aabb: Aabb,
+    min_area: f64,
     root: OptionalIdx,
     nodes: Vec<Node>,
     points: Vec<Vec2>,
+    data: Vec<T>,
     node_points_begin: Vec<Idx>,
 }
 
@@ -65,23 +67,28 @@ pub type IndexSlice = Range<Idx>;
 
 #[allow(clippy::indexing_slicing)]
 #[allow(unused)]
-fn build_impl(
-    tree: &mut Quadtree,
+fn build_impl<T>(
+    tree: &mut Quadtree<T>,
     bbox: Aabb,
-    points_idx: IndexSlice,
+    slice: IndexSlice,
     parent: OptionalIdx,
 ) -> OptionalIdx {
-    if points_idx.is_empty() {
+    if slice.is_empty() {
         return OptionalIdx::NONE;
     }
 
     let result = tree.append_new_node(parent);
-    let start = points_idx.start as usize;
-    let points = &mut tree.points[points_idx.start as usize..points_idx.end as usize];
+    let start = slice.start as usize;
+    let points = &mut tree.points[slice.start as usize..slice.end as usize];
 
     // println!("TOP; HAVE POINTS {:?}", points);
 
-    if points_idx.len() == 1 {
+    if slice.len() == 1 {
+        tree.node_points_begin[result as usize] = start as Idx;
+        return OptionalIdx::some(result);
+    }
+
+    if bbox.area() < tree.min_area {
         tree.node_points_begin[result as usize] = start as Idx;
         return OptionalIdx::some(result);
     }
@@ -126,10 +133,10 @@ fn build_impl(
 
     let result_some = OptionalIdx::some(result);
 
-    let child00_idx = points_idx.start..(points_idx.start + split_x_lower);
-    let child01_idx = (points_idx.start + split_x_lower)..(points_idx.start + split_y);
-    let child10_idx = (points_idx.start + split_y)..(points_idx.start + split_y + split_x_upper);
-    let child11_idx = (points_idx.start + split_y + split_x_upper)..points_idx.end;
+    let child00_idx = slice.start..(slice.start + split_x_lower);
+    let child01_idx = (slice.start + split_x_lower)..(slice.start + split_y);
+    let child10_idx = (slice.start + split_y)..(slice.start + split_y + split_x_upper);
+    let child11_idx = (slice.start + split_y + split_x_upper)..slice.end;
 
     // println!("indices \n{:?}\n{:?}\n{:?}\n{:?}", child00_idx, child01_idx, child10_idx,
     // child11_idx);
@@ -166,7 +173,9 @@ fn build_impl(
     OptionalIdx::some(result)
 }
 
-impl Quadtree {
+type SimpleQuadtree = Quadtree<()>;
+
+impl <T> Quadtree<T> {
     #[must_use]
     pub const fn aaabb(&self) -> &Aabb {
         &self.aabb
@@ -238,7 +247,7 @@ impl Quadtree {
     }
 
     #[must_use]
-    pub fn leafs(&self) -> iter::LeafNodes {
+    pub fn leafs(&self) -> iter::LeafNodes<T> {
         #[allow(clippy::option_if_let_else)]
         match self.root.inner() {
             None => iter::LeafNodes::empty(self),
@@ -247,16 +256,18 @@ impl Quadtree {
     }
 
     #[must_use]
-    pub fn build(points: Vec<Vec2>) -> Self {
+    pub fn build_with_min_area(points: Vec<Vec2>, data: Vec<T>, min_area: f64) -> Self {
         let aabb = Aabb::from_points(&points);
 
         let len = points.len();
 
         let mut result = Self {
             aabb,
+            min_area,
             root: OptionalIdx::NONE,
             nodes: vec![],
             points,
+            data,
             node_points_begin: vec![],
         };
 
@@ -266,6 +277,11 @@ impl Quadtree {
         result.node_points_begin.push(result.points.len() as Idx);
 
         result
+    }
+
+    #[must_use]
+    pub fn build(points: Vec<Vec2>) -> Self {
+        Self::build_with_min_area(points, 0.0)
     }
 
     #[must_use]
@@ -318,6 +334,28 @@ impl Quadtree {
             #[allow(clippy::indexing_slicing)]
             self.query_bbox_recursive(child, &child_bboxes[i], query_bbox, result);
         }
+    }
+    
+    pub fn move_point(&mut self, node_idx: Idx, local_idx: usize, new_point: Vec2) {
+        let mut node = self.nodes.get(node_idx as usize).unwrap();
+        let range = self.points_range_for(node_idx).unwrap();
+        
+        let points = &mut self.points[range];
+        
+        if node.aabb.contains(new_point) {
+            points[local_idx] = new_point;
+            return;
+        }
+        
+        // we need to expand the node
+        
+        loop {
+            
+        }
+        
+        
+
+        
     }
 }
 
