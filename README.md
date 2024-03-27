@@ -6,10 +6,13 @@ _From the creator of [SwarmBot](https://github.com/SwarmBotMC/SwarmBot):_
 
 **How can we get 10k players to PvP at once on a Minecraft server to break the [Guinness World Record for largest PvP battle in any game](https://www.guinnessworldrecords.com/world-records/105603-largest-videogame-pvp-battle) of 8,825 players?** 
 
-_The image below shows 30k zombies (with collisions) running at 8 ms/tick on an M2 MacBook Pro. 100k zombies can be run at 20 ms/tick._
-
 <p align="center">
+  <em>The image below shows 30k zombies (with collisions) running at 8 ms/tick on an M2 MacBook Pro.</em>
   <img src="https://github.com/andrewgazelka/hyperion/assets/7644264/d842d7c9-ee0c-4df3-85d6-46d91e455be5"/>
+  <br><br>
+  <em>100k zombies can be run at 20 ms/tick</em>
+  <img src=https://github.com/andrewgazelka/hyperion/assets/7644264/c02e720b-b878-418e-a949-ff7c24a53e82/>
+
 </p>
 
 # Running
