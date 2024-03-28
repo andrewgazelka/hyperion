@@ -7,11 +7,17 @@ use valence_protocol::{
     text::{Color, IntoText},
 };
 
-use crate::{KickPlayer, Player, GLOBAL};
+use crate::{singleton::player_lookup::PlayerLookup, KickPlayer, Player, Uuid, GLOBAL};
 
 #[instrument(skip_all)]
-pub fn player_kick(r: Receiver<KickPlayer, (EntityId, &mut Player)>, mut s: Sender<Despawn>) {
-    let (id, player) = r.query;
+pub fn player_kick(
+    r: Receiver<KickPlayer, (EntityId, &mut Player, &Uuid)>,
+    lookup: Single<&mut PlayerLookup>,
+    mut s: Sender<Despawn>,
+) {
+    let (id, player, uuid) = r.query;
+
+    lookup.0.remove(&uuid.0);
 
     let reason = &r.event.reason;
 

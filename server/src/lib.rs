@@ -25,8 +25,8 @@ use valence_protocol::math::DVec3;
 
 use crate::{
     bounding_box::BoundingBox,
-    io::{server, ClientConnection, Packets},
-    singleton::encoder::Encoder,
+    io::{server, ClientConnection, Packets, GLOBAL_PACKETS},
+    singleton::{encoder::Encoder, player_lookup::PlayerLookup},
 };
 
 mod global;
@@ -53,6 +53,7 @@ struct InitPlayer {
     entity: EntityId,
     io: Packets,
     name: Box<str>,
+    uuid: uuid::Uuid,
     pos: FullEntityPose,
 }
 
@@ -122,6 +123,7 @@ pub struct Game {
     last_ms_per_tick: VecDeque<f64>,
     tick_on: u64,
     incoming: flume::Receiver<ClientConnection>,
+    req_packets: flume::Sender<()>,
 }
 
 impl Game {
@@ -155,7 +157,7 @@ impl Game {
             }
         });
 
-        let server = server(shutdown_rx)?;
+        let (incoming, req_packets) = server(shutdown_rx)?;
 
         let mut world = World::new();
 
@@ -178,12 +180,16 @@ impl Game {
         let encoder = world.spawn();
         world.insert(encoder, Encoder);
 
+        let lookup = world.spawn();
+        world.insert(lookup, PlayerLookup::default());
+
         let mut game = Self {
             world,
             last_ticks: VecDeque::default(),
             last_ms_per_tick: VecDeque::default(),
             tick_on: 0,
-            incoming: server,
+            incoming,
+            req_packets,
         };
 
         game.last_ticks.push_back(Instant::now());
@@ -236,7 +242,11 @@ impl Game {
         }
 
         while let Ok(connection) = self.incoming.try_recv() {
-            let ClientConnection { packets, name } = connection;
+            let ClientConnection {
+                packets,
+                name,
+                uuid,
+            } = connection;
 
             let player = self.world.spawn();
 
@@ -244,6 +254,7 @@ impl Game {
                 entity: player,
                 io: packets,
                 name,
+                uuid,
                 pos: FullEntityPose {
                     position: DVec3::new(0.0, 2.0, 0.0),
                     bounding: BoundingBox::create(DVec3::new(0.0, 2.0, 0.0), 0.6, 1.8),
@@ -256,6 +267,8 @@ impl Game {
         }
 
         self.world.send(Gametick);
+
+        self.req_packets.send(()).unwrap();
 
         let ms = now.elapsed().as_nanos() as f64 / 1_000_000.0;
         self.last_ms_per_tick.push_back(ms);
@@ -302,26 +315,37 @@ impl Game {
 fn process_packets(
     _: Receiver<Gametick>,
     mut fetcher: Fetcher<(EntityId, &mut Player, &mut FullEntityPose)>,
+    lookup: Single<&PlayerLookup>,
     mut sender: Sender<(KickPlayer, InitEntity, KillAllEntities)>,
 ) {
-    // todo: flume the best things to use here? also this really ust needs to be mpsc not mpmc
-    // let (tx, rx) = flume::unbounded();
+    // uuid to entity id map
 
-    fetcher.iter_mut().for_each(|(_id, player, position)| {
-        // info!("Processing packets for player: {:?}", id);
-        while let Ok(packet) = player.packets.reader.try_recv() {
-            // info!("Received packet: {:?}", packet);
-            if let Err(e) = packets::switch(packet, player, position, &mut sender) {
-                let reason = format!("error: {e}");
+    let packets: Vec<_> = {
+        let mut packets = GLOBAL_PACKETS.lock().unwrap();
+        core::mem::take(&mut packets)
+    };
 
-                // todo: handle error
-                let _ = player.packets.writer.send_chat_message(&reason);
+    let lookup = lookup.0;
 
-                warn!("invalid packet: {reason}");
-                // let _ = tx.send(KickPlayer { target: id, reason });
-            }
+    for packet in packets {
+        let id = packet.user;
+        let Some(&user) = lookup.get(&id) else { return };
+
+        let Ok((_, player, position)) = fetcher.get_mut(user) else {
+            return;
+        };
+
+        let packet = packet.packet;
+
+        if let Err(e) = packets::switch(packet, player, position, &mut sender) {
+            let reason = format!("error: {e}");
+
+            // todo: handle error
+            let _ = player.packets.writer.send_chat_message(&reason);
+
+            warn!("invalid packet: {reason}");
         }
-    });
+    }
 }
 
 static SHUTDOWN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);

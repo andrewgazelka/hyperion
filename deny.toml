@@ -218,8 +218,8 @@ skip = [
     "fastrand",
     "event-listener",
     "base64",
-    "regex-automata",
     "regex-syntax",
+    "regex-automata",
     "glam"
     #{ crate = "ansi_term@0.11.0", reason = "you can specify a reason why it can't be updated/removed" },
 ]
