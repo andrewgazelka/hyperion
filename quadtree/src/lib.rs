@@ -1,3 +1,4 @@
+#![allow(unused)]
 // https://lisyarus.github.io/blog/programming/2022/12/21/quadtrees.html
 // https://snorrwe.onrender.com/posts/morton-table/
 
@@ -14,6 +15,7 @@ mod aaab;
 mod idx;
 pub mod iter;
 mod nearest;
+mod rebuild;
 
 #[derive(Debug)]
 pub struct Node {
@@ -49,17 +51,17 @@ impl Default for Node {
                 OptionalIdx::NONE,
             ]],
             parent: OptionalIdx::NONE,
+            aabb: Aabb::default(),
         }
     }
 }
 
-pub struct Quadtree<T> {
+pub struct Quadtree {
     aabb: Aabb,
     min_area: f64,
     root: OptionalIdx,
     nodes: Vec<Node>,
     points: Vec<Vec2>,
-    data: Vec<T>,
     node_points_begin: Vec<Idx>,
 }
 
@@ -67,8 +69,8 @@ pub type IndexSlice = Range<Idx>;
 
 #[allow(clippy::indexing_slicing)]
 #[allow(unused)]
-fn build_impl<T>(
-    tree: &mut Quadtree<T>,
+fn build_impl(
+    tree: &mut Quadtree,
     bbox: Aabb,
     slice: IndexSlice,
     parent: OptionalIdx,
@@ -173,9 +175,7 @@ fn build_impl<T>(
     OptionalIdx::some(result)
 }
 
-type SimpleQuadtree = Quadtree<()>;
-
-impl<T> Quadtree<T> {
+impl Quadtree {
     #[must_use]
     pub const fn aaabb(&self) -> &Aabb {
         &self.aabb
@@ -201,6 +201,7 @@ impl<T> Quadtree<T> {
                 OptionalIdx::NONE,
             ]],
             parent: parent_idx,
+            aabb: Default::default(),
         });
 
         self.node_points_begin.push(0);
@@ -247,7 +248,7 @@ impl<T> Quadtree<T> {
     }
 
     #[must_use]
-    pub fn leafs(&self) -> iter::LeafNodes<T> {
+    pub fn leafs(&self) -> iter::LeafNodes {
         #[allow(clippy::option_if_let_else)]
         match self.root.inner() {
             None => iter::LeafNodes::empty(self),
@@ -256,7 +257,7 @@ impl<T> Quadtree<T> {
     }
 
     #[must_use]
-    pub fn build_with_min_area(points: Vec<Vec2>, data: Vec<T>, min_area: f64) -> Self {
+    pub fn build_with_min_area(points: Vec<Vec2>, min_area: f64) -> Self {
         let aabb = Aabb::from_points(&points);
 
         let len = points.len();
@@ -267,7 +268,6 @@ impl<T> Quadtree<T> {
             root: OptionalIdx::NONE,
             nodes: vec![],
             points,
-            data,
             node_points_begin: vec![],
         };
 
