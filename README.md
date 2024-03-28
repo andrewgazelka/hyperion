@@ -1,6 +1,7 @@
 # Hyperion
 
 [![Discord invite link](https://dcbadge.vercel.app/api/server/PBfnDtj5Wb)](https://discord.gg/PBfnDtj5Wb)
+[![wakatime](https://wakatime.com/badge/github/andrewgazelka/hyperion.svg)](https://wakatime.com/badge/github/andrewgazelka/hyperion)
 
 _From the creator of [SwarmBot](https://github.com/SwarmBotMC/SwarmBot):_
 
