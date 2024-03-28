@@ -59,7 +59,7 @@ impl Aabb {
     pub const fn new(min: Vec2, max: Vec2) -> Self {
         Self { min, max }
     }
-    
+
     pub fn area(&self) -> f64 {
         let size = self.max - self.min;
         size.x as f64 * size.y as f64

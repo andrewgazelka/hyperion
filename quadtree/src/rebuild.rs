@@ -13,7 +13,6 @@ struct OrderedEvents {
 
 impl From<Vec<MoveElement>> for OrderedEvents {
     fn from(changes: Vec<MoveElement>) -> Self {
-        // sort by insert_to_idx
         let mut by_removal = changes.clone();
         by_removal.sort_by_key(|x| Reverse(x.remove_from_idx));
 
@@ -68,14 +67,11 @@ impl Iterator for OrderedEvents {
 
 #[allow(clippy::indexing_slicing)]
 #[allow(dead_code)]
-fn rebuild_vec<T: Copy + Default + PartialEq>(
-    input: Vec<T>,
-    changes: Vec<MoveElement>,
-) -> Vec<T> {
+fn rebuild_vec<T: Copy + Default + PartialEq>(input: Vec<T>, changes: Vec<MoveElement>) -> Vec<T> {
     let len = input.len();
     let mut result = Vec::with_capacity(len);
     let ordered_events = OrderedEvents::from(changes);
-    
+
     let mut src_idx = 0;
 
     for event in ordered_events {

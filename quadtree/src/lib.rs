@@ -296,12 +296,7 @@ impl Quadtree {
         self.insert_recursive(self.root, &self.aabb, point)
     }
 
-    fn insert_recursive(
-        &self,
-        node: OptionalIdx,
-        node_bbox: &Aabb,
-        point: Vec2,
-    ) -> Option<Idx> {
+    fn insert_recursive(&self, node: OptionalIdx, node_bbox: &Aabb, point: Vec2) -> Option<Idx> {
         let Some(node_idx) = node.inner() else {
             return None;
         };
@@ -331,9 +326,7 @@ impl Quadtree {
         let node = self.get_node(node_idx).unwrap();
         for (i, &child) in node.children.iter().flatten().enumerate() {
             #[allow(clippy::indexing_slicing)]
-            if let Some(child_node_idx) =
-                self.insert_recursive(child, &child_bboxes[i], point)
-            {
+            if let Some(child_node_idx) = self.insert_recursive(child, &child_bboxes[i], point) {
                 return Some(child_node_idx);
             }
         }
