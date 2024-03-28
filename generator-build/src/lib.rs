@@ -3,37 +3,37 @@ mod schema;
 use std::{
     env,
     fs::File,
-    io::Write,
+    io::{Read, Write},
     path::{Path, PathBuf},
 };
 
-use anyhow::{ensure, Context};
+use anyhow::Context;
 
 use crate::schema::MinecraftData;
 
 // java -DbundlerMainClass=net.minecraft.data.Main -jar minecraft_server.jar
 
-pub struct GeneratorConfig {
-    pub input: PathBuf,
+pub struct GeneratorConfig<T> {
+    pub registries: T,
     pub output: Option<PathBuf>,
 }
 
-impl GeneratorConfig {
+impl<T: Read> GeneratorConfig<T> {
     #[must_use]
-    pub const fn new(input: PathBuf) -> Self {
+    pub const fn new(registries: T) -> Self {
         Self {
-            input,
+            registries,
             output: None,
         }
     }
 
-    pub fn build(&self) -> anyhow::Result<()> {
-        let generated = self.generate()?;
-
+    pub fn build(self) -> anyhow::Result<()> {
         let output = match &self.output {
             Some(path) => path.clone(),
             None => Path::new(&env::var("OUT_DIR")?).join("generator-output.rs"),
         };
+
+        let generated = self.generate()?;
 
         let mut file = File::create(output)?;
         file.write_all(generated.as_bytes())?;
@@ -41,23 +41,8 @@ impl GeneratorConfig {
         Ok(())
     }
 
-    fn generate(&self) -> anyhow::Result<String> {
-        // ensure input exists
-        ensure!(
-            self.input.exists(),
-            "input path {:?} does not exist",
-            self.input.display()
-        );
-
-        let reports = self.input.join("reports");
-        ensure!(reports.exists(), "reports directory does not exist");
-
-        let regitry = reports.join("registries.json");
-        ensure!(regitry.exists(), "registries.json does not exist");
-
-        let s = std::fs::read_to_string(regitry)?;
-
-        let data: MinecraftData = serde_json::from_str(&s)?;
+    fn generate(self) -> anyhow::Result<String> {
+        let data: MinecraftData = serde_json::from_reader(self.registries)?;
 
         let result = data.entity_type.to_token_stream("EntityType")?;
 
