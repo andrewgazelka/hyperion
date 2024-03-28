@@ -201,7 +201,7 @@ impl Quadtree {
                 OptionalIdx::NONE,
             ]],
             parent: parent_idx,
-            aabb: Default::default(),
+            aabb: Aabb::default(),
         });
 
         self.node_points_begin.push(0);

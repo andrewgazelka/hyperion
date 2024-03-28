@@ -67,17 +67,15 @@ impl Iterator for OrderedEvents {
 }
 
 #[allow(clippy::indexing_slicing)]
+#[allow(dead_code)]
 fn rebuild_vec<T: Copy + Default + PartialEq>(
     input: Vec<T>,
-    mut changes: Vec<MoveElement>,
+    changes: Vec<MoveElement>,
 ) -> Vec<T> {
     let len = input.len();
     let mut result = Vec::with_capacity(len);
-    let mut ordered_events = OrderedEvents::from(changes);
-
-    let mut idx = 0;
-    let mut offset = 0;
-
+    let ordered_events = OrderedEvents::from(changes);
+    
     let mut src_idx = 0;
 
     for event in ordered_events {
@@ -140,7 +138,7 @@ mod tests {
         let expected = vec![1, 5, 3, 4, 2];
         assert_eq!(rebuild_vec(input, changes), expected);
     }
-    
+
     #[test]
     fn test_duplicate_insert_indices() {
         let input = vec![1, 2, 3, 4, 5];
