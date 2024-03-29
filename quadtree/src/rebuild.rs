@@ -53,7 +53,7 @@ impl Iterator for OrderedEvents {
                 Some(Event::Insert { from, to })
             }
             (Some(removal), Some(insertion)) => {
-                if removal.remove_from_idx < insertion.insert_to_idx {
+                if removal.remove_from_idx <= insertion.insert_to_idx {
                     self.by_removal.pop();
                     Some(Event::Removal(removal.remove_from_idx))
                 } else {
@@ -252,7 +252,7 @@ mod tests {
         ];
         let mut tracking = vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 
-        assert_eq!(apply_vec(&input, &changes.clone(), &mut tracking), vec![
+        assert_eq!(apply_vec(&input, &changes, &mut tracking), vec![
             0, 4, 5, 1, 6, 7, 8, 2, 9, 3
         ]);
         assert_eq!(tracking, vec![0, 1, 1, 1, 1, 2, 4, 5, 6, 8, 10]);
