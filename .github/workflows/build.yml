@@ -94,6 +94,6 @@ jobs:
           components: clippy
 
       - name: Clippy check
-        run: cargo clippy --workspace --tests --examples --all-features
+        run: cargo clippy --workspace --tests --examples --all-features -- -D warnings
 
 

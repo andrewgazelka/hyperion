@@ -11,70 +11,21 @@ glam = "0.27.0"
 itertools = "0.12.1"
 num-traits = "0.2.18"
 
+[dev-dependencies]
+divan = "0.1.14"
+rand = "0.8.5"
 
-[lints.rust]
-warnings = "deny"
+[[bench]]
+name = "rebuild"
+harness = false
 
 [lints.clippy]
-cargo_common_metadata = "allow"
-negative_feature_names = "deny"
-redundant_feature_names = "deny"
-wildcard_dependencies = "deny"
-
-restriction = { level = "deny", priority = -1 }
-missing_docs_in_private_items = "allow"
-question_mark_used = "allow"
-print_stdout = "allow"
-implicit_return = "allow"
-shadow_reuse = "allow"
-absolute_paths = "allow"
-use_debug = "allow"
-unwrap_used = "allow"
-std_instead_of_alloc = "allow" # consider denying
-default_numeric_fallback = "allow"
-as_conversions = "allow"
-arithmetic_side_effects = "allow"
-shadow_unrelated = "allow"
-unseparated_literal_suffix = "allow"
-else_if_without_else = "allow"
-float_arithmetic = "allow"
-single_call_fn = "allow"
-missing_inline_in_public_items = "allow"
-exhaustive_structs = "allow"
-pub_use = "allow"
-let_underscore_untyped = "allow"
-infinite_loop = "allow"
-single_char_lifetime_names = "allow"
-min_ident_chars = "allow"
-std_instead_of_core = "allow"
-let_underscore_must_use = "allow"
-pattern_type_mismatch = "allow"
-print_stderr = "allow"
-missing_assert_message = "allow"
-shadow_same = "allow"
-mod_module_files = "deny"
-self_named_module_files = "allow"
-missing_trait_methods = "allow"
-
-complexity = { level = "deny", priority = -1 }
+complexity = "deny"
 
 nursery = { level = "deny", priority = -1 }
-future_not_send = "allow"
 redundant_pub_crate = "allow"
 
-pedantic = { level = "deny", priority = -1 }
-uninlined_format_args = "allow" # consider denying; this is allowed because Copilot often generates code that triggers this lint
-needless_pass_by_value = "allow" # consider denying
-cast_lossless = "allow"
-cast_possible_truncation = "allow" # consider denying
-cast_precision_loss = "allow" # consider denying
-missing_errors_doc = "allow" # consider denying
-struct_excessive_bools = "allow"
-wildcard_imports = "allow"
-
-perf = { level = "deny", priority = -1 }
-
-style = { level = "deny", priority = -1 }
-
-suspicious = { level = "deny", priority = -1 }
-blanket_clippy_restriction_lints = "allow"
+pedantic = "deny"
+perf = "deny"
+style = "deny"
+suspicious = "deny"

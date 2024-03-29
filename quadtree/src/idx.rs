@@ -58,9 +58,3 @@ impl OptionalIdx {
         Self(id)
     }
 }
-
-impl From<usize> for OptionalIdx {
-    fn from(value: usize) -> Self {
-        Self(value as Idx)
-    }
-}

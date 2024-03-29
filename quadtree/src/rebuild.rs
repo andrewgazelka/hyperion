@@ -1,11 +1,12 @@
 use std::{cmp::Reverse, iter::Peekable, ops::AddAssign};
 
+use itertools::Itertools;
 use num_traits::PrimInt;
 
 #[derive(Copy, Clone)]
-struct MoveElement {
-    remove_from_idx: usize,
-    insert_to_idx: usize,
+pub struct MoveElement {
+    pub remove_from_idx: usize,
+    pub insert_to_idx: usize,
 }
 
 struct OrderedEvents {
@@ -96,24 +97,35 @@ where {
     }
 }
 
+fn debug_assert_valid_changes(changes: &[MoveElement]) {
+    debug_assert!(
+        changes.iter().map(|x| x.remove_from_idx).all_unique(),
+        "removal indices must be unique"
+    );
+    debug_assert!(
+        changes.iter().all(|x| x.remove_from_idx != x.insert_to_idx),
+        "removal and insertion indices must be different"
+    );
+}
+
 #[allow(clippy::indexing_slicing)]
 #[allow(dead_code)]
-fn rebuild_vec<T, Idx>(
-    input: Vec<T>,
-    changes: Vec<MoveElement>,
+pub fn apply_vec<T, Idx>(
+    input: &[T],
+    changes: &[MoveElement],
     tracking: &mut [Idx], // 3 9 10
 ) -> Vec<T>
 where
     T: Copy,
     Idx: PrimInt + AddAssign,
 {
-    // todo: assert tracking sorted
+    debug_assert_valid_changes(changes);
 
     let len = input.len();
     let mut result = Vec::with_capacity(len);
-    let ordered_events = OrderedEvents::from(changes);
+    let ordered_events = OrderedEvents::from(changes.to_vec());
 
-    let mut tracking = tracking.iter_mut();
+    let tracking = tracking.iter_mut();
     let mut tracking = TrackingUpdate::new(tracking);
 
     let mut src_idx = 0;
@@ -122,6 +134,8 @@ where
     for event in ordered_events {
         match event {
             Event::Removal(removal) => {
+                debug_assert!(removal < len, "attempt to move element from invalid index");
+
                 result.extend_from_slice(&input[src_idx..removal]);
                 src_idx = removal + 1;
 
@@ -130,6 +144,9 @@ where
                 offset -= 1;
             }
             Event::Insert { from, to } => {
+                debug_assert!(from < len, "attempt to move element from invalid index");
+                debug_assert!(to < len, "attempt to move element to invalid index");
+
                 result.extend_from_slice(&input[src_idx..=to]);
                 let elem = input[from];
                 result.push(elem);
@@ -159,7 +176,7 @@ mod tests {
 
         let expected = vec![1, 2, 3, 4, 5];
 
-        assert_eq!(rebuild_vec(input, changes, &mut tracking), expected);
+        assert_eq!(apply_vec(&input, &changes, &mut tracking), expected);
         assert_eq!(tracking, vec![0]);
     }
 
@@ -174,7 +191,7 @@ mod tests {
         let mut tracking = vec![0, 1, 2, 3, 4];
 
         let expected = vec![1, 3, 4, 2, 5];
-        assert_eq!(rebuild_vec(input, changes, &mut tracking), expected);
+        assert_eq!(apply_vec(&input, &changes, &mut tracking), expected);
         assert_eq!(tracking, vec![0, 1, 1, 2, 4]);
     }
 
@@ -193,7 +210,7 @@ mod tests {
         ];
         let mut tracking = vec![0, 1, 2, 3, 4];
         let expected = vec![1, 5, 3, 4, 2];
-        assert_eq!(rebuild_vec(input, changes, &mut tracking), expected);
+        assert_eq!(apply_vec(&input, &changes, &mut tracking), expected);
         assert_eq!(tracking, vec![0, 2, 2, 3, 5]);
     }
 
@@ -212,7 +229,7 @@ mod tests {
         ];
         let mut tracking = vec![0, 1, 2, 3, 4];
         let expected = vec![1, 3, 4, 5, 2];
-        assert_eq!(rebuild_vec(input, changes, &mut tracking), expected);
+        assert_eq!(apply_vec(&input, &changes, &mut tracking), expected);
         assert_eq!(tracking, vec![0, 1, 1, 2, 5]);
     }
 
@@ -235,14 +252,13 @@ mod tests {
         ];
         let mut tracking = vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 
-        assert_eq!(
-            rebuild_vec(input.clone(), changes.clone(), &mut tracking),
-            vec![0, 4, 5, 1, 6, 7, 8, 2, 9, 3]
-        );
+        assert_eq!(apply_vec(&input, &changes.clone(), &mut tracking), vec![
+            0, 4, 5, 1, 6, 7, 8, 2, 9, 3
+        ]);
         assert_eq!(tracking, vec![0, 1, 1, 1, 1, 2, 4, 5, 6, 8, 10]);
 
         let mut tracking = vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
-        assert_eq!(rebuild_vec(input, changes, &mut tracking), vec![
+        assert_eq!(apply_vec(&input, &changes, &mut tracking), vec![
             0, 4, 5, 1, 6, 7, 8, 2, 9, 3
         ]);
         assert_eq!(tracking, vec![0, 1, 1, 1, 1, 2, 4, 5, 6, 8]);
@@ -254,7 +270,120 @@ mod tests {
         let changes = vec![];
         let mut tracking: Vec<usize> = vec![];
         let expected = vec![];
-        assert_eq!(rebuild_vec(input, changes, &mut tracking), expected);
+        assert_eq!(apply_vec(&input, &changes, &mut tracking), expected);
         assert_eq!(tracking, vec![]);
+    }
+
+    #[test]
+    #[should_panic(expected = "attempt to move element to invalid index")]
+    fn test_move_to_out_of_bounds_index() {
+        let input = vec![1, 2, 3, 4, 5];
+        let changes = vec![MoveElement {
+            remove_from_idx: 1,
+            insert_to_idx: 10,
+        }];
+        let mut tracking = vec![0, 1, 2, 3, 4];
+
+        apply_vec(&input, &changes, &mut tracking);
+    }
+
+    #[test]
+    #[should_panic(expected = "attempt to move element from invalid index")]
+    fn test_move_from_out_of_bounds_index() {
+        let input = vec![1, 2, 3, 4, 5];
+        let changes = vec![MoveElement {
+            remove_from_idx: 10,
+            insert_to_idx: 3,
+        }];
+        let mut tracking = vec![0, 1, 2, 3, 4];
+
+        apply_vec(&input, &changes, &mut tracking);
+    }
+
+    #[test]
+    fn test_empty_tracking() {
+        let input = vec![1, 2, 3, 4, 5];
+        let changes = vec![
+            MoveElement {
+                remove_from_idx: 1,
+                insert_to_idx: 3,
+            },
+            MoveElement {
+                remove_from_idx: 4,
+                insert_to_idx: 0,
+            },
+        ];
+        let mut tracking: Vec<usize> = vec![];
+        let expected = vec![1, 5, 3, 4, 2];
+        assert_eq!(apply_vec(&input, &changes, &mut tracking), expected);
+        assert_eq!(tracking, vec![]);
+    }
+
+    #[test]
+    fn test_move_first_element_to_end() {
+        let input = vec![1, 2, 3, 4, 5];
+        let changes = vec![MoveElement {
+            remove_from_idx: 0,
+            insert_to_idx: 4,
+        }];
+        let mut tracking = vec![0, 1, 2, 3, 4];
+        let expected = vec![2, 3, 4, 5, 1];
+        assert_eq!(apply_vec(&input, &changes, &mut tracking), expected);
+        assert_eq!(tracking, vec![0, 0, 1, 2, 3]);
+    }
+    #[test]
+    fn test_swap_first_and_last_elements() {
+        // Initial setup with elements in a sequential order for clarity.
+        let input = vec![1, 2, 3, 4, 5];
+        // Defining the changes to swap the first (index 0) and the last (index 4) elements.
+        let changes = vec![
+            MoveElement {
+                remove_from_idx: 0,
+                insert_to_idx: 4,
+            },
+            MoveElement {
+                remove_from_idx: 4,
+                insert_to_idx: 0,
+            },
+        ];
+        // Tracking vector to observe changes in indices due to swaps.
+        let mut tracking = vec![0, 1, 2, 3, 4];
+
+        // Expected result after swapping the first and last elements.
+        let expected = vec![5, 2, 3, 4, 1];
+        // Applying the vector changes and comparing the result to the expected vector.
+        assert_eq!(apply_vec(&input, &changes, &mut tracking), expected);
+        // Expected tracking after the swaps, showing how indices should have adjusted.
+        assert_eq!(tracking, vec![0, 1, 2, 3, 4]);
+    }
+
+    #[test]
+    fn test_multiple_ends() {
+        // Initial setup with elements in a sequential order for clarity.
+        let input = vec![1, 2, 3, 4, 5];
+        // Defining the changes to swap the first (index 0) and the last (index 4) elements.
+        let changes = vec![
+            MoveElement {
+                remove_from_idx: 0,
+                insert_to_idx: 4,
+            },
+            MoveElement {
+                remove_from_idx: 4,
+                insert_to_idx: 0,
+            },
+            MoveElement {
+                remove_from_idx: 3,
+                insert_to_idx: 0,
+            },
+        ];
+        // Tracking vector to observe changes in indices due to swaps.
+        let mut tracking = vec![0, 1, 2, 3, 4, 5];
+
+        // Expected result after swapping the first and last elements.
+        let expected = vec![4, 5, 2, 3, 1];
+        // Applying the vector changes and comparing the result to the expected vector.
+        assert_eq!(apply_vec(&input, &changes, &mut tracking), expected);
+        // Expected tracking after the swaps, showing how indices should have adjusted.
+        assert_eq!(tracking, vec![0, 2, 3, 4, 4, 5]);
     }
 }

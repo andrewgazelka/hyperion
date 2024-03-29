@@ -1450,9 +1450,11 @@ dependencies = [
 name = "quadtree"
 version = "0.1.0"
 dependencies = [
+ "divan",
  "glam 0.27.0",
  "itertools",
  "num-traits",
+ "rand 0.8.5",
 ]
 
 [[package]]

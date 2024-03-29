@@ -9,7 +9,7 @@ members = [
     "quadtree",
     "chunk",
     "generator-build",
-    "generator"
+    "generator",
 ]
 
 [profile.dev]
@@ -19,19 +19,15 @@ opt-level = 1
 opt-level = 3
 
 [profile.release]
-#debug = true
 lto = "fat"
 codegen-units = 1
-#strip = false
-#panic = "abort"
 
 [profile.bench]
-#debug = true
 lto = "fat"
 codegen-units = 1
-#panic = "abort"
 
 [workspace.dependencies]
 chunk = { path = "chunk" }
 generator-build = { path = "generator-build" }
 generator = { path = "generator" }
+quadtree = { path = "quadtree" }

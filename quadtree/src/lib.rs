@@ -1,4 +1,3 @@
-#![allow(unused)]
 // https://lisyarus.github.io/blog/programming/2022/12/21/quadtrees.html
 // https://snorrwe.onrender.com/posts/morton-table/
 
@@ -15,7 +14,7 @@ mod aaab;
 mod idx;
 pub mod iter;
 mod nearest;
-mod rebuild;
+pub mod rebuild;
 
 #[derive(Debug)]
 pub struct Node {
@@ -83,55 +82,38 @@ fn build_impl(
     let start = slice.start as usize;
     let points = &mut tree.points[slice.start as usize..slice.end as usize];
 
-    // println!("TOP; HAVE POINTS {:?}", points);
-
     if slice.len() == 1 {
-        tree.node_points_begin[result as usize] = start as Idx;
+        tree.node_points_begin[result as usize] = Idx::try_from(start).unwrap();
         return OptionalIdx::some(result);
     }
 
     if bbox.area() < tree.min_area {
-        tree.node_points_begin[result as usize] = start as Idx;
+        tree.node_points_begin[result as usize] = Idx::try_from(start).unwrap();
         return OptionalIdx::some(result);
     }
 
     // equal
     if points.iter().all(|p| *p == points[0]) {
-        tree.node_points_begin[result as usize] = start as Idx;
+        tree.node_points_begin[result as usize] = Idx::try_from(start).unwrap();
         return OptionalIdx::some(result);
     }
 
-    tree.node_points_begin[result as usize] = start as Idx;
+    tree.node_points_begin[result as usize] = Idx::try_from(start).unwrap();
 
     let center = bbox.mid();
 
     let bottom = |p: &Vec2| p.y < center.y;
     let left = |p: &Vec2| p.x < center.x;
 
-    // len
-    // println!("points: {}", points.len());
-    // println!("{:?}", points);
-
     // todo: why need to &mut points[..]?
     let split_y = itertools::partition(&mut *points, bottom);
-
-    // println!();
-    // println!("split_y: {} @ {}", split_y, center.y);
-    // println!("BOTTOM {:?}", &points[..split_y]);
-    // println!("TOP {:?}", &points[split_y..]);
 
     debug_assert!(points[..split_y].iter().all(|p| p.y < center.y));
     debug_assert!(points[split_y..].iter().all(|p| p.y >= center.y));
 
-    let split_x_lower = itertools::partition(&mut points[..split_y], left) as Idx;
-    let split_x_upper = itertools::partition(&mut points[split_y..], left) as Idx;
-
-    // println!();
-    // println!("split_x_lower: {} @ {}", split_x_lower, center.x);
-    // println!("LEFT {:?}", &points[..split_x_lower as usize]);
-    // println!("RIGHT {:?}", &points[split_x_lower as usize..split_y]);
-
-    let split_y = split_y as Idx;
+    let split_x_lower = Idx::try_from(itertools::partition(&mut points[..split_y], left)).unwrap();
+    let split_x_upper = Idx::try_from(itertools::partition(&mut points[split_y..], left)).unwrap();
+    let split_y = Idx::try_from(split_y).unwrap();
 
     let result_some = OptionalIdx::some(result);
 
@@ -139,9 +121,6 @@ fn build_impl(
     let child01_idx = (slice.start + split_x_lower)..(slice.start + split_y);
     let child10_idx = (slice.start + split_y)..(slice.start + split_y + split_x_upper);
     let child11_idx = (slice.start + split_y + split_x_upper)..slice.end;
-
-    // println!("indices \n{:?}\n{:?}\n{:?}\n{:?}", child00_idx, child01_idx, child10_idx,
-    // child11_idx);
 
     let child00 = build_impl(tree, Aabb::new(bbox.min, center), child00_idx, result_some);
 
@@ -206,7 +185,7 @@ impl Quadtree {
 
         self.node_points_begin.push(0);
 
-        result as Idx
+        Idx::try_from(result).unwrap()
     }
 
     #[must_use]
@@ -256,8 +235,12 @@ impl Quadtree {
         }
     }
 
+    /// # Panics
+    /// If `points.len()` is greater than `u16::MAX`
     #[must_use]
     pub fn build_with_min_area(points: Vec<Vec2>, min_area: f64) -> Self {
+        debug_assert!(points.len() <= Idx::MAX as usize);
+
         let aabb = Aabb::from_points(&points);
 
         let len = points.len();
@@ -271,10 +254,12 @@ impl Quadtree {
             node_points_begin: vec![],
         };
 
-        result.root = build_impl(&mut result, aabb, 0..len as Idx, OptionalIdx::NONE);
+        let len = Idx::try_from(len).unwrap();
+
+        result.root = build_impl(&mut result, aabb, 0..len, OptionalIdx::NONE);
 
         // to eliminate edge case on right edge
-        result.node_points_begin.push(result.points.len() as Idx);
+        result.node_points_begin.push(len);
 
         result
     }
@@ -380,7 +365,7 @@ impl Quadtree {
 
     #[allow(clippy::missing_panics_doc, clippy::indexing_slicing)]
     pub fn move_point(&mut self, node_idx: Idx, local_idx: usize, new_point: Vec2) {
-        let mut node = &self.nodes[node_idx as usize];
+        let node = &self.nodes[node_idx as usize];
         let range = self.points_range_for(node_idx).unwrap();
 
         let points = &mut self.points[range];

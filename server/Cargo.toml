@@ -62,7 +62,6 @@ warnings = "deny"
 [lints.clippy]
 # cargo
 cargo_common_metadata = "allow"
-#multiple_crate_versions = "warn"
 negative_feature_names = "deny"
 redundant_feature_names = "deny"
 wildcard_dependencies = "deny"

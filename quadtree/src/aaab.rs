@@ -27,10 +27,9 @@ impl Containable for Vec2 {
 
         let mut contains = 0b1u8;
 
-        #[allow(clippy::indexing_slicing)]
         for i in 0..2 {
-            contains &= (elem[i] >= min[i]) as u8;
-            contains &= (elem[i] <= max[i]) as u8;
+            contains &= u8::from(elem[i] >= min[i]);
+            contains &= u8::from(elem[i] <= max[i]);
         }
 
         contains == 1
@@ -46,10 +45,9 @@ impl Containable for Aabb {
 
         let mut contains = 0b1u8;
 
-        #[allow(clippy::indexing_slicing)]
         for i in 0..2 {
-            contains &= (other_min[i] >= this_min[i]) as u8;
-            contains &= (other_max[i] <= this_max[i]) as u8;
+            contains &= u8::from(other_min[i] >= this_min[i]);
+            contains &= u8::from(other_max[i] <= this_max[i]);
         }
         contains == 1
     }
@@ -62,7 +60,7 @@ impl Aabb {
 
     pub fn area(&self) -> f64 {
         let size = self.max - self.min;
-        size.x as f64 * size.y as f64
+        f64::from(size.x) * f64::from(size.y)
     }
 
     pub fn mid(&self) -> Vec2 {
@@ -95,8 +93,8 @@ impl Aabb {
 
         #[allow(clippy::indexing_slicing)]
         for i in 0..2 {
-            intersects &= (this_min[i] <= other_max[i]) as u8;
-            intersects &= (this_max[i] >= other_min[i]) as u8;
+            intersects &= u8::from(this_min[i] <= other_max[i]);
+            intersects &= u8::from(this_max[i] >= other_min[i]);
         }
 
         intersects == 1
