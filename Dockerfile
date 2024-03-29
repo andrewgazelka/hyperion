@@ -109,12 +109,3 @@ RUN --mount=type=cache,target=/cargo-home \
     IAI_CALLGRIND_RUNNER=/cargo-home/bin/iai-callgrind-runner cargo bench --locked > /app/bench.txt
 
 RUN cat /app/bench.txt
-
-
-
-
-#FROM alpine:3.19 as cli
-#
-## timings
-#COPY --from=debug /build/cargo-timing.html /app/cargo-timing.html
-

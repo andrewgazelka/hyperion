@@ -322,6 +322,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "broadcast"
+version = "0.1.0"
+dependencies = [
+ "divan",
+ "fast_hilbert",
+ "fnv",
+ "num-traits",
+ "rand 0.8.5",
+]
+
+[[package]]
 name = "bumpalo"
 version = "3.15.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -669,6 +680,15 @@ checksum = "958e4d70b6d5e81971bebec42271ec641e7ff4e170a6fa605f2b8a8b65cb97d3"
 dependencies = [
  "event-listener 4.0.3",
  "pin-project-lite",
+]
+
+[[package]]
+name = "fast_hilbert"
+version = "2.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f8ec2bbe15af87954c739e236021f4411766c0f2b9c4a5f0b9317bcf6048ebf8"
+dependencies = [
+ "num-traits",
 ]
 
 [[package]]

@@ -8,7 +8,8 @@ members = [
     "server",
     "chunk",
     "generator-build",
-    "generator"
+    "generator",
+    "broadcast",
 ]
 
 [profile.dev]
@@ -34,3 +35,4 @@ codegen-units = 1
 chunk = { path = "chunk" }
 generator-build = { path = "generator-build" }
 generator = { path = "generator" }
+broadcast = { path = "broadcast" }
