@@ -9,7 +9,6 @@ publish = false
 [dependencies]
 fast_hilbert = "2.0.0"
 fnv = "1.0.7"
-num-traits = "0.2.18"
 
 [dev-dependencies]
 divan = "0.1.14"

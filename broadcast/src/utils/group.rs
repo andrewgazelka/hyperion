@@ -2,8 +2,8 @@ use std::borrow::Cow;
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub struct RangeInclusive<T = u32> {
-    pub  start: T,
-    pub  end: T,
+    pub start: T,
+    pub end: T,
 }
 
 impl<T> RangeInclusive<T> {

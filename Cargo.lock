@@ -328,7 +328,6 @@ dependencies = [
  "divan",
  "fast_hilbert",
  "fnv",
- "num-traits",
  "rand 0.8.5",
 ]
 

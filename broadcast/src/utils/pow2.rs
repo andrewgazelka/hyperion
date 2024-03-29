@@ -23,7 +23,7 @@ pub const fn bits_for_length(length: u16) -> u8 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_128() {
         assert_eq!(bits_for_length(128), 7);

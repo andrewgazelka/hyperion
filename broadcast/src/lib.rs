@@ -6,9 +6,8 @@ use fnv::FnvHashMap;
 
 use crate::utils::{
     group::{group, RangeInclusive},
-    pow2::closest_consuming_power_of_2,
+    pow2::{bits_for_length, closest_consuming_power_of_2},
 };
-use crate::utils::pow2::bits_for_length;
 
 type Idx = u32;
 
@@ -30,6 +29,8 @@ impl Cache {
         y_range: Range<u16>,
     ) -> &mut Vec<RangeInclusive> {
         self.inner
+            // yes I know we are not caching the whole range so this is technically incorrect
+            // but let's just assume that range lengths are always the same
             .entry((x_range.start, y_range.start))
             .or_insert_with(|| {
                 let mut indices = Vec::with_capacity(x_range.len() * y_range.len());
