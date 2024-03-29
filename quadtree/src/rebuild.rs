@@ -1,4 +1,6 @@
-use std::cmp::Reverse;
+use std::{cmp::Reverse, iter::Peekable, ops::AddAssign};
+
+use num_traits::PrimInt;
 
 #[derive(Copy, Clone)]
 struct MoveElement {
@@ -65,26 +67,77 @@ impl Iterator for OrderedEvents {
     }
 }
 
+struct TrackingUpdate<I> {
+    tracking: I,
+}
+
+impl<'a, T, I> TrackingUpdate<Peekable<I>>
+where
+    T: PrimInt + AddAssign + 'a,
+    I: Iterator<Item = &'a mut T> + 'a,
+{
+    fn update(&mut self, until_idx: usize, offset: isize) {
+        while let Some(idx) = self.tracking.peek() {
+            if idx.to_usize().unwrap() > until_idx {
+                break;
+            }
+
+            let offset = T::from(offset).unwrap();
+
+            *self.tracking.next().unwrap() += offset;
+        }
+    }
+
+    fn new(tracking: I) -> Self
+where {
+        Self {
+            tracking: tracking.peekable(),
+        }
+    }
+}
+
 #[allow(clippy::indexing_slicing)]
 #[allow(dead_code)]
-fn rebuild_vec<T: Copy + Default + PartialEq>(input: Vec<T>, changes: Vec<MoveElement>) -> Vec<T> {
+fn rebuild_vec<T, Idx>(
+    input: Vec<T>,
+    changes: Vec<MoveElement>,
+    tracking: &mut [Idx], // 3 9 10
+) -> Vec<T>
+where
+    T: Copy,
+    Idx: PrimInt + AddAssign,
+{
+    // todo: assert tracking sorted
+
     let len = input.len();
     let mut result = Vec::with_capacity(len);
     let ordered_events = OrderedEvents::from(changes);
 
+    let mut tracking = tracking.iter_mut();
+    let mut tracking = TrackingUpdate::new(tracking);
+
     let mut src_idx = 0;
+    let mut offset = 0isize;
 
     for event in ordered_events {
         match event {
             Event::Removal(removal) => {
                 result.extend_from_slice(&input[src_idx..removal]);
                 src_idx = removal + 1;
+
+                tracking.update(removal, offset);
+
+                offset -= 1;
             }
             Event::Insert { from, to } => {
                 result.extend_from_slice(&input[src_idx..=to]);
                 let elem = input[from];
                 result.push(elem);
                 src_idx = to + 1;
+
+                tracking.update(to, offset);
+
+                offset += 1;
             }
         }
     }
@@ -102,8 +155,12 @@ mod tests {
     fn test_no_changes() {
         let input = vec![1, 2, 3, 4, 5];
         let changes = vec![];
+        let mut tracking = vec![0];
+
         let expected = vec![1, 2, 3, 4, 5];
-        assert_eq!(rebuild_vec(input, changes), expected);
+
+        assert_eq!(rebuild_vec(input, changes, &mut tracking), expected);
+        assert_eq!(tracking, vec![0]);
     }
 
     #[test]
@@ -114,8 +171,11 @@ mod tests {
             remove_from_idx: 1,
             insert_to_idx: 3,
         }];
+        let mut tracking = vec![0, 1, 2, 3, 4];
+
         let expected = vec![1, 3, 4, 2, 5];
-        assert_eq!(rebuild_vec(input, changes), expected);
+        assert_eq!(rebuild_vec(input, changes, &mut tracking), expected);
+        assert_eq!(tracking, vec![0, 1, 1, 2, 4]);
     }
 
     #[test]
@@ -131,8 +191,10 @@ mod tests {
                 insert_to_idx: 0,
             },
         ];
+        let mut tracking = vec![0, 1, 2, 3, 4];
         let expected = vec![1, 5, 3, 4, 2];
-        assert_eq!(rebuild_vec(input, changes), expected);
+        assert_eq!(rebuild_vec(input, changes, &mut tracking), expected);
+        assert_eq!(tracking, vec![0, 2, 2, 3, 5]);
     }
 
     #[test]
@@ -148,8 +210,10 @@ mod tests {
                 insert_to_idx: 3,
             },
         ];
+        let mut tracking = vec![0, 1, 2, 3, 4];
         let expected = vec![1, 3, 4, 5, 2];
-        assert_eq!(rebuild_vec(input, changes), expected);
+        assert_eq!(rebuild_vec(input, changes, &mut tracking), expected);
+        assert_eq!(tracking, vec![0, 1, 1, 2, 5]);
     }
 
     #[test]
@@ -169,17 +233,28 @@ mod tests {
                 insert_to_idx: 9,
             },
         ];
+        let mut tracking = vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 
-        assert_eq!(rebuild_vec(input, changes), vec![
+        assert_eq!(
+            rebuild_vec(input.clone(), changes.clone(), &mut tracking),
+            vec![0, 4, 5, 1, 6, 7, 8, 2, 9, 3]
+        );
+        assert_eq!(tracking, vec![0, 1, 1, 1, 1, 2, 4, 5, 6, 8, 10]);
+
+        let mut tracking = vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+        assert_eq!(rebuild_vec(input, changes, &mut tracking), vec![
             0, 4, 5, 1, 6, 7, 8, 2, 9, 3
         ]);
+        assert_eq!(tracking, vec![0, 1, 1, 1, 1, 2, 4, 5, 6, 8]);
     }
 
     #[test]
     fn test_empty_input() {
         let input: Vec<usize> = vec![];
         let changes = vec![];
+        let mut tracking: Vec<usize> = vec![];
         let expected = vec![];
-        assert_eq!(rebuild_vec(input, changes), expected);
+        assert_eq!(rebuild_vec(input, changes, &mut tracking), expected);
+        assert_eq!(tracking, vec![]);
     }
 }

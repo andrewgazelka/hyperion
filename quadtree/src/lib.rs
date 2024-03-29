@@ -296,10 +296,9 @@ impl Quadtree {
         self.insert_recursive(self.root, &self.aabb, point)
     }
 
+    #[allow(clippy::unwrap_in_result)]
     fn insert_recursive(&self, node: OptionalIdx, node_bbox: &Aabb, point: Vec2) -> Option<Idx> {
-        let Some(node_idx) = node.inner() else {
-            return None;
-        };
+        let node_idx = node.inner()?;
 
         if !node_bbox.contains(point) {
             return None;
@@ -379,8 +378,9 @@ impl Quadtree {
         }
     }
 
+    #[allow(clippy::missing_panics_doc, clippy::indexing_slicing)]
     pub fn move_point(&mut self, node_idx: Idx, local_idx: usize, new_point: Vec2) {
-        let mut node = self.nodes.get(node_idx as usize).unwrap();
+        let mut node = &self.nodes[node_idx as usize];
         let range = self.points_range_for(node_idx).unwrap();
 
         let points = &mut self.points[range];
@@ -395,7 +395,7 @@ impl Quadtree {
         let (up_idx, up_aabb) = loop {
             // todo: expand if None
             let parent_idx = node.parent().unwrap();
-            let parent = self.nodes.get(parent_idx as usize).unwrap();
+            let parent = &self.nodes[parent_idx as usize];
             let parent_aabb = &parent.aabb;
             if parent_aabb.contains(new_point) {
                 break (parent_idx, parent_aabb);
