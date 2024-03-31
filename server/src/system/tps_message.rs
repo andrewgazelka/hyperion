@@ -17,8 +17,12 @@ pub fn tps_message(r: Receiver<StatsEvent>, mut players: Fetcher<(&mut Player, &
 
     players.iter_mut().for_each(|(player, _)| {
         // make sexy with stddev & mean symbol
-        let message =
-            format!("µms {ms_per_tick_mean_1s:.2} {ms_per_tick_mean_5s:.2}, {resident:.2}MiB");
+        let ping = player.ping.as_secs_f32() * 1000.0;
+        let speed_mib = player.packets.writer.speed() as f32 / 1024.0 / 1024.0;
+        let message = format!(
+            "µms {ms_per_tick_mean_1s:.2} {ms_per_tick_mean_5s:.2}, {resident:.2}MiB, \
+             {speed_mib:.2}MiB/s, {ping:.2}ms"
+        );
 
         // todo: handle error
         let _ = player.packets.writer.send_chat_message(&message);

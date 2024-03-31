@@ -12,8 +12,8 @@ use valence_protocol::{
 };
 
 use crate::{
-    singleton::encoder::Encoder, EntityReaction, FullEntityPose, Gametick, MinecraftEntity, Player,
-    RunningSpeed, Targetable,
+    singleton::encoder::{Encoder, PacketMetadata, PacketNecessity},
+    EntityReaction, FullEntityPose, Gametick, MinecraftEntity, RunningSpeed, Targetable,
 };
 
 // 0 &mut FullEntityPose
@@ -39,11 +39,6 @@ pub fn entity_move_logic(
     mut target: Fetcher<(
         &FullEntityPose,       // 0
         &Targetable,           // 2
-        Not<&MinecraftEntity>, // not 1
-    )>,
-    player: Fetcher<(
-        &FullEntityPose,       // 0
-        &Player,               // 3
         Not<&MinecraftEntity>, // not 1
     )>,
     encoder: Single<&mut Encoder>,
@@ -116,14 +111,15 @@ pub fn entity_move_logic(
             head_yaw: ByteAngle::from_degrees(yaw),
         };
 
-        // todo: remove unwrap
-        encoder.append(&pos).unwrap();
-        encoder.append(&look).unwrap();
-    });
+        let metadata = PacketMetadata {
+            necessity: PacketNecessity::Droppable {
+                prioritize_location: DVec2::new(pose.position.x, pose.position.y),
+            },
+            exclude_player: None,
+        };
 
-    encoder.par_drain(|bytes| {
-        for (_, player, _) in &player {
-            let _ = player.packets.writer.send_raw(bytes.clone());
-        }
+        // todo: remove unwrap
+        encoder.append(&pos, metadata).unwrap();
+        encoder.append(&look, metadata).unwrap();
     });
 }

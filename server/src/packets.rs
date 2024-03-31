@@ -110,6 +110,16 @@ fn update_selected_slot(mut data: &[u8]) -> anyhow::Result<()> {
     Ok(())
 }
 
+fn keep_alive(player: &mut Player) -> anyhow::Result<()> {
+    ensure!(
+        !player.unresponded_keep_alive,
+        "keep alive sent unexpectedly"
+    );
+    player.unresponded_keep_alive = false;
+    player.ping = player.last_keep_alive_sent.elapsed();
+    Ok(())
+}
+
 #[derive(Debug, Copy, Clone)]
 enum HybridPos {
     Absolute(f64),
@@ -244,7 +254,7 @@ pub fn switch(
         play::ClientCommandC2s::ID => player_command(data),
         play::UpdatePlayerAbilitiesC2s::ID => update_player_abilities(data)?,
         play::UpdateSelectedSlotC2s::ID => update_selected_slot(data)?,
-        play::KeepAliveC2s::ID => (), // todo: implement
+        play::KeepAliveC2s::ID => keep_alive(player)?,
         play::CommandExecutionC2s::ID => chat_command(data, player, full_entity_pose, sender)?,
         _ => warn!("unknown packet id: 0x{:02X}", id),
     }

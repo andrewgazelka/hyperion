@@ -47,6 +47,13 @@ struct Player {
     packets: Packets,
     name: Box<str>,
     last_keep_alive_sent: Instant,
+
+    /// Set to true if a keep alive has been sent to the client and the client hasn't responded.
+    unresponded_keep_alive: bool,
+
+    /// The player's ping. This is likely higher than the player's real ping.
+    ping: Duration,
+
     locale: Option<String>,
 }
 
@@ -115,6 +122,9 @@ fn bytes_to_mb(bytes: usize) -> f64 {
 #[derive(Event)]
 struct Gametick;
 
+#[derive(Event)]
+struct BroadcastPackets;
+
 static GLOBAL: global::Global = global::Global {
     player_count: AtomicU32::new(0),
 };
@@ -171,6 +181,7 @@ impl Game {
         world.add_handler(system::entity_detect_collisions);
         world.add_handler(system::reset_bounding_boxes);
 
+        world.add_handler(system::broadcast_packets);
         world.add_handler(system::keep_alive);
         world.add_handler(process_packets);
         world.add_handler(system::tps_message);
@@ -269,6 +280,7 @@ impl Game {
         }
 
         self.world.send(Gametick);
+        self.world.send(BroadcastPackets);
 
         self.req_packets.send(()).unwrap();
 

@@ -1,6 +1,18 @@
 #![allow(clippy::module_name_repetitions)]
 
-use std::{borrow::Cow, cell::UnsafeCell, collections::BTreeSet, io, io::ErrorKind, sync::Mutex};
+use std::{
+    borrow::Cow,
+    cell::UnsafeCell,
+    collections::BTreeSet,
+    io,
+    io::ErrorKind,
+    os::fd::{AsRawFd, RawFd},
+    sync::{
+        atomic::{AtomicU32, Ordering},
+        Arc, Mutex,
+    },
+    time::{Duration, Instant},
+};
 
 use anyhow::{ensure, Context};
 use base64::Engine;
@@ -30,6 +42,8 @@ use valence_protocol::{
 use valence_registry::{BiomeRegistry, RegistryCodec};
 
 use crate::GLOBAL;
+
+const DEFAULT_SPEED: u32 = 1024 * 1024;
 
 const READ_BUF_SIZE: usize = 4096;
 
@@ -66,6 +80,7 @@ pub struct Io {
 
 pub struct IoWrite {
     write: OwnedWriteHalf<TcpStream>,
+    raw_fd: RawFd,
 }
 
 pub struct IoRead {
@@ -76,9 +91,17 @@ pub struct IoRead {
 pub struct WriterComm {
     tx: flume::Sender<bytes::Bytes>,
     enc: PacketEncoder,
+
+    /// Approximate speed that the other side can receive the data that this sends.
+    /// Measured in bytes/second.
+    speed: Arc<AtomicU32>,
 }
 
 impl WriterComm {
+    pub fn speed(&self) -> u32 {
+        self.speed.load(Ordering::Relaxed)
+    }
+
     pub fn serialize<P>(&mut self, pkt: &P) -> anyhow::Result<bytes::Bytes>
     where
         P: valence_protocol::Packet + Encode,
@@ -117,10 +140,9 @@ impl WriterComm {
     }
 
     pub fn send_keep_alive(&mut self) -> anyhow::Result<()> {
-        // todo: handle error
         let pkt = valence_protocol::packets::play::KeepAliveS2c {
-            // todo: this might be inefficient
-            id: rand::random(),
+            // The ID can be set to zero because it doesn't matter
+            id: 0,
         };
 
         self.send_packet(&pkt)?;
@@ -212,6 +234,25 @@ impl IoWrite {
 
         Ok(())
     }
+
+    pub(crate) fn queued_send(&self) -> libc::c_int {
+        if cfg!(unix) {
+            let mut value: libc::c_int = 0;
+            // SAFETY: raw_fd is valid since the TcpStream is still alive, and value is valid to
+            // write to
+            unsafe {
+                // TODO: Handle ioctl error properly
+                assert_ne!(
+                    libc::ioctl(self.raw_fd, libc::TIOCOUTQ, core::ptr::addr_of_mut!(value)),
+                    -1
+                );
+            }
+            value
+        } else {
+            // TODO: Support getting queued send for other OS
+            0
+        }
+    }
 }
 
 pub struct Packets {
@@ -273,7 +314,6 @@ impl Io {
 
         let mut bytes_slice = &*bytes;
         let slice = &mut bytes_slice;
-        #[allow(clippy::cast_sign_loss)]
         let length = VarInt::decode_partial(slice).unwrap() as usize;
 
         let slice_len = bytes_slice.len();
@@ -307,7 +347,6 @@ impl Io {
 
         let HandshakeC2s {
             protocol_version,
-            server_port,
             next_state,
             ..
         } = self.recv_packet().await?;
@@ -318,7 +357,6 @@ impl Io {
             protocol_version.0 == PROTOCOL_VERSION,
             "expected protocol version {PROTOCOL_VERSION}, got {version}"
         );
-        ensure!(server_port == 25565, "expected server port 25565");
 
         match next_state {
             HandshakeNextState::Status => self.server_status().await?,
@@ -356,14 +394,18 @@ impl Io {
         // bound at 1024 packets
         let (s2c_tx, s2c_rx) = flume::unbounded();
 
+        let raw_fd = self.stream.as_raw_fd();
         let (read, write) = self.stream.into_split();
+
+        let speed = Arc::new(AtomicU32::new(DEFAULT_SPEED));
 
         let writer_comm = WriterComm {
             tx: s2c_tx,
             enc: self.enc,
+            speed: Arc::clone(&speed),
         };
 
-        let mut io_write = IoWrite { write };
+        let mut io_write = IoWrite { write, raw_fd };
 
         let mut io_read = IoRead {
             stream: read,
@@ -381,10 +423,31 @@ impl Io {
         });
 
         monoio::spawn(async move {
+            let mut past_queued_send = 0;
+            let mut past_instant = Instant::now();
             while let Ok(bytes) = s2c_rx.recv_async().await {
+                let len = bytes.len();
                 if let Err(e) = io_write.send_packet(bytes).await {
                     error!("{e:?}");
                     break;
+                }
+                let elapsed = past_instant.elapsed();
+                if elapsed > Duration::from_secs(1) {
+                    let queued_send = io_write.queued_send();
+                    speed.store(
+                        ((past_queued_send - queued_send) as f32 / elapsed.as_secs_f32()) as u32,
+                        Ordering::Relaxed,
+                    );
+                    past_queued_send = io_write.queued_send();
+                    past_instant = Instant::now();
+                } else {
+                    // This will make the estimated speed slightly lower than the actual speed, but
+                    // it makes measuring speed more practical because the server will send packets
+                    // to the client more often than 1 second
+                    #[allow(clippy::cast_possible_wrap)]
+                    {
+                        past_queued_send += len as libc::c_int;
+                    }
                 }
             }
         });
