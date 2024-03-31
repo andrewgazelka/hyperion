@@ -25,9 +25,10 @@ codegen-units = 1
 #panic = "abort"
 
 [profile.bench]
-#debug = true
-lto = "fat"
-codegen-units = 1
+debug = true
+lto = false
+#lto = "fat"
+#codegen-units = 1
 #panic = "abort"
 
 [workspace.dependencies]
