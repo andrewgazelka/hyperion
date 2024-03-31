@@ -10,26 +10,30 @@ use server::{bounding_box::BoundingBox, FullEntityPose, Game, InitEntity, Target
 use valence_protocol::math::DVec3;
 
 fn main() {
-    // Run registered benchmarks.
     divan::main();
 }
 
-#[divan::bench]
-fn world_bench(bencher: Bencher) {
+const THREAD_COUNTS: &[usize] = &[1, 2, 4, 8];
+
+#[divan::bench(
+    args = THREAD_COUNTS,
+    sample_count = 1,
+)]
+fn world_bench(bencher: Bencher, thread_count: usize) {
     // so we can have reliable benchmarks even when we are using our laptop for other
     // things
-    rayon::ThreadPoolBuilder::new()
-        // .spawn_handler(|t| {
-        //     std::thread::Builder::new().spawn_with_priority(ThreadPriority::Max, |_| t.run())?;
-        //     Ok(())
-        // })
-        .num_threads(4)
-        .build_global()
+
+    // Run registered benchmarks.
+    let pool = rayon::ThreadPoolBuilder::new()
+        .num_threads(thread_count)
+        .build()
         .unwrap();
+
+    const TICKS: usize = 100;
 
     let mut game = Game::init().unwrap();
 
-    let count = 100_000;
+    let count: usize = 100_000;
 
     const BASE_RADIUS: f64 = 4.0;
 
@@ -69,7 +73,11 @@ fn world_bench(bencher: Bencher) {
 
     world.insert(id, Targetable);
 
-    bencher.bench_local(|| {
-        game.tick();
+    bencher.counter(TICKS).bench_local(|| {
+        pool.install(|| {
+            for _ in 0..TICKS {
+                game.tick();
+            }
+        });
     });
 }
