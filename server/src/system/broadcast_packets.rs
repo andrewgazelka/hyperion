@@ -37,7 +37,7 @@ pub fn broadcast_packets(
         // TODO: Avoid taking packet_data so that the capacity can be reused
         let packet_data = Bytes::from(core::mem::take(&mut encoder.packet_data));
 
-        for (player_uuid, pose, player, _) in &player {
+        'handle_player: for (player_uuid, pose, player, _) in &player {
             let player_location = Vec2::new(pose.position.x, pose.position.y);
 
             // Max bytes that should be sent this tick
@@ -57,7 +57,7 @@ pub fn broadcast_packets(
                     .send_raw(packet_data.slice(packet.offset..packet.offset + packet.len))
                     .is_err()
                 {
-                    return;
+                    continue 'handle_player;
                 }
                 total_bytes_sent += packet.len;
             }
@@ -80,7 +80,7 @@ pub fn broadcast_packets(
                             .send_raw(packet_data.slice(packet.offset..packet.offset + packet.len))
                             .is_err()
                         {
-                            return;
+                            continue 'handle_player;
                         }
 
                         // total_bytes_sent is not increased because it is no longer used
@@ -127,7 +127,7 @@ pub fn broadcast_packets(
                             .send_raw(packet_data.slice(packet.offset..packet.offset + packet.len))
                             .is_err()
                         {
-                            return;
+                            continue 'handle_player;
                         }
 
                         total_bytes_sent += packet.len;

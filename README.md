@@ -20,12 +20,6 @@ _From the creator of [SwarmBot](https://github.com/SwarmBotMC/SwarmBot):_
 
 ## Manual
 ```bash
-# Install Git LFS
-pkg-manager install git-lfs
-
-# Setup Git LFS
-git lfs install
-
 git clone https://github.com/andrewgazelka/hyperion
 cd hyperion
 cargo run --release
@@ -34,12 +28,6 @@ cargo run --release
 ## Docker
 Note: this is no longer recommended as [Docker blocks io_uring](https://github.com/moby/moby/commit/891241e7e74d4aae6de5f6125574eb994f25e169).
 ```bash
-# Install Git LFS
-pkg-manager install git-lfs
-
-# Setup Git LFS
-git lfs install
-
 git clone https://github.com/andrewgazelka/hyperion
 cd hyperion
 docker compose up --build release

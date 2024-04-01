@@ -144,7 +144,7 @@ impl BitStorage {
         } else {
             vec![0; calculated_length]
         };
-        
+
         #[expect(clippy::cast_sign_loss, reason = "the sign is not relevant")]
         let (divide_mul, divide_add) = {
             let divide_mul = divide_mul as u32;

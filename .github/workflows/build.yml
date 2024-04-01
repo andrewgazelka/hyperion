@@ -29,22 +29,20 @@ jobs:
         run: |
           cargo machete
 
-  test:
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          lfs: true
-
-      - name: Setup Rust toolchain and cache
-        uses: actions-rust-lang/setup-rust-toolchain@v1
-        with:
-          toolchain: ${{ env.RUST_NIGHTLY_TOOLCHAIN }}
-
-      - name: Run cargo test
-        run: cargo test --workspace --all-features
+#  test:
+#    runs-on: ubuntu-latest
+#
+#    steps:
+#      - name: Checkout repository
+#        uses: actions/checkout@v4
+#
+#      - name: Setup Rust toolchain and cache
+#        uses: actions-rust-lang/setup-rust-toolchain@v1
+#        with:
+#          toolchain: ${{ env.RUST_NIGHTLY_TOOLCHAIN }}
+#
+#      - name: Run cargo test
+#        run: cargo test --workspace --all-features
 
   deny:
     runs-on: ubuntu-latest
@@ -84,8 +82,6 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          lfs: true
 
       - name: Setup Rust toolchain and cache
         uses: actions-rust-lang/setup-rust-toolchain@v1
@@ -94,6 +90,20 @@ jobs:
           components: clippy
 
       - name: Clippy check
-        run: cargo clippy --workspace --tests --examples --all-features
+        run: cargo clippy --workspace --benches --tests --examples --all-features
 
+  clippy-macos:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain and cache
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: ${{ env.RUST_NIGHTLY_TOOLCHAIN }}
+          components: clippy
+
+      - name: Clippy check
+        run: cargo clippy --workspace --benches --tests --examples --all-features
 

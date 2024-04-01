@@ -103,7 +103,6 @@ confidence-threshold = 0.8
 # Allow 1 or more licenses on a per-crate basis, so that particular licenses
 # aren't accepted for every possible crate as with the normal allow list
 exceptions = [
-    { allow = ["CC0-1.0"], crate = "constant_time_eq" },
     { allow = ["Zlib"], crate = "nanorand" }
     # Each entry is the crate and version constraint, and its specific allow
     # list
@@ -219,7 +218,8 @@ skip = [
     "event-listener",
     "base64",
     "regex-syntax",
-    "regex-automata"
+    "regex-automata",
+    "bitflags"
     #{ crate = "ansi_term@0.11.0", reason = "you can specify a reason why it can't be updated/removed" },
 ]
 # Similarly to `skip` allows you to skip certain crates during duplicate
