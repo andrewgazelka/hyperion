@@ -23,10 +23,22 @@ fn setup_global_subscriber() -> impl Drop {
     guard
 }
 
+#[cfg(feature = "trace-simple")]
+fn setup_simple_trace() {
+    tracing_subscriber::fmt::try_init().unwrap();
+}
+
 // https://tracing-rs.netlify.app/tracing/
 fn main() -> anyhow::Result<()> {
+    // trace and trace-simple are mutually exclusive
+    #[cfg(all(feature = "trace", feature = "trace-simple"))]
+    compile_error!("trace and trace-simple are mutually exclusive");
+    
     #[cfg(feature = "trace")]
     let _guard = setup_global_subscriber();
+
+    #[cfg(feature = "trace-simple")]
+    setup_simple_trace();
 
     #[cfg(feature = "pprof")]
     let guard = pprof::ProfilerGuardBuilder::default()
