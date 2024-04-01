@@ -1,8 +1,7 @@
-use std::{collections::VecDeque, fs::File, hint::black_box};
+use std::hint::black_box;
 
-use broadcast::{utils::group::group, World};
+use broadcast::World;
 use divan::{AllocProfiler, Bencher};
-use rand::prelude::SliceRandom;
 
 #[global_allocator]
 static ALLOC: AllocProfiler = AllocProfiler::system();
@@ -18,7 +17,7 @@ const LENS: &[u16] = &[128, 256, 512, 1024];
 
 #[inline(never)]
 fn generate_world(width: u16) -> World {
-    let mut world = World::create(width);
+    let mut world = World::create(width).unwrap();
 
     world.populate(|_, data| {
         let data_len = rand::random::<u8>();
@@ -41,7 +40,6 @@ fn player_render_distance_32(bencher: Bencher, len: u16) {
     const PLAYER_VIEW_DISTANCE: u16 = 32;
 
     let mut world = generate_world(len);
-    world.data_range(0..len, 0..len);
 
     bencher.counter(PLAYER_COUNT).bench_local(move || {
         for _ in 0..PLAYER_COUNT {
@@ -52,7 +50,9 @@ fn player_render_distance_32(bencher: Bencher, len: u16) {
             let end_y = start_y + PLAYER_VIEW_DISTANCE * 2;
 
             let res = world.data_range(start_x..end_x, start_y..end_y);
-            black_box(res);
+            for elem in res {
+                black_box(elem);
+            }
         }
     });
 

@@ -325,6 +325,7 @@ dependencies = [
 name = "broadcast"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "divan",
  "fast_hilbert",
  "fnv",

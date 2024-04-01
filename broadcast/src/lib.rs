@@ -1,13 +1,14 @@
-pub mod utils;
-
-use std::{collections::HashMap, ops::Range};
+use std::ops::Range;
 
 use fnv::FnvHashMap;
 
 use crate::utils::{
+    cache::hilbert::HilbertCache,
     group::{group, RangeInclusive},
-    pow2::{bits_for_length, closest_consuming_power_of_2},
+    pow2::bits_for_length,
 };
+
+pub mod utils;
 
 type Idx = u32;
 
@@ -16,44 +17,12 @@ struct Node {
     start: Idx,
 }
 
-#[derive(Default)]
-struct Cache {
-    inner: FnvHashMap<(u16, u16), Vec<RangeInclusive>>,
-}
-
-impl Cache {
-    fn calculate(
-        &mut self,
-        order: u8,
-        x_range: Range<u16>,
-        y_range: Range<u16>,
-    ) -> &mut Vec<RangeInclusive> {
-        self.inner
-            // yes I know we are not caching the whole range so this is technically incorrect
-            // but let's just assume that range lengths are always the same
-            .entry((x_range.start, y_range.start))
-            .or_insert_with(|| {
-                let mut indices = Vec::with_capacity(x_range.len() * y_range.len());
-
-                for x in x_range {
-                    for y in y_range.clone() {
-                        indices.push(fast_hilbert::xy2h(x, y, order));
-                    }
-                }
-
-                indices.sort_unstable();
-
-                group(indices).collect()
-            })
-    }
-}
-
 pub struct World {
     grid: Box<[Node]>,
     data: Vec<u8>,
     order: u8,
     width: u16,
-    cache: Cache,
+    cache: HilbertCache,
 }
 
 pub struct Coord {
@@ -62,17 +31,18 @@ pub struct Coord {
 }
 
 impl World {
-    #[must_use]
-    pub fn create(width: u16) -> Self {
+    /// # Errors
+    /// Returns an error if the total number of elements given the order is too large to fit in a
+    /// u16
+    pub fn create(width: u16) -> anyhow::Result<Self> {
         const NODE: Node = Node { start: 0 };
 
-        // let width_bits = 7; // closest_consuming_power_of_2(width - 1);
         let width_bits = bits_for_length(width);
         let width = 1_usize << width_bits;
 
         let grid = vec![NODE; width * width + 1].into_boxed_slice();
 
-        Self {
+        Ok(Self {
             grid,
             data: vec![],
             order: width_bits,
@@ -80,8 +50,9 @@ impl World {
             // it is not possible to be greater than a u16
             #[allow(clippy::cast_possible_truncation)]
             width: width as u16,
-            cache: Cache::default(),
-        }
+            // cache: Cache::default(),
+            cache: HilbertCache::build(width_bits)?,
+        })
     }
 
     #[must_use]
@@ -116,7 +87,7 @@ impl World {
     pub fn idx(&self, x: u16, y: u16) -> u32 {
         debug_assert!(x < self.width);
         debug_assert!(y < self.width);
-        fast_hilbert::xy2h(x, y, self.order)
+        self.cache.get_hilbert(x, y)
     }
 
     #[must_use]
@@ -140,20 +111,13 @@ impl World {
         &mut self.data[range]
     }
 
-    pub fn data_range(&mut self, x_range: Range<u16>, y_range: Range<u16>) -> Vec<&[u8]> {
-        let indices = self.cache.calculate(self.order, x_range, y_range);
-
-        indices
-            .iter()
-            .map(|idx| {
-                let start = idx.start;
-                let end = idx.end;
-
-                let start = self.grid[start as usize].start as usize;
-                let end = self.grid[end as usize + 1].start as usize;
-
-                &self.data[start..end]
-            })
-            .collect()
+    pub fn data_range(
+        &mut self,
+        x_range: Range<u16>,
+        y_range: Range<u16>,
+    ) -> impl Iterator<Item = &[u8]> {
+        x_range
+            .flat_map(move |x| y_range.clone().map(move |y| (x, y)))
+            .map(|(x, y)| self.get_data(x, y))
     }
 }
