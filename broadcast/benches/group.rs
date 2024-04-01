@@ -1,4 +1,4 @@
-use std::{collections::VecDeque, hint::black_box};
+use std::hint::black_box;
 
 use broadcast::utils::group::group;
 use divan::{AllocProfiler, Bencher};
