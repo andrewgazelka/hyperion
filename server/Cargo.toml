@@ -54,7 +54,6 @@ jemallocator = "0.5.4"
 jemalloc-ctl = "0.5.4"
 libc = "0.2.153"
 fastrand = "2.0.2"
-broadcast.workspace = true
 
 [target.'cfg(target_os = "linux")'.dependencies]
 io-uring = "0.6.3"
