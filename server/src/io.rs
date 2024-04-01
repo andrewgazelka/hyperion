@@ -235,6 +235,17 @@ impl IoWrite {
         Ok(())
     }
 
+    /// This function returns the number of bytes in the TCP send queue that have
+    /// not yet been transmitted to the network.
+    ///
+    /// It utilizes the `ioctl` system call with the `TIOCOUTQ` operation on Unix-like systems to
+    /// query this information. The function safely checks the `ioctl` return value to ensure no
+    /// errors occur during the operation.
+    ///
+    /// If running on non-Unix systems, it currently returns `0` by default.
+    ///
+    /// Proper error handling for `ioctl` failures should be added, and support for other operating
+    /// systems needs to be considered for portability.
     pub(crate) fn queued_send(&self) -> libc::c_int {
         if cfg!(unix) {
             let mut value: libc::c_int = 0;
