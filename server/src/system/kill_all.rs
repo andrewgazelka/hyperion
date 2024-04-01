@@ -13,7 +13,7 @@ pub fn kill_all(
 ) {
     let ids = entities.iter().map(|(id, ..)| id).collect::<Vec<_>>();
 
-    #[allow(clippy::cast_possible_wrap)]
+    #[expect(clippy::cast_possible_wrap, reason = "wrapping is ok in this case")]
     let entity_ids = ids.iter().map(|id| VarInt(id.index().0 as i32)).collect();
 
     let despawn_packet = valence_protocol::packets::play::EntitiesDestroyS2c { entity_ids };

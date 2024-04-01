@@ -61,7 +61,7 @@ pub fn init_entity(
     let speed = log_normal.sample(&mut rand::thread_rng()) * 0.1;
     s.insert(id, RunningSpeed(speed));
 
-    #[allow(clippy::cast_possible_wrap)]
+    #[expect(clippy::cast_possible_wrap, reason = "wrapping is ok in this case")]
     let entity_id = VarInt(id.index().0 as i32);
 
     let pose = event.pose;
@@ -70,7 +70,7 @@ pub fn init_entity(
         entity_id,
         object_uuid: uuid.0,
         kind: VarInt(EntityType::Zombie as i32),
-        position: pose.position,
+        position: pose.position.as_dvec3(),
         pitch: ByteAngle::from_degrees(pose.pitch),
         yaw: ByteAngle::from_degrees(pose.yaw),
         head_yaw: ByteAngle(0),

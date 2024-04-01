@@ -3,7 +3,7 @@ use std::iter::Zip;
 use evenio::{component::Component, entity::EntityId, fetch::Fetcher};
 use fnv::FnvHashMap;
 use smallvec::SmallVec;
-use valence_protocol::math::{DVec2, DVec3, IVec2};
+use valence_protocol::math::{IVec2, Vec2, Vec3};
 
 use crate::{EntityReaction, FullEntityPose};
 
@@ -22,17 +22,17 @@ pub struct EntityBoundingBoxes {
 
 #[derive(Copy, Clone, Debug)]
 pub struct BoundingBox {
-    pub min: DVec3,
-    pub max: DVec3,
+    pub min: Vec3,
+    pub max: Vec3,
 }
 
 impl BoundingBox {
     #[must_use]
-    pub fn create(feet: DVec3, width: f64, height: f64) -> Self {
+    pub fn create(feet: Vec3, width: f32, height: f32) -> Self {
         let half_width = width / 2.0;
 
-        let min = DVec3::new(feet.x - half_width, feet.y, feet.z - half_width);
-        let max = DVec3::new(feet.x + half_width, feet.y + height, feet.z + half_width);
+        let min = Vec3::new(feet.x - half_width, feet.y, feet.z - half_width);
+        let max = Vec3::new(feet.x + half_width, feet.y + height, feet.z + half_width);
 
         Self { min, max }
     }
@@ -48,7 +48,6 @@ impl BoundingBox {
 
         let mut collide = 0b1_u8;
 
-        #[allow(clippy::indexing_slicing)]
         for i in 0..3 {
             collide &= u8::from(self_min[i] <= other_max[i]);
             collide &= u8::from(self_max[i] >= other_min[i]);
@@ -58,7 +57,7 @@ impl BoundingBox {
     }
 
     #[must_use]
-    pub fn move_by(&self, offset: DVec3) -> Self {
+    pub fn move_by(&self, offset: Vec3) -> Self {
         Self {
             min: self.min + offset,
             max: self.max + offset,
@@ -94,11 +93,14 @@ pub struct CollisionContext {
     pub id: EntityId,
 }
 
-#[allow(dead_code)]
 impl EntityBoundingBoxes {
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "https://github.com/andrewgazelka/hyperion/issues/73"
+    )]
     pub fn insert(&mut self, bounding_box: BoundingBox, id: EntityId) {
-        let min2d = DVec2::new(bounding_box.min.x, bounding_box.min.z);
-        let max2d = DVec2::new(bounding_box.max.x, bounding_box.max.z);
+        let min2d = Vec2::new(bounding_box.min.x, bounding_box.min.z);
+        let max2d = Vec2::new(bounding_box.max.x, bounding_box.max.z);
 
         let start_x = min2d.x.floor() as i32;
         let start_z = min2d.y.floor() as i32;
@@ -127,22 +129,24 @@ impl EntityBoundingBoxes {
     }
 
     // todo: is there a better way to do this
-    #[allow(clippy::large_stack_frames, clippy::large_stack_arrays)]
     pub fn clear(&mut self) {
         self.query.clear();
     }
 
     #[must_use]
-    // #[instrument(skip_all, name = "get_collisions")]
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "https://github.com/andrewgazelka/hyperion/issues/74"
+    )]
     pub fn get_collisions(
         &self,
-        current: CollisionContext,
+        current: &CollisionContext,
         fetcher: &Fetcher<(EntityId, &FullEntityPose, &EntityReaction)>,
     ) -> Collisions {
         let bounding = current.bounding;
 
-        let min2d = DVec2::new(bounding.min.x, bounding.min.z);
-        let max2d = DVec2::new(bounding.max.x, bounding.max.z);
+        let min2d = Vec2::new(bounding.min.x, bounding.min.z);
+        let max2d = Vec2::new(bounding.max.x, bounding.max.z);
 
         let start_x = min2d.x.floor() as i32;
         let start_z = min2d.y.floor() as i32;

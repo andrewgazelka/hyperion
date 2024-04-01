@@ -5,6 +5,8 @@ impl FullEntityPose {
     /// This is only safe is this is not done in tandem with another `EntityReaction`
     // #[instrument(skip_all)]
     pub unsafe fn apply_entity_collision(&self, other: &Self, reaction: &EntityReaction) {
+        const MULT_FACTOR: f32 = 2.0;
+
         let dx = other.position.x - self.position.x;
         let dz = other.position.z - self.position.z;
 
@@ -25,8 +27,6 @@ impl FullEntityPose {
             }
 
             let reaction = &mut *reaction.0.get();
-
-            const MULT_FACTOR: f64 = 2.0;
 
             reaction.velocity.x -= vx * MULT_FACTOR;
             reaction.velocity.z -= vz * MULT_FACTOR;

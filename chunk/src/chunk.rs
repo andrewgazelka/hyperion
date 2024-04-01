@@ -267,7 +267,7 @@ impl IntoBlock for BlockState {
     }
 }
 
-pub const SECTION_BLOCK_COUNT: usize = 16 * 16 * 16;
+pub const SECTION_BLOCK_COUNT: u16 = 16 * 16 * 16;
 pub const SLICE_BLOCK_COUNT: usize = 16 * 16;
 
 pub const SECTION_BIOME_COUNT: usize = 4 * 4 * 4;
@@ -275,8 +275,11 @@ pub const SECTION_BIOME_COUNT: usize = 4 * 4 * 4;
 /// The maximum height of a chunk.
 pub const MAX_HEIGHT: u32 = 4096;
 
-pub type BlockStateContainer =
-    PalettedContainer<BlockState, SECTION_BLOCK_COUNT, { SECTION_BLOCK_COUNT >> 1 }>;
+pub type BlockStateContainer = PalettedContainer<
+    BlockState,
+    { SECTION_BLOCK_COUNT as usize },
+    { SECTION_BLOCK_COUNT as usize >> 1 },
+>;
 
 pub type BiomeContainer =
     PalettedContainer<BiomeId, SECTION_BIOME_COUNT, { SECTION_BIOME_COUNT >> 1 }>;

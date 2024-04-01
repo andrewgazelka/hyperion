@@ -1,5 +1,6 @@
 #![feature(thread_local)]
 #![feature(lint_reasons)]
+#![expect(clippy::type_complexity, reason = "evenio uses a lot of complex types")]
 
 #[global_allocator]
 static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
@@ -21,16 +22,16 @@ use jemalloc_ctl::{epoch, stats};
 use ndarray::s;
 use signal_hook::iterator::Signals;
 use tracing::{info, instrument, warn};
-use valence_protocol::math::DVec3;
+use valence_protocol::math::Vec3;
 
 use crate::{
     bounding_box::BoundingBox,
-    io::{server, ClientConnection, Packets, GLOBAL_PACKETS},
+    net::{server, ClientConnection, Packets, GLOBAL_PACKETS},
     singleton::player_lookup::PlayerLookup,
 };
 
 mod global;
-mod io;
+mod net;
 
 mod packets;
 mod system;
@@ -88,7 +89,7 @@ struct PlayerJoinWorld {
 pub struct MinecraftEntity;
 
 #[derive(Component, Debug, Copy, Clone)]
-pub struct RunningSpeed(f64);
+pub struct RunningSpeed(f32);
 
 impl Default for RunningSpeed {
     fn default() -> Self {
@@ -107,14 +108,15 @@ struct KickPlayer {
 struct KillAllEntities;
 
 #[derive(Event, Copy, Clone)]
-#[allow(dead_code)]
 struct StatsEvent {
     ms_per_tick_mean_1s: f64,
     ms_per_tick_mean_5s: f64,
+    #[expect(dead_code, reason = "not used currently, will in future")]
     allocated: usize,
     resident: usize,
 }
 
+#[expect(clippy::cast_precision_loss, reason = "2^52 bytes is over 1000 TB")]
 fn bytes_to_mb(bytes: usize) -> f64 {
     bytes as f64 / 1024.0 / 1024.0
 }
@@ -212,7 +214,8 @@ impl Game {
 
         let count = self.last_ticks.len();
 
-        let time_for_20_tps = first_tick + Duration::from_secs_f64(count as f64 / 20.0);
+        #[expect(clippy::cast_precision_loss, reason = "count is limited to 100")]
+        let time_for_20_tps = { first_tick + Duration::from_secs_f64(count as f64 / 20.0) };
 
         // aim for 20 ticks per second
         let now = Instant::now();
@@ -266,8 +269,8 @@ impl Game {
                 name,
                 uuid,
                 pos: FullEntityPose {
-                    position: DVec3::new(0.0, 2.0, 0.0),
-                    bounding: BoundingBox::create(DVec3::new(0.0, 2.0, 0.0), 0.6, 1.8),
+                    position: Vec3::new(0.0, 2.0, 0.0),
+                    bounding: BoundingBox::create(Vec3::new(0.0, 2.0, 0.0), 0.6, 1.8),
                     yaw: 0.0,
                     pitch: 0.0,
                 },
@@ -281,6 +284,11 @@ impl Game {
 
         self.req_packets.send(()).unwrap();
 
+        #[expect(
+            clippy::cast_precision_loss,
+            reason = "realistically, nanoseconds between last tick will not be greater than 2^52 \
+                      (~52 days)"
+        )]
         let ms = now.elapsed().as_nanos() as f64 / 1_000_000.0;
         self.last_ms_per_tick.push_back(ms);
 
@@ -363,14 +371,14 @@ static SHUTDOWN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::
 
 #[derive(Component, Copy, Clone, Debug)]
 pub struct FullEntityPose {
-    pub position: DVec3,
+    pub position: Vec3,
     pub yaw: f32,
     pub pitch: f32,
     pub bounding: BoundingBox,
 }
 
 impl FullEntityPose {
-    fn move_by(&mut self, vec: DVec3) {
+    fn move_by(&mut self, vec: Vec3) {
         self.position += vec;
         self.bounding = self.bounding.move_by(vec);
     }
@@ -378,21 +386,18 @@ impl FullEntityPose {
 
 #[derive(Debug, Default)]
 pub struct EntityReactionInner {
-    velocity: DVec3,
+    velocity: Vec3,
 }
 
 #[derive(Component, Debug, Default)]
 pub struct EntityReaction(UnsafeCell<EntityReactionInner>);
 
 impl EntityReaction {
-    #[allow(dead_code)]
     fn get_mut(&mut self) -> &mut EntityReactionInner {
         self.0.get_mut()
     }
 }
 
-#[allow(clippy::undocumented_unsafe_blocks)]
 unsafe impl Send for EntityReaction {}
 
-#[allow(clippy::undocumented_unsafe_blocks)]
 unsafe impl Sync for EntityReaction {}
