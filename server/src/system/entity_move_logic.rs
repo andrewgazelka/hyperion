@@ -1,7 +1,7 @@
 use evenio::{
     entity::EntityId,
     event::Receiver,
-    fetch::{Fetcher, Single},
+    fetch::Fetcher,
     query::{Not, Query, With},
     rayon::prelude::*,
 };
@@ -12,8 +12,8 @@ use valence_protocol::{
 };
 
 use crate::{
-    singleton::encoder::Encoder, EntityReaction, FullEntityPose, Gametick, MinecraftEntity, Player,
-    RunningSpeed, Targetable,
+    singleton::encoder::{Encoder, PacketMetadata, PacketNecessity},
+    EntityReaction, FullEntityPose, Gametick, MinecraftEntity, RunningSpeed, Targetable,
 };
 
 // 0 &mut FullEntityPose
@@ -41,12 +41,6 @@ pub fn entity_move_logic(
         &Targetable,           // 2
         Not<&MinecraftEntity>, // not 1
     )>,
-    player: Fetcher<(
-        &FullEntityPose,       // 0
-        &Player,               // 3
-        Not<&MinecraftEntity>, // not 1
-    )>,
-    encoder: Single<&mut Encoder>,
 ) {
     use valence_protocol::packets::play;
 
@@ -56,8 +50,6 @@ pub fn entity_move_logic(
     };
 
     let target = target.position;
-
-    let encoder = encoder.0;
 
     entities.par_iter_mut().for_each(|query| {
         let EntityQuery {
@@ -73,7 +65,7 @@ pub fn entity_move_logic(
         let dif = target - current;
 
         let dif2d = DVec2::new(dif.x, dif.z);
-        
+
         #[allow(clippy::cast_possible_truncation)]
         let yaw = dif2d.y.atan2(dif2d.x).to_degrees() as f32;
 
@@ -117,14 +109,15 @@ pub fn entity_move_logic(
             head_yaw: ByteAngle::from_degrees(yaw),
         };
 
-        // todo: remove unwrap
-        encoder.append(&pos).unwrap();
-        encoder.append(&look).unwrap();
-    });
+        let metadata = PacketMetadata {
+            necessity: PacketNecessity::Droppable {
+                prioritize_location: DVec2::new(pose.position.x, pose.position.y),
+            },
+            exclude_player: None,
+        };
 
-    encoder.par_drain(|bytes| {
-        for (_, player, _) in &player {
-            let _ = player.packets.writer.send_raw(bytes.clone());
-        }
+        // todo: remove unwrap
+        Encoder::append(&pos, metadata).unwrap();
+        Encoder::append(&look, metadata).unwrap();
     });
 }

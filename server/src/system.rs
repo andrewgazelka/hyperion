@@ -1,3 +1,4 @@
+mod broadcast_packets;
 mod entity_detect_collisions;
 mod entity_move_logic;
 mod init_entity;
@@ -9,6 +10,7 @@ mod player_kick;
 mod reset_bounding_boxes;
 mod tps_message;
 
+pub use broadcast_packets::broadcast_packets;
 pub use entity_detect_collisions::entity_detect_collisions;
 pub use entity_move_logic::entity_move_logic;
 pub use init_entity::init_entity as entity_spawn;

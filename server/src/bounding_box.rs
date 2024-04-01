@@ -66,7 +66,6 @@ impl BoundingBox {
     }
 }
 
-#[allow(clippy::cast_sign_loss)]
 const fn idx(location: IVec2) -> Index2D {
     Index2D {
         x: location.x,

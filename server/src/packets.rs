@@ -29,7 +29,7 @@ fn custom_payload(_data: &[u8]) {
 
 fn full(mut data: &[u8], full_entity_pose: &mut FullEntityPose) -> anyhow::Result<()> {
     const MAX_SPEED: f64 = 100.0;
-    
+
     let pkt = play::FullC2s::decode(&mut data)?;
 
     debug!("full packet: {:?}", pkt);
@@ -43,7 +43,6 @@ fn full(mut data: &[u8], full_entity_pose: &mut FullEntityPose) -> anyhow::Resul
 
     // check to see if the player is moving too fast
     // if they are, ignore the packet
-
 
     if position.distance_squared(full_entity_pose.position) > MAX_SPEED.powi(2) {
         bail!("Player is moving too fast max speed: {MAX_SPEED}");
@@ -111,6 +110,16 @@ fn update_selected_slot(mut data: &[u8]) -> anyhow::Result<()> {
     Ok(())
 }
 
+fn keep_alive(player: &mut Player) -> anyhow::Result<()> {
+    ensure!(
+        !player.unresponded_keep_alive,
+        "keep alive sent unexpectedly"
+    );
+    player.unresponded_keep_alive = false;
+    player.ping = player.last_keep_alive_sent.elapsed();
+    Ok(())
+}
+
 #[derive(Debug, Copy, Clone)]
 enum HybridPos {
     Absolute(f64),
@@ -165,7 +174,7 @@ fn chat_command(
             &[x, y, z] => [x.parse()?, y.parse()?, z.parse()?],
             [x] => {
                 let count = x.parse()?;
-                
+
                 // normalize over the number
                 let radius = BASE_RADIUS * f64::from(count).sqrt();
 
@@ -244,7 +253,7 @@ pub fn switch(
         play::ClientCommandC2s::ID => player_command(data),
         play::UpdatePlayerAbilitiesC2s::ID => update_player_abilities(data)?,
         play::UpdateSelectedSlotC2s::ID => update_selected_slot(data)?,
-        play::KeepAliveC2s::ID => (), // todo: implement
+        play::KeepAliveC2s::ID => keep_alive(player)?,
         play::CommandExecutionC2s::ID => chat_command(data, player, full_entity_pose, sender)?,
         _ => warn!("unknown packet id: 0x{:02X}", id),
     }

@@ -210,7 +210,6 @@ fn ground_section() -> Vec<u8> {
 
     let mut rnd = rand::thread_rng();
 
-    #[allow(clippy::cast_sign_loss)]
     #[allow(clippy::suboptimal_flops)]
     #[allow(clippy::indexing_slicing)]
     for x in 0..16 {
