@@ -40,7 +40,7 @@ pub fn broadcast_packets(
             // Max bytes that should be sent this tick
             // TODO: Determine max_bytes using the player's network speed, latency, and current
             // send window size
-            let max_bytes = 25_000;
+            let max_bytes = 25_000; // 4 Mbit/s
             let mut total_bytes_sent = 0;
 
             for packet in &encoder.necessary_packets {
@@ -83,6 +83,7 @@ pub fn broadcast_packets(
                         // total_bytes_sent is not increased because it is no longer used
                     }
                 } else {
+                    // todo: remove shuffling; this is inefficient
                     rng.shuffle(&mut encoder.droppable_packets);
                     for packet in &encoder.droppable_packets {
                         if packet.exclude_player == Some(player_uuid.0) {

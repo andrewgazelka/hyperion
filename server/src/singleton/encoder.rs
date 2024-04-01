@@ -7,7 +7,7 @@ use bytes::BufMut;
 use uuid::Uuid;
 use valence_protocol::{math::DVec2, Encode, Packet, VarInt};
 
-const MAX_PACKET_SIZE_LEN: usize = 3;
+const PACKET_LEN_BYTES_MAX: usize = 3;
 
 #[derive(Copy, Clone)]
 pub enum PacketNecessity {
@@ -64,13 +64,13 @@ impl PacketBuffer {
         // memory, but the amount of unused memory should be negligible.
         let mut packet_start = self.packet_data.len();
         self.packet_data
-            .resize(packet_start + MAX_PACKET_SIZE_LEN, 0);
+            .resize(packet_start + PACKET_LEN_BYTES_MAX, 0);
 
         // Write the packet data after the reserved packet length
         pkt.encode_with_id((&mut self.packet_data).writer())?;
 
         // Packet length excluding length of size
-        let packet_len = self.packet_data.len() - packet_start - MAX_PACKET_SIZE_LEN;
+        let packet_len = self.packet_data.len() - packet_start - PACKET_LEN_BYTES_MAX;
 
         ensure!(
             packet_len <= valence_protocol::MAX_PACKET_SIZE as usize,
@@ -81,7 +81,7 @@ impl PacketBuffer {
         // length there
         #[allow(clippy::cast_possible_wrap)]
         let packet_len_var_int = VarInt(packet_len as i32);
-        packet_start += MAX_PACKET_SIZE_LEN - packet_len_var_int.written_size();
+        packet_start += PACKET_LEN_BYTES_MAX - packet_len_var_int.written_size();
 
         #[allow(clippy::indexing_slicing)]
         let front = &mut self.packet_data[packet_start..];

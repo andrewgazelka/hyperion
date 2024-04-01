@@ -432,6 +432,8 @@ impl Io {
                     break;
                 }
                 let elapsed = past_instant.elapsed();
+
+                // todo: clarify why 1 second?
                 if elapsed > Duration::from_secs(1) {
                     let queued_send = io_write.queued_send();
                     speed.store(
