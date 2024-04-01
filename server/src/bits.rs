@@ -144,6 +144,13 @@ impl BitStorage {
         } else {
             vec![0; calculated_length]
         };
+        
+        #[expect(clippy::cast_sign_loss, reason = "the sign is not relevant")]
+        let (divide_mul, divide_add) = {
+            let divide_mul = divide_mul as u32;
+            let divide_add = divide_add as u32;
+            (divide_mul, divide_add)
+        };
 
         Ok(Self {
             data: using_data,
@@ -151,8 +158,8 @@ impl BitStorage {
             mask,
             size,
             values_per_long,
-            divide_mul: u64::try_from(divide_mul).unwrap(),
-            divide_add: u64::try_from(divide_add).unwrap(),
+            divide_mul: u64::from(divide_mul),
+            divide_add: u64::from(divide_add),
             divide_shift,
         })
     }

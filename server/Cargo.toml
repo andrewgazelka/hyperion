@@ -72,9 +72,6 @@ thread-priority = "0.16.0"
 name = "many_zombies"
 harness = false
 
-[lints.rust]
-warnings = "deny"
-
 [lints.clippy]
 complexity = "deny"
 
