@@ -94,12 +94,12 @@ pub struct WriterComm {
 
     /// Approximate speed that the other side can receive the data that this sends.
     /// Measured in bytes/second.
-    speed: Arc<AtomicU32>,
+    speed_mib_per_second: Arc<AtomicU32>,
 }
 
 impl WriterComm {
-    pub fn speed(&self) -> u32 {
-        self.speed.load(Ordering::Relaxed)
+    pub fn speed_mib_per_second(&self) -> u32 {
+        self.speed_mib_per_second.load(Ordering::Relaxed)
     }
 
     pub fn serialize<P>(&mut self, pkt: &P) -> anyhow::Result<bytes::Bytes>
@@ -402,7 +402,7 @@ impl Io {
         let writer_comm = WriterComm {
             tx: s2c_tx,
             enc: self.enc,
-            speed: Arc::clone(&speed),
+            speed_mib_per_second: Arc::clone(&speed),
         };
 
         let mut io_write = IoWrite { write, raw_fd };
