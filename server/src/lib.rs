@@ -441,6 +441,6 @@ fn try_io_uring() -> std::io::Result<()> {
 
     assert_eq!(cqe.user_data(), 0x42);
     assert!(cqe.result() >= 0, "read error: {}", cqe.result());
-    
+
     Ok(())
 }
