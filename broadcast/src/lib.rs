@@ -11,7 +11,7 @@ struct Node {
     start: Idx,
 }
 
-pub struct World {
+pub struct Broadcaster {
     grid: Box<[Node]>,
     data: Vec<u8>,
     width: u16,
@@ -22,7 +22,7 @@ pub struct Coord {
     pub y: u16,
 }
 
-impl World {
+impl Broadcaster {
     /// # Errors
     /// Returns an error if the total number of elements given the order is too large to fit in a
     /// u16

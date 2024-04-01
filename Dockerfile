@@ -34,9 +34,13 @@ COPY Cargo.toml Cargo.lock ./
 COPY chunk/Cargo.toml ./chunk/Cargo.toml
 COPY chunk/src ./chunk/src
 
+COPY broadcast/Cargo.toml ./broadcast/Cargo.toml
+COPY broadcast/benches ./broadcast/benches
+COPY broadcast/src ./broadcast/src
+
 COPY generator/Cargo.toml ./generator/Cargo.toml
 COPY generator/build.rs ./generator/build.rs
-COPY generator/generated.zip ./generator/generated.zip
+COPY generator/generated.tar.zst ./generator/generated.tar.zst
 COPY generator/src ./generator/src
 
 COPY generator-build/Cargo.toml ./generator-build/Cargo.toml

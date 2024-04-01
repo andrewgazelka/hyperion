@@ -2,7 +2,7 @@
 
 use std::{cell::RefCell, collections::BTreeMap, hint::black_box};
 
-use broadcast::World;
+use broadcast::Broadcaster;
 use divan::Bencher;
 
 // #[global_allocator]
@@ -18,8 +18,8 @@ fn main() {
 const LENS: &[u16] = &[128, 256, 512, 1024];
 
 #[inline(never)]
-fn generate_world(width: u16) -> World {
-    let mut world = World::create(width).unwrap();
+fn generate_world(width: u16) -> Broadcaster {
+    let mut world = Broadcaster::create(width).unwrap();
 
     world.populate(|_, data| {
         let data_len = rand::random::<u8>();
@@ -49,7 +49,7 @@ fn generate_world(width: u16) -> World {
 //
 
 #[thread_local]
-static WORLDS: RefCell<BTreeMap<u16, World>> = RefCell::new(BTreeMap::new());
+static WORLDS: RefCell<BTreeMap<u16, Broadcaster>> = RefCell::new(BTreeMap::new());
 
 // Register a `fibonacci` function and benchmark it over multiple cases.
 #[divan::bench(

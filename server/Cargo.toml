@@ -52,6 +52,7 @@ jemallocator = "0.5.4"
 jemalloc-ctl = "0.5.4"
 libc = "0.2.153"
 fastrand = "2.0.2"
+broadcast.workspace = true
 
 
 [dev-dependencies]

@@ -1,11 +1,12 @@
 // https://stackoverflow.com/a/61681112/4889030
 // https://matklad.github.io/2020/10/03/fast-thread-locals-in-rust.html
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 
 use anyhow::{ensure, Context};
 use bytes::BufMut;
 use uuid::Uuid;
 use valence_protocol::{math::Vec2, Encode, Packet, VarInt};
+use broadcast::Broadcaster;
 
 const PACKET_LEN_BYTES_MAX: usize = 3;
 
@@ -130,6 +131,10 @@ impl PacketBuffer {
         self.droppable_packets.clear();
     }
 }
+
+// todo init
+#[thread_local]
+static BROADCASTER: RefCell<Option<Broadcaster>> = RefCell::new(None);
 
 #[thread_local]
 static ENCODER: Cell<PacketBuffer> = Cell::new(PacketBuffer::new());
