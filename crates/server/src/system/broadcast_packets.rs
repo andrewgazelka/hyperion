@@ -1,7 +1,11 @@
 use std::cell::Cell;
 
 use bytes::Bytes;
-use evenio::{event::Receiver, fetch::Fetcher, query::Not};
+use evenio::{
+    event::Receiver,
+    fetch::{Fetcher, Single},
+    query::Not,
+};
 use fastrand::Rng;
 use tracing::{instrument, trace};
 use valence_protocol::math::Vec2;
@@ -22,10 +26,13 @@ static RNG: Cell<Option<Rng>> = Cell::new(None);
 pub fn broadcast_packets(
     _: Receiver<BroadcastPackets>,
     player: Fetcher<(&Uuid, &FullEntityPose, &Player, Not<&MinecraftEntity>)>,
+    encoder: Single<&mut Encoder>,
 ) {
     let start = std::time::Instant::now();
 
-    Encoder::par_drain(|encoder| {
+    let encoder = encoder.0;
+
+    encoder.par_drain(|encoder| {
         if encoder.necessary_packets.is_empty() && encoder.droppable_packets.is_empty() {
             return;
         }

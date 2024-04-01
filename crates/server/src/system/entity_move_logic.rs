@@ -1,7 +1,7 @@
 use evenio::{
     entity::EntityId,
     event::Receiver,
-    fetch::Fetcher,
+    fetch::{Fetcher, Single},
     query::{Not, Query, With},
     rayon::prelude::*,
 };
@@ -41,6 +41,7 @@ pub fn entity_move_logic(
         &Targetable,           // 2
         Not<&MinecraftEntity>, // not 1
     )>,
+    encoder: Single<&mut Encoder>,
 ) {
     use valence_protocol::packets::play;
 
@@ -48,6 +49,8 @@ pub fn entity_move_logic(
         // no movement if not a single player
         return;
     };
+
+    let encoder = encoder.0;
 
     let target = target.position;
 
@@ -119,7 +122,7 @@ pub fn entity_move_logic(
         };
 
         // todo: remove unwrap
-        Encoder::append(&pos, metadata).unwrap();
-        Encoder::append(&look, metadata).unwrap();
+        encoder.append(&pos, metadata).unwrap();
+        encoder.append(&look, metadata).unwrap();
     });
 }

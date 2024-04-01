@@ -35,7 +35,7 @@ chunk.workspace = true
 sha2 = "0.10.8"
 itertools = "0.12.1"
 rand = "0.8.5"
-evenio = { git = "https://github.com/andrewgazelka/evenio", features = ["rayon"], branch = "fix-collisions-gt-2" }
+evenio.workspace = true
 flume = "0.11.0"
 
 # todo: how much will adding "sync" wakers hurt performance?
@@ -54,6 +54,7 @@ jemallocator = "0.5.4"
 jemalloc-ctl = "0.5.4"
 libc = "0.2.153"
 fastrand = "2.0.2"
+rayon-local.workspace = true
 
 [target.'cfg(target_os = "linux")'.dependencies]
 io-uring = "0.6.3"

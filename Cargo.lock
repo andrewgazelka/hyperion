@@ -1587,6 +1587,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "rayon-local"
+version = "0.1.0"
+dependencies = [
+ "divan",
+ "evenio",
+ "rayon",
+]
+
+[[package]]
 name = "redox_syscall"
 version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1753,6 +1762,7 @@ dependencies = [
  "rand 0.8.5",
  "rand_distr",
  "rayon",
+ "rayon-local",
  "serde_json",
  "sha2",
  "signal-hook",
