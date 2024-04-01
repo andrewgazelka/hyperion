@@ -415,7 +415,7 @@ unsafe impl Send for EntityReaction {}
 unsafe impl Sync for EntityReaction {}
 
 #[cfg(target_os = "linux")]
-fn try_io_uring() -> std::io::Result<()> {
+fn try_io_uring() -> anyhow::Result<()> {
     use std::{fs, os::unix::io::AsRawFd};
 
     use io_uring::{opcode, types, IoUring};
@@ -425,9 +425,13 @@ fn try_io_uring() -> std::io::Result<()> {
     let fd = fs::File::open("/dev/urandom")?;
     let mut buf = vec![0; 1024];
 
-    let read_e = opcode::Read::new(types::Fd(fd.as_raw_fd()), buf.as_mut_ptr(), buf.len() as _)
-        .build()
-        .user_data(0x42);
+    let read_e = opcode::Read::new(
+        types::Fd(fd.as_raw_fd()),
+        buf.as_mut_ptr(),
+        buf.len().try_into()?,
+    )
+    .build()
+    .user_data(0x42);
 
     unsafe {
         ring.submission()
