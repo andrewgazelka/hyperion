@@ -26,7 +26,7 @@ use valence_protocol::math::DVec3;
 use crate::{
     bounding_box::BoundingBox,
     io::{server, ClientConnection, Packets, GLOBAL_PACKETS},
-    singleton::{encoder::Encoder, player_lookup::PlayerLookup},
+    singleton::player_lookup::PlayerLookup,
 };
 
 mod global;
@@ -189,9 +189,6 @@ impl Game {
 
         let bounding_boxes = world.spawn();
         world.insert(bounding_boxes, bounding_box::EntityBoundingBoxes::default());
-
-        let encoder = world.spawn();
-        world.insert(encoder, Encoder);
 
         let lookup = world.spawn();
         world.insert(lookup, PlayerLookup::default());

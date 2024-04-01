@@ -1,7 +1,7 @@
 use evenio::{
     entity::EntityId,
     event::Receiver,
-    fetch::{Fetcher, Single},
+    fetch::Fetcher,
     query::{Not, Query, With},
     rayon::prelude::*,
 };
@@ -41,7 +41,6 @@ pub fn entity_move_logic(
         &Targetable,           // 2
         Not<&MinecraftEntity>, // not 1
     )>,
-    encoder: Single<&mut Encoder>,
 ) {
     use valence_protocol::packets::play;
 
@@ -51,8 +50,6 @@ pub fn entity_move_logic(
     };
 
     let target = target.position;
-
-    let encoder = encoder.0;
 
     entities.par_iter_mut().for_each(|query| {
         let EntityQuery {
@@ -119,7 +116,7 @@ pub fn entity_move_logic(
         };
 
         // todo: remove unwrap
-        encoder.append(&pos, metadata).unwrap();
-        encoder.append(&look, metadata).unwrap();
+        Encoder::append(&pos, metadata).unwrap();
+        Encoder::append(&look, metadata).unwrap();
     });
 }

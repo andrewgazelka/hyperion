@@ -1,18 +1,13 @@
 use std::cell::Cell;
 
 use bytes::Bytes;
-use evenio::{
-    event::Receiver,
-    fetch::{Fetcher, Single},
-    query::Not,
-};
+use evenio::{event::Receiver, fetch::Fetcher, query::Not};
 use fastrand::Rng;
 use tracing::{instrument, trace};
 use valence_protocol::math::DVec2;
 
 use crate::{
-    singleton::encoder::Encoder,
-    BroadcastPackets, FullEntityPose, MinecraftEntity, Player, Uuid,
+    singleton::encoder::Encoder, BroadcastPackets, FullEntityPose, MinecraftEntity, Player, Uuid,
 };
 
 #[thread_local]
@@ -23,18 +18,11 @@ static RNG: Cell<Option<Rng>> = Cell::new(None);
 #[instrument(skip_all)]
 pub fn broadcast_packets(
     _: Receiver<BroadcastPackets>,
-    player: Fetcher<(
-        &Uuid,
-        &FullEntityPose,
-        &Player,
-        Not<&MinecraftEntity>,
-    )>,
-    encoder: Single<&mut Encoder>,
+    player: Fetcher<(&Uuid, &FullEntityPose, &Player, Not<&MinecraftEntity>)>,
 ) {
     let start = std::time::Instant::now();
-    let encoder = encoder.0;
 
-    encoder.par_drain(|encoder| {
+    Encoder::par_drain(|encoder| {
         if encoder.necessary_packets.is_empty() && encoder.droppable_packets.is_empty() {
             return;
         }

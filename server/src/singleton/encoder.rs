@@ -4,10 +4,8 @@ use std::cell::Cell;
 
 use anyhow::ensure;
 use bytes::BufMut;
-use evenio::component::Component;
 use uuid::Uuid;
 use valence_protocol::{math::DVec2, Encode, Packet, VarInt};
-
 
 const MAX_PACKET_SIZE_LEN: usize = 3;
 
@@ -124,24 +122,17 @@ impl PacketBuffer {
 #[thread_local]
 static ENCODER: Cell<PacketBuffer> = Cell::new(PacketBuffer::new());
 
-#[derive(Component)]
 pub struct Encoder;
 
 impl Encoder {
-    #[allow(clippy::unused_self)]
-    pub fn append<P: Packet + Encode>(
-        &self,
-        packet: &P,
-        metadata: PacketMetadata,
-    ) -> anyhow::Result<()> {
+    pub fn append<P: Packet + Encode>(packet: &P, metadata: PacketMetadata) -> anyhow::Result<()> {
         let mut encoder = ENCODER.take();
         let result = encoder.append_packet(packet, metadata);
         ENCODER.set(encoder);
         result
     }
 
-    #[allow(clippy::unused_self)]
-    pub fn par_drain<F>(&self, f: F)
+    pub fn par_drain<F>(f: F)
     where
         F: Fn(&mut PacketBuffer) + Sync,
     {
