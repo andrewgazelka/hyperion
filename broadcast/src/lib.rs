@@ -1,12 +1,6 @@
 use std::ops::Range;
 
-use fnv::FnvHashMap;
-
-use crate::utils::{
-    cache::hilbert::HilbertCache,
-    group::{group, RangeInclusive},
-    pow2::bits_for_length,
-};
+use crate::utils::pow2::bits_for_length;
 
 pub mod utils;
 
@@ -20,9 +14,7 @@ struct Node {
 pub struct World {
     grid: Box<[Node]>,
     data: Vec<u8>,
-    order: u8,
     width: u16,
-    cache: HilbertCache,
 }
 
 pub struct Coord {
@@ -45,13 +37,10 @@ impl World {
         Ok(Self {
             grid,
             data: vec![],
-            order: width_bits,
 
             // it is not possible to be greater than a u16
             #[allow(clippy::cast_possible_truncation)]
             width: width as u16,
-            // cache: Cache::default(),
-            cache: HilbertCache::build(width_bits)?,
         })
     }
 
@@ -68,7 +57,7 @@ impl World {
         F: FnMut(Coord, &mut Vec<u8>),
     {
         for i in 0..self.area() {
-            let (x, y) = fast_hilbert::h2xy(i, self.order);
+            let (x, y) = self.idx_to_xy(i);
             f(Coord { x, y }, &mut self.data);
         }
 
@@ -84,15 +73,25 @@ impl World {
     }
 
     #[must_use]
-    pub fn idx(&self, x: u16, y: u16) -> u32 {
+    pub const fn xy_to_idx(&self, x: u16, y: u16) -> u32 {
         debug_assert!(x < self.width);
         debug_assert!(y < self.width);
-        self.cache.get_hilbert(x, y)
+        let x = x as u32;
+        let y = y as u32;
+        x + y * (self.width as u32)
     }
 
     #[must_use]
-    fn get_data_idx(&self, x: u16, y: u16) -> Range<usize> {
-        let idx = self.idx(x, y);
+    pub const fn idx_to_xy(&self, idx: u32) -> (u16, u16) {
+        let x = idx % self.width as u32;
+        let y = idx / self.width as u32;
+        #[allow(clippy::cast_possible_truncation)]
+        (x as u16, y as u16)
+    }
+
+    #[must_use]
+    const fn get_data_idx(&self, x: u16, y: u16) -> Range<usize> {
+        let idx = self.xy_to_idx(x, y);
 
         let start = self.grid[idx as usize].start;
         let stop = self.grid[idx as usize + 1].start;
@@ -112,12 +111,23 @@ impl World {
     }
 
     pub fn data_range(
-        &mut self,
+        &self,
         x_range: Range<u16>,
         y_range: Range<u16>,
-    ) -> impl Iterator<Item = &[u8]> {
-        x_range
-            .flat_map(move |x| y_range.clone().map(move |y| (x, y)))
-            .map(|(x, y)| self.get_data(x, y))
+    ) -> impl Iterator<Item = &[u8]> + '_ {
+        let x_start = x_range.start;
+        let x_end = x_range.end;
+
+        y_range
+            .map(move |y| {
+                let start_idx = self.xy_to_idx(x_start, y);
+                let stop_idx = self.xy_to_idx(x_end, y) + 1;
+
+                let data_start_idx = self.grid[start_idx as usize].start as usize;
+                let data_stop_idx = self.grid[stop_idx as usize].start as usize;
+
+                data_start_idx..data_stop_idx
+            })
+            .map(move |range| &self.data[range])
     }
 }

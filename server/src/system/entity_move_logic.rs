@@ -73,7 +73,8 @@ pub fn entity_move_logic(
         let dif = target - current;
 
         let dif2d = DVec2::new(dif.x, dif.z);
-
+        
+        #[allow(clippy::cast_possible_truncation)]
         let yaw = dif2d.y.atan2(dif2d.x).to_degrees() as f32;
 
         // subtract 90 degrees

@@ -50,8 +50,8 @@ impl BoundingBox {
 
         #[allow(clippy::indexing_slicing)]
         for i in 0..3 {
-            collide &= (self_min[i] <= other_max[i]) as u8;
-            collide &= (self_max[i] >= other_min[i]) as u8;
+            collide &= u8::from(self_min[i] <= other_max[i]);
+            collide &= u8::from(self_max[i] >= other_min[i]);
         }
 
         collide == 1

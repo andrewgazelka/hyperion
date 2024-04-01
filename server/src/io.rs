@@ -1,5 +1,8 @@
 #![allow(clippy::module_name_repetitions)]
 
+// this 
+#![allow(clippy::future_not_send)]
+
 use std::{borrow::Cow, cell::UnsafeCell, collections::BTreeSet, io, io::ErrorKind, sync::Mutex};
 
 use anyhow::{ensure, Context};

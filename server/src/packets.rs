@@ -28,6 +28,8 @@ fn custom_payload(_data: &[u8]) {
 }
 
 fn full(mut data: &[u8], full_entity_pose: &mut FullEntityPose) -> anyhow::Result<()> {
+    const MAX_SPEED: f64 = 100.0;
+    
     let pkt = play::FullC2s::decode(&mut data)?;
 
     debug!("full packet: {:?}", pkt);
@@ -42,7 +44,6 @@ fn full(mut data: &[u8], full_entity_pose: &mut FullEntityPose) -> anyhow::Resul
     // check to see if the player is moving too fast
     // if they are, ignore the packet
 
-    const MAX_SPEED: f64 = 100.0;
 
     if position.distance_squared(full_entity_pose.position) > MAX_SPEED.powi(2) {
         bail!("Player is moving too fast max speed: {MAX_SPEED}");
@@ -144,6 +145,7 @@ fn chat_command(
     full_entity_pose: &FullEntityPose,
     sender: &mut Sender<(KickPlayer, InitEntity, KillAllEntities)>,
 ) -> anyhow::Result<()> {
+    const BASE_RADIUS: f64 = 4.0;
     let pkt = play::CommandExecutionC2s::decode(&mut data)?;
 
     let mut cmd = pkt.command.0.split(' ');
@@ -163,11 +165,9 @@ fn chat_command(
             &[x, y, z] => [x.parse()?, y.parse()?, z.parse()?],
             [x] => {
                 let count = x.parse()?;
-
-                const BASE_RADIUS: f64 = 4.0;
-
+                
                 // normalize over the number
-                let radius = BASE_RADIUS * (count as f64).sqrt();
+                let radius = BASE_RADIUS * f64::from(count).sqrt();
 
                 for _ in 0..count {
                     // spawn in 100 block radius

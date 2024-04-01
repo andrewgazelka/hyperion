@@ -8,8 +8,6 @@ publish = false
 
 [dependencies]
 anyhow = "1.0.81"
-fast_hilbert = "2.0.0"
-fnv = "1.0.7"
 
 [dev-dependencies]
 divan = "0.1.14"
@@ -21,10 +19,6 @@ harness = false
 
 [[bench]]
 name = "world"
-harness = false
-
-[[bench]]
-name = "hilbert"
 harness = false
 
 [lints.clippy]

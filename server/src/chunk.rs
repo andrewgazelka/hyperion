@@ -17,7 +17,7 @@ pub fn heightmap(max_height: u32, current_height: u32) -> Vec<u64> {
     for x in 0_usize..16 {
         for z in 0_usize..16 {
             let index = x + z * 16;
-            data.set(index, current_height as u64 + 1);
+            data.set(index, u64::from(current_height) + 1);
         }
     }
 

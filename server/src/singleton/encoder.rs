@@ -2,7 +2,7 @@
 // https://matklad.github.io/2020/10/03/fast-thread-locals-in-rust.html
 use std::cell::UnsafeCell;
 
-use anyhow::ensure;
+use anyhow::{ensure, Context};
 use bytes::{BufMut, Bytes};
 use evenio::component::Component;
 use valence_protocol::{Encode, Packet, VarInt};
@@ -34,18 +34,22 @@ impl ConstPacketEncoder {
             "packet exceeds maximum length"
         );
 
-        #[allow(clippy::cast_possible_wrap)]
-        let packet_len_size = VarInt(packet_len as i32).written_size();
+        let packet_len = i32::try_from(packet_len).context("packet length exceeds i32")?;
+
+        let packet_len_size = VarInt(packet_len).written_size();
 
         self.buf.put_bytes(0, packet_len_size);
         self.buf
             .copy_within(start_len..start_len + data_len, start_len + packet_len_size);
 
-        #[allow(clippy::indexing_slicing)]
+        #[expect(
+            clippy::indexing_slicing,
+            reason = "we are only growing buf, and its original length is start_len, so this is a \
+                      valid operation"
+        )]
         let front = &mut self.buf[start_len..];
 
-        #[allow(clippy::cast_possible_wrap)]
-        VarInt(packet_len as i32).encode(front)?;
+        VarInt(packet_len).encode(front)?;
 
         Ok(())
     }
@@ -54,12 +58,11 @@ impl ConstPacketEncoder {
 #[thread_local]
 static ENCODER: UnsafeCell<ConstPacketEncoder> = UnsafeCell::new(ConstPacketEncoder::new());
 
-#[derive(Component)]
 pub struct Encoder;
 
 impl Encoder {
-    #[allow(clippy::unused_self)]
-    pub fn append<P: Packet + Encode>(&self, packet: &P) -> anyhow::Result<()> {
+    #[expect(clippy::unused_self)]
+    pub fn append<P: Packet + Encode>(packet: &P) -> anyhow::Result<()> {
         // Safety:
         // The use of `unsafe` here is justified by the guarantees provided by the `ThreadLocal` and
         // `UnsafeCell` usage patterns:

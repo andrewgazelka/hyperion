@@ -1,5 +1,5 @@
-#![allow(clippy::many_single_char_names)]
 #![feature(thread_local)]
+#![feature(lint_reasons)]
 
 #[global_allocator]
 static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;

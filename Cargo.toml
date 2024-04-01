@@ -1,5 +1,6 @@
 # https://doc.rust-lang.org/rustc/profile-guided-optimization.html
 # https://nikolaivazquez.com/blog/divan/#measure-allocations
+# https://doc.rust-lang.org/cargo/reference/profiles.html
 
 [workspace]
 resolver = "2"
@@ -22,15 +23,12 @@ opt-level = 3
 #debug = true
 lto = "fat"
 codegen-units = 1
-#strip = false
-#panic = "abort"
+panic = "abort"
 
 [profile.bench]
-debug = true
-lto = false
-#lto = "fat"
-#codegen-units = 1
-#panic = "abort"
+#debug = true
+lto = "fat"
+codegen-units = 1
 
 [workspace.dependencies]
 chunk = { path = "chunk" }
