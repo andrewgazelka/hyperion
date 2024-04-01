@@ -23,8 +23,16 @@ fn setup_global_subscriber() -> impl Drop {
     guard
 }
 
+#[cfg(all(feature = "trace-simple", not(feature = "trace")))]
+fn setup_simple_trace() {
+    tracing_subscriber::fmt::try_init().unwrap();
+}
+
 // https://tracing-rs.netlify.app/tracing/
 fn main() -> anyhow::Result<()> {
+    #[cfg(all(feature = "trace-simple", not(feature = "trace")))]
+    setup_simple_trace();
+
     #[cfg(feature = "trace")]
     let _guard = setup_global_subscriber();
 

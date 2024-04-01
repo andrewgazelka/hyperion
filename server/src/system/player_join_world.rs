@@ -16,7 +16,7 @@ use valence_protocol::{
 use valence_registry::{biome::BiomeId, RegistryIdx};
 
 use crate::{
-    bits::BitStorage, chunk::heightmap, io::Packets, singleton::player_lookup::PlayerLookup,
+    bits::BitStorage, chunk::heightmap, net::Packets, singleton::player_lookup::PlayerLookup,
     KickPlayer, Player, PlayerJoinWorld, Uuid, GLOBAL,
 };
 
@@ -40,7 +40,7 @@ pub fn player_join_world(
     }
 }
 
-fn write_block_states(states: BlockStateContainer, writer: &mut impl Write) -> anyhow::Result<()> {
+fn write_block_states(states: &BlockStateContainer, writer: &mut impl Write) -> anyhow::Result<()> {
     states.encode_mc_format(
         writer,
         |b| b.to_raw().into(),
@@ -51,7 +51,7 @@ fn write_block_states(states: BlockStateContainer, writer: &mut impl Write) -> a
     Ok(())
 }
 
-fn write_biomes(biomes: BiomeContainer, writer: &mut impl Write) -> anyhow::Result<()> {
+fn write_biomes(biomes: &BiomeContainer, writer: &mut impl Write) -> anyhow::Result<()> {
     biomes.encode_mc_format(
         writer,
         |b| b.to_index() as u64,
@@ -64,12 +64,15 @@ fn write_biomes(biomes: BiomeContainer, writer: &mut impl Write) -> anyhow::Resu
 
 trait Array3d {
     type Item;
-    #[allow(dead_code)]
+    #[expect(dead_code, reason = "unused")]
     fn get3(&self, x: usize, y: usize, z: usize) -> &Self::Item;
     fn get3_mut(&mut self, x: usize, y: usize, z: usize) -> &mut Self::Item;
 }
 
-#[allow(clippy::indexing_slicing)]
+#[expect(
+    clippy::indexing_slicing,
+    reason = "the signature of the trait allows for panics"
+)]
 impl<T, const N: usize> Array3d for [T; N] {
     type Item = T;
 
@@ -84,7 +87,9 @@ impl<T, const N: usize> Array3d for [T; N] {
 
 fn send_commands(io: &mut Packets) -> anyhow::Result<()> {
     // https://wiki.vg/Command_Data
-    use valence_protocol::packets::play::command_tree_s2c::*;
+    use valence_protocol::packets::play::command_tree_s2c::{
+        CommandTreeS2c, Node, NodeData, Parser,
+    };
 
     // id 0
     let root = Node {
@@ -149,26 +154,24 @@ fn air_section() -> Vec<u8> {
     0_u16.encode(&mut section_bytes).unwrap();
 
     let block_states = BlockStateContainer::Single(BlockState::AIR);
-    write_block_states(block_states, &mut section_bytes).unwrap();
+    write_block_states(&block_states, &mut section_bytes).unwrap();
 
     let biomes = BiomeContainer::Single(BiomeId::DEFAULT);
-    write_biomes(biomes, &mut section_bytes).unwrap();
+    write_biomes(&biomes, &mut section_bytes).unwrap();
 
     section_bytes
 }
 
 fn stone_section() -> Vec<u8> {
     let mut section_bytes = Vec::new();
-    (SECTION_BLOCK_COUNT as u16)
-        .encode(&mut section_bytes)
-        .unwrap();
+    SECTION_BLOCK_COUNT.encode(&mut section_bytes).unwrap();
 
-    let blocks = [BlockState::STONE; SECTION_BLOCK_COUNT];
+    let blocks = [BlockState::STONE; { SECTION_BLOCK_COUNT as usize }];
     let block_states = BlockStateContainer::Direct(Box::new(blocks));
-    write_block_states(block_states, &mut section_bytes).unwrap();
+    write_block_states(&block_states, &mut section_bytes).unwrap();
 
     let biomes = BiomeContainer::Single(BiomeId::DEFAULT);
-    write_biomes(biomes, &mut section_bytes).unwrap();
+    write_biomes(&biomes, &mut section_bytes).unwrap();
 
     section_bytes
 }
@@ -179,7 +182,7 @@ fn ground_section() -> Vec<u8> {
     let number_blocks: u16 = 16 * 16;
     number_blocks.encode(&mut section_bytes).unwrap();
 
-    let mut blocks = [BlockState::AIR; SECTION_BLOCK_COUNT];
+    let mut blocks = [BlockState::AIR; { SECTION_BLOCK_COUNT as usize }];
 
     let surface_blocks = [
         BlockState::END_STONE,
@@ -210,8 +213,6 @@ fn ground_section() -> Vec<u8> {
 
     let mut rnd = rand::thread_rng();
 
-    #[allow(clippy::suboptimal_flops)]
-    #[allow(clippy::indexing_slicing)]
     for x in 0..16 {
         for z in 0..16 {
             // let dist_from_center = (x as f64 - 8.0).hypot(z as f64 - 8.0);
@@ -219,8 +220,7 @@ fn ground_section() -> Vec<u8> {
             // based on x and z
             // should be highest at center of chunk
             // let height = (16.0 - dist_from_center) * 0.5 + 3.0;
-            let height = 5.0;
-            let height = height as usize;
+            let height = 5;
             let height = height.min(16);
             for y in 0..height {
                 use rand::seq::SliceRandom;
@@ -232,10 +232,10 @@ fn ground_section() -> Vec<u8> {
 
     let block_states = BlockStateContainer::Direct(Box::new(blocks));
 
-    write_block_states(block_states, &mut section_bytes).unwrap();
+    write_block_states(&block_states, &mut section_bytes).unwrap();
 
     let biomes = BiomeContainer::Single(BiomeId::DEFAULT);
-    write_biomes(biomes, &mut section_bytes).unwrap();
+    write_biomes(&biomes, &mut section_bytes).unwrap();
 
     section_bytes
 }

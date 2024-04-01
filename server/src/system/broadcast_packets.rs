@@ -4,7 +4,7 @@ use bytes::Bytes;
 use evenio::{event::Receiver, fetch::Fetcher, query::Not};
 use fastrand::Rng;
 use tracing::{instrument, trace};
-use valence_protocol::math::DVec2;
+use valence_protocol::math::Vec2;
 
 use crate::{
     singleton::encoder::Encoder, BroadcastPackets, FullEntityPose, MinecraftEntity, Player, Uuid,
@@ -14,7 +14,10 @@ use crate::{
 static RNG: Cell<Option<Rng>> = Cell::new(None);
 
 // TODO: Split broadcast_packets into separate functions
-#[allow(clippy::cognitive_complexity)]
+#[expect(
+    clippy::cognitive_complexity,
+    reason = "https://github.com/andrewgazelka/hyperion/issues/68"
+)]
 #[instrument(skip_all)]
 pub fn broadcast_packets(
     _: Receiver<BroadcastPackets>,
@@ -35,7 +38,7 @@ pub fn broadcast_packets(
         let packet_data = Bytes::from(core::mem::take(&mut encoder.packet_data));
 
         'handle_player: for (player_uuid, pose, player, _) in &player {
-            let player_location = DVec2::new(pose.position.x, pose.position.y);
+            let player_location = Vec2::new(pose.position.x, pose.position.y);
 
             // Max bytes that should be sent this tick
             // TODO: Determine max_bytes using the player's network speed, latency, and current
@@ -97,6 +100,12 @@ pub fn broadcast_packets(
                         let distance_squared =
                             packet.prioritize_location.distance_squared(player_location);
                         let chance = (1.0 / distance_squared).clamp(0.05, 1.0);
+
+                        #[expect(
+                            clippy::cast_sign_loss,
+                            clippy::cast_possible_truncation,
+                            reason = "chance is clamped to 0.05 and 1.0"
+                        )]
                         let chance_u8 = (chance * 255.0) as u8;
                         let keep = rng.u8(..) > chance_u8;
 

@@ -1,4 +1,4 @@
-#![allow(clippy::module_name_repetitions)]
+#![expect(clippy::future_not_send, reason = "monoio is not Send")]
 
 use std::{
     borrow::Cow,
@@ -62,8 +62,12 @@ pub const MAX_PACKET_SIZE: usize = MAX_JAVA_PACKET_SIZE;
 pub const MINECRAFT_VERSION: &str = "1.20.1";
 
 fn offline_uuid(username: &str) -> anyhow::Result<Uuid> {
-    #[allow(clippy::indexing_slicing)]
-    Uuid::from_slice(&sha2::Sha256::digest(username)[..16]).map_err(Into::into)
+    let digest = sha2::Sha256::digest(username);
+
+    #[expect(clippy::indexing_slicing, reason = "sha256 is always 32 bytes")]
+    let slice = &digest[..16];
+
+    Uuid::from_slice(slice).context("failed to create uuid")
 }
 
 pub struct ClientConnection {
@@ -262,7 +266,8 @@ impl IoWrite {
         #[cfg(target_os = "macos")]
         {
             let mut value: libc::c_int = 0;
-            let mut len: libc::socklen_t = std::mem::size_of::<libc::c_int>() as libc::socklen_t;
+            let mut len: libc::socklen_t =
+                libc::socklen_t::try_from(std::mem::size_of::<libc::c_int>()).unwrap();
             // SAFETY: raw_fd is valid since the TcpStream is still alive, value and len are valid
             // to write to, and value and len do not alias
             unsafe {
@@ -344,7 +349,9 @@ impl Io {
 
         let mut bytes_slice = &*bytes;
         let slice = &mut bytes_slice;
-        let length = VarInt::decode_partial(slice).unwrap() as usize;
+
+        let length_varint = VarInt::decode_partial(slice).context("failed to decode varint")?;
+        let length = usize::try_from(length_varint).context("failed to convert varint to usize")?;
 
         let slice_len = bytes_slice.len();
 
@@ -446,7 +453,6 @@ impl Io {
 
         monoio::spawn(async move {
             while let Ok(packet) = io_read.recv_packet_raw().await {
-                #[allow(clippy::undocumented_unsafe_blocks)]
                 let packets = unsafe { &mut *LOCAL_PACKETS.get() };
                 packets.push(UserPacketFrame { packet, user: uuid });
             }
@@ -466,19 +472,35 @@ impl Io {
                 // todo: clarify why 1 second?
                 if elapsed > Duration::from_secs(1) {
                     let queued_send = io_write.queued_send();
-                    speed.store(
-                        ((past_queued_send - queued_send) as f32 / elapsed.as_secs_f32()) as u32,
-                        Ordering::Relaxed,
-                    );
+
+                    let elapsed_seconds = elapsed.as_secs_f32();
+
+                    // precision
+                    #[expect(
+                        clippy::cast_precision_loss,
+                        reason = "precision loss is not an issue"
+                    )]
+                    let queued_send_difference = { (past_queued_send - queued_send) as f32 };
+
+                    #[expect(
+                        clippy::cast_possible_truncation,
+                        clippy::cast_sign_loss,
+                        reason = "speed is always positive"
+                    )]
+                    {
+                        speed.store(
+                            (queued_send_difference / elapsed_seconds) as u32,
+                            Ordering::Relaxed,
+                        );
+                    }
                     past_queued_send = io_write.queued_send();
                     past_instant = Instant::now();
                 } else {
                     // This will make the estimated speed slightly lower than the actual speed, but
                     // it makes measuring speed more practical because the server will send packets
                     // to the client more often than 1 second
-                    #[allow(clippy::cast_possible_wrap)]
                     {
-                        past_queued_send += len as libc::c_int;
+                        past_queued_send += libc::c_int::try_from(len).unwrap();
                     }
                 }
             }
@@ -584,7 +606,6 @@ async fn run(tx: flume::Sender<ClientConnection>, update_global: flume::Receiver
 
     monoio::spawn(async move {
         while update_global.recv_async().await == Ok(()) {
-            #[allow(clippy::undocumented_unsafe_blocks)]
             let packets = unsafe { &mut *LOCAL_PACKETS.get() };
             let mut global_packets = GLOBAL_PACKETS.lock().unwrap();
             global_packets.append(packets);

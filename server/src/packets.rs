@@ -1,5 +1,7 @@
-#![allow(clippy::missing_const_for_fn)]
-#![allow(unused_variables)]
+#![expect(
+    unused_variables,
+    reason = "there are still many changes that need to be made to this file"
+)]
 //! <https://wiki.vg/index.php?title=Protocol&oldid=18375>
 
 use std::str::FromStr;
@@ -7,13 +9,13 @@ use std::str::FromStr;
 use anyhow::{bail, ensure};
 use evenio::event::Sender;
 use tracing::{debug, warn};
-use valence_protocol::{decode::PacketFrame, math::DVec3, packets::play, Decode, Packet};
+use valence_protocol::{decode::PacketFrame, math::Vec3, packets::play, Decode, Packet};
 
 use crate::{
     bounding_box::BoundingBox, FullEntityPose, InitEntity, KickPlayer, KillAllEntities, Player,
 };
 
-fn confirm_teleport(_pkt: &[u8]) {
+const fn confirm_teleport(_pkt: &[u8]) {
     // ignore
 }
 
@@ -23,11 +25,13 @@ fn client_settings(mut data: &[u8], player: &mut Player) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn custom_payload(_data: &[u8]) {
+const fn custom_payload(_data: &[u8]) {
     // ignore
 }
 
 fn full(mut data: &[u8], full_entity_pose: &mut FullEntityPose) -> anyhow::Result<()> {
+    const MAX_SPEED: f32 = 100.0;
+
     let pkt = play::FullC2s::decode(&mut data)?;
 
     debug!("full packet: {:?}", pkt);
@@ -42,8 +46,7 @@ fn full(mut data: &[u8], full_entity_pose: &mut FullEntityPose) -> anyhow::Resul
     // check to see if the player is moving too fast
     // if they are, ignore the packet
 
-    const MAX_SPEED: f64 = 100.0;
-
+    let position = position.as_vec3();
     if position.distance_squared(full_entity_pose.position) > MAX_SPEED.powi(2) {
         bail!("Player is moving too fast max speed: {MAX_SPEED}");
     }
@@ -73,7 +76,7 @@ fn look_and_on_ground(
     Ok(())
 }
 
-fn player_command(data: &[u8]) {
+const fn player_command(data: &[u8]) {
     // let pkt = play::ClientCommandC2s::decode(&mut data)?;
 
     // debug!("player command packet: {:?}", pkt);
@@ -89,7 +92,7 @@ fn position_and_on_ground(
 
     let play::PositionAndOnGroundC2s { position, .. } = pkt;
 
-    full_entity_pose.position = position;
+    full_entity_pose.position = position.as_vec3();
 
     Ok(())
 }
@@ -122,8 +125,8 @@ fn keep_alive(player: &mut Player) -> anyhow::Result<()> {
 
 #[derive(Debug, Copy, Clone)]
 enum HybridPos {
-    Absolute(f64),
-    Relative(f64),
+    Absolute(f32),
+    Relative(f32),
 }
 
 // impl parse
@@ -154,6 +157,7 @@ fn chat_command(
     full_entity_pose: &FullEntityPose,
     sender: &mut Sender<(KickPlayer, InitEntity, KillAllEntities)>,
 ) -> anyhow::Result<()> {
+    const BASE_RADIUS: f32 = 4.0;
     let pkt = play::CommandExecutionC2s::decode(&mut data)?;
 
     let mut cmd = pkt.command.0.split(' ');
@@ -174,23 +178,22 @@ fn chat_command(
             [x] => {
                 let count = x.parse()?;
 
-                const BASE_RADIUS: f64 = 4.0;
-
                 // normalize over the number
-                let radius = BASE_RADIUS * (count as f64).sqrt();
+                #[expect(clippy::cast_possible_truncation, reason = "sqrt of f64 is f32")]
+                let radius = BASE_RADIUS * f64::from(count).sqrt() as f32;
 
                 for _ in 0..count {
                     // spawn in 100 block radius
-                    let x = (rand::random::<f64>() - 0.5).mul_add(radius, loc.x);
+                    let x = (rand::random::<f32>() - 0.5).mul_add(radius, loc.x);
                     let y = loc.y;
-                    let z = (rand::random::<f64>() - 0.5).mul_add(radius, loc.z);
+                    let z = (rand::random::<f32>() - 0.5).mul_add(radius, loc.z);
 
                     sender.send(InitEntity {
                         pose: FullEntityPose {
-                            position: DVec3::new(x, y, z),
+                            position: Vec3::new(x, y, z),
                             yaw: 0.0,
                             pitch: 0.0,
-                            bounding: BoundingBox::create(DVec3::new(x, y, z), 0.6, 1.8),
+                            bounding: BoundingBox::create(Vec3::new(x, y, z), 0.6, 1.8),
                         },
                     });
                 }
@@ -223,10 +226,10 @@ fn chat_command(
 
         sender.send(InitEntity {
             pose: FullEntityPose {
-                position: DVec3::new(x, y, z),
+                position: Vec3::new(x, y, z),
                 yaw: 0.0,
                 pitch: 0.0,
-                bounding: BoundingBox::create(DVec3::new(x, y, z), 0.6, 1.8),
+                bounding: BoundingBox::create(Vec3::new(x, y, z), 0.6, 1.8),
             },
         });
     }

@@ -1,4 +1,8 @@
-#![allow(clippy::indexing_slicing, dead_code)]
+#![expect(
+    clippy::indexing_slicing,
+    dead_code,
+    reason = "This is azalea code and likely works"
+)]
 // from azalea
 use std::{error::Error, fmt};
 
@@ -141,14 +145,21 @@ impl BitStorage {
             vec![0; calculated_length]
         };
 
+        #[expect(clippy::cast_sign_loss, reason = "the sign is not relevant")]
+        let (divide_mul, divide_add) = {
+            let divide_mul = divide_mul as u32;
+            let divide_add = divide_add as u32;
+            (divide_mul, divide_add)
+        };
+
         Ok(Self {
             data: using_data,
             bits,
             mask,
             size,
             values_per_long,
-            divide_mul: divide_mul as u32 as u64,
-            divide_add: divide_add as u32 as u64,
+            divide_mul: u64::from(divide_mul),
+            divide_add: u64::from(divide_add),
             divide_shift,
         })
     }

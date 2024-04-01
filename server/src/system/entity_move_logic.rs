@@ -7,7 +7,7 @@ use evenio::{
 };
 use tracing::instrument;
 use valence_protocol::{
-    math::{DVec2, DVec3},
+    math::{Vec2, Vec3},
     ByteAngle, VarInt,
 };
 
@@ -64,9 +64,9 @@ pub fn entity_move_logic(
 
         let dif = target - current;
 
-        let dif2d = DVec2::new(dif.x, dif.z);
+        let dif2d = Vec2::new(dif.x, dif.z);
 
-        let yaw = dif2d.y.atan2(dif2d.x).to_degrees() as f32;
+        let yaw = dif2d.y.atan2(dif2d.x).to_degrees();
 
         // subtract 90 degrees
         let yaw = yaw - 90.0;
@@ -85,19 +85,22 @@ pub fn entity_move_logic(
             let speed = running_speed.copied().unwrap_or_default();
             let dif2d = dif2d * speed.0;
 
-            let vec = DVec3::new(dif2d.x, 0.0, dif2d.y) + reaction.velocity;
+            let vec = Vec3::new(dif2d.x, 0.0, dif2d.y) + reaction.velocity;
 
             pose.move_by(vec);
         }
 
-        reaction.velocity = DVec3::ZERO;
+        reaction.velocity = Vec3::ZERO;
 
-        #[allow(clippy::cast_possible_wrap)]
+        #[expect(
+            clippy::cast_possible_wrap,
+            reason = "wrapping is okay in this scenario"
+        )]
         let entity_id = VarInt(id.index().0 as i32);
 
         let pos = play::EntityPositionS2c {
             entity_id,
-            position: pose.position,
+            position: pose.position.as_dvec3(),
             yaw: ByteAngle::from_degrees(yaw),
             pitch: ByteAngle::from_degrees(pitch),
             on_ground: false,
@@ -110,7 +113,7 @@ pub fn entity_move_logic(
 
         let metadata = PacketMetadata {
             necessity: PacketNecessity::Droppable {
-                prioritize_location: DVec2::new(pose.position.x, pose.position.y),
+                prioritize_location: Vec2::new(pose.position.x, pose.position.y),
             },
             exclude_player: None,
         };

@@ -2,19 +2,23 @@
 // https://matklad.github.io/2020/10/03/fast-thread-locals-in-rust.html
 use std::cell::Cell;
 
-use anyhow::ensure;
+use anyhow::{ensure, Context};
 use bytes::BufMut;
 use uuid::Uuid;
-use valence_protocol::{math::DVec2, Encode, Packet, VarInt};
+use valence_protocol::{math::Vec2, Encode, Packet, VarInt};
 
 const PACKET_LEN_BYTES_MAX: usize = 3;
 
 #[derive(Copy, Clone)]
 pub enum PacketNecessity {
-    #[allow(dead_code)]
-    Needed,
+    #[expect(
+        dead_code,
+        reason = "This is not used yet, but it is planned to be used very shortly. An example of \
+                  a packet that required would be a block break packet"
+    )]
+    Required,
     Droppable {
-        prioritize_location: DVec2,
+        prioritize_location: Vec2,
     },
 }
 
@@ -33,7 +37,7 @@ pub struct NecessaryPacket {
 
 /// Packet which may be dropped
 pub struct DroppablePacket {
-    pub prioritize_location: DVec2,
+    pub prioritize_location: Vec2,
     pub exclude_player: Option<Uuid>,
     pub offset: usize,
     pub len: usize,
@@ -77,20 +81,28 @@ impl PacketBuffer {
             "packet exceeds maximum length"
         );
 
+        // should never happen
+        let packet_len_i32 = i32::try_from(packet_len).context(
+            "packet length is larger than an i32, which is the maximum size of a packet length",
+        )?;
+
         // Shift the start of the packet to the start of the packet length and write the packet
         // length there
-        #[allow(clippy::cast_possible_wrap)]
-        let packet_len_var_int = VarInt(packet_len as i32);
+        let packet_len_var_int = VarInt(packet_len_i32);
         packet_start += PACKET_LEN_BYTES_MAX - packet_len_var_int.written_size();
 
-        #[allow(clippy::indexing_slicing)]
+        #[expect(
+            clippy::indexing_slicing,
+            reason = "packet_start is guaranteed to be valid since we are only adding to \
+                      packet_data and the initial length is packet_start"
+        )]
         let front = &mut self.packet_data[packet_start..];
         packet_len_var_int.encode(front)?;
 
         let packet_len_including_size = packet_len + packet_len_var_int.written_size();
 
         match metadata.necessity {
-            PacketNecessity::Needed => {
+            PacketNecessity::Required => {
                 self.necessary_packets.push(NecessaryPacket {
                     exclude_player: metadata.exclude_player,
                     offset: packet_start,
@@ -118,6 +130,10 @@ impl PacketBuffer {
         self.droppable_packets.clear();
     }
 }
+
+// // todo init
+// #[thread_local]
+// static BROADCASTER: RefCell<Option<Broadcaster>> = RefCell::new(None);
 
 #[thread_local]
 static ENCODER: Cell<PacketBuffer> = Cell::new(PacketBuffer::new());
