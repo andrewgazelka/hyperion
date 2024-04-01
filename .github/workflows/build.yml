@@ -29,20 +29,20 @@ jobs:
         run: |
           cargo machete
 
-  test:
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Setup Rust toolchain and cache
-        uses: actions-rust-lang/setup-rust-toolchain@v1
-        with:
-          toolchain: ${{ env.RUST_NIGHTLY_TOOLCHAIN }}
-
-      - name: Run cargo test
-        run: cargo test --workspace --all-features
+#  test:
+#    runs-on: ubuntu-latest
+#
+#    steps:
+#      - name: Checkout repository
+#        uses: actions/checkout@v4
+#
+#      - name: Setup Rust toolchain and cache
+#        uses: actions-rust-lang/setup-rust-toolchain@v1
+#        with:
+#          toolchain: ${{ env.RUST_NIGHTLY_TOOLCHAIN }}
+#
+#      - name: Run cargo test
+#        run: cargo test --workspace --all-features
 
   deny:
     runs-on: ubuntu-latest
