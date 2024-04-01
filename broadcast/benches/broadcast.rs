@@ -1,12 +1,12 @@
-#![feature(thread_local)]
+//! Benchmarking broadcast
 
-use std::{cell::RefCell, collections::BTreeMap, hint::black_box};
+use std::hint::black_box;
 
 use broadcast::Broadcaster;
-use divan::Bencher;
+use divan::{AllocProfiler, Bencher};
 
-// #[global_allocator]
-// static ALLOC: AllocProfiler = AllocProfiler::system();
+#[global_allocator]
+static ALLOC: AllocProfiler = AllocProfiler::system();
 
 fn main() {
     divan::main();
@@ -18,10 +18,10 @@ fn main() {
 const LENS: &[u16] = &[128, 256, 512, 1024];
 
 #[inline(never)]
-fn generate_world(width: u16) -> Broadcaster {
+fn generate_broadcaster(width: u16) -> Broadcaster {
     let mut world = Broadcaster::create(width).unwrap();
 
-    world.populate(|_, data| {
+    world.repopulate(|_, data| {
         let data_len = rand::random::<u8>();
         let to_push = (0..data_len)
             .map(|_| rand::random::<u8>())
@@ -48,9 +48,6 @@ fn generate_world(width: u16) -> Broadcaster {
 
 //
 
-#[thread_local]
-static WORLDS: RefCell<BTreeMap<u16, Broadcaster>> = RefCell::new(BTreeMap::new());
-
 // Register a `fibonacci` function and benchmark it over multiple cases.
 #[divan::bench(
     args = LENS,
@@ -59,10 +56,7 @@ fn player_render_distance_32(bencher: Bencher, len: u16) {
     const PLAYER_COUNT: usize = 10_000;
     const PLAYER_VIEW_DISTANCE: u16 = 32;
 
-    let mut worlds = WORLDS.borrow_mut();
-    let world = worlds.entry(len).or_insert_with(|| generate_world(len));
-
-    // let mut world = generate_world(len);
+    let world = generate_broadcaster(len);
 
     bencher.counter(PLAYER_COUNT).bench_local(move || {
         for _ in 0..PLAYER_COUNT {
