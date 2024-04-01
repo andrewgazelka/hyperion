@@ -8,7 +8,7 @@ use std::str::FromStr;
 
 use anyhow::{bail, ensure};
 use evenio::event::Sender;
-use tracing::{debug, warn};
+use tracing::warn;
 use valence_protocol::{decode::PacketFrame, math::Vec3, packets::play, Decode, Packet};
 
 use crate::{
@@ -33,8 +33,6 @@ fn full(mut data: &[u8], full_entity_pose: &mut FullEntityPose) -> anyhow::Resul
     const MAX_SPEED: f32 = 100.0;
 
     let pkt = play::FullC2s::decode(&mut data)?;
-
-    debug!("full packet: {:?}", pkt);
 
     let play::FullC2s {
         position,

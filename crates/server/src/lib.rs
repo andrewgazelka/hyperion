@@ -127,7 +127,7 @@ struct Gametick;
 #[derive(Event)]
 struct BroadcastPackets;
 
-static GLOBAL: global::Global = global::Global {
+static SHARED: global::Shared = global::Shared {
     player_count: AtomicU32::new(0),
 };
 
@@ -194,12 +194,16 @@ impl Game {
         world.add_handler(system::entity_move_logic);
         world.add_handler(system::entity_detect_collisions);
         world.add_handler(system::reset_bounding_boxes);
+        world.add_handler(system::update_time);
 
         world.add_handler(system::broadcast_packets);
         world.add_handler(system::keep_alive);
         world.add_handler(process_packets);
         world.add_handler(system::tps_message);
         world.add_handler(system::kill_all);
+        
+        let global = world.spawn();
+        world.insert(global, global::Global::default());
 
         let bounding_boxes = world.spawn();
         world.insert(bounding_boxes, bounding_box::EntityBoundingBoxes::default());

@@ -42,7 +42,7 @@ use valence_protocol::{
 };
 use valence_registry::{BiomeRegistry, RegistryCodec};
 
-use crate::GLOBAL;
+use crate::SHARED;
 
 const DEFAULT_SPEED: u32 = 1024 * 1024;
 
@@ -525,7 +525,7 @@ impl Io {
         debug!("status");
         let status::QueryRequestC2s = self.recv_packet().await?;
 
-        let player_count = GLOBAL
+        let player_count = SHARED
             .player_count
             .load(std::sync::atomic::Ordering::Relaxed);
 

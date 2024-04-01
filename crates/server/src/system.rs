@@ -9,6 +9,7 @@ mod player_join_world;
 mod player_kick;
 mod reset_bounding_boxes;
 mod tps_message;
+mod update_time;
 
 pub use broadcast_packets::broadcast_packets;
 pub use entity_detect_collisions::entity_detect_collisions;
@@ -21,3 +22,4 @@ pub use player_join_world::player_join_world;
 pub use player_kick::player_kick;
 pub use reset_bounding_boxes::reset_bounding_boxes;
 pub use tps_message::tps_message;
+pub use update_time::update_time;
