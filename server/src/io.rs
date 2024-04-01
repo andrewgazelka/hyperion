@@ -7,6 +7,7 @@ use std::{
     io,
     io::ErrorKind,
     os::fd::{AsRawFd, RawFd},
+    ptr::addr_of_mut,
     sync::{
         atomic::{AtomicU32, Ordering},
         Arc, Mutex,
@@ -236,33 +237,51 @@ impl IoWrite {
     }
 
     /// This function returns the number of bytes in the TCP send queue that have
-    /// not yet been transmitted to the network.
-    ///
-    /// It utilizes the `ioctl` system call with the `TIOCOUTQ` operation on Unix-like systems to
-    /// query this information. The function safely checks the `ioctl` return value to ensure no
-    /// errors occur during the operation.
+    /// been sent but have not been acknowledged by the client.
     ///
     /// If running on non-Unix systems, it currently returns `0` by default.
     ///
     /// Proper error handling for `ioctl` failures should be added, and support for other operating
     /// systems needs to be considered for portability.
     pub(crate) fn queued_send(&self) -> libc::c_int {
-        if cfg!(unix) {
+        #[cfg(target_os = "linux")]
+        {
             let mut value: libc::c_int = 0;
             // SAFETY: raw_fd is valid since the TcpStream is still alive, and value is valid to
             // write to
             unsafe {
                 // TODO: Handle ioctl error properly
                 assert_ne!(
-                    libc::ioctl(self.raw_fd, libc::TIOCOUTQ, core::ptr::addr_of_mut!(value)),
+                    libc::ioctl(self.raw_fd, libc::TIOCOUTQ, addr_of_mut!(value)),
                     -1
                 );
             }
             value
-        } else {
-            // TODO: Support getting queued send for other OS
-            0
         }
+
+        #[cfg(target_os = "macos")]
+        {
+            let mut value: libc::c_int = 0;
+            let mut len: libc::socklen_t = std::mem::size_of::<libc::c_int>() as libc::socklen_t;
+            // SAFETY: raw_fd is valid since the TcpStream is still alive, value and len are valid
+            // to write to, and value and len do not alias
+            unsafe {
+                // TODO: Handle getsockopt error properly
+                assert_ne!(
+                    libc::getsockopt(
+                        self.raw_fd,
+                        libc::SOL_SOCKET,
+                        libc::SO_NWRITE,
+                        addr_of_mut!(value).cast(),
+                        addr_of_mut!(len)
+                    ),
+                    -1
+                );
+            }
+            value
+        }
+
+        // TODO: Support getting queued send for other OS
     }
 }
 
