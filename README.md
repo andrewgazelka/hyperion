@@ -3,6 +3,10 @@
 [![Discord invite link](https://dcbadge.vercel.app/api/server/PBfnDtj5Wb)](https://discord.gg/PBfnDtj5Wb)
 [![wakatime](https://wakatime.com/badge/github/andrewgazelka/hyperion.svg)](https://wakatime.com/badge/github/andrewgazelka/hyperion)
 
+Introduction (click to watch):
+
+[![Intro video](https://img.youtube.com/vi/hRc2oWAXd70/0.jpg)](https://www.youtube.com/watch?v=hRc2oWAXd70)
+
 _From the creator of [SwarmBot](https://github.com/SwarmBotMC/SwarmBot):_
 
 **How can we get 10k players to PvP at once on a Minecraft server to break the [Guinness World Record for largest PvP battle in any game](https://www.guinnessworldrecords.com/world-records/105603-largest-videogame-pvp-battle) of 8,825 players?** 
