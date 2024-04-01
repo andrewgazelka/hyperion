@@ -8,8 +8,9 @@ use crate::{Gametick, Player};
 #[instrument(skip_all)]
 pub fn keep_alive(_: Receiver<Gametick>, mut fetcher: Fetcher<&mut Player>) {
     fetcher.par_iter_mut().for_each(|player| {
-        // if we haven't sent a keep alive packet in 5 seconds, send one
-        if player.last_keep_alive_sent.elapsed().as_secs() >= 5 {
+        // if we haven't sent a keep alive packet in 5 seconds, and a keep alive hasn't already
+        // been sent and hasn't been responded to, send one
+        if !player.unresponded_keep_alive && player.last_keep_alive_sent.elapsed().as_secs() >= 5 {
             player.last_keep_alive_sent = Instant::now();
             // todo: handle and disconnect
             let name = &player.name;

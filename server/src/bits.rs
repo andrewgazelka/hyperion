@@ -141,7 +141,6 @@ impl BitStorage {
             vec![0; calculated_length]
         };
 
-        #[allow(clippy::cast_sign_loss)]
         Ok(Self {
             data: using_data,
             bits,

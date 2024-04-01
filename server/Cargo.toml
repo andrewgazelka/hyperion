@@ -50,6 +50,8 @@ tracing-flame = "0.2.0"
 ndarray = "0.15.6"
 jemallocator = "0.5.4"
 jemalloc-ctl = "0.5.4"
+libc = "0.2.153"
+fastrand = "2.0.2"
 
 # removing this because jemalloc-ctl is nice for memory stats also
 # https://github.com/rust-lang/rust-analyzer/issues/1441#issuecomment-509506279
@@ -68,6 +70,7 @@ redundant_feature_names = "deny"
 wildcard_dependencies = "deny"
 
 restriction = { level = "deny", priority = -1 }
+semicolon_outside_block = "allow"
 missing_docs_in_private_items = "allow"
 question_mark_used = "allow"
 print_stdout = "allow"
@@ -117,6 +120,7 @@ pedantic = { level = "deny", priority = -1 }
 uninlined_format_args = "allow" # consider denying; this is allowed because Copilot often generates code that triggers this lint
 needless_pass_by_value = "allow" # consider denying
 cast_lossless = "allow"
+cast_sign_loss = "allow"
 cast_possible_truncation = "allow" # consider denying
 cast_precision_loss = "allow" # consider denying
 missing_errors_doc = "allow" # consider denying
