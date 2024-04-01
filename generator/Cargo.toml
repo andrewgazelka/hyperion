@@ -9,10 +9,11 @@ publish = false
 [dependencies]
 valence_protocol = { git = "https://github.com/valence-rs/valence", optional = true }
 
-
 [build-dependencies]
+tar = "0.4.40"
+zstd = "0.13.1"
 generator-build.workspace = true
-zip = "0.6.6"
+anyhow = "1.0.81"
 
 [lints.rust]
 warnings = "deny"
@@ -86,3 +87,6 @@ style = { level = "deny", priority = -1 }
 
 suspicious = { level = "deny", priority = -1 }
 blanket_clippy_restriction_lints = "allow"
+
+[dev-dependencies]
+zip = "0.6.6"

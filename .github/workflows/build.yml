@@ -35,8 +35,6 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          lfs: true
 
       - name: Setup Rust toolchain and cache
         uses: actions-rust-lang/setup-rust-toolchain@v1
@@ -84,8 +82,6 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          lfs: true
 
       - name: Setup Rust toolchain and cache
         uses: actions-rust-lang/setup-rust-toolchain@v1
