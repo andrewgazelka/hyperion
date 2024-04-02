@@ -5,7 +5,7 @@ use evenio::{
     query::{Not, Query, With},
     rayon::prelude::*,
 };
-use tracing::instrument;
+use tracing::{error, instrument};
 use valence_protocol::{
     math::{Vec2, Vec3},
     ByteAngle, VarInt,
@@ -122,7 +122,12 @@ pub fn entity_move_logic(
         };
 
         // todo: remove unwrap
-        encoder.append(&pos, metadata).unwrap();
-        encoder.append(&look, metadata).unwrap();
+        if let Err(e) = encoder.append(&pos, metadata) {
+            error!("Failed to append entity position packet: {:?}", e);
+        }
+
+        if let Err(e) = encoder.append(&look, metadata) {
+            error!("Failed to append entity look packet: {:?}", e);
+        }
     });
 }

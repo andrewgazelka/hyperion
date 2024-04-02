@@ -303,6 +303,7 @@ impl Game {
         let ms = now.elapsed().as_nanos() as f64 / 1_000_000.0;
         self.last_ms_per_tick.push_back(ms);
 
+        #[expect(clippy::unwrap_used, reason = "these numbers should always be valid")]
         if self.last_ms_per_tick.len() > MSPT_HISTORY_SIZE {
             // efficient
             let arr = ndarray::Array::from_iter(self.last_ms_per_tick.iter().copied().rev());

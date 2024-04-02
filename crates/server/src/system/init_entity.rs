@@ -4,7 +4,7 @@ use evenio::{
 };
 use generator::EntityType;
 use rand_distr::{Distribution, LogNormal};
-use tracing::instrument;
+use tracing::{error, instrument};
 use valence_protocol::{ByteAngle, VarInt, Velocity};
 
 use crate::{
@@ -56,16 +56,17 @@ pub fn init_entity(
         velocity: Velocity([0; 3]),
     };
 
-    encoder
-        .0
-        .append_round_robin(&pkt, PacketMetadata::REQUIRED)
-        .unwrap();
+    if let Err(e) = encoder.0.append_round_robin(&pkt, PacketMetadata::REQUIRED) {
+        error!("Failed to encode packet: {:?}", e);
+    }
 }
 
 fn generate_running_speed() -> RunningSpeed {
     // Parameters for the Log-Normal distribution
     let mean = 0.10; // Mean of the underlying Normal distribution
     let std_dev = 0.20; // Standard deviation of the underlying Normal distribution
+
+    #[expect(clippy::unwrap_used, reason = "this should never fail")]
     let log_normal = LogNormal::new(mean, std_dev).unwrap();
 
     let speed = log_normal.sample(&mut rand::thread_rng()) * 0.1;

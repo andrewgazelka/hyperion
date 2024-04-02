@@ -28,11 +28,13 @@ fn world_bench(bencher: Bencher, thread_count: usize) {
     // things
 
     // Run registered benchmarks.
+    #[expect(clippy::unwrap_used, reason = "this is a bench")]
     let pool = rayon::ThreadPoolBuilder::new()
         .num_threads(thread_count)
         .build()
         .unwrap();
 
+    #[expect(clippy::unwrap_used, reason = "this is a bench")]
     let mut game = Game::init().unwrap();
 
     let count: u32 = 100_000;

@@ -149,6 +149,10 @@ fn send_commands(io: &mut Packets) -> anyhow::Result<()> {
     Ok(())
 }
 
+#[expect(
+    clippy::unwrap_used,
+    reason = "this code is essentially pure; unwrapping is okay as it is predictable"
+)]
 fn air_section() -> Vec<u8> {
     let mut section_bytes = Vec::new();
     0_u16.encode(&mut section_bytes).unwrap();
@@ -162,6 +166,10 @@ fn air_section() -> Vec<u8> {
     section_bytes
 }
 
+#[expect(
+    clippy::unwrap_used,
+    reason = "this code is essentially pure; unwrapping is okay as it is predictable"
+)]
 fn stone_section() -> Vec<u8> {
     let mut section_bytes = Vec::new();
     SECTION_BLOCK_COUNT.encode(&mut section_bytes).unwrap();
@@ -176,6 +184,10 @@ fn stone_section() -> Vec<u8> {
     section_bytes
 }
 
+#[expect(
+    clippy::unwrap_used,
+    reason = "this code is essentially pure; unwrapping is okay as it is predictable"
+)]
 fn ground_section() -> Vec<u8> {
     let mut section_bytes = Vec::new();
 
@@ -286,11 +298,11 @@ fn inner(io: &mut Player) -> anyhow::Result<()> {
 
     let dimension_height = 384;
 
-    let map = heightmap(dimension_height, dimension_height - 3);
+    let map = heightmap(dimension_height, dimension_height - 3)?;
     let map: Vec<_> = map.into_iter().map(i64::try_from).try_collect()?;
 
     // convert section_count + 2 0b1s into u64 array
-    let mut bits = BitStorage::new(1, section_count + 2, None).unwrap();
+    let mut bits = BitStorage::new(1, section_count + 2, None)?;
 
     for i in 0..section_count + 2 {
         bits.set(i, 1);

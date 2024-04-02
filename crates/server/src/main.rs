@@ -1,6 +1,12 @@
+#![feature(lint_reasons)]
+
 use server::Game;
 
 #[cfg(feature = "trace")]
+#[expect(
+    clippy::unwrap_used,
+    reason = "It is appropriate to have unwraps during initialization"
+)]
 fn setup_global_subscriber() -> impl Drop {
     use tracing_flame::FlameLayer;
     use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
@@ -24,6 +30,10 @@ fn setup_global_subscriber() -> impl Drop {
 }
 
 #[cfg(all(feature = "trace-simple", not(feature = "trace")))]
+#[expect(
+    clippy::unwrap_used,
+    reason = "It is appropriate to have unwraps during initialization"
+)]
 fn setup_simple_trace() {
     tracing_subscriber::fmt::try_init().unwrap();
 }
@@ -37,6 +47,10 @@ fn main() -> anyhow::Result<()> {
     let _guard = setup_global_subscriber();
 
     #[cfg(feature = "pprof")]
+    #[expect(
+        clippy::unwrap_used,
+        reason = "It is appropriate to have unwraps during initialization"
+    )]
     let guard = pprof::ProfilerGuardBuilder::default()
         .frequency(2999)
         .blocklist(&["libc", "libgcc", "pthread", "vdso", "rayon"])
@@ -47,6 +61,10 @@ fn main() -> anyhow::Result<()> {
     game.game_loop();
 
     #[cfg(feature = "pprof")]
+    #[expect(
+        clippy::unwrap_used,
+        reason = "It is appropriate to have unwraps during de-initialization"
+    )]
     if let Ok(report) = guard.report().build() {
         let file = std::fs::File::create("flamegraph.svg").unwrap();
         report.flamegraph(file).unwrap();

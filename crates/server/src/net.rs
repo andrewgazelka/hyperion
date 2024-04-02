@@ -265,6 +265,11 @@ impl IoWrite {
         #[cfg(target_os = "macos")]
         {
             let mut value: libc::c_int = 0;
+
+            #[expect(
+                clippy::unwrap_used,
+                reason = "it is realistic to assume that the value will be set properly"
+            )]
             let mut len: libc::socklen_t =
                 libc::socklen_t::try_from(std::mem::size_of::<libc::c_int>()).unwrap();
             // SAFETY: raw_fd is valid since the TcpStream is still alive, value and len are valid
@@ -459,7 +464,7 @@ impl Io {
         });
 
         monoio::spawn(async move {
-            let mut past_queued_send = 0;
+            let mut past_queued_send: i64 = 0;
             let mut past_instant = Instant::now();
             while let Ok(bytes) = s2c_rx.recv_async().await {
                 let len = bytes.len();
@@ -480,7 +485,8 @@ impl Io {
                         clippy::cast_precision_loss,
                         reason = "precision loss is not an issue"
                     )]
-                    let queued_send_difference = { (past_queued_send - queued_send) as f32 };
+                    let queued_send_difference =
+                        { (past_queued_send - i64::from(queued_send)) as f32 };
 
                     #[expect(
                         clippy::cast_possible_truncation,
@@ -493,14 +499,19 @@ impl Io {
                             Ordering::Relaxed,
                         );
                     }
-                    past_queued_send = io_write.queued_send();
+                    past_queued_send = i64::from(io_write.queued_send());
                     past_instant = Instant::now();
                 } else {
                     // This will make the estimated speed slightly lower than the actual speed, but
                     // it makes measuring speed more practical because the server will send packets
                     // to the client more often than 1 second
+                    #[expect(
+                        clippy::unwrap_used,
+                        reason = "realistically, 2,147,483,648 = 2^31 should be a large enough \
+                                  length"
+                    )]
                     {
-                        past_queued_send += libc::c_int::try_from(len).unwrap();
+                        past_queued_send += i64::try_from(len).unwrap();
                     }
                 }
             }
@@ -516,7 +527,10 @@ impl Io {
             uuid,
         };
 
-        tx.send(conn).unwrap();
+        if let Err(e) = tx.send(conn) {
+            // todo: add disconnect message especially if this occurs often
+            error!("Error sending connection: {e}");
+        }
 
         Ok(())
     }
@@ -628,6 +642,10 @@ pub fn server(shutdown: flume::Receiver<()>) -> anyhow::Result<flume::Receiver<C
     std::thread::Builder::new()
         .name("io".to_string())
         .spawn(move || {
+            #[expect(
+                clippy::unwrap_used,
+                reason = "It is appropriate to have unwraps during initialization"
+            )]
             let mut runtime = monoio::RuntimeBuilder::<monoio::FusionDriver>::new()
                 .build()
                 .unwrap();

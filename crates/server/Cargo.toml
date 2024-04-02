@@ -93,3 +93,5 @@ suspicious = "deny"
 # restriction
 allow_attributes = "deny"
 allow_attributes_without_reason = "deny"
+unwrap_used = "deny"
+expect_used = "deny"
