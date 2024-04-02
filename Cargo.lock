@@ -1767,6 +1767,7 @@ dependencies = [
  "sha2",
  "signal-hook",
  "smallvec 2.0.0-alpha.5",
+ "spin",
  "thread-priority",
  "tracing",
  "tracing-flame",

@@ -137,7 +137,6 @@ pub struct Game {
     last_ms_per_tick: VecDeque<f64>,
     tick_on: u64,
     incoming: flume::Receiver<ClientConnection>,
-    req_packets: flume::Sender<()>,
 }
 
 impl Game {
@@ -183,7 +182,7 @@ impl Game {
             }
         });
 
-        let (incoming, req_packets) = server(shutdown_rx)?;
+        let incoming = server(shutdown_rx)?;
 
         let mut world = World::new();
 
@@ -216,7 +215,6 @@ impl Game {
             last_ms_per_tick: VecDeque::default(),
             tick_on: 0,
             incoming,
-            req_packets,
         };
 
         game.last_ticks.push_back(Instant::now());
@@ -297,8 +295,6 @@ impl Game {
         self.world.send(Gametick);
         self.world.send(BroadcastPackets);
 
-        self.req_packets.send(()).unwrap();
-
         #[expect(
             clippy::cast_precision_loss,
             reason = "realistically, nanoseconds between last tick will not be greater than 2^52 \
@@ -354,10 +350,7 @@ fn process_packets(
 ) {
     // uuid to entity id map
 
-    let packets: Vec<_> = {
-        let mut packets = GLOBAL_PACKETS.lock().unwrap();
-        core::mem::take(&mut packets)
-    };
+    let packets: Vec<_> = core::mem::take(&mut *GLOBAL_PACKETS.lock());
 
     let lookup = lookup.0;
 
