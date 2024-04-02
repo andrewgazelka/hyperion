@@ -6,11 +6,12 @@
 resolver = "2"
 
 members = [
-    "server",
-    "chunk",
-    "generator-build",
-    "generator",
-    "broadcast",
+    "crates/broadcast",
+    "crates/chunk",
+    "crates/generator",
+    "crates/generator-build",
+    "crates/rayon-local",
+    "crates/server",
 ]
 
 [profile.dev]
@@ -31,7 +32,9 @@ lto = "fat"
 codegen-units = 1
 
 [workspace.dependencies]
-chunk = { path = "chunk" }
-generator-build = { path = "generator-build" }
-generator = { path = "generator" }
-broadcast = { path = "broadcast" }
+broadcast = { path = "crates/broadcast" }
+chunk = { path = "crates/chunk" }
+generator = { path = "crates/generator" }
+generator-build = { path = "crates/generator-build" }
+rayon-local = { path = "crates/rayon-local" }
+evenio = { git = "https://github.com/andrewgazelka/evenio", features = ["rayon"], branch = "fix-collisions-gt-2" }

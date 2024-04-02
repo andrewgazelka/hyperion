@@ -4,6 +4,10 @@ use std::cell::Cell;
 
 use anyhow::{ensure, Context};
 use bytes::BufMut;
+use evenio::prelude::Component;
+use rayon::iter::IntoParallelRefMutIterator;
+pub use rayon::iter::ParallelIterator;
+use rayon_local::RayonLocal;
 use uuid::Uuid;
 use valence_protocol::{math::Vec2, Encode, Packet, VarInt};
 
@@ -11,21 +15,21 @@ const PACKET_LEN_BYTES_MAX: usize = 3;
 
 #[derive(Copy, Clone)]
 pub enum PacketNecessity {
-    #[expect(
-        dead_code,
-        reason = "This is not used yet, but it is planned to be used very shortly. An example of \
-                  a packet that required would be a block break packet"
-    )]
     Required,
-    Droppable {
-        prioritize_location: Vec2,
-    },
+    Droppable { prioritize_location: Vec2 },
 }
 
 #[derive(Copy, Clone)]
 pub struct PacketMetadata {
     pub necessity: PacketNecessity,
     pub exclude_player: Option<Uuid>,
+}
+
+impl PacketMetadata {
+    pub const REQUIRED: Self = Self {
+        necessity: PacketNecessity::Required,
+        exclude_player: None,
+    };
 }
 
 /// Packet which should not be dropped
@@ -51,14 +55,6 @@ pub struct PacketBuffer {
 }
 
 impl PacketBuffer {
-    pub const fn new() -> Self {
-        Self {
-            packet_data: Vec::new(),
-            necessary_packets: Vec::new(),
-            droppable_packets: Vec::new(),
-        }
-    }
-
     pub fn append_packet<P>(&mut self, pkt: &P, metadata: PacketMetadata) -> anyhow::Result<()>
     where
         P: Packet + Encode,
@@ -135,40 +131,45 @@ impl PacketBuffer {
 // #[thread_local]
 // static BROADCASTER: RefCell<Option<Broadcaster>> = RefCell::new(None);
 
-#[thread_local]
-static ENCODER: Cell<PacketBuffer> = Cell::new(PacketBuffer::new());
+// pub struct Encoder;
 
-pub struct Encoder;
+#[derive(Component, Default)]
+pub struct Encoder {
+    rayon_local: RayonLocal<Cell<PacketBuffer>>,
+}
 
 impl Encoder {
-    pub fn append<P: Packet + Encode>(packet: &P, metadata: PacketMetadata) -> anyhow::Result<()> {
-        let mut encoder = ENCODER.take();
+    pub fn append<P: Packet + Encode>(
+        &self,
+        packet: &P,
+        metadata: PacketMetadata,
+    ) -> anyhow::Result<()> {
+        let local = self.rayon_local.get_rayon_local();
+        let mut encoder = local.take();
         let result = encoder.append_packet(packet, metadata);
-        ENCODER.set(encoder);
+        local.set(encoder);
         result
     }
 
-    pub fn par_drain<F>(f: F)
+    pub fn append_round_robin<P: Packet + Encode>(
+        &mut self,
+        packet: &P,
+        metadata: PacketMetadata,
+    ) -> anyhow::Result<()> {
+        let local = self.rayon_local.get_local_round_robin();
+        let result = local.get_mut().append_packet(packet, metadata);
+        result
+    }
+
+    pub fn par_drain<F>(&mut self, f: F)
     where
         F: Fn(&mut PacketBuffer) + Sync,
     {
-        rayon::broadcast(|_| {
-            let mut encoder = ENCODER.take();
-            f(&mut encoder);
-            ENCODER.set(encoder);
-        });
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use std::panic::{RefUnwindSafe, UnwindSafe};
-
-    use crate::singleton::encoder::Encoder;
-
-    const fn _assert_auto_trait_impls()
-    where
-        Encoder: Send + Sync + UnwindSafe + RefUnwindSafe,
-    {
+        self.rayon_local
+            .get_all_locals()
+            .par_iter_mut()
+            .for_each(|x| {
+                f(x.get_mut());
+            });
     }
 }

@@ -1,7 +1,11 @@
 use std::cell::Cell;
 
 use bytes::Bytes;
-use evenio::{event::Receiver, fetch::Fetcher, query::Not};
+use evenio::{
+    event::Receiver,
+    fetch::{Fetcher, Single},
+    query::Not,
+};
 use fastrand::Rng;
 use tracing::{instrument, trace};
 use valence_protocol::math::Vec2;
@@ -22,11 +26,14 @@ static RNG: Cell<Option<Rng>> = Cell::new(None);
 pub fn broadcast_packets(
     _: Receiver<BroadcastPackets>,
     player: Fetcher<(&Uuid, &FullEntityPose, &Player, Not<&MinecraftEntity>)>,
+    encoder: Single<&mut Encoder>,
 ) {
     let start = std::time::Instant::now();
 
-    Encoder::par_drain(|encoder| {
-        if encoder.necessary_packets.is_empty() && encoder.droppable_packets.is_empty() {
+    let encoder = encoder.0;
+
+    encoder.par_drain(|buf| {
+        if buf.necessary_packets.is_empty() && buf.droppable_packets.is_empty() {
             return;
         }
 
@@ -35,7 +42,7 @@ pub fn broadcast_packets(
         let mut rng = RNG.take().unwrap_or_default();
 
         // TODO: Avoid taking packet_data so that the capacity can be reused
-        let packet_data = Bytes::from(core::mem::take(&mut encoder.packet_data));
+        let packet_data = Bytes::from(core::mem::take(&mut buf.packet_data));
 
         'handle_player: for (player_uuid, pose, player, _) in &player {
             let player_location = Vec2::new(pose.position.x, pose.position.y);
@@ -46,7 +53,7 @@ pub fn broadcast_packets(
             let max_bytes = 25_000; // 4 Mbit/s
             let mut total_bytes_sent = 0;
 
-            for packet in &encoder.necessary_packets {
+            for packet in &buf.necessary_packets {
                 if packet.exclude_player == Some(player_uuid.0) {
                     continue;
                 }
@@ -63,13 +70,13 @@ pub fn broadcast_packets(
             }
 
             if total_bytes_sent < max_bytes {
-                let all_droppable_packets_len = encoder
+                let all_droppable_packets_len = buf
                     .droppable_packets
                     .iter()
                     .map(|packet| packet.len)
                     .sum::<usize>();
                 if all_droppable_packets_len + total_bytes_sent <= max_bytes {
-                    for packet in &encoder.droppable_packets {
+                    for packet in &buf.droppable_packets {
                         if packet.exclude_player == Some(player_uuid.0) {
                             continue;
                         }
@@ -87,8 +94,8 @@ pub fn broadcast_packets(
                     }
                 } else {
                     // todo: remove shuffling; this is inefficient
-                    rng.shuffle(&mut encoder.droppable_packets);
-                    for packet in &encoder.droppable_packets {
+                    rng.shuffle(&mut buf.droppable_packets);
+                    for packet in &buf.droppable_packets {
                         if packet.exclude_player == Some(player_uuid.0) {
                             continue;
                         }
@@ -137,7 +144,7 @@ pub fn broadcast_packets(
         }
 
         RNG.set(Some(rng));
-        encoder.clear_packets();
+        buf.clear_packets();
 
         trace!(
             "took {:?} to broadcast packets with specific encoder",
