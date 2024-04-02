@@ -1,13 +1,10 @@
-use std::fs::File;
-use std::io::Read;
-use std::path::Path;
+use std::{fs::File, io::Read, path::Path};
+
 use serde::{Deserialize, Serialize};
 use spin::lazy::Lazy;
 use tracing::{info, instrument};
 
-pub static CONFIG: Lazy<Config> = Lazy::new(|| {
-    Config::load("run/config.toml").unwrap()
-});
+pub static CONFIG: Lazy<Config> = Lazy::new(|| Config::load("run/config.toml").unwrap());
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Config {
@@ -15,7 +12,7 @@ pub struct Config {
     pub max_players: i32,
     pub view_distance: i32,
     pub simulation_distance: i32,
-    pub server_desc: String
+    pub server_desc: String,
 }
 
 impl Default for Config {
@@ -25,7 +22,7 @@ impl Default for Config {
             max_players: 10_000,
             view_distance: 32,
             simulation_distance: 10,
-            server_desc: "10k babyyyy".to_owned()
+            server_desc: "10k babyyyy".to_owned(),
         }
     }
 }
@@ -38,7 +35,7 @@ impl Config {
             let mut file = File::open(path)?;
             let mut contents = String::default();
             file.read_to_string(&mut contents)?;
-            let config = toml::from_str::<Config>(contents.as_str())?;
+            let config = toml::from_str::<Self>(contents.as_str())?;
             Ok(config)
         } else {
             info!("configuration file not found, using defaults");

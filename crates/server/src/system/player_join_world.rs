@@ -15,7 +15,10 @@ use valence_protocol::{
 };
 use valence_registry::{biome::BiomeId, RegistryIdx};
 
-use crate::{bits::BitStorage, chunk::heightmap, net::Packets, singleton::player_lookup::PlayerLookup, KickPlayer, Player, PlayerJoinWorld, Uuid, SHARED, config};
+use crate::{
+    bits::BitStorage, chunk::heightmap, config, net::Packets,
+    singleton::player_lookup::PlayerLookup, KickPlayer, Player, PlayerJoinWorld, Uuid, SHARED,
+};
 
 #[instrument(skip_all)]
 pub fn player_join_world(

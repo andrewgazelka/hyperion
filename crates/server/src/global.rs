@@ -12,10 +12,9 @@ pub struct Global {
     pub tick: i64,
 }
 
+#[expect(clippy::derivable_impls, reason = "default impl for explicitness")]
 impl Default for Global {
     fn default() -> Self {
-        Self {
-            tick: 0,
-        }
+        Self { tick: 0 }
     }
 }
