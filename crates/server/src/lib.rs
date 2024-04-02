@@ -200,7 +200,7 @@ impl Game {
         world.add_handler(process_packets);
         world.add_handler(system::tps_message);
         world.add_handler(system::kill_all);
-        
+
         let global = world.spawn();
         world.insert(global, global::Global::default());
 
