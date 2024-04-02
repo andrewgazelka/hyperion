@@ -5,6 +5,8 @@ use std::cell::Cell;
 use anyhow::{ensure, Context};
 use bytes::BufMut;
 use evenio::prelude::Component;
+use rayon::iter::IntoParallelRefMutIterator;
+pub use rayon::iter::ParallelIterator;
 use rayon_local::RayonLocal;
 use uuid::Uuid;
 use valence_protocol::{math::Vec2, Encode, Packet, VarInt};
@@ -159,15 +161,15 @@ impl Encoder {
         result
     }
 
-    pub fn par_drain<F>(&self, f: F)
+    pub fn par_drain<F>(&mut self, f: F)
     where
         F: Fn(&mut PacketBuffer) + Sync,
     {
-        rayon::broadcast(|_| {
-            let local = self.rayon_local.get_rayon_local();
-            let mut encoder = local.take();
-            f(&mut encoder);
-            local.set(encoder);
-        });
+        self.rayon_local
+            .get_all_locals()
+            .par_iter_mut()
+            .for_each(|x| {
+                f(x.get_mut());
+            });
     }
 }
