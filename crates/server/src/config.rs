@@ -1,5 +1,6 @@
 use std::{fs::File, io::Read, path::Path};
 
+use anyhow::Context;
 use serde::{Deserialize, Serialize};
 use spin::lazy::Lazy;
 use tracing::{info, instrument};
@@ -39,6 +40,23 @@ impl Config {
             Ok(config)
         } else {
             info!("configuration file not found, using defaults");
+
+            // make required folders
+            if let Some(parent) = path.as_ref().parent() {
+                std::fs::create_dir_all(parent).with_context(|| {
+                    format!(
+                        "failed to create parent directories for {:?}",
+                        path.as_ref()
+                    )
+                })?;
+            }
+
+            // write default config to file
+            let default_config = Self::default();
+            std::fs::write(&path, toml::to_string(&default_config)?.as_bytes())?;
+            
+            info!("wrote default configuration to {:?}", path.as_ref());
+
             Ok(Self::default())
         }
     }
