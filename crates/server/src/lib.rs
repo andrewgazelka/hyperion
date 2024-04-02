@@ -433,12 +433,15 @@ fn try_io_uring() -> anyhow::Result<()> {
     unsafe {
         ring.submission()
             .push(&read_e)
-            .expect("submission queue is full");
+            .context("submission queue is full")?;
     }
 
     ring.submit_and_wait(1)?;
 
-    let cqe = ring.completion().next().expect("completion queue is empty");
+    let cqe = ring
+        .completion()
+        .next()
+        .context("completion queue is empty")?;
 
     assert_eq!(cqe.user_data(), 0x42);
     assert!(cqe.result() >= 0, "read error: {}", cqe.result());
