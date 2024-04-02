@@ -54,7 +54,7 @@ impl Config {
             // write default config to file
             let default_config = Self::default();
             std::fs::write(&path, toml::to_string(&default_config)?.as_bytes())?;
-            
+
             info!("wrote default configuration to {:?}", path.as_ref());
 
             Ok(Self::default())
