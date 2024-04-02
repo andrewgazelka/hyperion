@@ -2,7 +2,6 @@
 
 use std::{
     borrow::Cow,
-    cell::UnsafeCell,
     collections::BTreeSet,
     io,
     io::ErrorKind,
@@ -10,7 +9,7 @@ use std::{
     ptr::addr_of_mut,
     sync::{
         atomic::{AtomicU32, Ordering},
-        Arc, Mutex,
+        Arc,
     },
     time::{Duration, Instant},
 };
@@ -453,8 +452,9 @@ impl Io {
 
         monoio::spawn(async move {
             while let Ok(packet) = io_read.recv_packet_raw().await {
-                let packets = unsafe { &mut *LOCAL_PACKETS.get() };
-                packets.push(UserPacketFrame { packet, user: uuid });
+                GLOBAL_PACKETS
+                    .lock()
+                    .push(UserPacketFrame { packet, user: uuid });
             }
         });
 
@@ -582,12 +582,9 @@ async fn print_errors(future: impl core::future::Future<Output = anyhow::Result<
     }
 }
 
-#[thread_local]
-static LOCAL_PACKETS: UnsafeCell<Vec<UserPacketFrame>> = UnsafeCell::new(Vec::new());
+pub static GLOBAL_PACKETS: spin::Mutex<Vec<UserPacketFrame>> = spin::Mutex::new(Vec::new());
 
-pub static GLOBAL_PACKETS: Mutex<Vec<UserPacketFrame>> = Mutex::new(Vec::new());
-
-async fn run(tx: flume::Sender<ClientConnection>, update_global: flume::Receiver<()>) {
+async fn run(tx: flume::Sender<ClientConnection>) {
     // start socket 25565
     // todo: remove unwrap
     let addr = "0.0.0.0:25565";
@@ -603,14 +600,6 @@ async fn run(tx: flume::Sender<ClientConnection>, update_global: flume::Receiver
     info!("listening on {addr}");
 
     let mut id = 0;
-
-    monoio::spawn(async move {
-        while update_global.recv_async().await == Ok(()) {
-            let packets = unsafe { &mut *LOCAL_PACKETS.get() };
-            let mut global_packets = GLOBAL_PACKETS.lock().unwrap();
-            global_packets.append(packets);
-        }
-    });
 
     // accept incoming connections
     loop {
@@ -633,11 +622,8 @@ async fn run(tx: flume::Sender<ClientConnection>, update_global: flume::Receiver
     }
 }
 
-pub fn server(
-    shutdown: flume::Receiver<()>,
-) -> anyhow::Result<(flume::Receiver<ClientConnection>, flume::Sender<()>)> {
+pub fn server(shutdown: flume::Receiver<()>) -> anyhow::Result<flume::Receiver<ClientConnection>> {
     let (connection_tx, connection_rx) = flume::unbounded();
-    let (update_global_tx, update_global_rx) = flume::unbounded();
 
     std::thread::Builder::new()
         .name("io".to_string())
@@ -647,7 +633,7 @@ pub fn server(
                 .unwrap();
 
             runtime.block_on(async move {
-                let run = run(connection_tx, update_global_rx);
+                let run = run(connection_tx);
                 let shutdown = shutdown.recv_async();
 
                 monoio::select! {
@@ -658,7 +644,7 @@ pub fn server(
         })
         .context("failed to spawn io thread")?;
 
-    Ok((connection_rx, update_global_tx))
+    Ok(connection_rx)
 }
 
 fn registry_codec_raw(codec: &RegistryCodec) -> anyhow::Result<Compound> {
