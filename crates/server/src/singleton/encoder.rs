@@ -26,6 +26,12 @@ pub struct PacketMetadata {
 }
 
 impl PacketMetadata {
+    pub const DROPPABLE: Self = Self {
+        necessity: PacketNecessity::Droppable {
+            prioritize_location: Vec2::new(0.0, 0.0),
+        },
+        exclude_player: None,
+    };
     pub const REQUIRED: Self = Self {
         necessity: PacketNecessity::Required,
         exclude_player: None,
