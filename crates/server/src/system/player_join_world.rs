@@ -15,16 +15,12 @@ use valence_protocol::{
 };
 use valence_registry::{biome::BiomeId, RegistryIdx};
 
-use crate::{
-    bits::BitStorage, chunk::heightmap, global::Global, net::Packets,
-    singleton::player_lookup::PlayerLookup, KickPlayer, Player, PlayerJoinWorld, Uuid, SHARED,
-};
+use crate::{bits::BitStorage, chunk::heightmap, net::Packets, singleton::player_lookup::PlayerLookup, KickPlayer, Player, PlayerJoinWorld, Uuid, SHARED, config};
 
 #[instrument(skip_all)]
 pub fn player_join_world(
     r: Receiver<PlayerJoinWorld, (EntityId, &mut Player, &Uuid)>,
     lookup: Single<&mut PlayerLookup>,
-    global: Single<&Global>,
     mut s: Sender<KickPlayer>,
 ) {
     let (id, player, uuid) = r.query;
@@ -33,9 +29,7 @@ pub fn player_join_world(
 
     info!("Player {} joined the world", player.name);
 
-    let global = global.0;
-
-    if let Err(e) = inner(player, global) {
+    if let Err(e) = inner(player) {
         s.send(KickPlayer {
             target: id,
             reason: format!("Failed to join world: {e}"),
@@ -243,7 +237,7 @@ fn ground_section() -> Vec<u8> {
     section_bytes
 }
 
-fn inner(io: &mut Player, global: &Global) -> anyhow::Result<()> {
+fn inner(io: &mut Player) -> anyhow::Result<()> {
     let io = &mut io.packets;
 
     io.writer.send_game_join_packet()?;
@@ -323,7 +317,7 @@ fn inner(io: &mut Player, global: &Global) -> anyhow::Result<()> {
 
     send_commands(io)?;
 
-    if let Some(diameter) = global.world_border_diameter {
+    if let Some(diameter) = config::CONFIG.border_diameter {
         debug!("Setting world border to diameter {}", diameter);
 
         io.writer.send_packet(&play::WorldBorderInitializeS2c {

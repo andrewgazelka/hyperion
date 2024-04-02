@@ -9,14 +9,12 @@ pub struct Shared {
 
 #[derive(Component)]
 pub struct Global {
-    pub world_border_diameter: Option<f64>,
     pub tick: i64,
 }
 
 impl Default for Global {
     fn default() -> Self {
         Self {
-            world_border_diameter: Some(100.0),
             tick: 0,
         }
     }
