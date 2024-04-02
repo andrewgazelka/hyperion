@@ -1,7 +1,6 @@
 use std::fs::File;
 use std::io::Read;
 use std::path::Path;
-use evenio::component::Component;
 use serde::{Deserialize, Serialize};
 use spin::lazy::Lazy;
 use tracing::{info, instrument};
@@ -10,7 +9,7 @@ pub static CONFIG: Lazy<Config> = Lazy::new(|| {
     Config::load("run/config.toml").unwrap()
 });
 
-#[derive(Serialize, Deserialize, Debug, Component)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct Config {
     pub border_diameter: Option<f64>,
     pub max_players: i32,
