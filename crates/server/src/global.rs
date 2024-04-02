@@ -9,15 +9,12 @@ pub struct Shared {
 
 #[derive(Component)]
 pub struct Global {
-    pub world_border_diameter: Option<f64>,
     pub tick: i64,
 }
 
+#[expect(clippy::derivable_impls, reason = "default impl for explicitness")]
 impl Default for Global {
     fn default() -> Self {
-        Self {
-            world_border_diameter: Some(100.0),
-            tick: 0,
-        }
+        Self { tick: 0 }
     }
 }

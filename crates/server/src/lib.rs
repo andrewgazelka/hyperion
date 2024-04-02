@@ -21,6 +21,7 @@ use evenio::prelude::*;
 use jemalloc_ctl::{epoch, stats};
 use ndarray::s;
 use signal_hook::iterator::Signals;
+use spin::Lazy;
 use tracing::{info, instrument, warn};
 use valence_protocol::math::Vec3;
 
@@ -41,6 +42,7 @@ mod bits;
 mod quad_tree;
 
 pub mod bounding_box;
+mod config;
 
 // A zero-sized component, often called a "marker" or "tag".
 #[derive(Component)]
@@ -151,6 +153,7 @@ impl Game {
     #[instrument]
     pub fn init() -> anyhow::Result<Self> {
         info!("Starting mc-server");
+        Lazy::force(&config::CONFIG);
 
         // if linux
         #[cfg(target_os = "linux")]

@@ -56,6 +56,8 @@ libc = "0.2.153"
 fastrand = "2.0.2"
 spin = "0.9.8"
 rayon-local.workspace = true
+serde = { version = "1.0.193", features = ["derive"] }
+toml = "0.8.12"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 io-uring = "0.6.3"

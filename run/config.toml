@@ -1,0 +1,5 @@
+border_diameter = 300.0
+max_players = 10000
+view_distance = 32
+simulation_distance = 10
+server_desc = "10k babyyyyyyyyyy"

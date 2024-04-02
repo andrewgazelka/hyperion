@@ -41,7 +41,7 @@ use valence_protocol::{
 };
 use valence_registry::{BiomeRegistry, RegistryCodec};
 
-use crate::SHARED;
+use crate::{config, SHARED};
 
 const DEFAULT_SPEED: u32 = 1024 * 1024;
 
@@ -175,9 +175,9 @@ impl WriterComm {
             is_hardcore: false,
             dimension_names: Cow::Owned(dimension_names),
             registry_codec: Cow::Borrowed(&registry_codec),
-            max_players: 10_000.into(),
-            view_distance: 32.into(), // max view distance
-            simulation_distance: 10.into(),
+            max_players: config::CONFIG.max_players.into(),
+            view_distance: config::CONFIG.view_distance.into(), // max view distance
+            simulation_distance: config::CONFIG.simulation_distance.into(),
             reduced_debug_info: false,
             enable_respawn_screen: false,
             dimension_name: dimension_name.into(),
@@ -549,11 +549,11 @@ impl Io {
             },
             "players": {
                 "online": player_count,
-                "max": 10_000,
+                "max": config::CONFIG.max_players,
                 "sample": [],
             },
             "favicon": favicon,
-            "description": "10k babyyyyy",
+            "description": config::CONFIG.server_desc.clone(),
         });
 
         let json = serde_json::to_string_pretty(&json)?;
