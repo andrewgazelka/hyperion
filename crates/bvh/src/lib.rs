@@ -29,7 +29,7 @@ pub struct BvhNode {
 pub struct Bvh<T> {
     nodes: Vec<BvhNode>,
     elems: Vec<SmallVec<T, MAX_ELEMENTS_PER_LEAF>>,
-    root: isize,
+    root: Option<NonMaxIsize>,
 }
 
 impl<T: HasAabb + Copy + Send + Sync + Debug> Bvh<T> {
@@ -52,16 +52,16 @@ impl<T: HasAabb + Copy + Send + Sync + Debug> Bvh<T> {
         let bvh = Self {
             nodes,
             elems,
-            root: 0,
+            root: None,
         };
 
         let bvh = Mutex::new(bvh);
 
-        let root = BvhNode::build_in::<T, H>(&bvh, elements).expect("failed to build bvh");
+        let root = BvhNode::build_in::<T, H>(&bvh, elements);
 
         let mut bvh = bvh.into_inner();
 
-        bvh.root = root.get();
+        bvh.root = root;
 
         bvh
     }
@@ -72,10 +72,17 @@ impl<T: HasAabb + Copy + Send + Sync + Debug> Bvh<T> {
 }
 
 impl<T> Bvh<T> {
-    pub fn root(&self) -> &BvhNode {
-        self.nodes
-            .get(self.root as usize)
-            .expect("failed to get root node")
+    pub fn root(&self) -> Option<Node<T>> {
+        self.root.map(|root| {
+            let root = root.get();
+
+            if root < 0 {
+                let root = root.checked_neg().expect("failed to negate index") - 1;
+                return Node::Leaf(&self.elems[root as usize]);
+            }
+
+            Node::Internal(&self.nodes[root as usize])
+        })
     }
 }
 
@@ -287,7 +294,21 @@ pub struct BvhIter<'a, T> {
 
 impl<'a, T: Copy + HasAabb> BvhIter<'a, T> {
     fn consume(bvh: &'a Bvh<T>, target: Aabb, process: &mut impl FnMut(T)) {
-        let root = bvh.root();
+        let Some(root) = bvh.root() else {
+            return;
+        };
+
+        let root = match root {
+            Node::Internal(internal) => internal,
+            Node::Leaf(leaf) => {
+                for elem in leaf.iter() {
+                    if elem.aabb().collides(&target) {
+                        process(*elem);
+                    }
+                }
+                return;
+            }
+        };
 
         if !root.aabb.collides(&target) {
             return;
@@ -369,6 +390,16 @@ pub mod tests {
             .iter()
             .filter(|elem| elem.collides(&target))
             .count()
+    }
+
+    #[test]
+    fn test_build_all_sizes() {
+        let counts = &[0, 1, 10, 100];
+
+        for count in counts {
+            let mut elements = create_random_elements_1(*count);
+            Bvh::build::<TrivialHeuristic>(&mut elements);
+        }
     }
 
     #[test]

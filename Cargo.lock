@@ -362,6 +362,7 @@ name = "bvh"
 version = "0.1.0"
 dependencies = [
  "bitfield-struct 0.6.0",
+ "bumpalo",
  "bumpalo-herd",
  "divan",
  "fastrand 2.0.2",

@@ -58,7 +58,7 @@ use rayon::prelude::*;
 //     elements
 // }
 
-const ENTITY_COUNTS: &[usize] = &[100, 1_000, 10_000, 100_000];
+const ENTITY_COUNTS: &[usize] = &[1, 10, 100, 1_000, 10_000, 100_000];
 
 #[divan::bench(
     args = ENTITY_COUNTS,
@@ -90,19 +90,20 @@ fn query<T: Heuristic>(b: Bencher, count: usize) {
 
 #[divan::bench(
     args = ENTITY_COUNTS,
+    threads,
     types = [TrivialHeuristic],
 )]
 fn query_par<T: Heuristic>(b: Bencher, count: usize) {
     let mut elements = create_random_elements_1(100_000);
     let bvh = Bvh::build::<T>(&mut elements);
 
-    b.counter(count).bench_local(|| {
-        (0..count).into_par_iter().for_each(|_| {
+    b.counter(count).bench(|| {
+        for _ in 0..count {
             let element = random_element_1();
             bvh.get_collisions(element, |elem| {
                 black_box(elem);
             });
-        });
+        }
     });
 }
 
