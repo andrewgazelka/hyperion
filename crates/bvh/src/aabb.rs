@@ -49,7 +49,7 @@ impl Aabb {
     }
 
     #[must_use]
-    pub fn collides_current(&self, other: &Self) -> bool {
+    pub fn collides(&self, other: &Self) -> bool {
         let self_min = self.min.as_ref();
         let self_max = self.max.as_ref();
 

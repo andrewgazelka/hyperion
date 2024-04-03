@@ -6,13 +6,14 @@
 
 use std::fmt::Debug;
 
-const MAX_ELEMENTS_PER_LEAF: usize = 16;
-
+use glam::Vec3;
 use nonmax::NonMaxIsize;
 use parking_lot::Mutex;
 use smallvec::SmallVec;
 
 use crate::aabb::Aabb;
+
+const MAX_ELEMENTS_PER_LEAF: usize = 16;
 
 pub mod aabb;
 
@@ -35,8 +36,8 @@ impl<T: HasAabb + Copy + Send + Sync + Debug> Bvh<T> {
     pub fn build<H: Heuristic>(elements: &mut [T]) -> Self {
         let len = elements.len();
 
-        // there will be about len / MAX_ELEMENTS_PER_LEAF nodes since max MAX_ELEMENTS_PER_LEAF elements per leaf
-        // there will also be about len / 2 elems
+        // there will be about len / MAX_ELEMENTS_PER_LEAF nodes since max MAX_ELEMENTS_PER_LEAF
+        // elements per leaf there will also be about len / 2 elems
 
         let nodes = Vec::with_capacity(len / MAX_ELEMENTS_PER_LEAF);
         let elems = Vec::with_capacity(len / MAX_ELEMENTS_PER_LEAF * 2);
@@ -269,7 +270,7 @@ impl BvhNode {
 
         let idx = idx as isize;
 
-        assert!(idx >= 0);
+        debug_assert!(idx >= 0);
 
         Some(NonMaxIsize::new(idx).expect("failed to create non-max index"))
     }
@@ -339,68 +340,56 @@ impl<'a, T: Copy + HasAabb> BvhIter<'a, T> {
     }
 }
 
+pub fn random_element_1() -> Aabb {
+    let min = std::array::from_fn(|_| fastrand::f32() * 100.0);
+    let min = Vec3::from_array(min);
+    let max = min + Vec3::splat(1.0);
+
+    Aabb::new(min, max)
+}
+
+pub fn create_random_elements_1(count: usize) -> Vec<Aabb> {
+    let mut elements = Vec::new();
+
+    for _ in 0..count {
+        elements.push(random_element_1());
+    }
+
+    elements
+}
+
 #[cfg(test)]
-mod tests {
-    use rand::Rng;
+pub mod tests {
+    use crate::{
+        aabb::Aabb, create_random_elements_1, random_element_1, Bvh, HasAabb, TrivialHeuristic,
+    };
 
-    use crate::{aabb::Aabb, Bvh, DefaultHeuristic, Element, HasAabb, TrivialHeuristic};
-
-    fn create_element(min: [f32; 3], max: [f32; 3]) -> Element {
-        Element {
-            aabb: Aabb::new(min, max),
-        }
-    }
-    // fn random_element_1() -> Element {
-    //     let mut rng = rand::thread_rng();
-    //     let min = [rng.gen_range(0.0..1000.0); 3];
-    //     let max = [
-    //         rng.gen_range(min[0]..1.0),
-    //         rng.gen_range(min[1]..10.0),
-    //         rng.gen_range(min[2]..1000.0),
-    //     ];
-    //     create_element(min, max)
-    // }
-
-    fn random_element_1() -> Element {
-        let mut rng = rand::thread_rng();
-        let min = std::array::from_fn(|_| rng.gen_range(0.0..1000.0));
-        let max = [
-            rng.gen_range(min[0]..min[0] + 1.0),
-            rng.gen_range(min[1]..min[1] + 1.0),
-            rng.gen_range(min[2]..min[2] + 1.0),
-        ];
-        create_element(min, max)
-    }
-
-    fn create_random_elements_1(count: usize) -> Vec<Element> {
-        let mut elements = Vec::new();
-
-        for _ in 0..count {
-            elements.push(random_element_1());
-        }
-
+    fn collisions_naive(elements: &[Aabb], target: Aabb) -> usize {
         elements
+            .iter()
+            .filter(|elem| elem.collides(&target))
+            .count()
     }
 
     #[test]
     fn test_query() {
-        let mut elements = create_random_elements_1(100_000);
+        let mut elements = create_random_elements_1(10_000_000);
         let bvh = Bvh::build::<TrivialHeuristic>(&mut elements);
 
         let element = random_element_1();
+
+        let naive_count = collisions_naive(&elements, element);
 
         let mut num_collisions = 0;
 
         // 1000 x 1000 x 1000 = 1B ... 1B / 1M = 1000 blocks on average...
         // on average num_collisions should be super low
-        bvh.get_collisions(element.aabb, |elem| {
+        bvh.get_collisions(element, |elem| {
             num_collisions += 1;
-            assert!(elem.aabb().collides(&element.aabb));
-
-            println!("collision {:?} and {:?}", elem, element);
+            assert!(elem.collides(&element));
         });
 
-        println!("num_collisions: {}", num_collisions);
+        assert_eq!(num_collisions, naive_count);
     }
 
     #[test]

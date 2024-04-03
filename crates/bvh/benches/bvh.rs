@@ -9,14 +9,17 @@ fn main() {
     divan::main();
 }
 
-use bvh::{aabb::Aabb, Bvh, Element, Heuristic, TrivialHeuristic};
+use bvh::{
+    aabb::Aabb, create_random_elements_1, random_element_1, Bvh, Element, Heuristic,
+    TrivialHeuristic,
+};
 use rayon::prelude::*;
 
-fn create_element(min: [f32; 3], max: [f32; 3]) -> Element {
-    Element {
-        aabb: Aabb::new(min, max),
-    }
-}
+// fn create_element(min: [f32; 3], max: [f32; 3]) -> Element {
+//     Element {
+//         aabb: Aabb::new(min, max),
+//     }
+// }
 
 // fn create_random_elements_full(count: usize) -> Vec<Element> {
 //     let mut rng = rand::thread_rng();
@@ -35,25 +38,25 @@ fn create_element(min: [f32; 3], max: [f32; 3]) -> Element {
 //     elements
 // }
 
-fn random_element_1() -> Element {
-    let min = std::array::from_fn(|_| fastrand::f32() * 1000.0);
-    let max = [
-        min[0] + fastrand::f32(),
-        min[1] + fastrand::f32(),
-        min[2] + fastrand::f32(),
-    ];
-    create_element(min, max)
-}
-
-fn create_random_elements_1(count: usize) -> Vec<Element> {
-    let mut elements = Vec::new();
-
-    for _ in 0..count {
-        elements.push(random_element_1());
-    }
-
-    elements
-}
+// fn random_element_1() -> Element {
+//     let min = std::array::from_fn(|_| fastrand::f32() * 1000.0);
+//     let max = [
+//         min[0] + fastrand::f32(),
+//         min[1] + fastrand::f32(),
+//         min[2] + fastrand::f32(),
+//     ];
+//     create_element(min, max)
+// }
+//
+// fn create_random_elements_1(count: usize) -> Vec<Element> {
+//     let mut elements = Vec::new();
+//
+//     for _ in 0..count {
+//         elements.push(random_element_1());
+//     }
+//
+//     elements
+// }
 
 const ENTITY_COUNTS: &[usize] = &[100, 1_000, 10_000, 100_000];
 
@@ -78,7 +81,7 @@ fn query<T: Heuristic>(b: Bencher, count: usize) {
     b.counter(count).bench_local(|| {
         for _ in 0..count {
             let element = random_element_1();
-            bvh.get_collisions(element.aabb, |elem| {
+            bvh.get_collisions(element, |elem| {
                 black_box(elem);
             });
         }
@@ -96,7 +99,7 @@ fn query_par<T: Heuristic>(b: Bencher, count: usize) {
     b.counter(count).bench_local(|| {
         (0..count).into_par_iter().for_each(|_| {
             let element = random_element_1();
-            bvh.get_collisions(element.aabb, |elem| {
+            bvh.get_collisions(element, |elem| {
                 black_box(elem);
             });
         });
