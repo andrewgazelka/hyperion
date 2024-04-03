@@ -178,6 +178,9 @@ fn sort_by_largest_axis<T: HasAabb>(elements: &mut [T], aabb: &Aabb) -> u8 {
     let lens = aabb.lens();
     let largest = lens.x.max(lens.y).max(lens.z);
 
+    let len = elements.len();
+    let median_idx = len / 2;
+
     #[expect(clippy::float_cmp, reason = "we are comparing exact values")]
     let key = if lens.x == largest {
         0_u8
@@ -187,7 +190,7 @@ fn sort_by_largest_axis<T: HasAabb>(elements: &mut [T], aabb: &Aabb) -> u8 {
         2
     };
 
-    elements.sort_unstable_by(|a, b| {
+    elements.select_nth_unstable_by(median_idx, |a, b| {
         let a = a.aabb().min.as_ref()[key as usize];
         let b = b.aabb().min.as_ref()[key as usize];
 
