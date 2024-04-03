@@ -102,6 +102,10 @@ pub struct WriterComm {
 }
 
 impl WriterComm {
+    pub fn is_closed(&self) -> bool {
+        self.tx.is_disconnected()
+    }
+
     pub fn speed_mib_per_second(&self) -> u32 {
         self.speed_mib_per_second.load(Ordering::Relaxed)
     }

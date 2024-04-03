@@ -2,7 +2,7 @@ use evenio::{
     entity::EntityId,
     event::Receiver,
     fetch::{Fetcher, Single},
-    query::{Not, Query, With},
+    query::{Query, With},
     rayon::prelude::*,
 };
 use tracing::instrument;
@@ -16,7 +16,7 @@ use crate::{
         encoder::{Encoder, PacketMetadata, PacketNecessity},
         player_location_lookup::PlayerLocationLookup,
     },
-    EntityReaction, FullEntityPose, Gametick, MinecraftEntity, RunningSpeed, Targetable,
+    EntityReaction, FullEntityPose, Gametick, MinecraftEntity, RunningSpeed,
 };
 
 // 0 &mut FullEntityPose
@@ -39,11 +39,6 @@ pub struct EntityQuery<'a> {
 pub fn entity_move_logic(
     _: Receiver<Gametick>,
     mut entities: Fetcher<EntityQuery>,
-    mut target: Fetcher<(
-        &FullEntityPose,       // 0
-        &Targetable,           // 2
-        Not<&MinecraftEntity>, // not 1
-    )>,
     encoder: Single<&mut Encoder>,
     lookup: Single<&PlayerLocationLookup>,
 ) {
@@ -67,16 +62,17 @@ pub fn entity_move_logic(
             return;
         };
 
-        let dif = target.aabb.mid() - current;
+        let dif_mid = target.aabb.mid() - current;
+        let dif_height = target.aabb.min.y - current.y;
 
-        let dif2d = Vec2::new(dif.x, dif.z);
+        let dif2d = Vec2::new(dif_mid.x, dif_mid.z);
 
         let yaw = dif2d.y.atan2(dif2d.x).to_degrees();
 
         // subtract 90 degrees
         let yaw = yaw - 90.0;
 
-        let pitch = 0.0;
+        let pitch = -dif_height.atan2(dif2d.length()).to_degrees();
 
         let reaction = reaction.get_mut();
 

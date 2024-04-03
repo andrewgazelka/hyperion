@@ -72,7 +72,7 @@ struct InitPlayer {
     pos: FullEntityPose,
 }
 
-#[derive(Component, Copy, Clone)]
+#[derive(Component, Copy, Clone, Debug)]
 struct Uuid(uuid::Uuid);
 
 #[derive(Event)]
@@ -201,6 +201,7 @@ impl Game {
         world.add_handler(system::reset_bounding_boxes);
         world.add_handler(system::update_time);
         world.add_handler(system::rebuild_player_location);
+        world.add_handler(system::clean_up_io);
 
         world.add_handler(system::broadcast_packets);
         world.add_handler(system::keep_alive);
@@ -404,7 +405,7 @@ impl FullEntityPose {
         self.position += vec;
         self.bounding = self.bounding.move_by(vec);
     }
-    
+
     pub fn move_to(&mut self, pos: Vec3) {
         self.bounding = self.bounding.move_to(pos);
         self.position = pos;

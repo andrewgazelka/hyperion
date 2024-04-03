@@ -3,6 +3,7 @@ use evenio::{entity::EntityId, prelude::Component};
 
 #[derive(Debug, Copy, Clone)]
 pub struct LookupData {
+    #[expect(dead_code, reason = "this is not being used yet")]
     pub id: EntityId,
     pub aabb: Aabb,
 }

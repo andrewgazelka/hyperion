@@ -17,12 +17,22 @@ use valence_registry::{biome::BiomeId, RegistryIdx};
 
 use crate::{
     bits::BitStorage, chunk::heightmap, config, net::Packets,
-    singleton::player_lookup::PlayerUuidLookup, KickPlayer, Player, PlayerJoinWorld, Uuid, SHARED,
+    singleton::player_lookup::PlayerUuidLookup, system::init_entity::spawn_packet, FullEntityPose,
+    KickPlayer, MinecraftEntity, Player, PlayerJoinWorld, Uuid, SHARED,
 };
+
+#[derive(Query, Debug)]
+pub(crate) struct EntityQuery<'a> {
+    id: EntityId,
+    uuid: &'a Uuid,
+    pose: &'a FullEntityPose,
+    _player: With<&'static MinecraftEntity>,
+}
 
 #[instrument(skip_all)]
 pub fn player_join_world(
     r: Receiver<PlayerJoinWorld, (EntityId, &mut Player, &Uuid)>,
+    entities: Fetcher<EntityQuery>,
     lookup: Single<&mut PlayerUuidLookup>,
     mut s: Sender<KickPlayer>,
 ) {
@@ -32,7 +42,7 @@ pub fn player_join_world(
 
     info!("Player {} joined the world", player.name);
 
-    if let Err(e) = inner(player) {
+    if let Err(e) = inner(player, entities) {
         s.send(KickPlayer {
             target: id,
             reason: format!("Failed to join world: {e}"),
@@ -240,7 +250,7 @@ fn ground_section() -> Vec<u8> {
     section_bytes
 }
 
-fn inner(io: &mut Player) -> anyhow::Result<()> {
+fn inner(io: &mut Player, entities: Fetcher<EntityQuery>) -> anyhow::Result<()> {
     let io = &mut io.packets;
 
     io.writer.send_game_join_packet()?;
@@ -343,16 +353,10 @@ fn inner(io: &mut Player) -> anyhow::Result<()> {
         })?;
     }
 
-    // set fly speed
-
-    // io.writer.send_packet(&play::PlayerAbilitiesS2c {
-    //     flags: PlayerAbilitiesFlags::default()
-    //         .with_flying(true)
-    //         .with_allow_flying(true),
-    //     flying_speed: 1.0,
-    //     fov_modifier: 0.0,
-    // })?;
-    // io.writer.send_packet(&play::EntityA
+    for entity in entities {
+        let pkt = spawn_packet(entity.id, *entity.uuid, entity.pose);
+        io.writer.send_packet(&pkt)?;
+    }
 
     SHARED
         .player_count

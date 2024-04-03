@@ -17,7 +17,10 @@ pub(crate) struct EntityQuery<'a> {
     pose: &'a FullEntityPose,
     _player: With<&'static Player>,
 }
-
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "The ECS framework requires this"
+)]
 pub fn rebuild_player_location(
     _: Receiver<Gametick>,
     lookup: Single<&mut PlayerLocationLookup>,
@@ -32,7 +35,7 @@ pub fn rebuild_player_location(
         .collect();
 
     let lookup = lookup.0;
-    
+
     let bvh = Bvh::build::<TrivialHeuristic>(&mut elements);
 
     lookup.inner = bvh;
