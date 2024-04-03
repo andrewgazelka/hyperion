@@ -301,17 +301,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "bitfield-struct"
-version = "0.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4b0fe3d90b1534e1b0e92008ad2d9f9a3ddb650965ae0592ed1d1031b9dea94f"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
-]
-
-[[package]]
 name = "bitflags"
 version = "1.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -349,31 +338,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7ff69b9dd49fd426c69a0db9fc04dd934cdb6645ff000864d98f7e2af8830eaa"
 
 [[package]]
-name = "bumpalo-herd"
-version = "0.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c51ab7ee02d3459317cc16fec045966c9120733a10229541acaf3cc81b137c95"
-dependencies = [
- "bumpalo",
-]
-
-[[package]]
 name = "bvh"
 version = "0.1.0"
 dependencies = [
- "bitfield-struct 0.6.0",
- "bumpalo",
- "bumpalo-herd",
  "divan",
  "fastrand 2.0.2",
  "glam 0.27.0",
- "nonmax",
  "ordered-float",
- "parking_lot",
  "rand 0.8.5",
  "rayon",
- "sharded-slab",
- "slab",
  "smallvec 2.0.0-alpha.5",
 ]
 
@@ -1809,7 +1782,6 @@ dependencies = [
  "flume",
  "fnv",
  "generator",
- "glam 0.27.0",
  "io-uring",
  "itertools",
  "jemalloc-ctl",
@@ -2341,7 +2313,7 @@ dependencies = [
  "anyhow",
  "base64 0.21.7",
  "bevy_ecs",
- "bitfield-struct 0.5.6",
+ "bitfield-struct",
  "byteorder",
  "bytes",
  "derive_more",

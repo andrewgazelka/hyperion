@@ -9,54 +9,7 @@ fn main() {
     divan::main();
 }
 
-use bvh::{
-    aabb::Aabb, create_random_elements_1, random_element_1, Bvh, Element, Heuristic,
-    TrivialHeuristic,
-};
-use rayon::prelude::*;
-
-// fn create_element(min: [f32; 3], max: [f32; 3]) -> Element {
-//     Element {
-//         aabb: Aabb::new(min, max),
-//     }
-// }
-
-// fn create_random_elements_full(count: usize) -> Vec<Element> {
-//     let mut rng = rand::thread_rng();
-//     let mut elements = Vec::new();
-//
-//     for _ in 0..count {
-//         let min = [rng.gen_range(0.0..1000.0); 3];
-//         let max = [
-//             rng.gen_range(min[0]..1000.0),
-//             rng.gen_range(min[1]..1000.0),
-//             rng.gen_range(min[2]..1000.0),
-//         ];
-//         elements.push(create_element(min, max));
-//     }
-//
-//     elements
-// }
-
-// fn random_element_1() -> Element {
-//     let min = std::array::from_fn(|_| fastrand::f32() * 1000.0);
-//     let max = [
-//         min[0] + fastrand::f32(),
-//         min[1] + fastrand::f32(),
-//         min[2] + fastrand::f32(),
-//     ];
-//     create_element(min, max)
-// }
-//
-// fn create_random_elements_1(count: usize) -> Vec<Element> {
-//     let mut elements = Vec::new();
-//
-//     for _ in 0..count {
-//         elements.push(random_element_1());
-//     }
-//
-//     elements
-// }
+use bvh::{create_random_elements_1, random_element_1, Bvh, Heuristic, TrivialHeuristic};
 
 const ENTITY_COUNTS: &[usize] = &[1, 10, 100, 1_000, 10_000, 100_000];
 
@@ -107,7 +60,7 @@ fn query_par<T: Heuristic>(b: Bencher, count: usize) {
     });
 }
 
-const THREAD_COUNTS: &[usize] = &[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+const THREAD_COUNTS: &[usize] = &[1, 2, 4, 8];
 
 #[divan::bench(
     args = THREAD_COUNTS,

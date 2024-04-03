@@ -220,7 +220,9 @@ skip = [
     "regex-syntax",
     "regex-automata",
     "bitflags",
-    "glam"
+    "glam",
+    "toml_edit",
+    "winnow"
     #{ crate = "ansi_term@0.11.0", reason = "you can specify a reason why it can't be updated/removed" },
 ]
 # Similarly to `skip` allows you to skip certain crates during duplicate

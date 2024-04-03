@@ -1,69 +1,71 @@
-#![feature(portable_simd)]
 #![feature(lint_reasons)]
+#![feature(inline_const)]
 #![feature(allocator_api)]
 
 // https://www.haroldserrano.com/blog/visualizing-the-boundary-volume-hierarchy-collision-algorithm
 
-use std::fmt::Debug;
+use std::{fmt::Debug, num::NonZeroI32};
 
 use glam::Vec3;
-use nonmax::NonMaxIsize;
-use parking_lot::Mutex;
 use smallvec::SmallVec;
 
-use crate::aabb::Aabb;
+use crate::{aabb::Aabb, queue::Queue};
 
 const MAX_ELEMENTS_PER_LEAF: usize = 16;
 
 pub mod aabb;
 
+pub mod queue;
+
+#[derive(Debug)]
 pub struct BvhNode {
-    aabb: Aabb,
+    aabb: Aabb, // f32 * 6 = 24 bytes
 
     // if positive then it is an internal node; if negative then it is a leaf node
     // TODO: REMOVE REMOVE REMOVE OPTION IT CAN PANIC AND GET MAX PROBS
-    left: Option<NonMaxIsize>,
-    right: Option<NonMaxIsize>,
+    left: Option<NonZeroI32>,
+    right: Option<NonZeroI32>,
 }
 
 pub struct Bvh<T> {
-    nodes: Vec<BvhNode>,
-    elems: Vec<SmallVec<T, MAX_ELEMENTS_PER_LEAF>>,
-    root: Option<NonMaxIsize>,
+    nodes: Box<[BvhNode]>,
+    elems: Box<[SmallVec<T, MAX_ELEMENTS_PER_LEAF>]>,
+    root: Option<NonZeroI32>,
+}
+
+pub struct BvhBuild<T> {
+    nodes: Queue<BvhNode>,
+    elems: Queue<SmallVec<T, MAX_ELEMENTS_PER_LEAF>>,
 }
 
 impl<T: HasAabb + Copy + Send + Sync + Debug> Bvh<T> {
     pub fn build<H: Heuristic>(elements: &mut [T]) -> Self {
         let len = elements.len();
 
-        // there will be about len / MAX_ELEMENTS_PER_LEAF nodes since max MAX_ELEMENTS_PER_LEAF
-        // elements per leaf there will also be about len / 2 elems
+        // 1.7 works too, 2.0 is upper bound ... 1.8 is probably best
+        let cap = ((len / MAX_ELEMENTS_PER_LEAF) as f64 * 1.8) as usize;
+        let cap = cap.max(16);
 
-        let nodes = Vec::with_capacity(len / MAX_ELEMENTS_PER_LEAF);
-        let elems = Vec::with_capacity(len / MAX_ELEMENTS_PER_LEAF * 2);
+        let elems = Queue::new(cap);
+        let nodes = Queue::new(cap);
+
+        elems.push(SmallVec::new());
+        nodes.push(BvhNode::DUMMY);
 
         // // dummy so we never get 0 index
         // // todo: could we use negative pointer? don't think this is worth it though
         // // and think the way allocations work there are problems (pointers aren't really
         // // simple like many think they are)
-        // elems.insert(SmallVec::new());
-        // nodes.insert(BvhNode::DUMMY);
 
-        let bvh = Self {
-            nodes,
-            elems,
-            root: None,
-        };
-
-        let bvh = Mutex::new(bvh);
+        let bvh = BvhBuild { nodes, elems };
 
         let root = BvhNode::build_in::<T, H>(&bvh, elements);
 
-        let mut bvh = bvh.into_inner();
-
-        bvh.root = root;
-
-        bvh
+        Self {
+            nodes: bvh.nodes.into_inner(),
+            elems: bvh.elems.into_inner(),
+            root,
+        }
     }
 
     pub fn get_collisions(&self, target: Aabb, mut process: impl FnMut(T)) {
@@ -72,12 +74,12 @@ impl<T: HasAabb + Copy + Send + Sync + Debug> Bvh<T> {
 }
 
 impl<T> Bvh<T> {
-    pub fn root(&self) -> Option<Node<T>> {
+    fn root(&self) -> Option<Node<T>> {
         self.root.map(|root| {
             let root = root.get();
 
             if root < 0 {
-                let root = root.checked_neg().expect("failed to negate index") - 1;
+                let root = root.checked_neg().expect("failed to negate index");
                 return Node::Leaf(&self.elems[root as usize]);
             }
 
@@ -201,24 +203,30 @@ enum Node<'a, T> {
 }
 
 impl BvhNode {
-    pub fn left<'a, T>(&self, root: &'a Bvh<T>) -> Option<Node<'a, T>> {
+    pub const DUMMY: Self = Self {
+        aabb: Aabb::NULL,
+        left: None,
+        right: None,
+    };
+
+    fn left<'a, T>(&self, root: &'a Bvh<T>) -> Option<Node<'a, T>> {
         let left = self.left?;
         let left = left.get();
 
         if left < 0 {
-            let left = left.checked_neg().expect("failed to negate index") - 1;
+            let left = left.checked_neg().expect("failed to negate index");
             return root.elems.get(left as usize).map(Node::Leaf);
         }
 
         root.nodes.get(left as usize).map(Node::Internal)
     }
 
-    pub fn right<'a, T>(&self, root: &'a Bvh<T>) -> Option<Node<'a, T>> {
+    fn right<'a, T>(&self, root: &'a Bvh<T>) -> Option<Node<'a, T>> {
         let right = self.right?;
         let right = right.get();
 
         if right < 0 {
-            let right = right.checked_neg().expect("failed to negate index") - 1;
+            let right = right.checked_neg().expect("failed to negate index");
             return root.elems.get(right as usize).map(Node::Leaf);
         }
 
@@ -226,31 +234,26 @@ impl BvhNode {
     }
 
     #[allow(clippy::float_cmp)]
-    pub fn build_in<T: HasAabb + Copy + Send + Sync, H: Heuristic>(
-        root: &Mutex<Bvh<T>>,
+    pub fn build_in<T: HasAabb + Copy + Send + Sync + Debug, H: Heuristic>(
+        root: &BvhBuild<T>,
         elements: &mut [T],
-    ) -> Option<NonMaxIsize> {
+    ) -> Option<NonZeroI32> {
         if elements.is_empty() {
             return None;
         }
 
         if elements.len() <= MAX_ELEMENTS_PER_LEAF {
             let elem = SmallVec::from_slice(elements);
-            let idx = {
-                let mut mutex = root.lock();
-                let len = mutex.elems.len();
-                mutex.elems.push(elem);
-                len
-            };
-            let idx = isize::try_from(idx).expect("failed to convert index");
+            let idx = root.elems.push(elem);
+            let idx = i32::try_from(idx).expect("failed to convert index");
 
             // println!("idx {idx} added leaf with len: {}", elements.len());
 
-            debug_assert!(idx >= 0);
+            debug_assert!(idx > 0);
 
-            let idx = idx.checked_neg().expect("failed to negate index") - 1;
+            let idx = idx.checked_neg().expect("failed to negate index");
 
-            return Some(NonMaxIsize::new(idx).expect("failed to create non-max index"));
+            return Some(NonZeroI32::new(idx).expect("failed to create non-max index"));
         }
 
         let aabb = Aabb::from(&*elements);
@@ -268,18 +271,12 @@ impl BvhNode {
 
         let node = Self { aabb, left, right };
 
-        let idx = {
-            let mut mutex = root.lock();
-            let len = mutex.nodes.len();
-            mutex.nodes.push(node);
-            len
-        };
+        let idx = root.nodes.push(node);
+        let idx = i32::try_from(idx).expect("failed to convert index");
 
-        let idx = idx as isize;
+        debug_assert!(idx > 0);
 
-        debug_assert!(idx >= 0);
-
-        Some(NonMaxIsize::new(idx).expect("failed to create non-max index"))
+        Some(NonZeroI32::new(idx).expect("failed to create non-max index"))
     }
 }
 
@@ -324,7 +321,7 @@ impl<'a, T: Copy + HasAabb> BvhIter<'a, T> {
         iter.process(root, process);
     }
 
-    pub fn process(&mut self, on: &BvhNode, process: &mut impl FnMut((T))) {
+    pub fn process(&mut self, on: &BvhNode, process: &mut impl FnMut(T)) {
         if let Some(left) = on.left(self.bvh) {
             match left {
                 Node::Internal(internal) => {
@@ -381,9 +378,7 @@ pub fn create_random_elements_1(count: usize) -> Vec<Aabb> {
 
 #[cfg(test)]
 pub mod tests {
-    use crate::{
-        aabb::Aabb, create_random_elements_1, random_element_1, Bvh, HasAabb, TrivialHeuristic,
-    };
+    use crate::{aabb::Aabb, create_random_elements_1, random_element_1, Bvh, TrivialHeuristic};
 
     fn collisions_naive(elements: &[Aabb], target: Aabb) -> usize {
         elements
@@ -426,7 +421,7 @@ pub mod tests {
     #[test]
     fn test_query_all() {
         let mut elements = create_random_elements_1(10_000);
-        let mut bvh = Bvh::build::<TrivialHeuristic>(&mut elements);
+        let bvh = Bvh::build::<TrivialHeuristic>(&mut elements);
 
         let node_count = bvh.nodes.len();
         println!("node count: {}", node_count);
