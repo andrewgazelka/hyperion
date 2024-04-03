@@ -1,4 +1,4 @@
-use crate::{Element, HasAabb};
+use crate::HasAabb;
 
 #[derive(Copy, Clone)]
 pub struct Aabb {
@@ -119,9 +119,9 @@ impl Aabb {
     }
 }
 
-impl From<&[Element]> for Aabb {
-    fn from(elements: &[Element]) -> Self {
-        Self::containing(elements.iter().map(|e| &e.aabb))
+impl<T: HasAabb> From<&[T]> for Aabb {
+    fn from(elements: &[T]) -> Self {
+        Self::containing(elements.iter().map(|e| e.aabb()))
     }
 }
 

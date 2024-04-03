@@ -7,7 +7,13 @@ readme = "README.md"
 publish = false
 
 [dependencies]
+bitfield-struct = "0.6.0"
+bumpalo-herd = "0.1.2"
 glam = "0.27.0"
+nonmax = "0.5.5"
+rayon = "1.10.0"
+sharded-slab = "0.1.7"
+slab = "0.4.9"
 smallvec.workspace = true
 
 [dev-dependencies]
