@@ -9,7 +9,7 @@ fn main() {
     divan::main();
 }
 
-use bvh::{create_random_elements_1, random_element_1, Bvh, Heuristic, TrivialHeuristic};
+use bvh::{create_random_elements_1, random_aabb, Bvh, Heuristic, TrivialHeuristic};
 
 const ENTITY_COUNTS: &[usize] = &[1, 10, 100, 1_000, 10_000, 100_000];
 
@@ -33,7 +33,7 @@ fn query<T: Heuristic>(b: Bencher, count: usize) {
 
     b.counter(count).bench_local(|| {
         for _ in 0..count {
-            let element = random_element_1();
+            let element = random_aabb();
             bvh.get_collisions(element, |elem| {
                 black_box(elem);
             });
@@ -52,7 +52,7 @@ fn query_par<T: Heuristic>(b: Bencher, count: usize) {
 
     b.counter(count).bench(|| {
         for _ in 0..count {
-            let element = random_element_1();
+            let element = random_aabb();
             bvh.get_collisions(element, |elem| {
                 black_box(elem);
             });

@@ -1,6 +1,6 @@
 use crate::HasAabb;
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub struct Aabb {
     pub min: glam::Vec3,
     pub max: glam::Vec3,
@@ -67,6 +67,36 @@ impl Aabb {
         collide == 1
     }
 
+    pub fn collides_point(&self, point: glam::Vec3) -> bool {
+        let point = point.as_ref();
+        let self_min = self.min.as_ref();
+        let self_max = self.max.as_ref();
+
+        let mut collide = 0b1_u8;
+
+        for i in 0..3 {
+            collide &= u8::from(self_min[i] <= point[i]);
+            collide &= u8::from(self_max[i] >= point[i]);
+        }
+
+        collide == 1
+    }
+
+    pub fn dist2(&self, point: glam::Vec3) -> f32 {
+        let point = point.as_ref();
+        let self_min = self.min.as_ref();
+        let self_max = self.max.as_ref();
+
+        let mut dist2 = 0.0;
+
+        for i in 0..3 {
+            dist2 += (self_min[i] - point[i]).max(0.0).powi(2);
+            dist2 += (self_max[i] - point[i]).min(0.0).powi(2);
+        }
+
+        dist2
+    }
+
     pub fn overlaps<'a, T>(
         &'a self,
         elements: impl Iterator<Item = &'a T>,
@@ -89,6 +119,12 @@ impl Aabb {
     pub fn volume(&self) -> f32 {
         let lens = self.lens();
         lens.x * lens.y * lens.z
+    }
+
+    pub fn expand(mut self, amount: f32) -> Self {
+        self.min -= glam::Vec3::splat(amount);
+        self.max += glam::Vec3::splat(amount);
+        self
     }
 
     pub fn expand_to_fit(&mut self, other: &Self) {

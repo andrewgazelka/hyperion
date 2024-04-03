@@ -4,7 +4,7 @@
 
 // https://www.haroldserrano.com/blog/visualizing-the-boundary-volume-hierarchy-collision-algorithm
 
-use std::{fmt::Debug, num::NonZeroI32};
+use std::{cmp::Reverse, collections::BinaryHeap, fmt::Debug, num::NonZeroI32};
 
 use glam::Vec3;
 use smallvec::SmallVec;
@@ -17,7 +17,7 @@ pub mod aabb;
 
 pub mod queue;
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub struct BvhNode {
     aabb: Aabb, // f32 * 6 = 24 bytes
 
@@ -68,6 +68,99 @@ impl<T: HasAabb + Copy + Send + Sync + Debug> Bvh<T> {
         }
     }
 
+    /// Returns the closest element to the target and the distance squared to it.
+    pub fn get_closest(&self, target: Vec3) -> Option<(&T, f32)> {
+        struct NodeOrd<'a> {
+            node: &'a BvhNode,
+            dist2: f32,
+        }
+
+        impl PartialEq<Self> for NodeOrd<'_> {
+            fn eq(&self, other: &Self) -> bool {
+                self.dist2 == other.dist2
+            }
+        }
+        impl PartialOrd for NodeOrd<'_> {
+            fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+                Some(self.cmp(other))
+            }
+        }
+
+        impl Eq for NodeOrd<'_> {}
+
+        impl Ord for NodeOrd<'_> {
+            fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+                self.dist2.partial_cmp(&other.dist2).unwrap()
+            }
+        }
+
+        let mut min_dist2 = f32::MAX;
+        let mut min_node = None;
+
+        let on = self.root()?;
+
+        let on = match on {
+            Node::Internal(internal) => internal,
+            Node::Leaf(leaf) => {
+                return leaf
+                    .iter()
+                    .map(|elem| {
+                        let aabb = elem.aabb();
+                        let mid = aabb.mid();
+                        let dist2 = (mid - target).length_squared();
+
+                        (elem, dist2)
+                    })
+                    .min_by_key(|(_, dist)| dist.to_bits())
+            }
+        };
+
+        // let mut stack: SmallVec<&BvhNode, 64> = SmallVec::new();
+        let mut heap: BinaryHeap<_> = std::iter::once(on)
+            .map(|node| Reverse(NodeOrd { node, dist2: 0.0 }))
+            .collect();
+
+        while let Some(on) = heap.pop() {
+            let on = on.0.node;
+            let dist2 = on.aabb.dist2(target);
+
+            if dist2 > min_dist2 {
+                break;
+            }
+
+            for child in on.children(self) {
+                match child {
+                    Node::Internal(internal) => {
+                        heap.push(Reverse(NodeOrd {
+                            node: internal,
+                            dist2: internal.aabb.dist2(target),
+                        }));
+                    }
+                    Node::Leaf(leaf) => {
+                        let (elem, dist2) = leaf
+                            .iter()
+                            .map(|elem| {
+                                let aabb = elem.aabb();
+                                let mid = aabb.mid();
+                                let dist = (mid - target).length_squared();
+
+                                (elem, dist)
+                            })
+                            .min_by_key(|(_, dist)| dist.to_bits())
+                            .unwrap();
+
+                        if dist2 < min_dist2 {
+                            min_dist2 = dist2;
+                            min_node = Some(elem);
+                        }
+                    }
+                }
+            }
+        }
+
+        min_node.map(|elem| (elem, min_dist2))
+    }
+
     pub fn get_collisions(&self, target: Aabb, mut process: impl FnMut(T)) {
         BvhIter::consume(self, target, &mut process);
     }
@@ -115,7 +208,8 @@ pub trait Heuristic {
     fn heuristic<T: HasAabb>(elements: &[T]) -> usize;
 }
 
-pub struct DefaultHeuristic;
+// #[deprecated(note = "use TrivialHeuristic. This currently does not work properly.")]
+// pub struct LeastSurfaceAreaHeuristic;
 
 pub struct TrivialHeuristic;
 
@@ -125,49 +219,49 @@ impl Heuristic for TrivialHeuristic {
     }
 }
 
-impl Heuristic for DefaultHeuristic {
-    fn heuristic<T: HasAabb>(elements: &[T]) -> usize {
-        // todo: remove new alloc each time possibly?
-        let mut left_surface_areas = vec![0.0; elements.len() - 1];
-        let mut right_surface_areas = vec![0.0; elements.len() - 1];
-
-        let mut left_bb = Aabb::NULL;
-        let mut right_bb = Aabb::NULL;
-
-        #[allow(clippy::needless_range_loop)]
-        for idx in 0..(elements.len() - 1) {
-            let left_idx = idx;
-
-            let right_idx = elements.len() - idx - 2;
-
-            left_bb.expand_to_fit(elements[left_idx].aabb());
-            right_bb.expand_to_fit(elements[right_idx].aabb());
-
-            left_surface_areas[idx] = left_bb.surface_area();
-            right_surface_areas[right_idx] = right_bb.surface_area();
-        }
-
-        // get min by summing up the surface areas
-        let mut min_cost = f32::MAX;
-        let mut min_idx = 0;
-
-        for idx in 1..elements.len() {
-            let cost = left_surface_areas[idx - 1] + right_surface_areas[idx - 1];
-
-            // // pad idx MAX_ELEMENTS_PER_LEAF zeros
-            // println!("{:04}: {}", idx, cost);
-
-            if cost < min_cost {
-                min_cost = cost;
-                min_idx = idx;
-            }
-        }
-
-        // assert!(min_idx != 0);
-
-        min_idx
-    }
-}
+// impl Heuristic for LeastSurfaceAreaHeuristic {
+//     fn heuristic<T: HasAabb>(elements: &[T]) -> usize {
+//         // todo: remove new alloc each time possibly?
+//         let mut left_surface_areas = vec![0.0; elements.len() - 1];
+//         let mut right_surface_areas = vec![0.0; elements.len() - 1];
+//
+//         let mut left_bb = Aabb::NULL;
+//         let mut right_bb = Aabb::NULL;
+//
+//         #[allow(clippy::needless_range_loop)]
+//         for idx in 0..(elements.len() - 1) {
+//             let left_idx = idx;
+//
+//             let right_idx = elements.len() - idx - 2;
+//
+//             left_bb.expand_to_fit(elements[left_idx].aabb());
+//             right_bb.expand_to_fit(elements[right_idx].aabb());
+//
+//             left_surface_areas[idx] = left_bb.surface_area();
+//             right_surface_areas[right_idx] = right_bb.surface_area();
+//         }
+//
+//         // get min by summing up the surface areas
+//         let mut min_cost = f32::MAX;
+//         let mut min_idx = 0;
+//
+//         for idx in 1..elements.len() {
+//             let cost = left_surface_areas[idx - 1] + right_surface_areas[idx - 1];
+//
+//             // // pad idx MAX_ELEMENTS_PER_LEAF zeros
+//             // println!("{:04}: {}", idx, cost);
+//
+//             if cost < min_cost {
+//                 min_cost = cost;
+//                 min_idx = idx;
+//             }
+//         }
+//
+//         // assert!(min_idx != 0);
+//
+//         min_idx
+//     }
+// }
 
 // // input: sorted f64
 fn find_split<T: HasAabb, H: Heuristic>(elements: &[T]) -> usize {
@@ -200,6 +294,7 @@ fn sort_by_largest_axis<T: HasAabb>(elements: &mut [T], aabb: &Aabb) -> u8 {
     key
 }
 
+#[derive(Copy, Clone, Debug, PartialEq)]
 enum Node<'a, T> {
     Internal(&'a BvhNode),
     Leaf(&'a SmallVec<T, MAX_ELEMENTS_PER_LEAF>),
@@ -222,6 +317,14 @@ impl BvhNode {
         }
 
         root.nodes.get(left as usize).map(Node::Internal)
+    }
+
+    fn children<'a, T>(&self, root: &'a Bvh<T>) -> impl Iterator<Item = Node<'a, T>> {
+        // iter of two options left and right
+        let left = self.left(root);
+        let right = self.right(root);
+
+        left.into_iter().chain(right)
     }
 
     fn right<'a, T>(&self, root: &'a Bvh<T>) -> Option<Node<'a, T>> {
@@ -325,6 +428,7 @@ impl<'a, T: Copy + HasAabb> BvhIter<'a, T> {
     }
 
     pub fn process(&mut self, on: &BvhNode, process: &mut impl FnMut(T)) {
+        // todo: ideally get .children() on same level as this
         if let Some(left) = on.left(self.bvh) {
             match left {
                 Node::Internal(internal) => {
@@ -361,7 +465,7 @@ impl<'a, T: Copy + HasAabb> BvhIter<'a, T> {
     }
 }
 
-pub fn random_element_1() -> Aabb {
+pub fn random_aabb() -> Aabb {
     let min = std::array::from_fn(|_| fastrand::f32() * 100.0);
     let min = Vec3::from_array(min);
     let max = min + Vec3::splat(1.0);
@@ -373,7 +477,7 @@ pub fn create_random_elements_1(count: usize) -> Vec<Aabb> {
     let mut elements = Vec::new();
 
     for _ in 0..count {
-        elements.push(random_element_1());
+        elements.push(random_aabb());
     }
 
     elements
@@ -381,7 +485,9 @@ pub fn create_random_elements_1(count: usize) -> Vec<Aabb> {
 
 #[cfg(test)]
 pub mod tests {
-    use crate::{aabb::Aabb, create_random_elements_1, random_element_1, Bvh, TrivialHeuristic};
+    use rand::Rng;
+
+    use super::*;
 
     fn collisions_naive(elements: &[Aabb], target: Aabb) -> usize {
         elements
@@ -402,10 +508,10 @@ pub mod tests {
 
     #[test]
     fn test_query() {
-        let mut elements = create_random_elements_1(10_000_000);
+        let mut elements = create_random_elements_1(1_000_000);
         let bvh = Bvh::build::<TrivialHeuristic>(&mut elements);
 
-        let element = random_element_1();
+        let element = random_aabb();
 
         let naive_count = collisions_naive(&elements, element);
 
@@ -436,5 +542,140 @@ pub mod tests {
         });
 
         assert_eq!(num_collisions, 10_000);
+    }
+
+    #[test]
+    fn children_returns_none_when_no_children() {
+        let node = BvhNode {
+            aabb: Aabb::NULL,
+            left: None,
+            right: None,
+        };
+        let bvh: Bvh<i32> = Bvh {
+            nodes: Box::new([]),
+            elems: Box::new([]),
+            root: None,
+        };
+        assert!(node.children(&bvh).next().is_none());
+    }
+
+    #[test]
+    fn children_returns_internal_nodes() {
+        let aabb = random_aabb();
+
+        let child_node = BvhNode {
+            aabb,
+            left: None,
+            right: None,
+        };
+
+        let node = BvhNode {
+            aabb: aabb.expand(10.0),
+            left: Some(NonZeroI32::new(1).unwrap()),
+            right: Some(NonZeroI32::new(2).unwrap()),
+        };
+
+        let bvh: Bvh<i32> = Bvh {
+            nodes: Box::new([BvhNode::DUMMY, child_node, child_node]),
+            elems: Box::new([]),
+            root: None,
+        };
+        let mut children = node.children(&bvh);
+        assert_eq!(children.next(), Some(Node::Internal(&child_node)));
+        assert_eq!(children.next(), Some(Node::Internal(&child_node)));
+        assert!(children.next().is_none());
+    }
+
+    #[test]
+    fn get_closest_returns_closest_element() {
+        let mut elements = vec![
+            Element {
+                aabb: Aabb::new(Vec3::new(0.0, 0.0, 0.0), Vec3::new(1.0, 1.0, 1.0)),
+            },
+            Element {
+                aabb: Aabb::new(Vec3::new(2.0, 2.0, 2.0), Vec3::new(3.0, 3.0, 3.0)),
+            },
+            Element {
+                aabb: Aabb::new(Vec3::new(4.0, 4.0, 4.0), Vec3::new(5.0, 5.0, 5.0)),
+            },
+        ];
+        let bvh = Bvh::build::<TrivialHeuristic>(&mut elements);
+
+        let target = Vec3::new(2.5, 2.5, 2.5);
+        let closest = bvh.get_closest(target);
+
+        assert!(closest.is_some());
+        let (closest_element, _) = closest.unwrap();
+        assert_eq!(
+            closest_element.aabb(),
+            &Aabb::new(Vec3::new(2.0, 2.0, 2.0), Vec3::new(3.0, 3.0, 3.0))
+        );
+    }
+
+    #[test]
+    fn get_closest_returns_closest_element_with_random_data() {
+        let mut rng = rand::thread_rng();
+        let mut elements: Vec<Element> = (0..1000)
+            .map(|_| {
+                let min = Vec3::new(
+                    rng.gen_range(-100.0..100.0),
+                    rng.gen_range(-100.0..100.0),
+                    rng.gen_range(-100.0..100.0),
+                );
+                let max = min + Vec3::new(1.0, 1.0, 1.0);
+                Element {
+                    aabb: Aabb::new(min, max),
+                }
+            })
+            .collect();
+        let bvh = Bvh::build::<TrivialHeuristic>(&mut elements);
+
+        let target = Vec3::new(
+            rng.gen_range(-100.0..100.0),
+            rng.gen_range(-100.0..100.0),
+            rng.gen_range(-100.0..100.0),
+        );
+        let closest = bvh.get_closest(target);
+
+        assert!(closest.is_some());
+        let (closest_element, _) = closest.unwrap();
+
+        // Check that the closest element is indeed the closest by comparing with all elements
+        for element in &elements {
+            assert!(element.aabb().dist2(target) >= closest_element.aabb().dist2(target));
+        }
+    }
+
+    #[test]
+    fn get_closest_returns_none_when_no_elements() {
+        let mut elements: Vec<Element> = vec![];
+        let bvh = Bvh::build::<TrivialHeuristic>(&mut elements);
+
+        let target = Vec3::new(2.5, 2.5, 2.5);
+        let closest = bvh.get_closest(target);
+
+        assert!(closest.is_none());
+    }
+
+    #[test]
+    fn children_returns_leaf_nodes() {
+        let child_elems = SmallVec::<i32, MAX_ELEMENTS_PER_LEAF>::new();
+        let node = BvhNode {
+            aabb: Aabb::NULL,
+            left: Some(NonZeroI32::new(-1).unwrap()),
+            right: Some(NonZeroI32::new(-2).unwrap()),
+        };
+        let bvh: Bvh<i32> = Bvh {
+            nodes: Box::new([BvhNode::DUMMY]),
+            elems: Box::new([
+                SmallVec::default(),
+                child_elems.clone(),
+                child_elems.clone(),
+            ]),
+            root: None,
+        };
+        let mut children = node.children(&bvh);
+        assert_eq!(children.next(), Some(Node::Leaf(&child_elems)));
+        assert_eq!(children.next(), Some(Node::Leaf(&child_elems)));
     }
 }
