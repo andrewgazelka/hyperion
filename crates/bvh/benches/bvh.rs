@@ -83,23 +83,3 @@ fn build_100k_rayon<T: Heuristic>(b: Bencher, count: usize) {
         });
     });
 }
-
-// #[divan::bench]
-// fn bench_query_bvh(b: Bencher) {
-//     let mut elements = create_random_elements(100);
-//     let bvh = Bvh::build_in(&mut elements, Global);
-//
-//     let mut rng = rand::thread_rng();
-//
-//     b.bench_local(|| {
-//         let min = [rng.gen_range(0.0..1000.0); 3];
-//         let max = [
-//             rng.gen_range(min[0]..1000.0),
-//             rng.gen_range(min[1]..1000.0),
-//             rng.gen_range(min[2]..1000.0),
-//         ];
-//         let target = Aabb::new(min, max);
-//
-//         bvh.get_collisions(target).count()
-//     });
-// }
