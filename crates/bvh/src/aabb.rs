@@ -1,6 +1,6 @@
 use crate::HasAabb;
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub struct Aabb {
     pub min: glam::Vec3,
     pub max: glam::Vec3,

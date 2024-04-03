@@ -3,6 +3,8 @@
 
 // https://www.haroldserrano.com/blog/visualizing-the-boundary-volume-hierarchy-collision-algorithm
 
+use std::fmt::Debug;
+
 use nonmax::NonMaxIsize;
 use sharded_slab::Entry;
 use smallvec::SmallVec;
@@ -23,10 +25,10 @@ pub struct BvhNode {
 pub struct Bvh<T> {
     nodes: sharded_slab::Slab<BvhNode>,
     elems: sharded_slab::Slab<SmallVec<T, 4>>,
-    root: u32,
+    root: isize,
 }
 
-impl<T: HasAabb + Copy + Send + Sync> Bvh<T> {
+impl<T: HasAabb + Copy + Send + Sync + Debug> Bvh<T> {
     pub fn build<H: Heuristic>(elements: &mut [T]) -> Self {
         let nodes = sharded_slab::Slab::new();
         let elems = sharded_slab::Slab::new();
@@ -46,7 +48,7 @@ impl<T: HasAabb + Copy + Send + Sync> Bvh<T> {
 
         let root = BvhNode::build_in::<T, H>(&bvh, elements).expect("failed to build bvh");
 
-        bvh.root = root.get() as u32;
+        bvh.root = root.get();
 
         bvh
     }
@@ -64,7 +66,7 @@ impl<T> Bvh<T> {
     }
 }
 
-#[derive(Default, Copy, Clone)]
+#[derive(Default, Copy, Clone, Debug)]
 pub struct Element {
     pub aabb: Aabb,
 }
@@ -173,43 +175,34 @@ fn sort_by_largest_axis<T: HasAabb>(elements: &mut [T], aabb: &Aabb) -> u8 {
     key
 }
 
+enum Node<'a, T> {
+    Internal(Entry<'a, BvhNode>),
+    Leaf(Entry<'a, SmallVec<T, 4>>),
+}
+
 impl BvhNode {
-    pub fn left<'a, T>(&self, root: &'a Bvh<T>) -> Option<Entry<'a, Self>> {
+    pub fn left<'a, T>(&self, root: &'a Bvh<T>) -> Option<Node<'a, T>> {
         let left = self.left?;
+        let left = left.get();
 
-        // leaf node
-        if left.get() < 0 {
-            return None;
+        if left < 0 {
+            let left = left.checked_neg().expect("failed to negate index") - 1;
+            return root.elems.get(left as usize).map(Node::Leaf);
         }
 
-        root.nodes.get(left.get() as usize)
+        root.nodes.get(left as usize).map(Node::Internal)
     }
 
-    // TODO: add right as well
-    pub fn elements<'a, T>(&self, root: &'a Bvh<T>) -> Option<Entry<'a, SmallVec<T, 4>>> {
-        let idx = self.left?;
-
-        if idx.get() >= 0 {
-            return None;
-        }
-
-        let idx = idx.get().checked_neg().expect("failed to negate index") - 1;
-
-        assert!(idx >= 0, "idx: {}", idx);
-
-        root.elems.get(idx as usize)
-    }
-
-    pub fn right<'a, T>(&self, root: &'a Bvh<T>) -> Option<Entry<'a, Self>> {
+    pub fn right<'a, T>(&self, root: &'a Bvh<T>) -> Option<Node<'a, T>> {
         let right = self.right?;
+        let right = right.get();
 
-        // leaf node
-        if right.get() < 0 {
-            // elements here!
-            return None;
+        if right < 0 {
+            let right = right.checked_neg().expect("failed to negate index") - 1;
+            return root.elems.get(right as usize).map(Node::Leaf);
         }
 
-        root.nodes.get(right.get() as usize)
+        root.nodes.get(right as usize).map(Node::Internal)
     }
 
     #[allow(clippy::float_cmp)]
@@ -252,19 +245,21 @@ impl BvhNode {
 
         let idx = root.nodes.insert(node).expect("failed to insert node");
 
-        Some(NonMaxIsize::new(idx as isize).expect("failed to create non-max index"))
-    }
+        let idx = idx as isize;
 
-    pub const fn is_leaf(&self) -> bool {
-        self.left.is_none() && self.right.is_none()
+        assert!(idx >= 0);
+
+        Some(NonMaxIsize::new(idx).expect("failed to create non-max index"))
     }
 }
 
 pub struct BvhIter<'a, T> {
     node_stack: Vec<Entry<'a, BvhNode>>,
     bvh: &'a Bvh<T>,
-    idx: usize,
-    elements: Option<Entry<'a, SmallVec<T, 4>>>,
+    idx_left: usize,
+    idx_right: usize,
+    left_elements: Option<Entry<'a, SmallVec<T, 4>>>,
+    right_elements: Option<Entry<'a, SmallVec<T, 4>>>,
     target: Aabb,
 }
 
@@ -276,9 +271,11 @@ impl<'a, T> BvhIter<'a, T> {
             return Self {
                 node_stack: Vec::new(),
                 bvh,
-                idx: 0,
+                idx_left: 0,
+                idx_right: 0,
                 target,
-                elements: None,
+                left_elements: None,
+                right_elements: None,
             };
         }
 
@@ -288,50 +285,75 @@ impl<'a, T> BvhIter<'a, T> {
             node_stack,
             target,
             bvh,
-            idx: 0,
-            elements: None,
+            idx_left: 0,
+            idx_right: 0,
+            left_elements: None,
+            right_elements: None,
         }
     }
 }
 
-impl<'a, T: HasAabb + Copy> Iterator for BvhIter<'a, T> {
+impl<'a, T: HasAabb + Copy + Debug> Iterator for BvhIter<'a, T> {
     type Item = T;
 
     // todo: this loop can absolutely be improved
     fn next(&mut self) -> Option<Self::Item> {
-        if let Some(v) = &self.elements {
-            while let Some(res) = v.get(self.idx) {
-                self.idx += 1;
+        if let Some(v) = &self.left_elements {
+            while let Some(res) = v.get(self.idx_left) {
+                self.idx_left += 1;
                 // todo: is there a way to map Entry somehow so we can return a reference instead?
 
                 if res.aabb().collides(&self.target) {
                     return Some(*res);
                 }
             }
-
-            self.idx = 0;
-            self.elements = None;
         }
+
+        self.idx_left = 0;
+        self.left_elements = None;
+
+        if let Some(v) = &self.right_elements {
+            while let Some(res) = v.get(self.idx_right) {
+                self.idx_right += 1;
+                // todo: is there a way to map Entry somehow so we can return a reference instead?
+
+                if res.aabb().collides(&self.target) {
+                    return Some(*res);
+                }
+            }
+        }
+
+        self.idx_right = 0;
+        self.right_elements = None;
 
         if self.node_stack.is_empty() {
             return None;
         }
 
-        while let Some(node) = self.node_stack.pop() {
+        if let Some(node) = self.node_stack.pop() {
+            match node.right(self.bvh) {
+                Some(Node::Internal(internal)) => {
+                    if internal.aabb.collides(&self.target) {
+                        self.node_stack.push(internal);
+                    }
+                }
+                Some(Node::Leaf(leaf)) => {
+                    self.left_elements = Some(leaf);
+                }
+                _ => {}
+            }
+
             if let Some(right) = node.right(self.bvh) {
-                if right.aabb.collides(&self.target) {
-                    self.node_stack.push(right);
+                match right {
+                    Node::Internal(internal) => {
+                        if internal.aabb.collides(&self.target) {
+                            self.node_stack.push(internal);
+                        }
+                    }
+                    Node::Leaf(leaf) => {
+                        self.right_elements = Some(leaf);
+                    }
                 }
-            }
-
-            if let Some(left) = node.left(self.bvh) {
-                if left.aabb.collides(&self.target) {
-                    self.node_stack.push(left);
-                }
-            }
-
-            if let Some(elements) = node.elements(self.bvh) {
-                self.elements = Some(elements);
             }
         }
 
@@ -426,7 +448,7 @@ impl<'a, T: HasAabb + Copy> Iterator for BvhIter<'a, T> {
 mod tests {
     use rand::Rng;
 
-    use crate::{aabb::Aabb, Bvh, DefaultHeuristic, Element};
+    use crate::{aabb::Aabb, Bvh, DefaultHeuristic, Element, HasAabb};
 
     fn create_element(min: [f32; 3], max: [f32; 3]) -> Element {
         Element {
@@ -470,9 +492,22 @@ mod tests {
         let mut elements = create_random_elements_1(100_000);
         let bvh = Bvh::build::<DefaultHeuristic>(&mut elements);
 
-        // let element = random_element_1();
-        // for elem in bvh.get_collisions(element.aabb) {
-        //     assert!(elem.aabb().collides(&element.aabb));
-        // }
+        let element = random_element_1();
+        for elem in bvh.get_collisions(element.aabb) {
+            assert!(elem.aabb().collides(&element.aabb));
+        }
+    }
+
+    #[test]
+    fn test_query_all() {
+        let mut elements = create_random_elements_1(100_000);
+        let mut bvh = Bvh::build::<DefaultHeuristic>(&mut elements);
+
+        let node_count = bvh.nodes.unique_iter().count();
+        println!("node count: {}", node_count);
+
+        let num_collisions = bvh.get_collisions(bvh.root().aabb).count();
+
+        assert_eq!(num_collisions, 100_000);
     }
 }
