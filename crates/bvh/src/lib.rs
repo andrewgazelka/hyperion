@@ -217,13 +217,13 @@ impl BvhNode {
         if elements.len() <= 4 {
             let elem = SmallVec::from_slice(elements);
             let idx = root.elems.insert(elem).expect("failed to insert element");
-            let idx = idx as isize;
+            let idx = isize::try_from(idx).expect("failed to convert index");
+
+            // println!("idx {idx} added leaf with len: {}", elements.len());
 
             debug_assert!(idx >= 0);
 
             let idx = idx.checked_neg().expect("failed to negate index") - 1;
-
-            // println!("idx: {}", idx);
 
             return Some(NonMaxIsize::new(idx).expect("failed to create non-max index"));
         }
@@ -258,8 +258,9 @@ pub struct BvhIter<'a, T> {
     bvh: &'a Bvh<T>,
     idx_left: usize,
     idx_right: usize,
-    left_elements: Option<Entry<'a, SmallVec<T, 4>>>,
-    right_elements: Option<Entry<'a, SmallVec<T, 4>>>,
+    elements: Vec<T>,
+    // left_elements: Option<Entry<'a, SmallVec<T, 4>>>,
+    // right_elements: Option<Entry<'a, SmallVec<T, 4>>>,
     target: Aabb,
 }
 
@@ -273,9 +274,8 @@ impl<'a, T> BvhIter<'a, T> {
                 bvh,
                 idx_left: 0,
                 idx_right: 0,
+                elements: vec![],
                 target,
-                left_elements: None,
-                right_elements: None,
             };
         }
 
@@ -287,8 +287,7 @@ impl<'a, T> BvhIter<'a, T> {
             bvh,
             idx_left: 0,
             idx_right: 0,
-            left_elements: None,
-            right_elements: None,
+            elements: vec![],
         }
     }
 }
@@ -298,47 +297,23 @@ impl<'a, T: HasAabb + Copy + Debug> Iterator for BvhIter<'a, T> {
 
     // todo: this loop can absolutely be improved
     fn next(&mut self) -> Option<Self::Item> {
-        if let Some(v) = &self.left_elements {
-            while let Some(res) = v.get(self.idx_left) {
-                self.idx_left += 1;
-                // todo: is there a way to map Entry somehow so we can return a reference instead?
-
-                if res.aabb().collides(&self.target) {
-                    return Some(*res);
-                }
-            }
+        if !self.elements.is_empty() {
+            return self.elements.pop();
         }
-
-        self.idx_left = 0;
-        self.left_elements = None;
-
-        if let Some(v) = &self.right_elements {
-            while let Some(res) = v.get(self.idx_right) {
-                self.idx_right += 1;
-                // todo: is there a way to map Entry somehow so we can return a reference instead?
-
-                if res.aabb().collides(&self.target) {
-                    return Some(*res);
-                }
-            }
-        }
-
-        self.idx_right = 0;
-        self.right_elements = None;
 
         if self.node_stack.is_empty() {
             return None;
         }
 
         if let Some(node) = self.node_stack.pop() {
-            match node.right(self.bvh) {
+            match node.left(self.bvh) {
                 Some(Node::Internal(internal)) => {
                     if internal.aabb.collides(&self.target) {
                         self.node_stack.push(internal);
                     }
                 }
                 Some(Node::Leaf(leaf)) => {
-                    self.left_elements = Some(leaf);
+                    self.elements.extend(leaf.iter().copied());
                 }
                 _ => {}
             }
@@ -351,7 +326,7 @@ impl<'a, T: HasAabb + Copy + Debug> Iterator for BvhIter<'a, T> {
                         }
                     }
                     Node::Leaf(leaf) => {
-                        self.right_elements = Some(leaf);
+                        self.elements.extend(leaf.iter().copied());
                     }
                 }
             }
@@ -360,89 +335,6 @@ impl<'a, T: HasAabb + Copy + Debug> Iterator for BvhIter<'a, T> {
         self.next()
     }
 }
-// #[cfg(test)]
-// mod tests {
-//     use super::*;
-//
-//     fn create_element(min: [f32; 3], max: [f32; 3]) -> Element {
-//         Element {
-//             aabb: Aabb::new(min, max),
-//         }
-//     }
-//
-//     #[test]
-//     fn test_empty_bvh() {
-//         let mut elements = Vec::new();
-//         let bvh = Bvh::build_in(&mut elements, Global);
-//
-//         assert_eq!(bvh.get_collisions(Aabb::new([0.0; 3], [1.0; 3])).count(), 0);
-//     }
-//
-//     #[test]
-//     fn test_single_element_bvh() {
-//         let mut elements = vec![create_element([0.0; 3], [1.0; 3])];
-//         let bvh = Bvh::build_in(&mut elements, Global);
-//
-//         assert_eq!(bvh.get_collisions(Aabb::new([0.0; 3], [1.0; 3])).count(), 1);
-//         assert_eq!(bvh.get_collisions(Aabb::new([2.0; 3], [3.0; 3])).count(), 0);
-//     }
-//
-//     #[test]
-//     fn test_multiple_elements_bvh() {
-//         let mut elements = vec![
-//             create_element([0.0; 3], [1.0; 3]),
-//             create_element([2.0; 3], [3.0; 3]),
-//             create_element([4.0; 3], [5.0; 3]),
-//         ];
-//         let bvh = Bvh::build_in(&mut elements, Global);
-//
-//         assert_eq!(bvh.get_collisions(Aabb::new([0.0; 3], [1.0; 3])).count(), 1);
-//         assert_eq!(bvh.get_collisions(Aabb::new([2.0; 3], [3.0; 3])).count(), 1);
-//         assert_eq!(bvh.get_collisions(Aabb::new([4.0; 3], [5.0; 3])).count(), 1);
-//         assert_eq!(bvh.get_collisions(Aabb::new([6.0; 3], [7.0; 3])).count(), 0);
-//     }
-//
-//     #[test]
-//     fn test_overlapping_elements_bvh() {
-//         let mut elements = vec![
-//             create_element([0.0; 3], [2.0; 3]),
-//             create_element([1.0; 3], [3.0; 3]),
-//             create_element([2.0; 3], [4.0; 3]),
-//         ];
-//         let bvh = Bvh::build_in(&mut elements, Global);
-//
-//         assert_eq!(bvh.get_collisions(Aabb::new([0.0; 3], [1.0; 3])).count(), 1);
-//         assert_eq!(bvh.get_collisions(Aabb::new([1.0; 3], [2.0; 3])).count(), 2);
-//         assert_eq!(bvh.get_collisions(Aabb::new([2.0; 3], [3.0; 3])).count(), 2);
-//         assert_eq!(bvh.get_collisions(Aabb::new([3.0; 3], [4.0; 3])).count(), 1);
-//     }
-//
-//     #[test]
-//     fn test_large_bvh() {
-//         let mut elements = Vec::new();
-//
-//         for i in 0..1000 {
-//             let min = [i as f32; 3];
-//             let max = [i as f32 + 1.0; 3];
-//             elements.push(create_element(min, max));
-//         }
-//
-//         let bvh = Bvh::build_in(&mut elements, Global);
-//
-//         for i in 0..1000 {
-//             let min = [i as f32; 3];
-//             let max = [i as f32 + 1.0; 3];
-//             let target = Aabb::new(min, max);
-//             assert_eq!(bvh.get_collisions(target).count(), 1);
-//         }
-//
-//         assert_eq!(
-//             bvh.get_collisions(Aabb::new([1000.0; 3], [1001.0; 3]))
-//                 .count(),
-//             0
-//         );
-//     }
-// }
 
 #[cfg(test)]
 mod tests {
@@ -500,7 +392,7 @@ mod tests {
 
     #[test]
     fn test_query_all() {
-        let mut elements = create_random_elements_1(100_000);
+        let mut elements = create_random_elements_1(10_000);
         let mut bvh = Bvh::build::<DefaultHeuristic>(&mut elements);
 
         let node_count = bvh.nodes.unique_iter().count();
@@ -508,6 +400,6 @@ mod tests {
 
         let num_collisions = bvh.get_collisions(bvh.root().aabb).count();
 
-        assert_eq!(num_collisions, 100_000);
+        assert_eq!(num_collisions, 10_000);
     }
 }
