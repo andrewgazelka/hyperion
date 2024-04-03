@@ -9,8 +9,7 @@ fn main() {
     divan::main();
 }
 
-use bvh::{aabb::Aabb, Bvh, DefaultHeuristic, Element, Heuristic, TrivialHeuristic};
-use rand::Rng;
+use bvh::{aabb::Aabb, Bvh, Element, Heuristic, TrivialHeuristic};
 use rayon::prelude::*;
 
 fn create_element(min: [f32; 3], max: [f32; 3]) -> Element {
@@ -37,12 +36,11 @@ fn create_element(min: [f32; 3], max: [f32; 3]) -> Element {
 // }
 
 fn random_element_1() -> Element {
-    let mut rng = rand::thread_rng();
-    let min = [rng.gen_range(0.0..1000.0); 3];
+    let min = std::array::from_fn(|_| fastrand::f32() * 1000.0);
     let max = [
-        rng.gen_range(min[0]..min[0] + 1.0),
-        rng.gen_range(min[1]..min[1] + 1.0),
-        rng.gen_range(min[2]..min[2] + 1.0),
+        min[0] + fastrand::f32(),
+        min[1] + fastrand::f32(),
+        min[2] + fastrand::f32(),
     ];
     create_element(min, max)
 }
@@ -57,11 +55,11 @@ fn create_random_elements_1(count: usize) -> Vec<Element> {
     elements
 }
 
-const ENTITY_COUNTS: &[usize] = &[1, 10, 100, 1_000, 10_000, 100_000];
+const ENTITY_COUNTS: &[usize] = &[100, 1_000, 10_000, 100_000];
 
 #[divan::bench(
     args = ENTITY_COUNTS,
-    types = [DefaultHeuristic, TrivialHeuristic],
+    types = [TrivialHeuristic],
 )]
 fn build<H: Heuristic>(b: Bencher, count: usize) {
     let mut elements = create_random_elements_1(count);
@@ -71,25 +69,25 @@ fn build<H: Heuristic>(b: Bencher, count: usize) {
 
 #[divan::bench(
     args = ENTITY_COUNTS,
-    types = [DefaultHeuristic, TrivialHeuristic],
+    types = [TrivialHeuristic],
 )]
 fn query<T: Heuristic>(b: Bencher, count: usize) {
-    let mut elements = create_random_elements_1(100_000);
+    let mut elements = create_random_elements_1(count);
     let bvh = Bvh::build::<T>(&mut elements);
 
     b.counter(count).bench_local(|| {
         for _ in 0..count {
             let element = random_element_1();
-            for elem in bvh.get_collisions(element.aabb).get_vec() {
+            bvh.get_collisions(element.aabb, |elem| {
                 black_box(elem);
-            }
+            });
         }
     });
 }
 
 #[divan::bench(
     args = ENTITY_COUNTS,
-    types = [DefaultHeuristic, TrivialHeuristic],
+    types = [TrivialHeuristic],
 )]
 fn query_par<T: Heuristic>(b: Bencher, count: usize) {
     let mut elements = create_random_elements_1(100_000);
@@ -98,10 +96,9 @@ fn query_par<T: Heuristic>(b: Bencher, count: usize) {
     b.counter(count).bench_local(|| {
         (0..count).into_par_iter().for_each(|_| {
             let element = random_element_1();
-            bvh.get_collisions(element.aabb)
-                .for_each(|elem| {
-                    black_box(elem);
-                });
+            bvh.get_collisions(element.aabb, |elem| {
+                black_box(elem);
+            });
         });
     });
 }
@@ -110,7 +107,7 @@ const THREAD_COUNTS: &[usize] = &[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
 
 #[divan::bench(
     args = THREAD_COUNTS,
-    types = [DefaultHeuristic, TrivialHeuristic],
+    types = [TrivialHeuristic],
 )]
 fn build_100k_rayon<T: Heuristic>(b: Bencher, count: usize) {
     let thread_pool = rayon::ThreadPoolBuilder::default()

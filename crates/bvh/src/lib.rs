@@ -1,3 +1,4 @@
+#![feature(portable_simd)]
 #![feature(lint_reasons)]
 #![feature(allocator_api)]
 
@@ -5,8 +6,10 @@
 
 use std::fmt::Debug;
 
+const MAX_ELEMENTS_PER_LEAF: usize = 16;
+
 use nonmax::NonMaxIsize;
-use sharded_slab::Entry;
+use parking_lot::Mutex;
 use smallvec::SmallVec;
 
 use crate::aabb::Aabb;
@@ -23,15 +26,20 @@ pub struct BvhNode {
 }
 
 pub struct Bvh<T> {
-    nodes: sharded_slab::Slab<BvhNode>,
-    elems: sharded_slab::Slab<SmallVec<T, 4>>,
+    nodes: Vec<BvhNode>,
+    elems: Vec<SmallVec<T, MAX_ELEMENTS_PER_LEAF>>,
     root: isize,
 }
 
 impl<T: HasAabb + Copy + Send + Sync + Debug> Bvh<T> {
     pub fn build<H: Heuristic>(elements: &mut [T]) -> Self {
-        let nodes = sharded_slab::Slab::new();
-        let elems = sharded_slab::Slab::new();
+        let len = elements.len();
+
+        // there will be about len / MAX_ELEMENTS_PER_LEAF nodes since max MAX_ELEMENTS_PER_LEAF elements per leaf
+        // there will also be about len / 2 elems
+
+        let nodes = Vec::with_capacity(len / MAX_ELEMENTS_PER_LEAF);
+        let elems = Vec::with_capacity(len / MAX_ELEMENTS_PER_LEAF * 2);
 
         // // dummy so we never get 0 index
         // // todo: could we use negative pointer? don't think this is worth it though
@@ -40,26 +48,30 @@ impl<T: HasAabb + Copy + Send + Sync + Debug> Bvh<T> {
         // elems.insert(SmallVec::new());
         // nodes.insert(BvhNode::DUMMY);
 
-        let mut bvh = Self {
+        let bvh = Self {
             nodes,
             elems,
             root: 0,
         };
 
+        let bvh = Mutex::new(bvh);
+
         let root = BvhNode::build_in::<T, H>(&bvh, elements).expect("failed to build bvh");
+
+        let mut bvh = bvh.into_inner();
 
         bvh.root = root.get();
 
         bvh
     }
 
-    pub fn get_collisions(&self, target: Aabb) -> BvhIter<T> {
-        BvhIter::new(self, target)
+    pub fn get_collisions(&self, target: Aabb, mut process: impl FnMut(T)) {
+        BvhIter::consume(self, target, &mut process);
     }
 }
 
 impl<T> Bvh<T> {
-    pub fn root(&self) -> Entry<BvhNode> {
+    pub fn root(&self) -> &BvhNode {
         self.nodes
             .get(self.root as usize)
             .expect("failed to get root node")
@@ -132,7 +144,7 @@ impl Heuristic for DefaultHeuristic {
         for idx in 1..elements.len() {
             let cost = left_surface_areas[idx - 1] + right_surface_areas[idx - 1];
 
-            // // pad idx 4 zeros
+            // // pad idx MAX_ELEMENTS_PER_LEAF zeros
             // println!("{:04}: {}", idx, cost);
 
             if cost < min_cost {
@@ -176,8 +188,8 @@ fn sort_by_largest_axis<T: HasAabb>(elements: &mut [T], aabb: &Aabb) -> u8 {
 }
 
 enum Node<'a, T> {
-    Internal(Entry<'a, BvhNode>),
-    Leaf(Entry<'a, SmallVec<T, 4>>),
+    Internal(&'a BvhNode),
+    Leaf(&'a SmallVec<T, MAX_ELEMENTS_PER_LEAF>),
 }
 
 impl BvhNode {
@@ -207,16 +219,21 @@ impl BvhNode {
 
     #[allow(clippy::float_cmp)]
     pub fn build_in<T: HasAabb + Copy + Send + Sync, H: Heuristic>(
-        root: &Bvh<T>,
+        root: &Mutex<Bvh<T>>,
         elements: &mut [T],
     ) -> Option<NonMaxIsize> {
         if elements.is_empty() {
             return None;
         }
 
-        if elements.len() <= 4 {
+        if elements.len() <= MAX_ELEMENTS_PER_LEAF {
             let elem = SmallVec::from_slice(elements);
-            let idx = root.elems.insert(elem).expect("failed to insert element");
+            let idx = {
+                let mut mutex = root.lock();
+                let len = mutex.elems.len();
+                mutex.elems.push(elem);
+                len
+            };
             let idx = isize::try_from(idx).expect("failed to convert index");
 
             // println!("idx {idx} added leaf with len: {}", elements.len());
@@ -243,7 +260,12 @@ impl BvhNode {
 
         let node = Self { aabb, left, right };
 
-        let idx = root.nodes.insert(node).expect("failed to insert node");
+        let idx = {
+            let mut mutex = root.lock();
+            let len = mutex.nodes.len();
+            mutex.nodes.push(node);
+            len
+        };
 
         let idx = idx as isize;
 
@@ -254,110 +276,66 @@ impl BvhNode {
 }
 
 pub struct BvhIter<'a, T> {
-    node_stack: Vec<Entry<'a, BvhNode>>,
+    // node_stack: Vec<&'a BvhNode>,
     bvh: &'a Bvh<T>,
-    elements: Vec<T>,
-    // left_elements: Option<Entry<'a, SmallVec<T, 4>>>,
-    // right_elements: Option<Entry<'a, SmallVec<T, 4>>>,
+    // elements: Vec<T>,
+    // left_elements: Option<Entry<'a, SmallVec<T, MAX_ELEMENTS_PER_LEAF>>>,
+    // right_elements: Option<Entry<'a, SmallVec<T, MAX_ELEMENTS_PER_LEAF>>>,
     target: Aabb,
 }
 
-impl<'a, T: Copy> BvhIter<'a, T> {
-    fn new(bvh: &'a Bvh<T>, target: Aabb) -> Self {
+impl<'a, T: Copy + HasAabb> BvhIter<'a, T> {
+    fn consume(bvh: &'a Bvh<T>, target: Aabb, process: &mut impl FnMut(T)) {
         let root = bvh.root();
 
         if !root.aabb.collides(&target) {
-            return Self {
-                node_stack: Vec::new(),
-                bvh,
-                elements: vec![],
-                target,
-            };
+            return;
         }
 
-        let node_stack = vec![root];
-
-        Self {
-            node_stack,
+        let mut iter = Self {
+            // node_stack,
             target,
             bvh,
-            elements: vec![],
-        }
+            // elements: vec![],
+        };
+
+        iter.process(root, process);
     }
 
-    pub fn get_vec(mut self) -> Vec<T> {
-        while let Some(node) = self.node_stack.pop() {
-            match node.left(self.bvh) {
-                Some(Node::Internal(internal)) => {
+    pub fn process(&mut self, on: &BvhNode, process: &mut impl FnMut((T))) {
+        if let Some(left) = on.left(self.bvh) {
+            match left {
+                Node::Internal(internal) => {
                     if internal.aabb.collides(&self.target) {
-                        self.node_stack.push(internal);
+                        self.process(internal, process);
                     }
                 }
-                Some(Node::Leaf(leaf)) => {
-                    self.elements.extend(leaf.iter().copied());
-                }
-                _ => {}
-            }
-
-            if let Some(right) = node.right(self.bvh) {
-                match right {
-                    Node::Internal(internal) => {
-                        if internal.aabb.collides(&self.target) {
-                            self.node_stack.push(internal);
+                Node::Leaf(leaf) => {
+                    for elem in leaf.iter() {
+                        if elem.aabb().collides(&self.target) {
+                            process(*elem);
                         }
                     }
-                    Node::Leaf(leaf) => {
-                        self.elements.extend(leaf.iter().copied());
-                    }
                 }
             }
         }
 
-        self.elements
-    }
-}
-
-impl<'a, T: HasAabb + Copy + Debug> Iterator for BvhIter<'a, T> {
-    type Item = T;
-
-    // todo: this loop can absolutely be improved
-    fn next(&mut self) -> Option<Self::Item> {
-        if !self.elements.is_empty() {
-            return self.elements.pop();
-        }
-
-        if self.node_stack.is_empty() {
-            return None;
-        }
-
-        if let Some(node) = self.node_stack.pop() {
-            match node.left(self.bvh) {
-                Some(Node::Internal(internal)) => {
+        if let Some(right) = on.right(self.bvh) {
+            match right {
+                Node::Internal(internal) => {
                     if internal.aabb.collides(&self.target) {
-                        self.node_stack.push(internal);
+                        self.process(internal, process);
                     }
                 }
-                Some(Node::Leaf(leaf)) => {
-                    self.elements.extend(leaf.iter().copied());
-                }
-                _ => {}
-            }
-
-            if let Some(right) = node.right(self.bvh) {
-                match right {
-                    Node::Internal(internal) => {
-                        if internal.aabb.collides(&self.target) {
-                            self.node_stack.push(internal);
+                Node::Leaf(leaf) => {
+                    for elem in leaf.iter() {
+                        if elem.aabb().collides(&self.target) {
+                            process(*elem);
                         }
                     }
-                    Node::Leaf(leaf) => {
-                        self.elements.extend(leaf.iter().copied());
-                    }
                 }
             }
         }
-
-        self.next()
     }
 }
 
@@ -365,7 +343,7 @@ impl<'a, T: HasAabb + Copy + Debug> Iterator for BvhIter<'a, T> {
 mod tests {
     use rand::Rng;
 
-    use crate::{aabb::Aabb, Bvh, DefaultHeuristic, Element, HasAabb};
+    use crate::{aabb::Aabb, Bvh, DefaultHeuristic, Element, HasAabb, TrivialHeuristic};
 
     fn create_element(min: [f32; 3], max: [f32; 3]) -> Element {
         Element {
@@ -385,7 +363,7 @@ mod tests {
 
     fn random_element_1() -> Element {
         let mut rng = rand::thread_rng();
-        let min = [rng.gen_range(0.0..1000.0); 3];
+        let min = std::array::from_fn(|_| rng.gen_range(0.0..1000.0));
         let max = [
             rng.gen_range(min[0]..min[0] + 1.0),
             rng.gen_range(min[1]..min[1] + 1.0),
@@ -407,23 +385,37 @@ mod tests {
     #[test]
     fn test_query() {
         let mut elements = create_random_elements_1(100_000);
-        let bvh = Bvh::build::<DefaultHeuristic>(&mut elements);
+        let bvh = Bvh::build::<TrivialHeuristic>(&mut elements);
 
         let element = random_element_1();
-        for elem in bvh.get_collisions(element.aabb) {
+
+        let mut num_collisions = 0;
+
+        // 1000 x 1000 x 1000 = 1B ... 1B / 1M = 1000 blocks on average...
+        // on average num_collisions should be super low
+        bvh.get_collisions(element.aabb, |elem| {
+            num_collisions += 1;
             assert!(elem.aabb().collides(&element.aabb));
-        }
+
+            println!("collision {:?} and {:?}", elem, element);
+        });
+
+        println!("num_collisions: {}", num_collisions);
     }
 
     #[test]
     fn test_query_all() {
         let mut elements = create_random_elements_1(10_000);
-        let mut bvh = Bvh::build::<DefaultHeuristic>(&mut elements);
+        let mut bvh = Bvh::build::<TrivialHeuristic>(&mut elements);
 
-        let node_count = bvh.nodes.unique_iter().count();
+        let node_count = bvh.nodes.len();
         println!("node count: {}", node_count);
 
-        let num_collisions = bvh.get_collisions(bvh.root().aabb).count();
+        let mut num_collisions = 0;
+
+        bvh.get_collisions(Aabb::EVERYTHING, |_| {
+            num_collisions += 1;
+        });
 
         assert_eq!(num_collisions, 10_000);
     }
