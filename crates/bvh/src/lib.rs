@@ -3,7 +3,7 @@
 
 // https://www.haroldserrano.com/blog/visualizing-the-boundary-volume-hierarchy-collision-algorithm
 
-use nonmax::NonMaxI32;
+use nonmax::{NonMaxI32, NonMaxIsize, NonMaxU32};
 use sharded_slab::Entry;
 use smallvec::SmallVec;
 
@@ -15,8 +15,9 @@ pub struct BvhNode {
     aabb: Aabb,
 
     // if positive then it is an internal node; if negative then it is a leaf node
-    left: Option<NonMaxI32>,
-    right: Option<NonMaxI32>,
+    // TODO: REMOVE REMOVE REMOVE OPTION IT CAN PANIC AND GET MAX PROBS
+    left: Option<NonMaxIsize>,
+    right: Option<NonMaxIsize>,
 }
 
 impl BvhNode {
@@ -167,14 +168,17 @@ impl BvhNode {
         root.nodes.get(left.get() as usize)
     }
 
+    // TODO: add right as well
     pub fn elements<'a, T>(&self, root: &'a Bvh<T>) -> Option<Entry<'a, SmallVec<T, 4>>> {
         let idx = self.left?;
 
-        if idx.get() > 0 {
+        if idx.get() >= 0 {
             return None;
         }
 
-        let idx = idx.get().checked_neg().expect("failed to negate index");
+        let idx = idx.get().checked_neg().expect("failed to negate index") - 1;
+
+        assert!(idx >= 0, "idx: {}", idx);
 
         root.elems.get(idx as usize)
     }
@@ -184,6 +188,7 @@ impl BvhNode {
 
         // leaf node
         if right.get() < 0 {
+            // elements here!
             return None;
         }
 
@@ -194,7 +199,7 @@ impl BvhNode {
     pub fn build_in<T: HasAabb + Copy + Send + Sync>(
         root: &Bvh<T>,
         elements: &mut [T],
-    ) -> Option<NonMaxI32> {
+    ) -> Option<NonMaxIsize> {
         if elements.is_empty() {
             return None;
         }
@@ -202,9 +207,15 @@ impl BvhNode {
         if elements.len() <= 4 {
             let elem = SmallVec::from_slice(elements);
             let idx = root.elems.insert(elem).expect("failed to insert element");
-            let index = (idx as i32).checked_neg().expect("failed to negate index");
+            let idx = idx as isize;
 
-            return Some(NonMaxI32::new(index).expect("failed to create non-max index"));
+            debug_assert!(idx >= 0);
+
+            let idx = idx.checked_neg().expect("failed to negate index") - 1;
+
+            // println!("idx: {}", idx);
+
+            return Some(NonMaxIsize::new(idx).expect("failed to create non-max index"));
         }
 
         let aabb = Aabb::from(&*elements);
@@ -224,7 +235,7 @@ impl BvhNode {
 
         let idx = root.nodes.insert(node).expect("failed to insert node");
 
-        Some(NonMaxI32::new(idx as i32).expect("failed to create non-max index"))
+        Some(NonMaxIsize::new(idx as isize).expect("failed to create non-max index"))
     }
 
     pub const fn is_leaf(&self) -> bool {
@@ -269,27 +280,36 @@ impl<'a, T> BvhIter<'a, T> {
 impl<'a, T: HasAabb + Copy> Iterator for BvhIter<'a, T> {
     type Item = T;
 
+    // todo: this loop can absolutely be improved
     fn next(&mut self) -> Option<Self::Item> {
         if let Some(v) = &self.elements {
-            if let Some(res) = v.get(self.idx) {
+            while let Some(res) = v.get(self.idx) {
                 self.idx += 1;
                 // todo: is there a way to map Entry somehow so we can return a reference instead?
-                return Some(*res);
+
+                if res.aabb().collides(&self.target) {
+                    return Some(*res);
+                }
             }
+
             self.idx = 0;
             self.elements = None;
         }
 
-        while let Some(node) = self.node_stack.pop() {
-            if let Some(left) = node.left(self.bvh) {
-                if left.aabb.collides(&self.target) {
-                    self.node_stack.push(left);
-                }
-            }
+        if self.node_stack.is_empty() {
+            return None;
+        }
 
+        while let Some(node) = self.node_stack.pop() {
             if let Some(right) = node.right(self.bvh) {
                 if right.aabb.collides(&self.target) {
                     self.node_stack.push(right);
+                }
+            }
+
+            if let Some(left) = node.left(self.bvh) {
+                if left.aabb.collides(&self.target) {
+                    self.node_stack.push(left);
                 }
             }
 
@@ -384,3 +404,47 @@ impl<'a, T: HasAabb + Copy> Iterator for BvhIter<'a, T> {
 //         );
 //     }
 // }
+
+#[cfg(test)]
+mod tests {
+    use rand::Rng;
+
+    use crate::{aabb::Aabb, Bvh, Element, HasAabb};
+
+    fn create_element(min: [f32; 3], max: [f32; 3]) -> Element {
+        Element {
+            aabb: Aabb::new(min, max),
+        }
+    }
+    fn random_element_1() -> Element {
+        let mut rng = rand::thread_rng();
+        let min = [rng.gen_range(0.0..1000.0); 3];
+        let max = [
+            rng.gen_range(min[0]..1000.0),
+            rng.gen_range(min[1]..1000.0),
+            rng.gen_range(min[2]..1000.0),
+        ];
+        create_element(min, max)
+    }
+
+    fn create_random_elements_1(count: usize) -> Vec<Element> {
+        let mut elements = Vec::new();
+
+        for _ in 0..count {
+            elements.push(random_element_1());
+        }
+
+        elements
+    }
+
+    #[test]
+    fn test_query() {
+        let mut elements = create_random_elements_1(100_000);
+        let bvh = Bvh::build(&mut elements);
+
+        let element = random_element_1();
+        for elem in bvh.get_collisions(element.aabb) {
+            assert!(elem.aabb().collides(&element.aabb));
+        }
+    }
+}

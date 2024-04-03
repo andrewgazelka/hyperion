@@ -1,9 +1,15 @@
+use std::hint::black_box;
+
 use divan::{AllocProfiler, Bencher};
 
 #[global_allocator]
 static ALLOC: AllocProfiler = AllocProfiler::system();
 
 fn main() {
+    rayon::ThreadPoolBuilder::default()
+        .build_global()
+        .expect("Failed to build global thread pool");
+
     divan::main();
 }
 
@@ -33,18 +39,22 @@ fn create_random_elements_full(count: usize) -> Vec<Element> {
     elements
 }
 
-fn create_random_elements_1(count: usize) -> Vec<Element> {
+fn random_element_1() -> Element {
     let mut rng = rand::thread_rng();
+    let min = [rng.gen_range(0.0..1000.0); 3];
+    let max = [
+        rng.gen_range(min[0]..1000.0),
+        rng.gen_range(min[1]..1000.0),
+        rng.gen_range(min[2]..1000.0),
+    ];
+    create_element(min, max)
+}
+
+fn create_random_elements_1(count: usize) -> Vec<Element> {
     let mut elements = Vec::new();
 
     for _ in 0..count {
-        let min = [rng.gen_range(0.0..1000.0); 3];
-        let max = [
-            rng.gen_range(min[0]..min[0] + 1.0),
-            rng.gen_range(min[1]..min[1] + 1.0),
-            rng.gen_range(min[2]..min[2] + 1.0),
-        ];
-        elements.push(create_element(min, max));
+        elements.push(random_element_1());
     }
 
     elements
@@ -52,13 +62,24 @@ fn create_random_elements_1(count: usize) -> Vec<Element> {
 
 #[divan::bench]
 fn bench_build_bvh(b: Bencher) {
-    rayon::ThreadPoolBuilder::default()
-        .build_global()
-        .expect("Failed to build global thread pool");
+    let mut elements = create_random_elements_1(100_000);
+    b.bench_local(|| Bvh::build(&mut elements));
+}
 
-    b.bench(|| {
-        let mut elements = create_random_elements_1(100_000);
-        Bvh::build(&mut elements)
+const COUNTS: &[usize] = &[1, 10, 100, 1_000, 10_000, 100_000];
+
+#[divan::bench(args = COUNTS)]
+fn query(b: Bencher, count: usize) {
+    let mut elements = create_random_elements_1(100_000);
+    let bvh = Bvh::build(&mut elements);
+
+    b.counter(count).bench(|| {
+        for _ in 0..count {
+            let element = random_element_1();
+            for elem in bvh.get_collisions(element.aabb) {
+                black_box(elem);
+            }
+        }
     });
 }
 
