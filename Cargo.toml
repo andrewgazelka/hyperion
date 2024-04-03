@@ -33,10 +33,12 @@ lto = "fat"
 codegen-units = 1
 
 [workspace.dependencies]
+bvh = { path = "crates/bvh" }
 chunk = { path = "crates/chunk" }
 generator = { path = "crates/generator" }
 generator-build = { path = "crates/generator-build" }
 rayon-local = { path = "crates/rayon-local" }
+glam = "0.26.0"
 
 evenio = { git = "https://github.com/andrewgazelka/evenio", features = ["rayon"], branch = "fix-collisions-gt-2" }
 smallvec = { git = "https://github.com/servo/rust-smallvec" }

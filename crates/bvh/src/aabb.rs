@@ -104,7 +104,7 @@ impl Aabb {
     where
         T: HasAabb + 'a,
     {
-        elements.filter(|element| self.collides(element.aabb()))
+        elements.filter(|element| self.collides(&element.aabb()))
     }
 
     #[must_use]
@@ -157,10 +157,10 @@ impl Aabb {
         self.max - self.min
     }
 
-    pub fn containing<'a>(input: impl Iterator<Item = &'a Self>) -> Self {
+    pub fn containing(input: impl Iterator<Item = Self>) -> Self {
         input.fold(Self::NULL, |acc, aabb| {
             let mut acc = acc;
-            acc.expand_to_fit(aabb);
+            acc.expand_to_fit(&aabb);
             acc
         })
     }

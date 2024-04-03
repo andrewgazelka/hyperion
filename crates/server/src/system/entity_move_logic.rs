@@ -12,7 +12,10 @@ use valence_protocol::{
 };
 
 use crate::{
-    singleton::encoder::{Encoder, PacketMetadata, PacketNecessity},
+    singleton::{
+        encoder::{Encoder, PacketMetadata, PacketNecessity},
+        player_location_lookup::PlayerLocationLookup,
+    },
     EntityReaction, FullEntityPose, Gametick, MinecraftEntity, RunningSpeed, Targetable,
 };
 
@@ -42,17 +45,12 @@ pub fn entity_move_logic(
         Not<&MinecraftEntity>, // not 1
     )>,
     encoder: Single<&mut Encoder>,
+    lookup: Single<&PlayerLocationLookup>,
 ) {
     use valence_protocol::packets::play;
 
-    let Some((&target, ..)) = target.iter_mut().next() else {
-        // no movement if not a single player
-        return;
-    };
-
     let encoder = encoder.0;
-
-    let target = target.position;
+    let lookup = lookup.0;
 
     entities.par_iter_mut().for_each(|query| {
         let EntityQuery {
@@ -65,7 +63,11 @@ pub fn entity_move_logic(
 
         let current = pose.position;
 
-        let dif = target - current;
+        let Some(target) = lookup.closest_to(current) else {
+            return;
+        };
+
+        let dif = target.aabb.mid() - current;
 
         let dif2d = Vec2::new(dif.x, dif.z);
 

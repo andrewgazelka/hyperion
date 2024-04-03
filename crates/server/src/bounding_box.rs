@@ -20,6 +20,16 @@ pub struct EntityBoundingBoxes {
     query: FnvHashMap<Index2D, Storage>,
 }
 
+impl From<BoundingBox> for bvh::aabb::Aabb {
+    fn from(value: BoundingBox) -> Self {
+        Self::new([value.min.x, value.min.y, value.min.z], [
+            value.max.x,
+            value.max.y,
+            value.max.z,
+        ])
+    }
+}
+
 #[derive(Copy, Clone, Debug)]
 pub struct BoundingBox {
     pub min: Vec3,
@@ -27,6 +37,17 @@ pub struct BoundingBox {
 }
 
 impl BoundingBox {
+    #[must_use]
+    pub fn move_to(&self, feet: Vec3) -> Self {
+        let half_width = (self.max.x - self.min.x) / 2.0;
+        let height = self.max.y - self.min.y;
+
+        let min = Vec3::new(feet.x - half_width, feet.y, feet.z - half_width);
+        let max = Vec3::new(feet.x + half_width, feet.y + height, feet.z + half_width);
+
+        Self { min, max }
+    }
+
     #[must_use]
     pub fn create(feet: Vec3, width: f32, height: f32) -> Self {
         let half_width = width / 2.0;

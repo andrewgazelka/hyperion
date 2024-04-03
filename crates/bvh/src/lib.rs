@@ -15,7 +15,7 @@ const MAX_ELEMENTS_PER_LEAF: usize = 16;
 
 pub mod aabb;
 
-pub mod queue;
+mod queue;
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct BvhNode {
@@ -28,17 +28,37 @@ pub struct BvhNode {
 }
 
 pub struct Bvh<T> {
-    nodes: Box<[BvhNode]>,
-    elems: Box<[SmallVec<T, MAX_ELEMENTS_PER_LEAF>]>,
+    nodes: Vec<BvhNode>,
+    elems: Vec<SmallVec<T, MAX_ELEMENTS_PER_LEAF>>,
     root: Option<NonZeroI32>,
 }
 
-pub struct BvhBuild<T> {
+impl<T> Default for Bvh<T> {
+    fn default() -> Self {
+        Self {
+            nodes: Vec::new(),
+            elems: Vec::new(),
+            root: None,
+        }
+    }
+}
+
+impl<T: Debug> Debug for Bvh<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Bvh")
+            .field("nodes", &self.nodes)
+            .field("elems", &self.elems)
+            .field("root", &self.root)
+            .finish()
+    }
+}
+
+struct BvhBuild<T> {
     nodes: Queue<BvhNode>,
     elems: Queue<SmallVec<T, MAX_ELEMENTS_PER_LEAF>>,
 }
 
-impl<T: HasAabb + Copy + Send + Sync + Debug> Bvh<T> {
+impl<T: HasAabb + Send + Copy + Sync + Debug> Bvh<T> {
     pub fn build<H: Heuristic>(elements: &mut [T]) -> Self {
         let len = elements.len();
 
@@ -161,7 +181,7 @@ impl<T: HasAabb + Copy + Send + Sync + Debug> Bvh<T> {
         min_node.map(|elem| (elem, min_dist2))
     }
 
-    pub fn get_collisions(&self, target: Aabb, mut process: impl FnMut(T)) {
+    pub fn get_collisions(&self, target: Aabb, mut process: impl FnMut(&T)) {
         BvhIter::consume(self, target, &mut process);
     }
 }
@@ -181,24 +201,13 @@ impl<T> Bvh<T> {
     }
 }
 
-#[derive(Default, Copy, Clone, Debug)]
-pub struct Element {
-    pub aabb: Aabb,
-}
-
 pub trait HasAabb {
-    fn aabb(&self) -> &Aabb;
-}
-
-impl HasAabb for Element {
-    fn aabb(&self) -> &Aabb {
-        &self.aabb
-    }
+    fn aabb(&self) -> Aabb;
 }
 
 impl HasAabb for Aabb {
-    fn aabb(&self) -> &Aabb {
-        self
+    fn aabb(&self) -> Aabb {
+        *self
     }
 }
 
@@ -340,7 +349,7 @@ impl BvhNode {
     }
 
     #[allow(clippy::float_cmp)]
-    pub fn build_in<T: HasAabb + Copy + Send + Sync + Debug, H: Heuristic>(
+    fn build_in<T: HasAabb + Send + Copy + Sync + Debug, H: Heuristic>(
         root: &BvhBuild<T>,
         elements: &mut [T],
     ) -> Option<NonZeroI32> {
@@ -386,7 +395,7 @@ impl BvhNode {
     }
 }
 
-pub struct BvhIter<'a, T> {
+struct BvhIter<'a, T> {
     // node_stack: Vec<&'a BvhNode>,
     bvh: &'a Bvh<T>,
     // elements: Vec<T>,
@@ -395,8 +404,8 @@ pub struct BvhIter<'a, T> {
     target: Aabb,
 }
 
-impl<'a, T: Copy + HasAabb> BvhIter<'a, T> {
-    fn consume(bvh: &'a Bvh<T>, target: Aabb, process: &mut impl FnMut(T)) {
+impl<'a, T: HasAabb> BvhIter<'a, T> {
+    fn consume(bvh: &'a Bvh<T>, target: Aabb, process: &mut impl FnMut(&T)) {
         let Some(root) = bvh.root() else {
             return;
         };
@@ -406,7 +415,7 @@ impl<'a, T: Copy + HasAabb> BvhIter<'a, T> {
             Node::Leaf(leaf) => {
                 for elem in leaf.iter() {
                     if elem.aabb().collides(&target) {
-                        process(*elem);
+                        process(elem);
                     }
                 }
                 return;
@@ -427,7 +436,7 @@ impl<'a, T: Copy + HasAabb> BvhIter<'a, T> {
         iter.process(root, process);
     }
 
-    pub fn process(&mut self, on: &BvhNode, process: &mut impl FnMut(T)) {
+    pub fn process(&mut self, on: &BvhNode, process: &mut impl FnMut(&T)) {
         // todo: ideally get .children() on same level as this
         if let Some(left) = on.left(self.bvh) {
             match left {
@@ -439,7 +448,7 @@ impl<'a, T: Copy + HasAabb> BvhIter<'a, T> {
                 Node::Leaf(leaf) => {
                     for elem in leaf.iter() {
                         if elem.aabb().collides(&self.target) {
-                            process(*elem);
+                            process(elem);
                         }
                     }
                 }
@@ -456,7 +465,7 @@ impl<'a, T: Copy + HasAabb> BvhIter<'a, T> {
                 Node::Leaf(leaf) => {
                     for elem in leaf.iter() {
                         if elem.aabb().collides(&self.target) {
-                            process(*elem);
+                            process(elem);
                         }
                     }
                 }
@@ -484,9 +493,7 @@ pub fn create_random_elements_1(count: usize) -> Vec<Aabb> {
 }
 
 #[cfg(test)]
-pub mod tests {
-    use rand::Rng;
-
+mod tests {
     use super::*;
 
     fn collisions_naive(elements: &[Aabb], target: Aabb) -> usize {
@@ -552,8 +559,8 @@ pub mod tests {
             right: None,
         };
         let bvh: Bvh<i32> = Bvh {
-            nodes: Box::new([]),
-            elems: Box::new([]),
+            nodes: Vec::new(),
+            elems: Vec::new(),
             root: None,
         };
         assert!(node.children(&bvh).next().is_none());
@@ -576,8 +583,8 @@ pub mod tests {
         };
 
         let bvh: Bvh<i32> = Bvh {
-            nodes: Box::new([BvhNode::DUMMY, child_node, child_node]),
-            elems: Box::new([]),
+            nodes: vec![BvhNode::DUMMY, child_node, child_node],
+            elems: vec![],
             root: None,
         };
         let mut children = node.children(&bvh);
@@ -589,15 +596,9 @@ pub mod tests {
     #[test]
     fn get_closest_returns_closest_element() {
         let mut elements = vec![
-            Element {
-                aabb: Aabb::new(Vec3::new(0.0, 0.0, 0.0), Vec3::new(1.0, 1.0, 1.0)),
-            },
-            Element {
-                aabb: Aabb::new(Vec3::new(2.0, 2.0, 2.0), Vec3::new(3.0, 3.0, 3.0)),
-            },
-            Element {
-                aabb: Aabb::new(Vec3::new(4.0, 4.0, 4.0), Vec3::new(5.0, 5.0, 5.0)),
-            },
+            Aabb::new(Vec3::new(0.0, 0.0, 0.0), Vec3::new(1.0, 1.0, 1.0)),
+            Aabb::new(Vec3::new(2.0, 2.0, 2.0), Vec3::new(3.0, 3.0, 3.0)),
+            Aabb::new(Vec3::new(4.0, 4.0, 4.0), Vec3::new(5.0, 5.0, 5.0)),
         ];
         let bvh = Bvh::build::<TrivialHeuristic>(&mut elements);
 
@@ -608,32 +609,29 @@ pub mod tests {
         let (closest_element, _) = closest.unwrap();
         assert_eq!(
             closest_element.aabb(),
-            &Aabb::new(Vec3::new(2.0, 2.0, 2.0), Vec3::new(3.0, 3.0, 3.0))
+            Aabb::new(Vec3::new(2.0, 2.0, 2.0), Vec3::new(3.0, 3.0, 3.0))
         );
     }
 
     #[test]
     fn get_closest_returns_closest_element_with_random_data() {
-        let mut rng = rand::thread_rng();
-        let mut elements: Vec<Element> = (0..1000)
+        let mut elements: Vec<Aabb> = (0..1000)
             .map(|_| {
                 let min = Vec3::new(
-                    rng.gen_range(-100.0..100.0),
-                    rng.gen_range(-100.0..100.0),
-                    rng.gen_range(-100.0..100.0),
+                    fastrand::f32().mul_add(200.0, -100.0),
+                    fastrand::f32().mul_add(200.0, -100.0),
+                    fastrand::f32().mul_add(200.0, -100.0),
                 );
                 let max = min + Vec3::new(1.0, 1.0, 1.0);
-                Element {
-                    aabb: Aabb::new(min, max),
-                }
+                Aabb::new(min, max)
             })
             .collect();
         let bvh = Bvh::build::<TrivialHeuristic>(&mut elements);
 
         let target = Vec3::new(
-            rng.gen_range(-100.0..100.0),
-            rng.gen_range(-100.0..100.0),
-            rng.gen_range(-100.0..100.0),
+            fastrand::f32().mul_add(200.0, -100.0),
+            fastrand::f32().mul_add(200.0, -100.0),
+            fastrand::f32().mul_add(200.0, -100.0),
         );
         let closest = bvh.get_closest(target);
 
@@ -648,7 +646,7 @@ pub mod tests {
 
     #[test]
     fn get_closest_returns_none_when_no_elements() {
-        let mut elements: Vec<Element> = vec![];
+        let mut elements: Vec<Aabb> = vec![];
         let bvh = Bvh::build::<TrivialHeuristic>(&mut elements);
 
         let target = Vec3::new(2.5, 2.5, 2.5);
@@ -666,12 +664,12 @@ pub mod tests {
             right: Some(NonZeroI32::new(-2).unwrap()),
         };
         let bvh: Bvh<i32> = Bvh {
-            nodes: Box::new([BvhNode::DUMMY]),
-            elems: Box::new([
+            nodes: vec![BvhNode::DUMMY],
+            elems: vec![
                 SmallVec::default(),
                 child_elems.clone(),
                 child_elems.clone(),
-            ]),
+            ],
             root: None,
         };
         let mut children = node.children(&bvh);

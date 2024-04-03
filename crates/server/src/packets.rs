@@ -45,13 +45,13 @@ fn full(mut data: &[u8], full_entity_pose: &mut FullEntityPose) -> anyhow::Resul
     // if they are, ignore the packet
 
     let position = position.as_vec3();
-    if position.distance_squared(full_entity_pose.position) > MAX_SPEED.powi(2) {
+    let d_pos = position - full_entity_pose.position;
+    if d_pos.length_squared() > MAX_SPEED.powi(2) {
         bail!("Player is moving too fast max speed: {MAX_SPEED}");
     }
 
     // todo: analyze clustering
-
-    full_entity_pose.position = position;
+    full_entity_pose.move_to(position);
     full_entity_pose.yaw = yaw;
     full_entity_pose.pitch = pitch;
 
@@ -90,7 +90,8 @@ fn position_and_on_ground(
 
     let play::PositionAndOnGroundC2s { position, .. } = pkt;
 
-    full_entity_pose.position = position.as_vec3();
+    // todo: handle like full
+    full_entity_pose.move_to(position.as_vec3());
 
     Ok(())
 }

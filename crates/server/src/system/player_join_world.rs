@@ -17,13 +17,13 @@ use valence_registry::{biome::BiomeId, RegistryIdx};
 
 use crate::{
     bits::BitStorage, chunk::heightmap, config, net::Packets,
-    singleton::player_lookup::PlayerLookup, KickPlayer, Player, PlayerJoinWorld, Uuid, SHARED,
+    singleton::player_lookup::PlayerUuidLookup, KickPlayer, Player, PlayerJoinWorld, Uuid, SHARED,
 };
 
 #[instrument(skip_all)]
 pub fn player_join_world(
     r: Receiver<PlayerJoinWorld, (EntityId, &mut Player, &Uuid)>,
-    lookup: Single<&mut PlayerLookup>,
+    lookup: Single<&mut PlayerUuidLookup>,
     mut s: Sender<KickPlayer>,
 ) {
     let (id, player, uuid) = r.query;

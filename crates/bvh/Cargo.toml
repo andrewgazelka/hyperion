@@ -8,7 +8,7 @@ publish = false
 
 [dependencies]
 fastrand = "2.0.2"
-glam = "0.27.0"
+glam.workspace = true
 rayon = "1.10.0"
 smallvec.workspace = true
 

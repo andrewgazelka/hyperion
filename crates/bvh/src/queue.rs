@@ -1,16 +1,23 @@
+// https://doc.rust-lang.org/nomicon/vec/vec.html
+
 use std::{
     alloc::{Allocator, Global, Layout},
-    mem::{ManuallyDrop, MaybeUninit},
+    mem,
+    mem::ManuallyDrop,
     ptr,
     ptr::NonNull,
     sync::atomic::{AtomicU32, Ordering},
 };
 
 pub struct Queue<T, A: Allocator = Global> {
-    data: Box<[MaybeUninit<T>], A>,
+    ptr: NonNull<T>,
     head: AtomicU32,
     alloc: A,
+    capacity: usize,
 }
+
+unsafe impl<T: Send> Send for Queue<T> {}
+unsafe impl<T: Sync> Sync for Queue<T> {}
 
 impl<T> Queue<T, Global> {
     pub fn new(cap: usize) -> Self {
@@ -18,12 +25,33 @@ impl<T> Queue<T, Global> {
     }
 }
 
+impl<T, A: Allocator> Drop for Queue<T, A> {
+    fn drop(&mut self) {
+        while self.pop().is_some() {}
+        let layout = Layout::array::<T>(self.capacity).unwrap();
+        unsafe {
+            self.alloc.deallocate(self.ptr.cast(), layout);
+        }
+    }
+}
+
 impl<T, A: Allocator> Queue<T, A> {
     pub fn new_in(cap: usize, alloc: A) -> Self {
-        let data = box_uninit(cap, &alloc);
-        let head = AtomicU32::new(0);
+        init_queue(cap, alloc)
+    }
 
-        Self { data, head, alloc }
+    pub fn pop(&self) -> Option<T> {
+        let head = self.head.load(Ordering::Relaxed);
+        if head == 0 {
+            return None;
+        }
+
+        let head = head - 1;
+        self.head.store(head, Ordering::Relaxed);
+
+        let head = self.ptr.as_ptr().wrapping_offset(head as isize);
+
+        unsafe { Some(ptr::read(head)) }
     }
 
     pub fn push(&self, value: T) -> u32 {
@@ -31,7 +59,7 @@ impl<T, A: Allocator> Queue<T, A> {
         let head_idx = self.head.fetch_add(1, Ordering::Relaxed);
 
         // ultimately, is this safe?
-        let head = self.data[head_idx as usize].as_ptr().cast_mut();
+        let head = self.ptr.as_ptr().wrapping_offset(head_idx as isize);
 
         unsafe {
             ptr::write(head, value);
@@ -41,26 +69,31 @@ impl<T, A: Allocator> Queue<T, A> {
     }
 
     #[allow(clippy::as_ptr_cast_mut)]
-    pub fn into_inner(self) -> Box<[T], A> {
+    pub fn into_inner(self) -> Vec<T, A> {
         let len = self.head.load(Ordering::Relaxed) as usize;
-        let mut data = ManuallyDrop::new(self.data);
 
-        unsafe {
-            let slice = ptr::slice_from_raw_parts_mut(data.as_mut_ptr() as *mut T, len);
-            Box::from_raw_in(slice, ptr::read(&self.alloc))
-        }
+        let me = ManuallyDrop::new(self);
+
+        let data = me.ptr;
+        let alloc = unsafe { ptr::read(&me.alloc) };
+
+        unsafe { Vec::from_raw_parts_in(data.as_ptr(), len, me.capacity, alloc) }
     }
 }
 
-fn box_uninit<T, A: Allocator>(cap: usize, alloc: &A) -> Box<[MaybeUninit<T>], A> {
+fn init_queue<T, A: Allocator>(cap: usize, alloc: A) -> Queue<T, A> {
+    assert!(mem::size_of::<T>() != 0, "We do not handle ZSTs");
+    assert!(cap != 0, "Queue must have a capacity of at least 1");
     let layout = Layout::array::<T>(cap).unwrap();
-    let res = alloc.allocate(layout).unwrap();
+    let data = alloc.allocate(layout).unwrap();
 
-    let res: NonNull<T> = res.cast();
+    let data: NonNull<T> = data.cast();
 
-    unsafe {
-        let slice = ptr::slice_from_raw_parts_mut(res.as_ptr() as *mut MaybeUninit<T>, cap);
-        Box::from_raw_in(slice, ptr::read(alloc))
+    Queue {
+        ptr: data,
+        head: AtomicU32::new(0),
+        alloc,
+        capacity: cap,
     }
 }
 

@@ -28,7 +28,10 @@ use valence_protocol::math::Vec3;
 use crate::{
     bounding_box::BoundingBox,
     net::{server, ClientConnection, Packets, GLOBAL_PACKETS},
-    singleton::{encoder::Encoder, player_lookup::PlayerLookup},
+    singleton::{
+        encoder::Encoder, player_location_lookup::PlayerLocationLookup,
+        player_lookup::PlayerUuidLookup,
+    },
 };
 
 mod global;
@@ -197,6 +200,7 @@ impl Game {
         world.add_handler(system::entity_detect_collisions);
         world.add_handler(system::reset_bounding_boxes);
         world.add_handler(system::update_time);
+        world.add_handler(system::rebuild_player_location);
 
         world.add_handler(system::broadcast_packets);
         world.add_handler(system::keep_alive);
@@ -210,8 +214,11 @@ impl Game {
         let bounding_boxes = world.spawn();
         world.insert(bounding_boxes, bounding_box::EntityBoundingBoxes::default());
 
-        let lookup = world.spawn();
-        world.insert(lookup, PlayerLookup::default());
+        let uuid_lookup = world.spawn();
+        world.insert(uuid_lookup, PlayerUuidLookup::default());
+
+        let player_location_lookup = world.spawn();
+        world.insert(player_location_lookup, PlayerLocationLookup::default());
 
         let encoder = world.spawn();
         world.insert(encoder, Encoder::default());
@@ -352,7 +359,7 @@ impl Game {
 fn process_packets(
     _: Receiver<Gametick>,
     mut fetcher: Fetcher<(EntityId, &mut Player, &mut FullEntityPose)>,
-    lookup: Single<&PlayerLookup>,
+    lookup: Single<&PlayerUuidLookup>,
     mut sender: Sender<(KickPlayer, InitEntity, KillAllEntities)>,
 ) {
     // uuid to entity id map
@@ -393,9 +400,14 @@ pub struct FullEntityPose {
 }
 
 impl FullEntityPose {
-    fn move_by(&mut self, vec: Vec3) {
+    pub fn move_by(&mut self, vec: Vec3) {
         self.position += vec;
         self.bounding = self.bounding.move_by(vec);
+    }
+    
+    pub fn move_to(&mut self, pos: Vec3) {
+        self.bounding = self.bounding.move_to(pos);
+        self.position = pos;
     }
 }
 
