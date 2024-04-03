@@ -29,6 +29,7 @@ use crate::{
     bounding_box::BoundingBox,
     net::{server, ClientConnection, Packets, GLOBAL_PACKETS},
     singleton::{encoder::Encoder, player_lookup::PlayerLookup},
+    tracker::Tracker,
 };
 
 mod global;
@@ -40,9 +41,60 @@ mod system;
 mod bits;
 
 mod quad_tree;
+mod tracker;
 
 pub mod bounding_box;
 mod config;
+
+#[derive(Clone, PartialEq, Debug)]
+struct Absorption {
+    /// This effect goes away on the tick with the value end_tick.
+    end_tick: u64,
+    bonus_health: f32,
+}
+
+#[derive(Clone, PartialEq, Debug)]
+struct Regeneration {
+    /// This effect goes away on the tick with the value end_tick.
+    end_tick: u64,
+}
+
+#[derive(Clone, PartialEq, Debug)]
+enum PlayerState {
+    Alive {
+        /// Measured in half hearts
+        health: f32,
+        absorption: Absorption,
+        regeneration: Regeneration,
+    },
+    Dead {
+        respawn_tick: u64,
+    },
+}
+
+impl Default for Tracker<PlayerState> {
+    fn default() -> Self {
+        let mut value = Self::new(PlayerState::Alive {
+            health: 0.0,
+            absorption: Absorption {
+                end_tick: 0,
+                bonus_health: 0.0,
+            },
+            regeneration: Regeneration { end_tick: 0 },
+        });
+        // This update is needed so that a s2c packet updating the client's health is sent. If
+        // this isn't sent, the client won't show the first time it takes damage as actual damage
+        // because it believes that the server is simply updating its health to the amount of
+        // health the player had when it left.
+        value.update(|state| {
+            let PlayerState::Alive { health, .. } = state else {
+                unreachable!()
+            };
+            *health = 20.0;
+        });
+        value
+    }
+}
 
 // A zero-sized component, often called a "marker" or "tag".
 #[derive(Component)]
@@ -58,6 +110,53 @@ struct Player {
     ping: Duration,
 
     locale: Option<String>,
+
+    state: Tracker<PlayerState>,
+}
+
+impl Player {
+    fn heal(&mut self, _tick: Gametick, amount: f32) {
+        assert!(amount.is_finite());
+        assert!(amount > 0.0);
+
+        self.state.update(|state| {
+            let PlayerState::Alive { health, .. } = state else {
+                return;
+            };
+            *health = (*health + amount).min(20.0);
+        });
+    }
+
+    fn hurt(&mut self, tick: Gametick, mut amount: f32) {
+        assert!(amount.is_finite());
+        assert!(amount > 0.0);
+
+        self.state.update(|state| {
+            let PlayerState::Alive {
+                health, absorption, ..
+            } = state
+            else {
+                return;
+            };
+
+            if tick.number < absorption.end_tick {
+                if amount > absorption.bonus_health {
+                    amount -= absorption.bonus_health;
+                    absorption.bonus_health = 0.0;
+                } else {
+                    absorption.bonus_health -= amount;
+                    return;
+                }
+            }
+            *health -= amount;
+
+            if *health <= 0.0 {
+                *state = PlayerState::Dead {
+                    respawn_tick: tick.number + 100,
+                };
+            }
+        });
+    }
 }
 
 #[derive(Event)]
@@ -123,11 +222,16 @@ fn bytes_to_mb(bytes: usize) -> f64 {
     bytes as f64 / 1024.0 / 1024.0
 }
 
-#[derive(Event)]
-struct Gametick;
+#[derive(Copy, Clone, Event)]
+struct Gametick {
+    /// The first tick starts at 0 and each tick afterwards increments this value by 1.
+    number: u64,
+}
 
 #[derive(Event)]
-struct BroadcastPackets;
+struct BroadcastPackets {
+    tick: Gametick,
+}
 
 static SHARED: global::Shared = global::Shared {
     player_count: AtomicU32::new(0),
@@ -197,12 +301,14 @@ impl Game {
         world.add_handler(system::entity_detect_collisions);
         world.add_handler(system::reset_bounding_boxes);
         world.add_handler(system::update_time);
+        world.add_handler(system::update_health);
 
         world.add_handler(system::broadcast_packets);
         world.add_handler(system::keep_alive);
         world.add_handler(process_packets);
         world.add_handler(system::tps_message);
         world.add_handler(system::kill_all);
+        world.add_handler(system::sync_players);
 
         let global = world.spawn();
         world.insert(global, global::Global::default());
@@ -299,8 +405,11 @@ impl Game {
             self.world.send(event);
         }
 
-        self.world.send(Gametick);
-        self.world.send(BroadcastPackets);
+        let tick = Gametick {
+            number: self.tick_on,
+        };
+        self.world.send(tick);
+        self.world.send(BroadcastPackets { tick });
 
         #[expect(
             clippy::cast_precision_loss,
@@ -350,7 +459,7 @@ impl Game {
 // The `Receiver<Tick>` parameter tells our handler to listen for the `Tick` event.
 #[instrument(skip_all)]
 fn process_packets(
-    _: Receiver<Gametick>,
+    tick: Receiver<Gametick>,
     mut fetcher: Fetcher<(EntityId, &mut Player, &mut FullEntityPose)>,
     lookup: Single<&PlayerLookup>,
     mut sender: Sender<(KickPlayer, InitEntity, KillAllEntities)>,
@@ -371,7 +480,7 @@ fn process_packets(
 
         let packet = packet.packet;
 
-        if let Err(e) = packets::switch(packet, player, position, &mut sender) {
+        if let Err(e) = packets::switch(*tick.event, packet, player, position, &mut sender) {
             let reason = format!("error: {e}");
 
             // todo: handle error

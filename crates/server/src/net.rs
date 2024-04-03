@@ -182,7 +182,7 @@ impl WriterComm {
             enable_respawn_screen: false,
             dimension_name: dimension_name.into(),
             hashed_seed: 0,
-            game_mode: GameMode::Creative,
+            game_mode: GameMode::Survival,
             is_flat: false,
             last_death_location: None,
             portal_cooldown: 60.into(),

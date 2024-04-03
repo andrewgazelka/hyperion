@@ -12,7 +12,8 @@ use tracing::warn;
 use valence_protocol::{decode::PacketFrame, math::Vec3, packets::play, Decode, Packet};
 
 use crate::{
-    bounding_box::BoundingBox, FullEntityPose, InitEntity, KickPlayer, KillAllEntities, Player,
+    bounding_box::BoundingBox, Absorption, FullEntityPose, Gametick, InitEntity, KickPlayer,
+    KillAllEntities, Player, PlayerState, Regeneration,
 };
 
 const fn confirm_teleport(_pkt: &[u8]) {
@@ -151,6 +152,7 @@ impl FromStr for HybridPos {
 
 fn chat_command(
     mut data: &[u8],
+    tick: Gametick,
     player: &mut Player,
     full_entity_pose: &FullEntityPose,
     sender: &mut Sender<(KickPlayer, InitEntity, KillAllEntities)>,
@@ -164,9 +166,37 @@ fn chat_command(
 
     if first == Some("ka") {
         sender.send(KillAllEntities);
-    }
-
-    if first == Some("spawn") {
+    } else if first == Some("golden_apple") {
+        player.state.update(|state| {
+            let PlayerState::Alive {
+                absorption,
+                regeneration,
+                ..
+            } = state
+            else {
+                return;
+            };
+            *absorption = Absorption {
+                end_tick: tick.number + 2400,
+                bonus_health: 4.0,
+            };
+            *regeneration = Regeneration {
+                end_tick: tick.number + 100,
+            };
+        });
+    } else if first == Some("heal") {
+        let args: Vec<_> = cmd.collect();
+        let [amount] = args.as_slice() else {
+            anyhow::bail!("expected 1 number");
+        };
+        player.heal(tick, amount.parse()?);
+    } else if first == Some("hurt") {
+        let args: Vec<_> = cmd.collect();
+        let [amount] = args.as_slice() else {
+            anyhow::bail!("expected 1 number");
+        };
+        player.hurt(tick, amount.parse()?);
+    } else if first == Some("spawn") {
         let args: Vec<_> = cmd.collect();
 
         let loc = full_entity_pose.position;
@@ -236,6 +266,7 @@ fn chat_command(
 }
 
 pub fn switch(
+    tick: Gametick,
     raw: PacketFrame,
     player: &mut Player,
     full_entity_pose: &mut FullEntityPose,
@@ -256,7 +287,9 @@ pub fn switch(
         play::UpdatePlayerAbilitiesC2s::ID => update_player_abilities(data)?,
         play::UpdateSelectedSlotC2s::ID => update_selected_slot(data)?,
         play::KeepAliveC2s::ID => keep_alive(player)?,
-        play::CommandExecutionC2s::ID => chat_command(data, player, full_entity_pose, sender)?,
+        play::CommandExecutionC2s::ID => {
+            chat_command(data, tick, player, full_entity_pose, sender)?
+        }
         _ => warn!("unknown packet id: 0x{:02X}", id),
     }
 

@@ -37,6 +37,7 @@ pub fn init_player(
         ping: std::time::Duration::from_secs(1),
         name,
         locale: None,
+        state: Default::default(),
     });
     s.insert(entity, Uuid(uuid));
 
