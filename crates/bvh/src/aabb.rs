@@ -80,7 +80,7 @@ impl Aabb {
         lens.x * lens.y * lens.z
     }
 
-    pub fn grow_to_include(&mut self, other: &Self) {
+    pub fn expand_to_fit(&mut self, other: &Self) {
         self.min = self.min.min(other.min);
         self.max = self.max.max(other.max);
     }
@@ -113,7 +113,7 @@ impl Aabb {
     pub fn containing<'a>(input: impl Iterator<Item = &'a Self>) -> Self {
         input.fold(Self::NULL, |acc, aabb| {
             let mut acc = acc;
-            acc.grow_to_include(aabb);
+            acc.expand_to_fit(aabb);
             acc
         })
     }
@@ -130,7 +130,7 @@ mod tests {
     use crate::aabb::Aabb;
 
     #[test]
-    fn test_grow_to_fit() {
+    fn test_expand_to_fit() {
         let mut aabb = Aabb {
             min: glam::Vec3::new(0.0, 0.0, 0.0),
             max: glam::Vec3::new(1.0, 1.0, 1.0),
@@ -141,7 +141,7 @@ mod tests {
             max: glam::Vec3::new(2.0, 2.0, 2.0),
         };
 
-        aabb.grow_to_include(&other);
+        aabb.expand_to_fit(&other);
 
         assert_eq!(aabb.min, glam::Vec3::new(-1.0, -1.0, -1.0));
         assert_eq!(aabb.max, glam::Vec3::new(2.0, 2.0, 2.0));

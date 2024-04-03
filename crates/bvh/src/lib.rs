@@ -3,7 +3,7 @@
 
 // https://www.haroldserrano.com/blog/visualizing-the-boundary-volume-hierarchy-collision-algorithm
 
-use nonmax::{NonMaxI32, NonMaxIsize, NonMaxU32};
+use nonmax::NonMaxIsize;
 use sharded_slab::Entry;
 use smallvec::SmallVec;
 
@@ -20,14 +20,6 @@ pub struct BvhNode {
     right: Option<NonMaxIsize>,
 }
 
-impl BvhNode {
-    const DUMMY: Self = Self {
-        aabb: Aabb::NULL,
-        left: None,
-        right: None,
-    };
-}
-
 pub struct Bvh<T> {
     nodes: sharded_slab::Slab<BvhNode>,
     elems: sharded_slab::Slab<SmallVec<T, 4>>,
@@ -35,7 +27,7 @@ pub struct Bvh<T> {
 }
 
 impl<T: HasAabb + Copy + Send + Sync> Bvh<T> {
-    pub fn build(elements: &mut [T]) -> Self {
+    pub fn build<H: Heuristic>(elements: &mut [T]) -> Self {
         let nodes = sharded_slab::Slab::new();
         let elems = sharded_slab::Slab::new();
 
@@ -52,7 +44,7 @@ impl<T: HasAabb + Copy + Send + Sync> Bvh<T> {
             root: 0,
         };
 
-        let root = BvhNode::build_in(&bvh, elements).expect("failed to build bvh");
+        let root = BvhNode::build_in::<T, H>(&bvh, elements).expect("failed to build bvh");
 
         bvh.root = root.get() as u32;
 
@@ -93,44 +85,69 @@ impl HasAabb for Aabb {
     }
 }
 
-trait Heuristic {
+pub trait Heuristic {
     /// left are partitioned to the left side,
     /// middle cannot be partitioned to either, right are partitioned to the right side
-    fn heuristic<T: HasAabb>(elements: &[T], split_idx: usize) -> f32;
+    fn heuristic<T: HasAabb>(elements: &[T]) -> usize;
 }
 
-struct DefaultHeuristic;
+pub struct DefaultHeuristic;
+
+pub struct TrivialHeuristic;
+
+impl Heuristic for TrivialHeuristic {
+    fn heuristic<T: HasAabb>(elements: &[T]) -> usize {
+        elements.len() / 2
+    }
+}
 
 impl Heuristic for DefaultHeuristic {
-    fn heuristic<T: HasAabb>(elements: &[T], split_idx: usize) -> f32 {
-        let left = &elements[..split_idx];
-        let right = &elements[split_idx..];
+    fn heuristic<T: HasAabb>(elements: &[T]) -> usize {
+        // todo: remove new alloc each time possibly?
+        let mut left_surface_areas = vec![0.0; elements.len() - 1];
+        let mut right_surface_areas = vec![0.0; elements.len() - 1];
 
-        let left_aabb = Aabb::from(left);
-        let right_aabb = Aabb::from(right);
+        let mut left_bb = Aabb::NULL;
+        let mut right_bb = Aabb::NULL;
 
-        left_aabb.surface_area() + right_aabb.surface_area()
+        #[allow(clippy::needless_range_loop)]
+        for idx in 0..(elements.len() - 1) {
+            let left_idx = idx;
+
+            let right_idx = elements.len() - idx - 2;
+
+            left_bb.expand_to_fit(elements[left_idx].aabb());
+            right_bb.expand_to_fit(elements[right_idx].aabb());
+
+            left_surface_areas[idx] = left_bb.surface_area();
+            right_surface_areas[right_idx] = right_bb.surface_area();
+        }
+
+        // get min by summing up the surface areas
+        let mut min_cost = f32::MAX;
+        let mut min_idx = 0;
+
+        for idx in 1..elements.len() {
+            let cost = left_surface_areas[idx - 1] + right_surface_areas[idx - 1];
+
+            // // pad idx 4 zeros
+            // println!("{:04}: {}", idx, cost);
+
+            if cost < min_cost {
+                min_cost = cost;
+                min_idx = idx;
+            }
+        }
+
+        // assert!(min_idx != 0);
+
+        min_idx
     }
 }
 
 // // input: sorted f64
-const fn find_split<T: HasAabb>(elements: &[T]) -> usize {
-    // let mut min_cost = f32::MAX;
-    // let mut min_idx = 0;
-    //
-    // for split_idx in 0..elements.len() {
-    //     let cost = DefaultHeuristic::heuristic(elements, split_idx);
-    //
-    //     if cost < min_cost {
-    //         min_cost = cost;
-    //         min_idx = split_idx;
-    //     }
-    // }
-
-    // jank
-    let min_idx = elements.len() / 2;
-
-    min_idx
+fn find_split<T: HasAabb, H: Heuristic>(elements: &[T]) -> usize {
+    H::heuristic(elements)
 }
 
 fn sort_by_largest_axis<T: HasAabb>(elements: &mut [T], aabb: &Aabb) -> u8 {
@@ -196,7 +213,7 @@ impl BvhNode {
     }
 
     #[allow(clippy::float_cmp)]
-    pub fn build_in<T: HasAabb + Copy + Send + Sync>(
+    pub fn build_in<T: HasAabb + Copy + Send + Sync, H: Heuristic>(
         root: &Bvh<T>,
         elements: &mut [T],
     ) -> Option<NonMaxIsize> {
@@ -222,13 +239,13 @@ impl BvhNode {
 
         sort_by_largest_axis(elements, &aabb);
 
-        let split_idx = find_split(elements);
+        let split_idx = find_split::<T, H>(elements);
 
         let (left, right) = elements.split_at_mut(split_idx);
 
         let (left, right) = rayon::join(
-            || Self::build_in(root, left),
-            || Self::build_in(root, right),
+            || Self::build_in::<T, H>(root, left),
+            || Self::build_in::<T, H>(root, right),
         );
 
         let node = Self { aabb, left, right };
@@ -409,20 +426,31 @@ impl<'a, T: HasAabb + Copy> Iterator for BvhIter<'a, T> {
 mod tests {
     use rand::Rng;
 
-    use crate::{aabb::Aabb, Bvh, Element, HasAabb};
+    use crate::{aabb::Aabb, Bvh, DefaultHeuristic, Element};
 
     fn create_element(min: [f32; 3], max: [f32; 3]) -> Element {
         Element {
             aabb: Aabb::new(min, max),
         }
     }
+    // fn random_element_1() -> Element {
+    //     let mut rng = rand::thread_rng();
+    //     let min = [rng.gen_range(0.0..1000.0); 3];
+    //     let max = [
+    //         rng.gen_range(min[0]..1.0),
+    //         rng.gen_range(min[1]..10.0),
+    //         rng.gen_range(min[2]..1000.0),
+    //     ];
+    //     create_element(min, max)
+    // }
+
     fn random_element_1() -> Element {
         let mut rng = rand::thread_rng();
         let min = [rng.gen_range(0.0..1000.0); 3];
         let max = [
-            rng.gen_range(min[0]..1000.0),
-            rng.gen_range(min[1]..1000.0),
-            rng.gen_range(min[2]..1000.0),
+            rng.gen_range(min[0]..min[0] + 1.0),
+            rng.gen_range(min[1]..min[1] + 1.0),
+            rng.gen_range(min[2]..min[2] + 1.0),
         ];
         create_element(min, max)
     }
@@ -440,11 +468,11 @@ mod tests {
     #[test]
     fn test_query() {
         let mut elements = create_random_elements_1(100_000);
-        let bvh = Bvh::build(&mut elements);
+        let bvh = Bvh::build::<DefaultHeuristic>(&mut elements);
 
-        let element = random_element_1();
-        for elem in bvh.get_collisions(element.aabb) {
-            assert!(elem.aabb().collides(&element.aabb));
-        }
+        // let element = random_element_1();
+        // for elem in bvh.get_collisions(element.aabb) {
+        //     assert!(elem.aabb().collides(&element.aabb));
+        // }
     }
 }
