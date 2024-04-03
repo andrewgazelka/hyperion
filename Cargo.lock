@@ -338,6 +338,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7ff69b9dd49fd426c69a0db9fc04dd934cdb6645ff000864d98f7e2af8830eaa"
 
 [[package]]
+name = "bvh"
+version = "0.1.0"
+dependencies = [
+ "divan",
+ "glam 0.27.0",
+ "ordered-float",
+ "rand 0.8.5",
+ "smallvec 2.0.0-alpha.5",
+]
+
+[[package]]
 name = "bytemuck"
 version = "1.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1322,6 +1333,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3fdb12b2476b595f9358c5161aa467c2438859caa136dec86c26fdd2efe17b92"
 
 [[package]]
+name = "ordered-float"
+version = "4.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a76df7075c7d4d01fdcb46c912dd17fba5b60c78ea480b475f2b6ab6f666584e"
+dependencies = [
+ "num-traits",
+]
+
+[[package]]
 name = "overload"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1760,6 +1780,7 @@ dependencies = [
  "flume",
  "fnv",
  "generator",
+ "glam 0.27.0",
  "io-uring",
  "itertools",
  "jemalloc-ctl",

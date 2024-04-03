@@ -1,0 +1,36 @@
+[package]
+name = "bvh"
+version = "0.1.0"
+edition = "2021"
+authors = ["Andrew Gazelka <andrew.gazelka@gmail.com>"]
+readme = "README.md"
+publish = false
+
+[dependencies]
+glam = "0.27.0"
+smallvec.workspace = true
+
+[dev-dependencies]
+divan = "0.1.14"
+rand = "0.8.5"
+ordered-float = "4.2.0"
+
+[[bench]]
+name = "sort"
+harness = false
+
+[[bench]]
+name = "bvh"
+harness = false
+
+[lints.clippy]
+complexity = "deny"
+
+
+nursery = { level = "deny", priority = -1 }
+redundant_pub_crate = "allow"
+
+#pedantic = "deny"
+perf = "deny"
+style = "deny"
+suspicious = "deny"
