@@ -80,7 +80,7 @@ fn query<T: Heuristic>(b: Bencher, count: usize) {
     b.counter(count).bench_local(|| {
         for _ in 0..count {
             let element = random_element_1();
-            for elem in bvh.get_collisions(element.aabb) {
+            for elem in bvh.get_collisions(element.aabb).get_vec() {
                 black_box(elem);
             }
         }

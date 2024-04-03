@@ -256,15 +256,13 @@ impl BvhNode {
 pub struct BvhIter<'a, T> {
     node_stack: Vec<Entry<'a, BvhNode>>,
     bvh: &'a Bvh<T>,
-    idx_left: usize,
-    idx_right: usize,
     elements: Vec<T>,
     // left_elements: Option<Entry<'a, SmallVec<T, 4>>>,
     // right_elements: Option<Entry<'a, SmallVec<T, 4>>>,
     target: Aabb,
 }
 
-impl<'a, T> BvhIter<'a, T> {
+impl<'a, T: Copy> BvhIter<'a, T> {
     fn new(bvh: &'a Bvh<T>, target: Aabb) -> Self {
         let root = bvh.root();
 
@@ -272,8 +270,6 @@ impl<'a, T> BvhIter<'a, T> {
             return Self {
                 node_stack: Vec::new(),
                 bvh,
-                idx_left: 0,
-                idx_right: 0,
                 elements: vec![],
                 target,
             };
@@ -285,10 +281,39 @@ impl<'a, T> BvhIter<'a, T> {
             node_stack,
             target,
             bvh,
-            idx_left: 0,
-            idx_right: 0,
             elements: vec![],
         }
+    }
+
+    pub fn get_vec(mut self) -> Vec<T> {
+        while let Some(node) = self.node_stack.pop() {
+            match node.left(self.bvh) {
+                Some(Node::Internal(internal)) => {
+                    if internal.aabb.collides(&self.target) {
+                        self.node_stack.push(internal);
+                    }
+                }
+                Some(Node::Leaf(leaf)) => {
+                    self.elements.extend(leaf.iter().copied());
+                }
+                _ => {}
+            }
+
+            if let Some(right) = node.right(self.bvh) {
+                match right {
+                    Node::Internal(internal) => {
+                        if internal.aabb.collides(&self.target) {
+                            self.node_stack.push(internal);
+                        }
+                    }
+                    Node::Leaf(leaf) => {
+                        self.elements.extend(leaf.iter().copied());
+                    }
+                }
+            }
+        }
+
+        self.elements
     }
 }
 
