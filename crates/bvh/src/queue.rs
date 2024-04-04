@@ -68,7 +68,6 @@ impl<T, A: Allocator> Queue<T, A> {
         head_idx
     }
 
-    #[allow(clippy::as_ptr_cast_mut)]
     pub fn into_inner(self) -> Vec<T, A> {
         let len = self.head.load(Ordering::Relaxed) as usize;
 
