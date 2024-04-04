@@ -12,12 +12,18 @@ glam.workspace = true
 rayon = "1.10.0"
 bytemuck = "1.15.0"
 arrayvec = "0.7.4"
+ordered-float = "4.2.0"
+itertools = "0.12.1"
+plotters = { version = "0.3.5", default-features = false, features = ["plotters-bitmap", "image"] }
+plotters-bitmap = "0.3.3"
 
 [dev-dependencies]
 divan = "0.1.14"
 rand = "0.8.5"
 ordered-float = "4.2.0"
 fastrand = "2.0.2"
+tango-bench = "0.4.0"
+#plotters = "0.3.5"
 
 [[bench]]
 name = "sort"
@@ -25,6 +31,10 @@ harness = false
 
 [[bench]]
 name = "bvh"
+harness = false
+
+[[bench]]
+name = "build"
 harness = false
 
 [lints.clippy]

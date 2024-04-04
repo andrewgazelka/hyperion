@@ -10,6 +10,31 @@ pub struct Aabb {
     pub max: glam::Vec3,
 }
 
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Ord, PartialOrd, Hash)]
+pub struct CheckableAabb {
+    pub min: [ordered_float::NotNan<f32>; 3],
+    pub max: [ordered_float::NotNan<f32>; 3],
+}
+
+impl TryFrom<Aabb> for CheckableAabb {
+    type Error = ordered_float::FloatIsNan;
+
+    fn try_from(value: Aabb) -> Result<Self, Self::Error> {
+        Ok(Self {
+            min: [
+                ordered_float::NotNan::new(value.min.x)?,
+                ordered_float::NotNan::new(value.min.y)?,
+                ordered_float::NotNan::new(value.min.z)?,
+            ],
+            max: [
+                ordered_float::NotNan::new(value.max.x)?,
+                ordered_float::NotNan::new(value.max.y)?,
+                ordered_float::NotNan::new(value.max.z)?,
+            ],
+        })
+    }
+}
+
 unsafe impl Zeroable for Aabb {}
 
 unsafe impl bytemuck::Pod for Aabb {}
@@ -58,21 +83,26 @@ impl Aabb {
 
     #[must_use]
     pub fn collides(&self, other: &Self) -> bool {
-        let self_min = self.min.as_ref();
-        let self_max = self.max.as_ref();
-
-        let other_min = other.min.as_ref();
-        let other_max = other.max.as_ref();
-
-        // SIMD vectorized
-        let mut collide = 0b1_u8;
-
-        for i in 0..3 {
-            collide &= u8::from(self_min[i] <= other_max[i]);
-            collide &= u8::from(self_max[i] >= other_min[i]);
-        }
-
-        collide == 1
+        // let self_min = self.min.as_ref();
+        // let self_max = self.max.as_ref();
+        // 
+        // let other_min = other.min.as_ref();
+        // let other_max = other.max.as_ref();
+        // 
+        // // SIMD vectorized
+        // let mut collide = 0b1_u8;
+        // 
+        // for i in 0..3 {
+        //     collide &= u8::from(self_min[i] <= other_max[i]);
+        //     collide &= u8::from(self_max[i] >= other_min[i]);
+        // }
+        // 
+        // collide == 1
+        // 
+        self.min.x <= other.max.x
+            && self.max.x >= other.min.x
+            && self.min.y <= other.max.y
+            && self.max.y >= other.min.y
     }
 
     pub fn collides_point(&self, point: glam::Vec3) -> bool {

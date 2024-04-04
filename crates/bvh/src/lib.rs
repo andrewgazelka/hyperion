@@ -12,9 +12,10 @@ use glam::Vec3;
 
 use crate::{aabb::Aabb, queue::Queue};
 
-const MAX_ELEMENTS_PER_LEAF: usize = 16;
+const MAX_ELEMENTS_PER_LEAF: usize = 1024;
 
 pub mod aabb;
+pub mod plot;
 
 mod queue;
 
@@ -439,56 +440,73 @@ impl<'a, T: HasAabb> BvhIter<'a, T> {
     }
 
     pub fn process(&mut self, on: &BvhNode, process: &mut impl FnMut(&T)) {
-        // todo: ideally get .children() on same level as this
-        if let Some(left) = on.left(self.bvh) {
-            match left {
-                Node::Internal(internal) => {
-                    if internal.aabb.collides(&self.target) {
-                        self.process(internal, process);
-                    }
-                }
-                Node::Leaf(leaf) => {
-                    for elem in leaf.iter() {
-                        if elem.aabb().collides(&self.target) {
-                            process(elem);
-                        }
-                    }
-                }
-            }
-        }
+        let mut stack: ArrayVec<(&BvhNode, usize), 64> = ArrayVec::new();
+        stack.push((on, 0));
 
-        if let Some(right) = on.right(self.bvh) {
-            match right {
-                Node::Internal(internal) => {
-                    if internal.aabb.collides(&self.target) {
-                        self.process(internal, process);
+        let mut total_collisions = 0;
+
+        while let Some((on, depth)) = stack.pop() {
+            // println!("YES @ {depth}");
+            if let Some(left) = on.left(self.bvh) {
+                match left {
+                    Node::Internal(internal) => {
+                        if internal.aabb.collides(&self.target) {
+                            // println!("collide left");
+                            stack.push((internal, depth + 1));
+                            total_collisions += 1;
+                            // self.process(internal, process);
+                        }
                     }
-                }
-                Node::Leaf(leaf) => {
-                    for elem in leaf.iter() {
-                        if elem.aabb().collides(&self.target) {
-                            process(elem);
+                    Node::Leaf(leaf) => {
+                        for elem in leaf.iter() {
+                            // println!("left LEAF");
+                            if elem.aabb().collides(&self.target) {
+                                process(elem);
+                            }
                         }
                     }
                 }
             }
+
+            if let Some(right) = on.right(self.bvh) {
+                match right {
+                    Node::Internal(internal) => {
+                        if internal.aabb.collides(&self.target) {
+                            total_collisions += 1;
+                            // println!("collides right");
+                            stack.push((internal, depth + 1));
+                            // self.process(internal, process);
+                        }
+                    }
+                    Node::Leaf(leaf) => {
+                        for elem in leaf.iter() {
+                            // println!("right leaf");
+                            if elem.aabb().collides(&self.target) {
+                                process(elem);
+                            }
+                        }
+                    }
+                }
+            }
+
+            // println!("total_collisions: {}", total_collisions);
         }
     }
 }
 
-pub fn random_aabb() -> Aabb {
-    let min = std::array::from_fn(|_| fastrand::f32() * 100.0);
+pub fn random_aabb(width: f32) -> Aabb {
+    let min = std::array::from_fn(|_| fastrand::f32() * width);
     let min = Vec3::from_array(min);
     let max = min + Vec3::splat(1.0);
 
     Aabb::new(min, max)
 }
 
-pub fn create_random_elements_1(count: usize) -> Vec<Aabb> {
+pub fn create_random_elements_1(count: usize, width: f32) -> Vec<Aabb> {
     let mut elements = Vec::new();
 
     for _ in 0..count {
-        elements.push(random_aabb());
+        elements.push(random_aabb(width));
     }
 
     elements
@@ -496,13 +514,24 @@ pub fn create_random_elements_1(count: usize) -> Vec<Aabb> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use std::collections::HashSet;
 
-    fn collisions_naive(elements: &[Aabb], target: Aabb) -> usize {
+    use itertools::Itertools;
+
+    use super::*;
+    use crate::aabb::CheckableAabb;
+
+    // todo: consider duplicate
+    fn collisions_naive(
+        elements: &[Aabb],
+        target: Aabb,
+    ) -> Result<HashSet<CheckableAabb>, ordered_float::FloatIsNan> {
         elements
             .iter()
-            .filter(|elem| elem.collides(&target))
-            .count()
+            .filter(move |elem| elem.collides(&target))
+            .copied()
+            .map(CheckableAabb::try_from)
+            .try_collect()
     }
 
     #[test]
@@ -510,35 +539,49 @@ mod tests {
         let counts = &[0, 1, 10, 100];
 
         for count in counts {
-            let mut elements = create_random_elements_1(*count);
+            let mut elements = create_random_elements_1(*count, 100.0);
             Bvh::build::<TrivialHeuristic>(&mut elements);
         }
     }
 
     #[test]
-    fn test_query() {
-        let mut elements = create_random_elements_1(1_000_000);
+    fn test_query_one() {
+        let mut elements = create_random_elements_1(10_000, 100.0);
+        
+        // for elem in &mut elements {
+        //     elem.min.z = -0.0001;
+        //     elem.max.z = 0.0001;
+        // }
+        
         let bvh = Bvh::build::<TrivialHeuristic>(&mut elements);
 
-        let element = random_aabb();
+        let element = random_aabb(30.0);
 
-        let naive_count = collisions_naive(&elements, element);
+        let naive_collisions = collisions_naive(&elements, element).unwrap();
 
         let mut num_collisions = 0;
 
+        let mut bvh_collisions = Vec::new();
         // 1000 x 1000 x 1000 = 1B ... 1B / 1M = 1000 blocks on average...
         // on average num_collisions should be super low
         bvh.get_collisions(element, |elem| {
             num_collisions += 1;
             assert!(elem.collides(&element));
+            bvh_collisions.push(CheckableAabb::try_from(*elem).unwrap());
         });
 
-        assert_eq!(num_collisions, naive_count);
+        for elem in &naive_collisions {
+            assert!(bvh_collisions.contains(elem));
+        }
+
+        assert_eq!(num_collisions, naive_collisions.len());
+        
+        // bvh.plot("test.png").unwrap()
     }
 
     #[test]
     fn test_query_all() {
-        let mut elements = create_random_elements_1(10_000);
+        let mut elements = create_random_elements_1(10_000, 100.0);
         let bvh = Bvh::build::<TrivialHeuristic>(&mut elements);
 
         let node_count = bvh.nodes.len();
@@ -570,7 +613,7 @@ mod tests {
 
     #[test]
     fn children_returns_internal_nodes() {
-        let aabb = random_aabb();
+        let aabb = random_aabb(100.0);
 
         let child_node = BvhNode {
             aabb,

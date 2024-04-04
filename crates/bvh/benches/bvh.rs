@@ -18,7 +18,7 @@ const ENTITY_COUNTS: &[usize] = &[1, 10, 100, 1_000, 10_000, 100_000];
     types = [TrivialHeuristic],
 )]
 fn build<H: Heuristic>(b: Bencher, count: usize) {
-    let mut elements = create_random_elements_1(count);
+    let mut elements = create_random_elements_1(count, 100.0);
     b.counter(count)
         .bench_local(|| Bvh::build::<H>(&mut elements));
 }
@@ -28,12 +28,12 @@ fn build<H: Heuristic>(b: Bencher, count: usize) {
     types = [TrivialHeuristic],
 )]
 fn query<T: Heuristic>(b: Bencher, count: usize) {
-    let mut elements = create_random_elements_1(count);
+    let mut elements = create_random_elements_1(count, 100.0);
     let bvh = Bvh::build::<T>(&mut elements);
 
     b.counter(count).bench_local(|| {
         for _ in 0..count {
-            let element = random_aabb();
+            let element = random_aabb(100.0);
             bvh.get_collisions(element, |elem| {
                 black_box(elem);
             });
@@ -47,12 +47,12 @@ fn query<T: Heuristic>(b: Bencher, count: usize) {
     types = [TrivialHeuristic],
 )]
 fn query_par<T: Heuristic>(b: Bencher, count: usize) {
-    let mut elements = create_random_elements_1(100_000);
+    let mut elements = create_random_elements_1(100_000, 100.0);
     let bvh = Bvh::build::<T>(&mut elements);
 
     b.counter(count).bench(|| {
         for _ in 0..count {
-            let element = random_aabb();
+            let element = random_aabb(100.0);
             bvh.get_collisions(element, |elem| {
                 black_box(elem);
             });
@@ -74,7 +74,7 @@ fn build_1m_rayon<T: Heuristic>(b: Bencher, count: usize) {
 
     let count: usize = 1_000_000;
 
-    let elements = create_random_elements_1(count);
+    let elements = create_random_elements_1(count, 100.0);
 
     b.counter(count).bench(|| {
         thread_pool.install(|| {
