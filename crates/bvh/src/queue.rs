@@ -40,7 +40,7 @@ impl<T, A: Allocator> Queue<T, A> {
         init_queue(cap, alloc)
     }
 
-    pub fn pop(&self) -> Option<T> {
+    fn pop(&self) -> Option<T> {
         let head = self.head.load(Ordering::Relaxed);
         if head == 0 {
             return None;
