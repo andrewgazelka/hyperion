@@ -5,11 +5,11 @@ use plotters::{
     drawing::IntoDrawingArea,
     element::Rectangle,
     prelude::Cartesian2d,
-    style::{Color, RGBColor, ShapeStyle, BLACK, BLUE, GREEN, RED, WHITE},
+    style::{Color, RGBColor, ShapeStyle, BLACK, RED},
 };
 use plotters_bitmap::BitMapBackend;
 
-use crate::{aabb::Aabb, random_aabb, Bvh, HasAabb, Node};
+use crate::{aabb::Aabb, Bvh, HasAabb, Node};
 
 impl<T: HasAabb + Copy> Bvh<T> {
     pub fn plot(&self, filename: &str) -> Result<(), Box<dyn std::error::Error>> {
@@ -38,14 +38,13 @@ impl<T: HasAabb + Copy> Bvh<T> {
             .build_cartesian_2d(aabb.min.x..aabb.max.x, aabb.min.y..aabb.max.y)?;
 
         // chart.configure_mesh().gr.draw()?;
-        self.draw_node(1, &mut chart, root)?;
+        self.draw_node(&mut chart, root)?;
 
         Ok(())
     }
 
     fn draw_node(
         &self,
-        depth: usize,
         chart: &mut ChartContext<BitMapBackend, Cartesian2d<RangedCoordf32, RangedCoordf32>>,
         node: Option<Node<T>>,
     ) -> Result<(), Box<dyn std::error::Error>> {
@@ -54,8 +53,8 @@ impl<T: HasAabb + Copy> Bvh<T> {
                 Node::Internal(internal) => {
                     let style = RED.mix(0.15).stroke_width(1);
                     self.draw_aabb(style, chart, &internal.aabb)?;
-                    self.draw_node(depth + 1, chart, internal.left(self))?;
-                    self.draw_node(depth + 1, chart, internal.right(self))?;
+                    self.draw_node(chart, internal.left(self))?;
+                    self.draw_node(chart, internal.right(self))?;
                 }
                 Node::Leaf(leaf) => {
                     let color = random_color();

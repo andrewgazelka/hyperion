@@ -30,9 +30,13 @@ fn build_benchmarks() -> impl IntoBenchmarks {
         benchmark_fn("collisions", move || {
             for _ in 0..1000 {
                 let element = random_aabb(10_000.0);
+                let mut vec = Vec::new();
+
                 tree.get_collisions(element, |elem| {
-                    black_box(elem);
+                    vec.push(*elem);
                 });
+
+                black_box(vec);
             }
         }),
     ]

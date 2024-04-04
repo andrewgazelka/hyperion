@@ -1,4 +1,4 @@
-use std::simd::{num::SimdFloat, Simd};
+use std::fmt::Display;
 
 use bytemuck::Zeroable;
 
@@ -8,6 +8,17 @@ use crate::HasAabb;
 pub struct Aabb {
     pub min: glam::Vec3,
     pub max: glam::Vec3,
+}
+
+impl Display for Aabb {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // write [0.00, 0.00, 0.00] -> [1.00, 1.00, 1.00]
+        write!(
+            f,
+            "[{:.2}, {:.2}, {:.2}] -> [{:.2}, {:.2}, {:.2}]",
+            self.min.x, self.min.y, self.min.z, self.max.x, self.max.y, self.max.z
+        )
+    }
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Ord, PartialOrd, Hash)]
@@ -81,28 +92,32 @@ impl Aabb {
         }
     }
 
-    #[must_use]
+    // #[must_use]
+    // pub fn collides(&self, other: &Self) -> bool {
+    //     let self_min = self.min.as_ref();
+    //     let self_max = self.max.as_ref();
+    //
+    //     let other_min = other.min.as_ref();
+    //     let other_max = other.max.as_ref();
+    //
+    //     // SIMD vectorized
+    //     let mut collide = 0b1_u8;
+    //
+    //     for i in 0..3 {
+    //         collide &= u8::from(self_min[i] <= other_max[i]);
+    //         collide &= u8::from(self_max[i] >= other_min[i]);
+    //     }
+    //
+    //     collide == 1
+    // }
+
     pub fn collides(&self, other: &Self) -> bool {
-        // let self_min = self.min.as_ref();
-        // let self_max = self.max.as_ref();
-        // 
-        // let other_min = other.min.as_ref();
-        // let other_max = other.max.as_ref();
-        // 
-        // // SIMD vectorized
-        // let mut collide = 0b1_u8;
-        // 
-        // for i in 0..3 {
-        //     collide &= u8::from(self_min[i] <= other_max[i]);
-        //     collide &= u8::from(self_max[i] >= other_min[i]);
-        // }
-        // 
-        // collide == 1
-        // 
         self.min.x <= other.max.x
             && self.max.x >= other.min.x
             && self.min.y <= other.max.y
             && self.max.y >= other.min.y
+            && self.min.z <= other.max.z
+            && self.max.z >= other.min.z
     }
 
     pub fn collides_point(&self, point: glam::Vec3) -> bool {
@@ -195,40 +210,56 @@ impl Aabb {
         self.max - self.min
     }
 
-    pub fn containing<T: HasAabb>(input: &[T]) -> Self {
-        let mut current_min = Simd::<f32, 4>::splat(f32::INFINITY);
-        let mut current_max = Simd::<f32, 4>::splat(f32::NEG_INFINITY);
+    // pub fn containing<T: HasAabb>(input: &[T]) -> Self {
+    //     let mut current_min = Simd::<f32, 4>::splat(f32::INFINITY);
+    //     let mut current_max = Simd::<f32, 4>::splat(f32::NEG_INFINITY);
+    //
+    //     // optimized for neon (128 bit registers)
+    //     // todo: use chunks so we can to support AVX-512 (512 bit registers)
+    //     for elem in input {
+    //         let elem = elem.aabb();
+    //         let min = elem.min.as_ref();
+    //
+    //         // make it min [f32; 4]
+    //         let min_ptr = min.as_ptr();
+    //
+    //         // todo: is this safe?
+    //         let min = unsafe { std::slice::from_raw_parts(min_ptr.sub(1), 4) };
+    //
+    //         let min = Simd::<f32, 4>::from_slice(min);
+    //         current_min = current_min.simd_min(min);
+    //
+    //         let max = elem.max.as_ref();
+    //         let max_ptr = max.as_ptr();
+    //         let max = unsafe { std::slice::from_raw_parts(max_ptr.sub(1), 4) };
+    //
+    //         let max = Simd::<f32, 4>::from_slice(max);
+    //         current_max = current_max.simd_max(max);
+    //     }
+    //
+    //     let current_min = current_min.as_array();
+    //     let current_max = current_max.as_array();
+    //
+    //     let min = glam::Vec3::new(current_min[1], current_min[2], current_min[3]);
+    //     let max = glam::Vec3::new(current_max[1], current_max[2], current_max[3]);
+    //
+    //     Self { min, max }
+    // }
 
-        // optimized for neon (128 bit registers)
-        // todo: use chunks so we can to support AVX-512 (512 bit registers)
+    pub fn containing<T: HasAabb>(input: &[T]) -> Self {
+        let mut current_min = glam::Vec3::splat(f32::INFINITY);
+        let mut current_max = glam::Vec3::splat(f32::NEG_INFINITY);
+
         for elem in input {
             let elem = elem.aabb();
-            let min = elem.min.as_ref();
-
-            // make it min [f32; 4]
-            let min_ptr = min.as_ptr();
-
-            // todo: is this safe?
-            let min = unsafe { std::slice::from_raw_parts(min_ptr.sub(1), 4) };
-
-            let min = Simd::<f32, 4>::from_slice(min);
-            current_min = current_min.simd_min(min);
-
-            let max = elem.max.as_ref();
-            let max_ptr = max.as_ptr();
-            let max = unsafe { std::slice::from_raw_parts(max_ptr.sub(1), 4) };
-
-            let max = Simd::<f32, 4>::from_slice(max);
-            current_max = current_max.simd_max(max);
+            current_min = current_min.min(elem.min);
+            current_max = current_max.max(elem.max);
         }
 
-        let current_min = current_min.as_array();
-        let current_max = current_max.as_array();
-
-        let min = glam::Vec3::new(current_min[1], current_min[2], current_min[3]);
-        let max = glam::Vec3::new(current_max[1], current_max[2], current_max[3]);
-
-        Self { min, max }
+        Self {
+            min: current_min,
+            max: current_max,
+        }
     }
 }
 

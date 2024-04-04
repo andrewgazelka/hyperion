@@ -440,26 +440,19 @@ impl<'a, T: HasAabb> BvhIter<'a, T> {
     }
 
     pub fn process(&mut self, on: &BvhNode, process: &mut impl FnMut(&T)) {
-        let mut stack: ArrayVec<(&BvhNode, usize), 64> = ArrayVec::new();
-        stack.push((on, 0));
+        let mut stack: ArrayVec<&BvhNode, 64> = ArrayVec::new();
+        stack.push(on);
 
-        let mut total_collisions = 0;
-
-        while let Some((on, depth)) = stack.pop() {
-            // println!("YES @ {depth}");
+        while let Some(on) = stack.pop() {
             if let Some(left) = on.left(self.bvh) {
                 match left {
                     Node::Internal(internal) => {
                         if internal.aabb.collides(&self.target) {
-                            // println!("collide left");
-                            stack.push((internal, depth + 1));
-                            total_collisions += 1;
-                            // self.process(internal, process);
+                            stack.push(internal);
                         }
                     }
                     Node::Leaf(leaf) => {
                         for elem in leaf.iter() {
-                            // println!("left LEAF");
                             if elem.aabb().collides(&self.target) {
                                 process(elem);
                             }
@@ -472,10 +465,7 @@ impl<'a, T: HasAabb> BvhIter<'a, T> {
                 match right {
                     Node::Internal(internal) => {
                         if internal.aabb.collides(&self.target) {
-                            total_collisions += 1;
-                            // println!("collides right");
-                            stack.push((internal, depth + 1));
-                            // self.process(internal, process);
+                            stack.push(internal);
                         }
                     }
                     Node::Leaf(leaf) => {
@@ -488,8 +478,6 @@ impl<'a, T: HasAabb> BvhIter<'a, T> {
                     }
                 }
             }
-
-            // println!("total_collisions: {}", total_collisions);
         }
     }
 }
@@ -547,15 +535,17 @@ mod tests {
     #[test]
     fn test_query_one() {
         let mut elements = create_random_elements_1(10_000, 100.0);
-        
+
         // for elem in &mut elements {
         //     elem.min.z = -0.0001;
         //     elem.max.z = 0.0001;
         // }
-        
+
         let bvh = Bvh::build::<TrivialHeuristic>(&mut elements);
 
         let element = random_aabb(30.0);
+
+        println!("element: {}", element);
 
         let naive_collisions = collisions_naive(&elements, element).unwrap();
 
@@ -575,7 +565,7 @@ mod tests {
         }
 
         assert_eq!(num_collisions, naive_collisions.len());
-        
+
         // bvh.plot("test.png").unwrap()
     }
 
