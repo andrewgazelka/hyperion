@@ -27,7 +27,22 @@ impl<T> Queue<T, Global> {
 
 impl<T, A: Allocator> Drop for Queue<T, A> {
     fn drop(&mut self) {
-        while self.pop().is_some() {}
+        let pop = || {
+            let head = self.head.load(Ordering::Relaxed);
+            if head == 0 {
+                return None;
+            }
+
+            let head = head - 1;
+            self.head.store(head, Ordering::Relaxed);
+
+            let head = self.ptr.as_ptr().wrapping_offset(head as isize);
+
+            unsafe { Some(ptr::read(head)) }
+        };
+
+        while pop().is_some() {}
+
         let layout = Layout::array::<T>(self.capacity).unwrap();
         unsafe {
             self.alloc.deallocate(self.ptr.cast(), layout);
@@ -50,20 +65,6 @@ impl<T, A: Allocator> Queue<T, A> {
             alloc,
             capacity: cap,
         }
-    }
-
-    fn pop(&self) -> Option<T> {
-        let head = self.head.load(Ordering::Relaxed);
-        if head == 0 {
-            return None;
-        }
-
-        let head = head - 1;
-        self.head.store(head, Ordering::Relaxed);
-
-        let head = self.ptr.as_ptr().wrapping_offset(head as isize);
-
-        unsafe { Some(ptr::read(head)) }
     }
 
     pub fn push(&self, value: T) -> u32 {
