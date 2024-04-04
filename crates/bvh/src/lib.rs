@@ -1,6 +1,7 @@
 #![feature(lint_reasons)]
 #![feature(inline_const)]
 #![feature(allocator_api)]
+#![feature(portable_simd)]
 
 // https://www.haroldserrano.com/blog/visualizing-the-boundary-volume-hierarchy-collision-algorithm
 

@@ -341,6 +341,7 @@ checksum = "7ff69b9dd49fd426c69a0db9fc04dd934cdb6645ff000864d98f7e2af8830eaa"
 name = "bvh"
 version = "0.1.0"
 dependencies = [
+ "bytemuck",
  "divan",
  "fastrand 2.0.2",
  "glam",

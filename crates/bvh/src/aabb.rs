@@ -1,3 +1,7 @@
+use std::simd::{num::SimdFloat, Simd};
+
+use bytemuck::Zeroable;
+
 use crate::HasAabb;
 
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -5,6 +9,10 @@ pub struct Aabb {
     pub min: glam::Vec3,
     pub max: glam::Vec3,
 }
+
+unsafe impl Zeroable for Aabb {}
+
+unsafe impl bytemuck::Pod for Aabb {}
 
 impl Default for Aabb {
     fn default() -> Self {
@@ -157,18 +165,46 @@ impl Aabb {
         self.max - self.min
     }
 
-    pub fn containing(input: impl Iterator<Item = Self>) -> Self {
-        input.fold(Self::NULL, |acc, aabb| {
-            let mut acc = acc;
-            acc.expand_to_fit(&aabb);
-            acc
-        })
+    pub fn containing<T: HasAabb>(input: &[T]) -> Self {
+        let mut current_min = Simd::<f32, 4>::splat(f32::INFINITY);
+        let mut current_max = Simd::<f32, 4>::splat(f32::NEG_INFINITY);
+
+        // optimized for neon (128 bit registers)
+        // todo: use chunks so we can to support AVX-512 (512 bit registers)
+        for elem in input {
+            let elem = elem.aabb();
+            let min = elem.min.as_ref();
+
+            // make it min [f32; 4]
+            let min_ptr = min.as_ptr();
+
+            // todo: is this safe?
+            let min = unsafe { std::slice::from_raw_parts(min_ptr.sub(1), 4) };
+
+            let min = Simd::<f32, 4>::from_slice(min);
+            current_min = current_min.simd_min(min);
+
+            let max = elem.max.as_ref();
+            let max_ptr = max.as_ptr();
+            let max = unsafe { std::slice::from_raw_parts(max_ptr.sub(1), 4) };
+
+            let max = Simd::<f32, 4>::from_slice(max);
+            current_max = current_max.simd_max(max);
+        }
+
+        let current_min = current_min.as_array();
+        let current_max = current_max.as_array();
+
+        let min = glam::Vec3::new(current_min[1], current_min[2], current_min[3]);
+        let max = glam::Vec3::new(current_max[1], current_max[2], current_max[3]);
+
+        Self { min, max }
     }
 }
 
 impl<T: HasAabb> From<&[T]> for Aabb {
     fn from(elements: &[T]) -> Self {
-        Self::containing(elements.iter().map(|e| e.aabb()))
+        Self::containing(elements)
     }
 }
 
@@ -192,5 +228,57 @@ mod tests {
 
         assert_eq!(aabb.min, glam::Vec3::new(-1.0, -1.0, -1.0));
         assert_eq!(aabb.max, glam::Vec3::new(2.0, 2.0, 2.0));
+    }
+
+    #[test]
+    fn containing_returns_correct_aabb_for_multiple_aabbs() {
+        let aabbs = vec![
+            Aabb {
+                min: glam::Vec3::new(0.0, 0.0, 0.0),
+                max: glam::Vec3::new(1.0, 1.0, 1.0),
+            },
+            Aabb {
+                min: glam::Vec3::new(-1.0, -1.0, -1.0),
+                max: glam::Vec3::new(2.0, 2.0, 2.0),
+            },
+            Aabb {
+                min: glam::Vec3::new(0.5, 0.5, 0.5),
+                max: glam::Vec3::new(1.5, 1.5, 1.5),
+            },
+        ];
+
+        let containing_aabb = Aabb::containing(&aabbs);
+
+        assert_eq!(containing_aabb.min, glam::Vec3::new(-1.0, -1.0, -1.0));
+        assert_eq!(containing_aabb.max, glam::Vec3::new(2.0, 2.0, 2.0));
+    }
+
+    #[test]
+    fn containing_returns_correct_aabb_for_single_aabb() {
+        let aabbs = vec![Aabb {
+            min: glam::Vec3::new(0.0, 0.0, 0.0),
+            max: glam::Vec3::new(1.0, 1.0, 1.0),
+        }];
+
+        let containing_aabb = Aabb::containing(&aabbs);
+
+        assert_eq!(containing_aabb.min, glam::Vec3::new(0.0, 0.0, 0.0));
+        assert_eq!(containing_aabb.max, glam::Vec3::new(1.0, 1.0, 1.0));
+    }
+
+    #[test]
+    fn containing_returns_null_aabb_for_empty_input() {
+        let aabbs: Vec<Aabb> = vec![];
+
+        let containing_aabb = Aabb::containing(&aabbs);
+
+        assert_eq!(
+            containing_aabb.min,
+            glam::Vec3::new(f32::INFINITY, f32::INFINITY, f32::INFINITY)
+        );
+        assert_eq!(
+            containing_aabb.max,
+            glam::Vec3::new(f32::NEG_INFINITY, f32::NEG_INFINITY, f32::NEG_INFINITY)
+        );
     }
 }
