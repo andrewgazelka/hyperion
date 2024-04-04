@@ -15,7 +15,6 @@ ordered-float = "4.2.0"
 itertools = "0.12.1"
 plotters = { version = "0.3.5", default-features = false, features = ["plotters-bitmap", "image"] }
 plotters-bitmap = "0.3.3"
-crossbeam = "0.8.4"
 
 [dev-dependencies]
 divan = "0.1.14"

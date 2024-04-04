@@ -333,7 +333,7 @@ impl BvhNode {
 
             let start_idx = start_idx as usize;
 
-            let len = unsafe { self.right.unwrap_unchecked().get()} as usize;
+            let len = unsafe { self.right.unwrap_unchecked().get() } as usize;
 
             let elems = &root.elements[start_idx..start_idx + len];
             process_leaf(elems);

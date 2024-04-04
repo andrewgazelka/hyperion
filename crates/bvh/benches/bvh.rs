@@ -29,7 +29,7 @@ fn build<H: Heuristic>(b: Bencher, count: usize) {
     types = [TrivialHeuristic],
 )]
 fn query<T: Heuristic>(b: Bencher, count: usize) {
-    let mut elements = create_random_elements_1(count, 100.0);
+    let elements = create_random_elements_1(count, 100.0);
     let bvh = Bvh::build::<T>(elements);
 
     b.counter(count).bench_local(|| {
@@ -47,7 +47,7 @@ fn query<T: Heuristic>(b: Bencher, count: usize) {
     types = [TrivialHeuristic],
 )]
 fn query_par<T: Heuristic>(b: Bencher, count: usize) {
-    let mut elements = create_random_elements_1(100_000, 100.0);
+    let elements = create_random_elements_1(100_000, 100.0);
     let bvh = Bvh::build::<T>(elements);
 
     b.counter(count).bench_local(|| {

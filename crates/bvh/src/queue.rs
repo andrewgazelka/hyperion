@@ -69,18 +69,18 @@ impl<T, A: Allocator> Queue<T, A> {
     pub fn push(&self, value: T) -> u32 {
         // right ordering?
         let head_idx = self.head.fetch_add(1, Ordering::Relaxed);
-        
+
         // if head_idx as usize >= self.capacity {
         //     panic!("Queue is full");
         // }
-        
+
         // ultimately, is this safe?
         let head = self.ptr.as_ptr().wrapping_offset(head_idx as isize);
-        
+
         unsafe {
             ptr::write(head, value);
         }
-        
+
         head_idx
         // 1
     }

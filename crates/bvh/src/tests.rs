@@ -30,14 +30,14 @@ fn test_build_all_sizes() {
 
 #[test]
 fn test_query_one() {
-    let mut elements = create_random_elements_1(10_000, 100.0);
+    let elements = create_random_elements_1(10_000, 100.0);
 
     // for elem in &mut elements {
     //     elem.min.z = -0.0001;
     //     elem.max.z = 0.0001;
     // }
 
-    let mut elems = elements.clone();
+    let elems = elements.clone();
     let bvh = Bvh::build::<TrivialHeuristic>(elems);
 
     let element = random_aabb(30.0);
@@ -68,7 +68,7 @@ fn test_query_one() {
 
 #[test]
 fn test_query_all() {
-    let mut elements = create_random_elements_1(10_000, 100.0);
+    let elements = create_random_elements_1(10_000, 100.0);
     let bvh = Bvh::build::<TrivialHeuristic>(elements);
 
     let node_count = bvh.nodes.len();
@@ -127,7 +127,7 @@ fn children_returns_internal_nodes() {
 
 #[test]
 fn get_closest_returns_closest_element() {
-    let mut elements = vec![
+    let elements = vec![
         Aabb::new(Vec3::new(0.0, 0.0, 0.0), Vec3::new(1.0, 1.0, 1.0)),
         Aabb::new(Vec3::new(2.0, 2.0, 2.0), Vec3::new(3.0, 3.0, 3.0)),
         Aabb::new(Vec3::new(4.0, 4.0, 4.0), Vec3::new(5.0, 5.0, 5.0)),
@@ -147,7 +147,7 @@ fn get_closest_returns_closest_element() {
 
 #[test]
 fn get_closest_returns_closest_element_with_random_data() {
-    let mut elements: Vec<Aabb> = (0..1000)
+    let elements: Vec<Aabb> = (0..1000)
         .map(|_| {
             let min = Vec3::new(
                 fastrand::f32().mul_add(200.0, -100.0),
@@ -179,8 +179,8 @@ fn get_closest_returns_closest_element_with_random_data() {
 
 #[test]
 fn get_closest_returns_none_when_no_elements() {
-    let mut elements: Vec<Aabb> = vec![];
-    let bvh = Bvh::build::<TrivialHeuristic>(elements.clone());
+    let elements: Vec<Aabb> = vec![];
+    let bvh = Bvh::build::<TrivialHeuristic>(elements);
 
     let target = Vec3::new(2.5, 2.5, 2.5);
     let closest = bvh.get_closest(target);
