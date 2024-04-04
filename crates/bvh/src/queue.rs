@@ -37,7 +37,19 @@ impl<T, A: Allocator> Drop for Queue<T, A> {
 
 impl<T, A: Allocator> Queue<T, A> {
     pub fn new_in(cap: usize, alloc: A) -> Self {
-        init_queue(cap, alloc)
+        assert!(mem::size_of::<T>() != 0, "We do not handle ZSTs");
+        assert!(cap != 0, "Queue must have a capacity of at least 1");
+        let layout = Layout::array::<T>(cap).unwrap();
+        let data = alloc.allocate(layout).unwrap();
+
+        let data: NonNull<T> = data.cast();
+
+        Self {
+            ptr: data,
+            head: AtomicU32::new(0),
+            alloc,
+            capacity: cap,
+        }
     }
 
     fn pop(&self) -> Option<T> {
@@ -77,22 +89,6 @@ impl<T, A: Allocator> Queue<T, A> {
         let alloc = unsafe { ptr::read(&me.alloc) };
 
         unsafe { Vec::from_raw_parts_in(data.as_ptr(), len, me.capacity, alloc) }
-    }
-}
-
-fn init_queue<T, A: Allocator>(cap: usize, alloc: A) -> Queue<T, A> {
-    assert!(mem::size_of::<T>() != 0, "We do not handle ZSTs");
-    assert!(cap != 0, "Queue must have a capacity of at least 1");
-    let layout = Layout::array::<T>(cap).unwrap();
-    let data = alloc.allocate(layout).unwrap();
-
-    let data: NonNull<T> = data.cast();
-
-    Queue {
-        ptr: data,
-        head: AtomicU32::new(0),
-        alloc,
-        capacity: cap,
     }
 }
 
