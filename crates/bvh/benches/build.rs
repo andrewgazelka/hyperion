@@ -4,6 +4,8 @@ use bvh::{aabb::Aabb, create_random_elements_1, random_aabb, Bvh, TrivialHeurist
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use tango_bench::{benchmark_fn, tango_benchmarks, tango_main, IntoBenchmarks};
 
+const COUNT: usize = 10_000;
+
 fn benchmark_1m_4_cores() {
     let threads = 4;
     let thread_pool = rayon::ThreadPoolBuilder::default()
@@ -17,8 +19,7 @@ fn benchmark_1m_4_cores() {
 }
 
 fn build_tree() -> Bvh<Aabb> {
-    let count: usize = 1_000_000;
-    let elements = create_random_elements_1(count, 10_000.0);
+    let elements = create_random_elements_1(COUNT, 10_000.0);
     let mut elements = elements;
     Bvh::build::<TrivialHeuristic>(&mut elements)
 }
@@ -29,7 +30,7 @@ fn build_benchmarks() -> impl IntoBenchmarks {
     [
         benchmark_fn("build", benchmark_1m_4_cores),
         benchmark_fn("collisions", move || {
-            (0..1_000_000).into_par_iter().for_each(|_| {
+            (0..COUNT).into_par_iter().for_each(|_| {
                 let element = random_aabb(10_000.0);
 
                 tree.get_collisions(element, |elem| {
