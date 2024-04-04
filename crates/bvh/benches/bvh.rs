@@ -66,13 +66,13 @@ const THREAD_COUNTS: &[usize] = &[1, 2, 4, 8];
     args = THREAD_COUNTS,
     types = [TrivialHeuristic],
 )]
-fn build_100k_rayon<T: Heuristic>(b: Bencher, count: usize) {
+fn build_1m_rayon<T: Heuristic>(b: Bencher, count: usize) {
     let thread_pool = rayon::ThreadPoolBuilder::default()
         .num_threads(count)
         .build()
         .expect("Failed to build global thread pool");
 
-    let count: usize = 100_000;
+    let count: usize = 1_000_000;
 
     let elements = create_random_elements_1(count);
 
