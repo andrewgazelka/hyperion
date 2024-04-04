@@ -26,7 +26,7 @@ pub fn rebuild_player_location(
     lookup: Single<&mut PlayerLocationLookup>,
     entities: Fetcher<EntityQuery>,
 ) {
-    let mut elements: Vec<_> = entities
+    let elements: Vec<_> = entities
         .iter()
         .map(|query| LookupData {
             id: query.id,
@@ -36,7 +36,7 @@ pub fn rebuild_player_location(
 
     let lookup = lookup.0;
 
-    let bvh = Bvh::build::<TrivialHeuristic>(&mut elements);
+    let bvh = Bvh::build::<TrivialHeuristic>(elements);
 
     lookup.inner = bvh;
 }

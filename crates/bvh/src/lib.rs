@@ -1,5 +1,4 @@
 #![feature(lint_reasons)]
-#![feature(inline_const)]
 #![feature(allocator_api)]
 #![feature(portable_simd)]
 
@@ -29,9 +28,36 @@ pub struct BvhNode {
     right: Option<NonZeroI32>,
 }
 
+impl BvhNode {
+    fn create_leaf(aabb: Aabb, idx_left: usize, len: usize) -> Self {
+        let left = isize::try_from(idx_left).expect("failed to convert index");
+        let right = isize::try_from(len).expect("failed to convert index");
+
+        // large number
+        debug_assert!(left < 999999);
+
+        let left = left.checked_neg().expect("failed to negate index");
+        // let right = right.checked_neg().expect("failed to negate index");
+
+        let left = i32::try_from(left).expect("failed to convert index");
+        let right = i32::try_from(right).expect("failed to convert index");
+        // so it is not 0
+        let left = left - 1;
+
+        let left = NonZeroI32::new(left).expect("failed to create non-max index");
+        let right = NonZeroI32::new(right).expect("failed to create non-max index");
+
+        Self {
+            aabb,
+            left: Some(left),
+            right: Some(right),
+        }
+    }
+}
+
 pub struct Bvh<T> {
     nodes: Vec<BvhNode>,
-    elems: Vec<ArrayVec<T, MAX_ELEMENTS_PER_LEAF>>,
+    elements: Vec<T>,
     root: Option<NonZeroI32>,
 }
 
@@ -39,7 +65,7 @@ impl<T> Default for Bvh<T> {
     fn default() -> Self {
         Self {
             nodes: Vec::new(),
-            elems: Vec::new(),
+            elements: Vec::new(),
             root: None,
         }
     }
@@ -49,7 +75,7 @@ impl<T: Debug> Debug for Bvh<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Bvh")
             .field("nodes", &self.nodes)
-            .field("elems", &self.elems)
+            .field("elems", &self.elements)
             .field("root", &self.root)
             .finish()
     }
@@ -57,21 +83,24 @@ impl<T: Debug> Debug for Bvh<T> {
 
 struct BvhBuild<T> {
     nodes: Queue<BvhNode>,
-    elems: Queue<ArrayVec<T, MAX_ELEMENTS_PER_LEAF>>,
+    start_slice_pointer: *const T,
 }
 
+unsafe impl<T: Send> Send for BvhBuild<T> {}
+unsafe impl<T: Sync> Sync for BvhBuild<T> {}
+
 impl<T: HasAabb + Send + Copy + Sync + Debug> Bvh<T> {
-    pub fn build<H: Heuristic>(elements: &mut [T]) -> Self {
+    pub fn build<H: Heuristic>(mut elements: Vec<T>) -> Self {
         let len = elements.len();
 
         // 1.7 works too, 2.0 is upper bound ... 1.8 is probably best
-        let cap = ((len / MAX_ELEMENTS_PER_LEAF) as f64 * 1.8) as usize;
+        let cap = ((len / MAX_ELEMENTS_PER_LEAF) as f64 * 4.0) as usize;
         let cap = cap.max(16);
 
-        let elems = Queue::new(cap);
+        // let elems = Queue::new(cap);
         let nodes = Queue::new(cap);
 
-        elems.push(ArrayVec::new());
+        // elems.push(ArrayVec::new());
         nodes.push(BvhNode::DUMMY);
 
         // // dummy so we never get 0 index
@@ -79,13 +108,19 @@ impl<T: HasAabb + Send + Copy + Sync + Debug> Bvh<T> {
         // // and think the way allocations work there are problems (pointers aren't really
         // // simple like many think they are)
 
-        let bvh = BvhBuild { nodes, elems };
+        // todo: this is OFTEN UB... how to fix?
+        let ptr = elements.as_ptr();
 
-        let root = BvhNode::build_in::<T, H>(&bvh, elements);
+        let bvh = BvhBuild {
+            nodes,
+            start_slice_pointer: ptr,
+        };
+
+        let root = BvhNode::build_in::<T, H>(&bvh, &mut elements);
 
         Self {
             nodes: bvh.nodes.into_inner(),
-            elems: bvh.elems.into_inner(),
+            elements,
             root,
         }
     }
@@ -194,8 +229,7 @@ impl<T> Bvh<T> {
             let root = root.get();
 
             if root < 0 {
-                let root = root.checked_neg().expect("failed to negate index");
-                return Node::Leaf(&self.elems[root as usize]);
+                return Node::Leaf(&self.elements[..]);
             }
 
             Node::Internal(&self.nodes[root as usize])
@@ -219,9 +253,6 @@ pub trait Heuristic {
     fn heuristic<T: HasAabb>(elements: &[T]) -> usize;
 }
 
-// #[deprecated(note = "use TrivialHeuristic. This currently does not work properly.")]
-// pub struct LeastSurfaceAreaHeuristic;
-
 pub struct TrivialHeuristic;
 
 impl Heuristic for TrivialHeuristic {
@@ -229,50 +260,6 @@ impl Heuristic for TrivialHeuristic {
         elements.len() / 2
     }
 }
-
-// impl Heuristic for LeastSurfaceAreaHeuristic {
-//     fn heuristic<T: HasAabb>(elements: &[T]) -> usize {
-//         // todo: remove new alloc each time possibly?
-//         let mut left_surface_areas = vec![0.0; elements.len() - 1];
-//         let mut right_surface_areas = vec![0.0; elements.len() - 1];
-//
-//         let mut left_bb = Aabb::NULL;
-//         let mut right_bb = Aabb::NULL;
-//
-//         #[allow(clippy::needless_range_loop)]
-//         for idx in 0..(elements.len() - 1) {
-//             let left_idx = idx;
-//
-//             let right_idx = elements.len() - idx - 2;
-//
-//             left_bb.expand_to_fit(elements[left_idx].aabb());
-//             right_bb.expand_to_fit(elements[right_idx].aabb());
-//
-//             left_surface_areas[idx] = left_bb.surface_area();
-//             right_surface_areas[right_idx] = right_bb.surface_area();
-//         }
-//
-//         // get min by summing up the surface areas
-//         let mut min_cost = f32::MAX;
-//         let mut min_idx = 0;
-//
-//         for idx in 1..elements.len() {
-//             let cost = left_surface_areas[idx - 1] + right_surface_areas[idx - 1];
-//
-//             // // pad idx MAX_ELEMENTS_PER_LEAF zeros
-//             // println!("{:04}: {}", idx, cost);
-//
-//             if cost < min_cost {
-//                 min_cost = cost;
-//                 min_idx = idx;
-//             }
-//         }
-//
-//         // assert!(min_idx != 0);
-//
-//         min_idx
-//     }
-// }
 
 // // input: sorted f64
 fn find_split<T: HasAabb, H: Heuristic>(elements: &[T]) -> usize {
@@ -286,7 +273,10 @@ fn sort_by_largest_axis<T: HasAabb>(elements: &mut [T], aabb: &Aabb) -> u8 {
     let len = elements.len();
     let median_idx = len / 2;
 
-    #[expect(clippy::float_cmp, reason = "we are comparing exact values")]
+    #[expect(
+        clippy::float_cmp,
+        reason = "we are not modifying; we are comparing exact values"
+    )]
     let key = if lens.x == largest {
         0_u8
     } else if lens.y == largest {
@@ -308,7 +298,7 @@ fn sort_by_largest_axis<T: HasAabb>(elements: &mut [T], aabb: &Aabb) -> u8 {
 #[derive(Copy, Clone, Debug, PartialEq)]
 enum Node<'a, T> {
     Internal(&'a BvhNode),
-    Leaf(&'a ArrayVec<T, MAX_ELEMENTS_PER_LEAF>),
+    Leaf(&'a [T]),
 }
 
 impl BvhNode {
@@ -318,36 +308,90 @@ impl BvhNode {
         right: None,
     };
 
-    fn left<'a, T>(&self, root: &'a Bvh<T>) -> Option<Node<'a, T>> {
+    fn left<'a, T>(&self, root: &'a Bvh<T>) -> Option<&'a Self> {
         let left = self.left?;
         let left = left.get();
 
         if left < 0 {
-            let left = left.checked_neg().expect("failed to negate index");
-            return root.elems.get(left as usize).map(Node::Leaf);
+            return None;
         }
 
-        root.nodes.get(left as usize).map(Node::Internal)
+        root.nodes.get(left as usize)
     }
 
-    fn children<'a, T>(&self, root: &'a Bvh<T>) -> impl Iterator<Item = Node<'a, T>> {
-        // iter of two options left and right
-        let left = self.left(root);
-        let right = self.right(root);
+    fn switch_children<'a, T>(
+        &'a self,
+        root: &'a Bvh<T>,
+        mut process_children: impl FnMut(&'a Self),
+        mut process_leaf: impl FnMut(&'a [T]),
+    ) {
+        let left_idx = unsafe { self.left.unwrap_unchecked().get() };
 
-        left.into_iter().chain(right)
+        if left_idx < 0 {
+            let start_idx = -left_idx - 1;
+            // let start_idx = usize::try_from(start_idx).expect("failed to convert index");
+
+            let start_idx = start_idx as usize;
+
+            let len = unsafe { self.right.unwrap_unchecked().get()} as usize;
+
+            let elems = &root.elements[start_idx..start_idx + len];
+            process_leaf(elems);
+        } else {
+            let left = unsafe { self.left(root).unwrap_unchecked() };
+            let right = unsafe { self.right(root).unwrap_unchecked() };
+
+            process_children(left);
+            process_children(right);
+        }
     }
 
-    fn right<'a, T>(&self, root: &'a Bvh<T>) -> Option<Node<'a, T>> {
+    // impl Iterator
+    fn children<'a, T>(&'a self, root: &'a Bvh<T>) -> impl Iterator<Item = Node<T>> {
+        self.children_vec(root).into_iter()
+    }
+
+    fn children_vec<'a, T>(&'a self, root: &'a Bvh<T>) -> ArrayVec<Node<T>, 2> {
+        if let Some(left) = self.left {
+            let left = left.get();
+
+            // leaf
+            if left < 0 {
+                // println!("left: {}", left);
+                let start_idx = left.checked_neg().expect("failed to negate index") - 1;
+
+                let start_idx = usize::try_from(start_idx).expect("failed to convert index");
+
+                let len = self.right.unwrap().get() as usize;
+
+                let elems = &root.elements[start_idx..start_idx + len];
+                let mut vec = ArrayVec::new();
+                vec.push(Node::Leaf(elems));
+                return vec;
+            }
+        }
+
+        let mut vec = ArrayVec::new();
+        if let Some(left) = self.left(root) {
+            vec.push(Node::Internal(left));
+        }
+
+        if let Some(right) = self.right(root) {
+            vec.push(Node::Internal(right));
+        }
+
+        vec
+    }
+
+    fn right<'a, T>(&self, root: &'a Bvh<T>) -> Option<&'a Self> {
         let right = self.right?;
         let right = right.get();
 
         if right < 0 {
-            let right = right.checked_neg().expect("failed to negate index");
-            return root.elems.get(right as usize).map(Node::Leaf);
+            return None;
         }
 
-        root.nodes.get(right as usize).map(Node::Internal)
+        root.nodes.get(right as usize)
     }
 
     #[allow(clippy::float_cmp)]
@@ -360,16 +404,16 @@ impl BvhNode {
         }
 
         if elements.len() <= MAX_ELEMENTS_PER_LEAF {
-            let mut elem = ArrayVec::new();
-            elem.try_extend_from_slice(elements).unwrap();
-            let idx = root.elems.push(elem);
+            // flush
+            let idx_start = unsafe { elements.as_ptr().offset_from(root.start_slice_pointer) };
+
+            let node =
+                Self::create_leaf(Aabb::from(&*elements), idx_start as usize, elements.len());
+
+            let idx = root.nodes.push(node);
             let idx = i32::try_from(idx).expect("failed to convert index");
 
-            // println!("idx {idx} added leaf with len: {}", elements.len());
-
             debug_assert!(idx > 0);
-
-            let idx = idx.checked_neg().expect("failed to negate index");
 
             return Some(NonZeroI32::new(idx).expect("failed to create non-max index"));
         }
@@ -399,15 +443,14 @@ impl BvhNode {
 }
 
 struct BvhIter<'a, T> {
-    // node_stack: Vec<&'a BvhNode>,
     bvh: &'a Bvh<T>,
-    // elements: Vec<T>,
-    // left_elements: Option<Entry<'a, SmallVec<T, MAX_ELEMENTS_PER_LEAF>>>,
-    // right_elements: Option<Entry<'a, SmallVec<T, MAX_ELEMENTS_PER_LEAF>>>,
     target: Aabb,
 }
 
-impl<'a, T: HasAabb> BvhIter<'a, T> {
+impl<'a, T> BvhIter<'a, T>
+where
+    T: HasAabb,
+{
     fn consume(bvh: &'a Bvh<T>, target: Aabb, process: &mut impl FnMut(&T)) {
         let Some(root) = bvh.root() else {
             return;
@@ -444,40 +487,21 @@ impl<'a, T: HasAabb> BvhIter<'a, T> {
         stack.push(on);
 
         while let Some(on) = stack.pop() {
-            if let Some(left) = on.left(self.bvh) {
-                match left {
-                    Node::Internal(internal) => {
-                        if internal.aabb.collides(&self.target) {
-                            stack.push(internal);
+            on.switch_children(
+                self.bvh,
+                |child| {
+                    if child.aabb.collides(&self.target) {
+                        stack.push(child);
+                    }
+                },
+                |elements| {
+                    for elem in elements {
+                        if elem.aabb().collides(&self.target) {
+                            process(elem);
                         }
                     }
-                    Node::Leaf(leaf) => {
-                        for elem in leaf.iter() {
-                            if elem.aabb().collides(&self.target) {
-                                process(elem);
-                            }
-                        }
-                    }
-                }
-            }
-
-            if let Some(right) = on.right(self.bvh) {
-                match right {
-                    Node::Internal(internal) => {
-                        if internal.aabb.collides(&self.target) {
-                            stack.push(internal);
-                        }
-                    }
-                    Node::Leaf(leaf) => {
-                        for elem in leaf.iter() {
-                            // println!("right leaf");
-                            if elem.aabb().collides(&self.target) {
-                                process(elem);
-                            }
-                        }
-                    }
-                }
-            }
+                },
+            );
         }
     }
 }
@@ -501,214 +525,4 @@ pub fn create_random_elements_1(count: usize, width: f32) -> Vec<Aabb> {
 }
 
 #[cfg(test)]
-mod tests {
-    use std::collections::HashSet;
-
-    use itertools::Itertools;
-
-    use super::*;
-    use crate::aabb::CheckableAabb;
-
-    // todo: consider duplicate
-    fn collisions_naive(
-        elements: &[Aabb],
-        target: Aabb,
-    ) -> Result<HashSet<CheckableAabb>, ordered_float::FloatIsNan> {
-        elements
-            .iter()
-            .filter(move |elem| elem.collides(&target))
-            .copied()
-            .map(CheckableAabb::try_from)
-            .try_collect()
-    }
-
-    #[test]
-    fn test_build_all_sizes() {
-        let counts = &[0, 1, 10, 100];
-
-        for count in counts {
-            let mut elements = create_random_elements_1(*count, 100.0);
-            Bvh::build::<TrivialHeuristic>(&mut elements);
-        }
-    }
-
-    #[test]
-    fn test_query_one() {
-        let mut elements = create_random_elements_1(10_000, 100.0);
-
-        // for elem in &mut elements {
-        //     elem.min.z = -0.0001;
-        //     elem.max.z = 0.0001;
-        // }
-
-        let bvh = Bvh::build::<TrivialHeuristic>(&mut elements);
-
-        let element = random_aabb(30.0);
-
-        println!("element: {}", element);
-
-        let naive_collisions = collisions_naive(&elements, element).unwrap();
-
-        let mut num_collisions = 0;
-
-        let mut bvh_collisions = Vec::new();
-        // 1000 x 1000 x 1000 = 1B ... 1B / 1M = 1000 blocks on average...
-        // on average num_collisions should be super low
-        bvh.get_collisions(element, |elem| {
-            num_collisions += 1;
-            assert!(elem.collides(&element));
-            bvh_collisions.push(CheckableAabb::try_from(*elem).unwrap());
-        });
-
-        for elem in &naive_collisions {
-            assert!(bvh_collisions.contains(elem));
-        }
-
-        assert_eq!(num_collisions, naive_collisions.len());
-
-        // bvh.plot("test.png").unwrap()
-    }
-
-    #[test]
-    fn test_query_all() {
-        let mut elements = create_random_elements_1(10_000, 100.0);
-        let bvh = Bvh::build::<TrivialHeuristic>(&mut elements);
-
-        let node_count = bvh.nodes.len();
-        println!("node count: {}", node_count);
-
-        let mut num_collisions = 0;
-
-        bvh.get_collisions(Aabb::EVERYTHING, |_| {
-            num_collisions += 1;
-        });
-
-        assert_eq!(num_collisions, 10_000);
-    }
-
-    #[test]
-    fn children_returns_none_when_no_children() {
-        let node = BvhNode {
-            aabb: Aabb::NULL,
-            left: None,
-            right: None,
-        };
-        let bvh: Bvh<i32> = Bvh {
-            nodes: Vec::new(),
-            elems: Vec::new(),
-            root: None,
-        };
-        assert!(node.children(&bvh).next().is_none());
-    }
-
-    #[test]
-    fn children_returns_internal_nodes() {
-        let aabb = random_aabb(100.0);
-
-        let child_node = BvhNode {
-            aabb,
-            left: None,
-            right: None,
-        };
-
-        let node = BvhNode {
-            aabb: aabb.expand(10.0),
-            left: Some(NonZeroI32::new(1).unwrap()),
-            right: Some(NonZeroI32::new(2).unwrap()),
-        };
-
-        let bvh: Bvh<i32> = Bvh {
-            nodes: vec![BvhNode::DUMMY, child_node, child_node],
-            elems: vec![],
-            root: None,
-        };
-        let mut children = node.children(&bvh);
-        assert_eq!(children.next(), Some(Node::Internal(&child_node)));
-        assert_eq!(children.next(), Some(Node::Internal(&child_node)));
-        assert!(children.next().is_none());
-    }
-
-    #[test]
-    fn get_closest_returns_closest_element() {
-        let mut elements = vec![
-            Aabb::new(Vec3::new(0.0, 0.0, 0.0), Vec3::new(1.0, 1.0, 1.0)),
-            Aabb::new(Vec3::new(2.0, 2.0, 2.0), Vec3::new(3.0, 3.0, 3.0)),
-            Aabb::new(Vec3::new(4.0, 4.0, 4.0), Vec3::new(5.0, 5.0, 5.0)),
-        ];
-        let bvh = Bvh::build::<TrivialHeuristic>(&mut elements);
-
-        let target = Vec3::new(2.5, 2.5, 2.5);
-        let closest = bvh.get_closest(target);
-
-        assert!(closest.is_some());
-        let (closest_element, _) = closest.unwrap();
-        assert_eq!(
-            closest_element.aabb(),
-            Aabb::new(Vec3::new(2.0, 2.0, 2.0), Vec3::new(3.0, 3.0, 3.0))
-        );
-    }
-
-    #[test]
-    fn get_closest_returns_closest_element_with_random_data() {
-        let mut elements: Vec<Aabb> = (0..1000)
-            .map(|_| {
-                let min = Vec3::new(
-                    fastrand::f32().mul_add(200.0, -100.0),
-                    fastrand::f32().mul_add(200.0, -100.0),
-                    fastrand::f32().mul_add(200.0, -100.0),
-                );
-                let max = min + Vec3::new(1.0, 1.0, 1.0);
-                Aabb::new(min, max)
-            })
-            .collect();
-        let bvh = Bvh::build::<TrivialHeuristic>(&mut elements);
-
-        let target = Vec3::new(
-            fastrand::f32().mul_add(200.0, -100.0),
-            fastrand::f32().mul_add(200.0, -100.0),
-            fastrand::f32().mul_add(200.0, -100.0),
-        );
-        let closest = bvh.get_closest(target);
-
-        assert!(closest.is_some());
-        let (closest_element, _) = closest.unwrap();
-
-        // Check that the closest element is indeed the closest by comparing with all elements
-        for element in &elements {
-            assert!(element.aabb().dist2(target) >= closest_element.aabb().dist2(target));
-        }
-    }
-
-    #[test]
-    fn get_closest_returns_none_when_no_elements() {
-        let mut elements: Vec<Aabb> = vec![];
-        let bvh = Bvh::build::<TrivialHeuristic>(&mut elements);
-
-        let target = Vec3::new(2.5, 2.5, 2.5);
-        let closest = bvh.get_closest(target);
-
-        assert!(closest.is_none());
-    }
-
-    #[test]
-    fn children_returns_leaf_nodes() {
-        let child_elems = ArrayVec::<i32, MAX_ELEMENTS_PER_LEAF>::new();
-        let node = BvhNode {
-            aabb: Aabb::NULL,
-            left: Some(NonZeroI32::new(-1).unwrap()),
-            right: Some(NonZeroI32::new(-2).unwrap()),
-        };
-        let bvh: Bvh<i32> = Bvh {
-            nodes: vec![BvhNode::DUMMY],
-            elems: vec![
-                ArrayVec::default(),
-                child_elems.clone(),
-                child_elems.clone(),
-            ],
-            root: None,
-        };
-        let mut children = node.children(&bvh);
-        assert_eq!(children.next(), Some(Node::Leaf(&child_elems)));
-        assert_eq!(children.next(), Some(Node::Leaf(&child_elems)));
-    }
-}
+mod tests;

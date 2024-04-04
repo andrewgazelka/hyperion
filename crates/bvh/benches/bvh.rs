@@ -19,9 +19,9 @@ const ENTITY_COUNTS: &[usize] = &[100, 1_000, 10_000];
     types = [TrivialHeuristic],
 )]
 fn build<H: Heuristic>(b: Bencher, count: usize) {
-    let mut elements = create_random_elements_1(count, 100.0);
+    let elements = create_random_elements_1(count, 100.0);
     b.counter(count)
-        .bench_local(|| Bvh::build::<H>(&mut elements));
+        .bench_local(|| Bvh::build::<H>(elements.clone()));
 }
 
 #[divan::bench(
@@ -30,7 +30,7 @@ fn build<H: Heuristic>(b: Bencher, count: usize) {
 )]
 fn query<T: Heuristic>(b: Bencher, count: usize) {
     let mut elements = create_random_elements_1(count, 100.0);
-    let bvh = Bvh::build::<T>(&mut elements);
+    let bvh = Bvh::build::<T>(elements);
 
     b.counter(count).bench_local(|| {
         for _ in 0..count {
@@ -48,7 +48,7 @@ fn query<T: Heuristic>(b: Bencher, count: usize) {
 )]
 fn query_par<T: Heuristic>(b: Bencher, count: usize) {
     let mut elements = create_random_elements_1(100_000, 100.0);
-    let bvh = Bvh::build::<T>(&mut elements);
+    let bvh = Bvh::build::<T>(elements);
 
     b.counter(count).bench_local(|| {
         (0..count).into_par_iter().for_each(|_| {
@@ -66,20 +66,20 @@ const THREAD_COUNTS: &[usize] = &[1, 2, 4, 8];
     args = THREAD_COUNTS,
     types = [TrivialHeuristic],
 )]
-fn build_10k_rayon<T: Heuristic>(b: Bencher, count: usize) {
+fn build_1m_rayon<T: Heuristic>(b: Bencher, count: usize) {
     let thread_pool = rayon::ThreadPoolBuilder::default()
         .num_threads(count)
         .build()
         .expect("Failed to build global thread pool");
 
-    let count: usize = 10_000;
+    let count: usize = 1_000_000;
 
     let elements = create_random_elements_1(count, 100.0);
 
     b.counter(count).bench(|| {
         thread_pool.install(|| {
-            let mut elements = elements.clone();
-            Bvh::build::<T>(&mut elements);
+            let elements = elements.clone();
+            Bvh::build::<T>(elements);
         });
     });
 }

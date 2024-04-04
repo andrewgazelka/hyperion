@@ -53,8 +53,10 @@ impl<T: HasAabb + Copy> Bvh<T> {
                 Node::Internal(internal) => {
                     let style = RED.mix(0.15).stroke_width(1);
                     self.draw_aabb(style, chart, &internal.aabb)?;
-                    self.draw_node(chart, internal.left(self))?;
-                    self.draw_node(chart, internal.right(self))?;
+
+                    for elem in internal.children(self) {
+                        self.draw_node(chart, Some(elem))?;
+                    }
                 }
                 Node::Leaf(leaf) => {
                     let color = random_color();

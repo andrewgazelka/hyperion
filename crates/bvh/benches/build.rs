@@ -20,8 +20,7 @@ fn benchmark_1m_4_cores() {
 
 fn build_tree() -> Bvh<Aabb> {
     let elements = create_random_elements_1(COUNT, 10_000.0);
-    let mut elements = elements;
-    Bvh::build::<TrivialHeuristic>(&mut elements)
+    Bvh::build::<TrivialHeuristic>(elements)
 }
 
 fn build_benchmarks() -> impl IntoBenchmarks {
