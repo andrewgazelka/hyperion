@@ -12,7 +12,7 @@ use glam::Vec3;
 
 use crate::{aabb::Aabb, queue::Queue};
 
-const MAX_ELEMENTS_PER_LEAF: usize = 1024;
+const MAX_ELEMENTS_PER_LEAF: usize = 8;
 
 pub mod aabb;
 pub mod plot;

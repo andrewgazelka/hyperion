@@ -1,6 +1,7 @@
 use std::hint::black_box;
 
 use bvh::{aabb::Aabb, create_random_elements_1, random_aabb, Bvh, TrivialHeuristic};
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use tango_bench::{benchmark_fn, tango_benchmarks, tango_main, IntoBenchmarks};
 
 fn benchmark_1m_4_cores() {
@@ -28,16 +29,13 @@ fn build_benchmarks() -> impl IntoBenchmarks {
     [
         benchmark_fn("build", benchmark_1m_4_cores),
         benchmark_fn("collisions", move || {
-            for _ in 0..1000 {
+            (0..1_000_000).into_par_iter().for_each(|_| {
                 let element = random_aabb(10_000.0);
-                let mut vec = Vec::new();
 
                 tree.get_collisions(element, |elem| {
-                    vec.push(*elem);
+                    black_box(elem);
                 });
-
-                black_box(vec);
-            }
+            });
         }),
     ]
 }
