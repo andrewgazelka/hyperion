@@ -7,8 +7,8 @@
 
 use std::{cmp::Reverse, collections::BinaryHeap, fmt::Debug, num::NonZeroI32};
 
+use arrayvec::ArrayVec;
 use glam::Vec3;
-use smallvec::SmallVec;
 
 use crate::{aabb::Aabb, queue::Queue};
 
@@ -30,7 +30,7 @@ pub struct BvhNode {
 
 pub struct Bvh<T> {
     nodes: Vec<BvhNode>,
-    elems: Vec<SmallVec<T, MAX_ELEMENTS_PER_LEAF>>,
+    elems: Vec<ArrayVec<T, MAX_ELEMENTS_PER_LEAF>>,
     root: Option<NonZeroI32>,
 }
 
@@ -56,7 +56,7 @@ impl<T: Debug> Debug for Bvh<T> {
 
 struct BvhBuild<T> {
     nodes: Queue<BvhNode>,
-    elems: Queue<SmallVec<T, MAX_ELEMENTS_PER_LEAF>>,
+    elems: Queue<ArrayVec<T, MAX_ELEMENTS_PER_LEAF>>,
 }
 
 impl<T: HasAabb + Send + Copy + Sync + Debug> Bvh<T> {
@@ -70,7 +70,7 @@ impl<T: HasAabb + Send + Copy + Sync + Debug> Bvh<T> {
         let elems = Queue::new(cap);
         let nodes = Queue::new(cap);
 
-        elems.push(SmallVec::new());
+        elems.push(ArrayVec::new());
         nodes.push(BvhNode::DUMMY);
 
         // // dummy so we never get 0 index
@@ -307,7 +307,7 @@ fn sort_by_largest_axis<T: HasAabb>(elements: &mut [T], aabb: &Aabb) -> u8 {
 #[derive(Copy, Clone, Debug, PartialEq)]
 enum Node<'a, T> {
     Internal(&'a BvhNode),
-    Leaf(&'a SmallVec<T, MAX_ELEMENTS_PER_LEAF>),
+    Leaf(&'a ArrayVec<T, MAX_ELEMENTS_PER_LEAF>),
 }
 
 impl BvhNode {
@@ -359,7 +359,8 @@ impl BvhNode {
         }
 
         if elements.len() <= MAX_ELEMENTS_PER_LEAF {
-            let elem = SmallVec::from_slice(elements);
+            let mut elem = ArrayVec::new();
+            elem.try_extend_from_slice(elements).unwrap();
             let idx = root.elems.push(elem);
             let idx = i32::try_from(idx).expect("failed to convert index");
 
@@ -658,7 +659,7 @@ mod tests {
 
     #[test]
     fn children_returns_leaf_nodes() {
-        let child_elems = SmallVec::<i32, MAX_ELEMENTS_PER_LEAF>::new();
+        let child_elems = ArrayVec::<i32, MAX_ELEMENTS_PER_LEAF>::new();
         let node = BvhNode {
             aabb: Aabb::NULL,
             left: Some(NonZeroI32::new(-1).unwrap()),
@@ -667,7 +668,7 @@ mod tests {
         let bvh: Bvh<i32> = Bvh {
             nodes: vec![BvhNode::DUMMY],
             elems: vec![
-                SmallVec::default(),
+                ArrayVec::default(),
                 child_elems.clone(),
                 child_elems.clone(),
             ],

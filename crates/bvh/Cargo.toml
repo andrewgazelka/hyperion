@@ -10,8 +10,8 @@ publish = false
 fastrand = "2.0.2"
 glam.workspace = true
 rayon = "1.10.0"
-smallvec.workspace = true
 bytemuck = "1.15.0"
+arrayvec = "0.7.4"
 
 [dev-dependencies]
 divan = "0.1.14"
