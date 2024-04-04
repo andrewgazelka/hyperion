@@ -10,7 +10,6 @@ publish = false
 fastrand = "2.0.2"
 glam.workspace = true
 rayon = "1.10.0"
-bytemuck = "1.15.0"
 arrayvec = "0.7.4"
 ordered-float = "4.2.0"
 itertools = "0.12.1"
