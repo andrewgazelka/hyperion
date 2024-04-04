@@ -23,7 +23,6 @@ rand = "0.8.5"
 ordered-float = "4.2.0"
 fastrand = "2.0.2"
 tango-bench = "0.4.0"
-#plotters = "0.3.5"
 
 [[bench]]
 name = "sort"
