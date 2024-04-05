@@ -69,8 +69,8 @@ pub fn player_join_world(
         chat_data: None,
         listed: true,
         ping: 0,
-        game_mode: GameMode::Survival,
-        display_name: Some("Bot1".into_cow_text()),
+        game_mode: GameMode::Creative,
+        display_name: Some("SomeBot".into_cow_text()),
     }];
 
     let info = play::PlayerListS2c {

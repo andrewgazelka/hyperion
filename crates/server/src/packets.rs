@@ -8,7 +8,7 @@ use std::str::FromStr;
 
 use anyhow::{bail, ensure};
 use evenio::event::Sender;
-use tracing::warn;
+use tracing::{debug, warn};
 use valence_protocol::{decode::PacketFrame, math::Vec3, packets::play, Decode, Packet};
 
 use crate::{
@@ -258,7 +258,7 @@ pub fn switch(
         play::UpdateSelectedSlotC2s::ID => update_selected_slot(data)?,
         play::KeepAliveC2s::ID => keep_alive(player)?,
         play::CommandExecutionC2s::ID => chat_command(data, player, full_entity_pose, sender)?,
-        _ => warn!("unknown packet id: 0x{:02X}", id),
+        _ => debug!("unknown packet id: 0x{:02X}", id),
     }
 
     Ok(())

@@ -18,18 +18,22 @@ use std::{
 
 use anyhow::Context;
 use evenio::prelude::*;
+use glam::Vec2;
 use jemalloc_ctl::{epoch, stats};
 use ndarray::s;
+use rayon::iter::IntoParallelRefMutIterator;
+pub use rayon::iter::ParallelIterator;
 use signal_hook::iterator::Signals;
 use spin::Lazy;
 use tracing::{info, instrument, warn};
-use valence_protocol::math::Vec3;
+use valence_protocol::{math::Vec3, ByteAngle, VarInt};
 
 use crate::{
     bounding_box::BoundingBox,
     net::{server, ClientConnection, Packets, GLOBAL_PACKETS},
     singleton::{
-        encoder::Encoder, player_location_lookup::PlayerLocationLookup,
+        encoder::{Encoder, PacketMetadata, PacketNecessity},
+        player_location_lookup::PlayerLocationLookup,
         player_lookup::PlayerUuidLookup,
     },
 };
@@ -362,6 +366,7 @@ fn process_packets(
     mut fetcher: Fetcher<(EntityId, &mut Player, &mut FullEntityPose)>,
     lookup: Single<&PlayerUuidLookup>,
     mut sender: Sender<(KickPlayer, InitEntity, KillAllEntities)>,
+    encoder: Single<&mut Encoder>,
 ) {
     // uuid to entity id map
 
@@ -388,6 +393,32 @@ fn process_packets(
             warn!("invalid packet: {reason}");
         }
     }
+
+    let encoder = encoder.0;
+
+    fetcher.iter_mut().for_each(|(id, player, pose)| {
+        let vec2d = Vec2::new(pose.position.x, pose.position.z);
+        let pos = pose.position.as_dvec3();
+
+        // send packet for player moving
+        let packet = valence_protocol::packets::play::EntityPositionS2c {
+            entity_id: VarInt(id.index().0 as i32),
+            position: pos,
+            yaw: ByteAngle(0),
+            pitch: ByteAngle(0),
+            on_ground: false,
+        };
+
+        let meta = PacketMetadata {
+            necessity: PacketNecessity::Droppable {
+                prioritize_location: vec2d,
+            },
+            exclude_player: None, // todo: include player
+        };
+
+        // todo: what it panics otherwise
+        encoder.append_round_robin(&packet, meta).unwrap();
+    });
 }
 
 static SHUTDOWN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);

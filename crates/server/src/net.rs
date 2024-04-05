@@ -186,11 +186,11 @@ impl WriterComm {
             enable_respawn_screen: false,
             dimension_name: dimension_name.into(),
             hashed_seed: 0,
-            game_mode: GameMode::Survival,
+            game_mode: GameMode::Creative,
             is_flat: false,
             last_death_location: None,
             portal_cooldown: 60.into(),
-            previous_game_mode: OptGameMode(Some(GameMode::Survival)),
+            previous_game_mode: OptGameMode(Some(GameMode::Creative)),
             dimension_type_name: "minecraft:overworld".try_into()?,
             is_debug: false,
         };
@@ -232,7 +232,7 @@ impl IoRead {
 }
 
 impl IoWrite {
-    pub(crate) async fn send_packet(&mut self, bytes: bytes::Bytes) -> anyhow::Result<()> {
+    pub(crate) async fn send_packet(&mut self, bytes: bytes::Bytes) -> io::Result<()> {
         let (result, _) = self.write.write_all(bytes).await;
 
         result?;
@@ -465,7 +465,7 @@ impl Io {
             while let Ok(bytes) = s2c_rx.recv_async().await {
                 let len = bytes.len();
                 if let Err(e) = io_write.send_packet(bytes).await {
-                    error!("{e:?}");
+                    error!("Error sending packet: {e:?}");
                     break;
                 }
                 let elapsed = past_instant.elapsed();
