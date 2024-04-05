@@ -5,12 +5,17 @@
 #[global_allocator]
 static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
 
-extern crate core;
 mod chunk;
 mod singleton;
 
-use std::{cell::UnsafeCell, collections::VecDeque, io, sync::atomic::AtomicU32, time::{Duration, Instant}};
-use std::io::Write;
+use std::{
+    cell::UnsafeCell,
+    collections::VecDeque,
+    io,
+    io::Write,
+    sync::atomic::AtomicU32,
+    time::{Duration, Instant},
+};
 
 use anyhow::Context;
 use evenio::prelude::*;
@@ -26,7 +31,7 @@ use valence_protocol::{math::Vec3, ByteAngle, VarInt};
 
 use crate::{
     bounding_box::BoundingBox,
-    net::{server, ClientConnection, Packets, GLOBAL_PACKETS},
+    net::{server, ClientConnection, Packets, GLOBAL_C2S_PACKETS},
     singleton::{
         encoder::{Encoder, PacketMetadata, PacketNecessity},
         player_location_lookup::PlayerLocationLookup,
@@ -247,7 +252,7 @@ impl Game {
 
         // aim for 20 ticks per second
         let now = Instant::now();
-        
+
         if time_for_20_tps < now {
             return None;
         }
@@ -281,17 +286,17 @@ impl Game {
             let last = self.last_ticks.back().unwrap();
 
             let ms = last.elapsed().as_nanos() as f64 / 1_000_000.0;
-            if ms > 50.0 {
+            if ms > 50.0 * 1.2 {
                 warn!("tick took too long: {ms}ms");
             }
-            
+
             let front = self.last_ticks.pop_front().unwrap();
-            
+
             // let duration = front.elapsed();
-            
+
             // println!("tps = {}", LAST_TICK_HISTORY_SIZE as f64 / duration.as_secs_f64());
         }
-        
+
         self.last_ticks.push_back(now);
 
         while let Ok(connection) = self.incoming.try_recv() {
@@ -328,17 +333,12 @@ impl Game {
                       (~52 days)"
         )]
         let ms = now.elapsed().as_nanos() as f64 / 1_000_000.0;
-        
-        
+
         // print!("ms = {ms}\n");
         // flush
-        
+
         io::stdout().flush().unwrap();
-        
-        
-        
-        
-        
+
         self.last_ms_per_tick.push_back(ms);
 
         if self.last_ms_per_tick.len() > MSPT_HISTORY_SIZE {
@@ -361,6 +361,8 @@ impl Game {
 
             let allocated = allocated.read().unwrap();
             let resident = resident.read().unwrap();
+
+            info!("ms / tick: {mean_1_second:.2}ms");
 
             self.world.send(StatsEvent {
                 ms_per_tick_mean_1s: mean_1_second,
@@ -389,7 +391,7 @@ fn process_packets(
 ) {
     // uuid to entity id map
 
-    let packets: Vec<_> = core::mem::take(&mut *GLOBAL_PACKETS.lock());
+    let packets: Vec<_> = core::mem::take(&mut *GLOBAL_C2S_PACKETS.lock());
 
     let lookup = lookup.0;
 
@@ -407,7 +409,7 @@ fn process_packets(
             let reason = format!("error: {e}");
 
             // todo: handle error
-            let _ = player.packets.writer.send_chat_message(&reason);
+            // let _ = player.packets.writer.send_chat_message(&reason);
 
             warn!("invalid packet: {reason}");
         }

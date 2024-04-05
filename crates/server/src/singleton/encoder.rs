@@ -8,6 +8,7 @@ use evenio::prelude::Component;
 use rayon::iter::IntoParallelRefMutIterator;
 pub use rayon::iter::ParallelIterator;
 use rayon_local::RayonLocal;
+use tracing::{debug, info, trace};
 use uuid::Uuid;
 use valence_protocol::{math::Vec2, Encode, Packet, VarInt};
 
@@ -69,6 +70,7 @@ impl PacketBuffer {
         // size without shifting the packet body. This means that there is some amount of unused
         // memory, but the amount of unused memory should be negligible.
         let mut packet_start = self.packet_data.len();
+        let original_packet_start = packet_start;
         self.packet_data
             .resize(packet_start + PACKET_LEN_BYTES_MAX, 0);
 
@@ -123,6 +125,17 @@ impl PacketBuffer {
             }
         }
 
+        trace!(
+            "append packet {} {} len {} ... total bytes len -> {}",
+            P::ID,
+            P::NAME,
+            packet_len_including_size,
+            self.packet_data.len()
+        );
+
+        // todo: super inefficient
+        self.packet_data.drain(original_packet_start..packet_start);
+
         Ok(())
     }
 
@@ -137,8 +150,6 @@ impl PacketBuffer {
 // #[thread_local]
 // static BROADCASTER: RefCell<Option<Broadcaster>> = RefCell::new(None);
 
-// pub struct Encoder;
-
 #[derive(Component, Default)]
 pub struct Encoder {
     rayon_local: RayonLocal<Cell<PacketBuffer>>,
@@ -152,6 +163,9 @@ impl Encoder {
     ) -> anyhow::Result<()> {
         let local = self.rayon_local.get_rayon_local();
         let mut encoder = local.take();
+
+        trace!("append broadcast packet {} {}", P::ID, P::NAME);
+
         let result = encoder.append_packet(packet, metadata);
         local.set(encoder);
         result

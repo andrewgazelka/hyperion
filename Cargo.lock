@@ -132,9 +132,9 @@ dependencies = [
 
 [[package]]
 name = "async-executor"
-version = "1.8.0"
+version = "1.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "17ae5ebefcc48e7452b4987947920dac9450be1110cadf34d1b8c116bdbaf97c"
+checksum = "10b3e585719c2358d2660232671ca8ca4ddb4be4ce8a1842d6c2dc8685303316"
 dependencies = [
  "async-lock",
  "async-task",
@@ -174,9 +174,9 @@ dependencies = [
 
 [[package]]
 name = "autocfg"
-version = "1.1.0"
+version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d468802bab17cbc0cc575e9b053f41e72aa36bfa6b7f55e3529ffa43161b97fa"
+checksum = "f1fdabc7756949593fe60f30ec81974b613357de856987752631dea1e3394c80"
 
 [[package]]
 name = "backtrace"
@@ -481,9 +481,9 @@ dependencies = [
 
 [[package]]
 name = "clap"
-version = "4.5.3"
+version = "4.5.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "949626d00e063efc93b6dca932419ceb5432f99769911c0b995f7e884c778813"
+checksum = "90bc066a67923782aa8515dbaea16946c5bcc5addbd668bb80af688e53e548a0"
 dependencies = [
  "clap_builder",
  "clap_derive",
@@ -504,9 +504,9 @@ dependencies = [
 
 [[package]]
 name = "clap_derive"
-version = "4.5.3"
+version = "4.5.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "90239a040c80f5e14809ca132ddc4176ab33d5e17e49691793296e3fcb34d72f"
+checksum = "528131438037fd55894f62d6e9f068b8f45ac57ffa77517819645d10aed04f64"
 dependencies = [
  "heck",
  "proc-macro2",
@@ -729,7 +729,7 @@ dependencies = [
 [[package]]
 name = "evenio"
 version = "0.4.2"
-source = "git+https://github.com/andrewgazelka/evenio?branch=fix-collisions-gt-2#a5d6d58e8c0116b9e923838d01156a18588dc422"
+source = "git+https://github.com/andrewgazelka/evenio?branch=fix-collisions-gt-2#4b71d4f955274196a5364ccf777d18eed0ed5d03"
 dependencies = [
  "ahash",
  "bumpalo",
@@ -743,7 +743,7 @@ dependencies = [
 [[package]]
 name = "evenio_macros"
 version = "0.4.2"
-source = "git+https://github.com/andrewgazelka/evenio?branch=fix-collisions-gt-2#a5d6d58e8c0116b9e923838d01156a18588dc422"
+source = "git+https://github.com/andrewgazelka/evenio?branch=fix-collisions-gt-2#4b71d4f955274196a5364ccf777d18eed0ed5d03"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1150,9 +1150,9 @@ dependencies = [
 
 [[package]]
 name = "itoa"
-version = "1.0.10"
+version = "1.0.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b1a46d1a171d865aa5f83f92695765caa047a9b4cbae2cbf37dbd613a793fd4c"
+checksum = "49f1f14873335454500d59611f1cf4a4b0f786f9ac11f4312a78e4cf2566695b"
 
 [[package]]
 name = "jemalloc-ctl"
@@ -1280,9 +1280,9 @@ dependencies = [
 
 [[package]]
 name = "memchr"
-version = "2.7.1"
+version = "2.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "523dc4f511e55ab87b694dc30d0f820d60906ef06413f93d4d7a1385599cc149"
+checksum = "6c8640c5d730cb13ebd907d8d04b52f55ac9a2eec55b440c8892f40d56c76c1d"
 
 [[package]]
 name = "memmap2"
@@ -1569,9 +1569,9 @@ dependencies = [
 
 [[package]]
 name = "pin-project-lite"
-version = "0.2.13"
+version = "0.2.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8afb450f006bf6385ca15ef45d71d2288452bc3683ce2e2cacc0d18e4be60b58"
+checksum = "bda66fc9667c18cb2758a2ac84d1167245054bcf85d5d1aaa6923f45801bdd02"
 
 [[package]]
 name = "pin-utils"
@@ -1829,7 +1829,7 @@ dependencies = [
  "aho-corasick",
  "memchr",
  "regex-automata 0.4.6",
- "regex-syntax 0.8.2",
+ "regex-syntax 0.8.3",
 ]
 
 [[package]]
@@ -1849,7 +1849,7 @@ checksum = "86b83b8b9847f9bf95ef68afb0b8e6cdb80f498442f5179a29fad448fcc1eaea"
 dependencies = [
  "aho-corasick",
  "memchr",
- "regex-syntax 0.8.2",
+ "regex-syntax 0.8.3",
 ]
 
 [[package]]
@@ -1866,9 +1866,9 @@ checksum = "f162c6dd7b008981e4d40210aca20b4bd0f9b60ca9271061b07f78537722f2e1"
 
 [[package]]
 name = "regex-syntax"
-version = "0.8.2"
+version = "0.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c08c74e62047bb2de4ff487b251e4a92e24f48745648451635cec7d591162d9f"
+checksum = "adad44e29e4c806119491a7f06f03de4d1af22c3a680dd47f1e6e179439d1f56"
 
 [[package]]
 name = "rgb"
@@ -1964,9 +1964,9 @@ dependencies = [
 
 [[package]]
 name = "serde_json"
-version = "1.0.114"
+version = "1.0.115"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c5f09b1bd632ef549eaa9f60a1f8de742bdbc698e6cee2095fc84dde5f549ae0"
+checksum = "12dc5c46daa8e9fdf4f5e71b6cf9a53f2487da0e86e55808e2d35539666497dd"
 dependencies = [
  "itoa",
  "ryu",
@@ -2004,6 +2004,7 @@ dependencies = [
  "libc",
  "monoio",
  "ndarray",
+ "once_cell",
  "pprof",
  "rand 0.8.5",
  "rand_distr",
@@ -2179,9 +2180,9 @@ dependencies = [
 
 [[package]]
 name = "syn"
-version = "2.0.55"
+version = "2.0.58"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "002a1b3dbf967edfafc32655d0f377ab0bb7b994aa1d32c8cc7e9b8bf3ebb8f0"
+checksum = "44cfb93f38070beee36b3fef7d4f5a16f27751d94b187b666a5cc5e9b0d30687"
 dependencies = [
  "proc-macro2",
  "quote",

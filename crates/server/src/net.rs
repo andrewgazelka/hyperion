@@ -23,7 +23,7 @@ use monoio::{
 };
 use serde_json::json;
 use sha2::Digest;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info, trace, warn};
 use valence_protocol::{
     decode::PacketFrame,
     game_mode::OptGameMode,
@@ -121,6 +121,7 @@ impl WriterComm {
     }
 
     pub fn send_raw(&self, bytes: bytes::Bytes) -> anyhow::Result<()> {
+        trace!("send raw bytes");
         self.tx.send(bytes)?;
         Ok(())
     }
@@ -130,73 +131,8 @@ impl WriterComm {
         P: valence_protocol::Packet + Encode,
     {
         let bytes = self.serialize(pkt)?;
+        trace!("send packet {}", P::NAME);
         self.send_raw(bytes)?;
-        Ok(())
-    }
-
-    pub fn send_chat_message(&mut self, message: &str) -> anyhow::Result<()> {
-        let text = message.to_owned().into_text();
-        // system chat message
-        // System Chat Message
-        let pkt = valence_protocol::packets::play::OverlayMessageS2c {
-            action_bar_text: text.into(),
-        };
-
-        self.send_packet(&pkt)?;
-
-        Ok(())
-    }
-
-    pub fn send_keep_alive(&mut self) -> anyhow::Result<()> {
-        let pkt = valence_protocol::packets::play::KeepAliveS2c {
-            // The ID can be set to zero because it doesn't matter
-            id: 0,
-        };
-
-        self.send_packet(&pkt)?;
-
-        Ok(())
-    }
-
-    pub fn send_game_join_packet(&mut self) -> anyhow::Result<()> {
-        // recv ack
-
-        let codec = RegistryCodec::default();
-
-        let registry_codec = registry_codec_raw(&codec)?;
-
-        let dimension_names: BTreeSet<Ident<Cow<str>>> = codec
-            .registry(BiomeRegistry::KEY)
-            .iter()
-            .map(|value| value.name.as_str_ident().into())
-            .collect();
-
-        let dimension_name = ident!("overworld");
-        // let dimension_name: Ident<Cow<str>> = chunk_layer.dimension_type_name().into();
-
-        let pkt = GameJoinS2c {
-            entity_id: 0,
-            is_hardcore: false,
-            dimension_names: Cow::Owned(dimension_names),
-            registry_codec: Cow::Borrowed(&registry_codec),
-            max_players: config::CONFIG.max_players.into(),
-            view_distance: config::CONFIG.view_distance.into(), // max view distance
-            simulation_distance: config::CONFIG.simulation_distance.into(),
-            reduced_debug_info: false,
-            enable_respawn_screen: false,
-            dimension_name: dimension_name.into(),
-            hashed_seed: 0,
-            game_mode: GameMode::Creative,
-            is_flat: false,
-            last_death_location: None,
-            portal_cooldown: 60.into(),
-            previous_game_mode: OptGameMode(Some(GameMode::Creative)),
-            dimension_type_name: "minecraft:overworld".try_into()?,
-            is_debug: false,
-        };
-
-        self.send_packet(&pkt)?;
-
         Ok(())
     }
 }
@@ -233,12 +169,11 @@ impl IoRead {
 
 impl IoWrite {
     pub(crate) async fn send_packet(&mut self, bytes: bytes::Bytes) -> io::Result<()> {
+        // self.write.write_k
+
         let (result, _) = self.write.write_all(bytes).await;
 
-        result?;
-
-        // todo: is flush needed?
-        // self.write.flush().await?;
+        result?; // error occurs here
 
         Ok(())
     }
@@ -453,7 +388,7 @@ impl Io {
 
         monoio::spawn(async move {
             while let Ok(packet) = io_read.recv_packet_raw().await {
-                GLOBAL_PACKETS
+                GLOBAL_C2S_PACKETS
                     .lock()
                     .push(UserPacketFrame { packet, user: uuid });
             }
@@ -464,8 +399,22 @@ impl Io {
             let mut past_instant = Instant::now();
             while let Ok(bytes) = s2c_rx.recv_async().await {
                 let len = bytes.len();
+
+                trace!("got byte len: {len}");
+
+                let mut dec = PacketDecoder::new();
+
+                dec.queue_bytes(BytesMut::from(&*bytes));
+
+                // while let Some(frame) = dec.try_next_packet().unwrap() {
+                //     let id = frame.id;
+                //     let len = frame.body.len();
+                //
+                //     trace!("got pkt: {id} {len}");
+                // }
+
                 if let Err(e) = io_write.send_packet(bytes).await {
-                    error!("Error sending packet: {e:?}");
+                    error!("Error sending packet: {e} ... {e:?}");
                     break;
                 }
                 let elapsed = past_instant.elapsed();
@@ -526,9 +475,7 @@ impl Io {
         debug!("status");
         let status::QueryRequestC2s = self.recv_packet().await?;
 
-        let player_count = SHARED
-            .player_count
-            .load(std::sync::atomic::Ordering::Relaxed);
+        let player_count = SHARED.player_count.load(Ordering::Relaxed);
 
         //  64x64 pixels image
         let bytes = include_bytes!("saul.png");
@@ -583,7 +530,7 @@ async fn print_errors(future: impl core::future::Future<Output = anyhow::Result<
     }
 }
 
-pub static GLOBAL_PACKETS: spin::Mutex<Vec<UserPacketFrame>> = spin::Mutex::new(Vec::new());
+pub static GLOBAL_C2S_PACKETS: spin::Mutex<Vec<UserPacketFrame>> = spin::Mutex::new(Vec::new());
 
 async fn run(tx: flume::Sender<ClientConnection>) {
     // start socket 25565
@@ -651,7 +598,7 @@ pub fn server(shutdown: flume::Receiver<()>) -> anyhow::Result<flume::Receiver<C
     Ok(connection_rx)
 }
 
-fn registry_codec_raw(codec: &RegistryCodec) -> anyhow::Result<Compound> {
+pub fn registry_codec_raw(codec: &RegistryCodec) -> anyhow::Result<Compound> {
     // codec.cached_codec.clear();
 
     let mut compound = Compound::default();

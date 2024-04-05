@@ -218,10 +218,10 @@ fn chat_command(
             HybridPos::Relative(z) => loc.z + z,
         };
 
-        player
-            .packets
-            .writer
-            .send_chat_message(&format!("Spawning zombie at {x}, {y}, {z}"))?;
+        // player
+        //     .packets
+        //     .writer
+        //     .send_chat_message(&format!("Spawning zombie at {x}, {y}, {z}"))?;
 
         sender.send(InitEntity {
             pose: FullEntityPose {
