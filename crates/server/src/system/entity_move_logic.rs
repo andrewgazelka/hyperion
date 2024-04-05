@@ -72,7 +72,8 @@ pub fn entity_move_logic(
         // subtract 90 degrees
         let yaw = yaw - 90.0;
 
-        let pitch = -dif_height.atan2(dif2d.length()).to_degrees();
+        // let pitch = -dif_height.atan2(dif2d.length()).to_degrees();
+        let pitch = 0.0;
 
         let reaction = reaction.get_mut();
 

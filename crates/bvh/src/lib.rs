@@ -19,7 +19,7 @@ pub mod plot;
 mod queue;
 
 #[derive(Debug, Copy, Clone, PartialEq)]
-pub struct BvhNode {
+struct BvhNode {
     aabb: Aabb, // f32 * 6 = 24 bytes
 
     // if positive then it is an internal node; if negative then it is a leaf node
@@ -68,6 +68,14 @@ impl<T> Default for Bvh<T> {
             elements: Vec::new(),
             root: None,
         }
+    }
+}
+
+impl<T> Bvh<T> {
+    pub fn clear(&mut self) {
+        self.nodes.clear();
+        self.elements.clear();
+        self.root = None;
     }
 }
 

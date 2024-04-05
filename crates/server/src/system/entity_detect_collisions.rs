@@ -25,12 +25,12 @@ pub fn entity_detect_collisions(
             id,
         };
 
-        let collisions = entity_bounding_boxes.get_collisions(&context, &poses_fetcher);
+        entity_bounding_boxes.get_collisions(&context, |collision| {
+            if collision.id == id {
+                return;
+            }
 
-        for (_, other_pose) in collisions {
-            // safety: this is safe because we are doing this to one entity at a time so there
-            // is never a case where we are borrowing the same entity twice
-            unsafe { pose.apply_entity_collision(&other_pose, reaction) }
-        }
+            unsafe { pose.apply_entity_collision(&collision.aabb, reaction) };
+        });
     });
 }

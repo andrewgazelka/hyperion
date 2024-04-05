@@ -1,14 +1,16 @@
+use bvh::aabb::Aabb;
+
 use crate::{EntityReaction, FullEntityPose};
 
 impl FullEntityPose {
     /// # Safety
     /// This is only safe is this is not done in tandem with another `EntityReaction`
     // #[instrument(skip_all)]
-    pub unsafe fn apply_entity_collision(&self, other: &Self, reaction: &EntityReaction) {
-        const MULT_FACTOR: f32 = 2.0;
+    pub unsafe fn apply_entity_collision(&self, other: &Aabb, reaction: &EntityReaction) {
+        const MULT_FACTOR: f32 = 1.0;
 
-        let dx = other.position.x - self.position.x;
-        let dz = other.position.z - self.position.z;
+        let dx = other.mid().x - self.position.x;
+        let dz = other.mid().z - self.position.z;
 
         let largest_distance = dx.abs().max(dz.abs());
 
