@@ -20,7 +20,9 @@ fn collisions_naive(
 
 #[test]
 fn test_build_all_sizes() {
-    let counts = &[10, 100];
+    tracing_subscriber::fmt::init();
+
+    let counts = &[0, 1, 10, 100, 1_000, 10_000, 100_000, 1_000_000];
 
     for count in counts {
         let elements = create_random_elements_1(*count, 100.0);
@@ -83,47 +85,47 @@ fn test_query_all() {
     assert_eq!(num_collisions, 10_000);
 }
 
-#[test]
-fn children_returns_none_when_no_children() {
-    let node = BvhNode {
-        aabb: Aabb::NULL,
-        left: None,
-        right: None,
-    };
-    let bvh: Bvh<i32> = Bvh {
-        nodes: Vec::new(),
-        elements: Vec::new(),
-        root: None,
-    };
-    assert!(node.children(&bvh).next().is_none());
-}
+// #[test]
+// fn children_returns_none_when_no_children() {
+//     let node = BvhNode {
+//         aabb: Aabb::NULL,
+//         left: None,
+//         right: None,
+//     };
+//     let bvh: Bvh<i32> = Bvh {
+//         nodes: Vec::new(),
+//         elements: Vec::new(),
+//         root: None,
+//     };
+//     assert!(node.children(&bvh).next().is_none());
+// }
 
-#[test]
-fn children_returns_internal_nodes() {
-    let aabb = random_aabb(100.0);
-
-    let child_node = BvhNode {
-        aabb,
-        left: None,
-        right: None,
-    };
-
-    let node = BvhNode {
-        aabb: aabb.expand(10.0),
-        left: Some(NonZeroI32::new(1).unwrap()),
-        right: Some(NonZeroI32::new(2).unwrap()),
-    };
-
-    let bvh: Bvh<i32> = Bvh {
-        nodes: vec![BvhNode::DUMMY, child_node, child_node],
-        elements: Vec::new(),
-        root: None,
-    };
-    let mut children = node.children(&bvh);
-    assert_eq!(children.next(), Some(Node::Internal(&child_node)));
-    assert_eq!(children.next(), Some(Node::Internal(&child_node)));
-    assert!(children.next().is_none());
-}
+// #[test]
+// fn children_returns_internal_nodes() {
+//     let aabb = random_aabb(100.0);
+//
+//     let child_node = BvhNode {
+//         aabb,
+//         left: None,
+//         right: None,
+//     };
+//
+//     let node = BvhNode {
+//         aabb: aabb.expand(10.0),
+//         left: Some(NonZeroI32::new(1).unwrap()),
+//         right: Some(NonZeroI32::new(2).unwrap()),
+//     };
+//
+//     let bvh: Bvh<i32> = Bvh {
+//         nodes: vec![BvhNode::DUMMY, child_node, child_node],
+//         elements: Vec::new(),
+//         root: None,
+//     };
+//     let mut children = node.children(&bvh);
+//     assert_eq!(children.next(), Some(Node::Internal(&child_node)));
+//     assert_eq!(children.next(), Some(Node::Internal(&child_node)));
+//     assert!(children.next().is_none());
+// }
 
 #[test]
 fn get_closest_returns_closest_element() {

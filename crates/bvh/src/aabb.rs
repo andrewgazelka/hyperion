@@ -92,25 +92,6 @@ impl Aabb {
         }
     }
 
-    // #[must_use]
-    // pub fn collides(&self, other: &Self) -> bool {
-    //     let self_min = self.min.as_ref();
-    //     let self_max = self.max.as_ref();
-    //
-    //     let other_min = other.min.as_ref();
-    //     let other_max = other.max.as_ref();
-    //
-    //     // SIMD vectorized
-    //     let mut collide = 0b1_u8;
-    //
-    //     for i in 0..3 {
-    //         collide &= u8::from(self_min[i] <= other_max[i]);
-    //         collide &= u8::from(self_max[i] >= other_min[i]);
-    //     }
-    //
-    //     collide == 1
-    // }
-
     pub fn collides(&self, other: &Self) -> bool {
         self.min.x <= other.max.x
             && self.max.x >= other.min.x

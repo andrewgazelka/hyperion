@@ -16,8 +16,7 @@ impl<T: HasAabb + Copy> Bvh<T> {
         let root_area = BitMapBackend::new(filename, (1000, 1000)).into_drawing_area();
         root_area.fill(&BLACK)?;
 
-        let root = self.root();
-        let node = root.unwrap();
+        let node = self.root();
 
         let Node::Internal(internal) = node else {
             panic!("Root node is not internal")
@@ -31,14 +30,10 @@ impl<T: HasAabb + Copy> Bvh<T> {
         let aabb = internal.aabb;
 
         let mut chart = ChartBuilder::on(&root_area)
-            // .caption("BVH", ("Arial", 50).into_font())
-            // .margin(5)
-            // .x_label_area_size(30)
-            // .y_label_area_size(30)
             .build_cartesian_2d(aabb.min.x..aabb.max.x, aabb.min.y..aabb.max.y)?;
 
         // chart.configure_mesh().gr.draw()?;
-        self.draw_node(&mut chart, root)?;
+        self.draw_node(&mut chart, Some(node))?;
 
         Ok(())
     }

@@ -4,19 +4,21 @@
 
 // https://www.haroldserrano.com/blog/visualizing-the-boundary-volume-hierarchy-collision-algorithm
 
-use std::{cmp::Reverse, collections::BinaryHeap, fmt::Debug, num::NonZeroI32};
+use std::{
+    cmp::Reverse,
+    collections::BinaryHeap,
+    fmt::{Debug, Formatter},
+};
 
 use arrayvec::ArrayVec;
 use glam::Vec3;
 
-use crate::{aabb::Aabb, queue::Queue};
+use crate::aabb::Aabb;
 
-const MAX_ELEMENTS_PER_LEAF: usize = 8;
+const MAX_ELEMENTS_PER_LEAF: usize = 16;
 
 pub mod aabb;
 pub mod plot;
-
-mod queue;
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 struct BvhNode {
@@ -24,17 +26,14 @@ struct BvhNode {
 
     // if positive then it is an internal node; if negative then it is a leaf node
     // TODO: REMOVE REMOVE REMOVE OPTION IT CAN PANIC AND GET MAX PROBS
-    left: Option<NonZeroI32>,
-    right: Option<NonZeroI32>,
+    left: i32,
+    right: i32,
 }
 
 impl BvhNode {
     fn create_leaf(aabb: Aabb, idx_left: usize, len: usize) -> Self {
         let left = isize::try_from(idx_left).expect("failed to convert index");
         let right = isize::try_from(len).expect("failed to convert index");
-
-        // large number
-        debug_assert!(left < 999999);
 
         let left = left.checked_neg().expect("failed to negate index");
         // let right = right.checked_neg().expect("failed to negate index");
@@ -44,38 +43,29 @@ impl BvhNode {
         // so it is not 0
         let left = left - 1;
 
-        let left = NonZeroI32::new(left).expect("failed to create non-max index");
-        let right = NonZeroI32::new(right).expect("failed to create non-max index");
-
-        Self {
-            aabb,
-            left: Some(left),
-            right: Some(right),
-        }
+        Self { aabb, left, right }
     }
 }
 
 pub struct Bvh<T> {
     nodes: Vec<BvhNode>,
     elements: Vec<T>,
-    root: Option<NonZeroI32>,
+    root: i32,
 }
 
 impl<T> Default for Bvh<T> {
     fn default() -> Self {
         Self {
-            nodes: Vec::new(),
+            nodes: vec![BvhNode::DUMMY],
             elements: Vec::new(),
-            root: None,
+            root: 0,
         }
     }
 }
 
 impl<T> Bvh<T> {
     pub fn clear(&mut self) {
-        self.nodes.clear();
-        self.elements.clear();
-        self.root = None;
+        *self = Self::default();
     }
 }
 
@@ -90,44 +80,60 @@ impl<T: Debug> Debug for Bvh<T> {
 }
 
 struct BvhBuild<T> {
-    nodes: Queue<BvhNode>,
-    start_slice_pointer: *const T,
+    start_elements_ptr: *const T,
+    start_nodes_ptr: *const BvhNode,
+}
+
+impl<T> Debug for BvhBuild<T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("BvhBuild")
+            .field("start_elements_ptr", &self.start_elements_ptr)
+            .field("start_nodes_ptr", &self.start_nodes_ptr)
+            .finish()
+    }
 }
 
 unsafe impl<T: Send> Send for BvhBuild<T> {}
 unsafe impl<T: Sync> Sync for BvhBuild<T> {}
 
+// get number of threads that is pow of 2
+fn thread_count_pow2() -> usize {
+    let max_threads_tentative = rayon::current_num_threads();
+    // let max
+
+    // does not make sense to not have a power of two
+    let mut max_threads = max_threads_tentative.next_power_of_two();
+
+    if max_threads != max_threads_tentative {
+        max_threads >>= 1;
+    }
+
+    max_threads
+}
+
 impl<T: HasAabb + Send + Copy + Sync + Debug> Bvh<T> {
     pub fn build<H: Heuristic>(mut elements: Vec<T>) -> Self {
+        let max_threads = thread_count_pow2();
+
         let len = elements.len();
 
-        // 1.7 works too, 2.0 is upper bound ... 1.8 is probably best
-        let cap = ((len / MAX_ELEMENTS_PER_LEAF) as f64 * 4.0) as usize;
-        let cap = cap.max(16);
+        // // 1.7 works too, 2.0 is upper bound ... 1.8 is probably best
+        let capacity = ((len / MAX_ELEMENTS_PER_LEAF) as f64 * 8.0) as usize;
+        let capacity = capacity.max(16);
 
-        // let elems = Queue::new(cap);
-        let nodes = Queue::new(cap);
-
-        // elems.push(ArrayVec::new());
-        nodes.push(BvhNode::DUMMY);
-
-        // // dummy so we never get 0 index
-        // // todo: could we use negative pointer? don't think this is worth it though
-        // // and think the way allocations work there are problems (pointers aren't really
-        // // simple like many think they are)
-
-        // todo: this is OFTEN UB... how to fix?
-        let ptr = elements.as_ptr();
+        let mut nodes = vec![BvhNode::DUMMY; capacity];
 
         let bvh = BvhBuild {
-            nodes,
-            start_slice_pointer: ptr,
+            start_elements_ptr: elements.as_ptr(),
+            start_nodes_ptr: nodes.as_ptr(),
         };
 
-        let root = BvhNode::build_in::<T, H>(&bvh, &mut elements);
+        let nodes_slice = &mut nodes[1..];
+
+        let (root, _) = BvhNode::build_in(&bvh, &mut elements, max_threads, 0, nodes_slice);
 
         Self {
-            nodes: bvh.nodes.into_inner(),
+            nodes,
             elements,
             root,
         }
@@ -162,7 +168,7 @@ impl<T: HasAabb + Send + Copy + Sync + Debug> Bvh<T> {
         let mut min_dist2 = f32::MAX;
         let mut min_node = None;
 
-        let on = self.root()?;
+        let on = self.root();
 
         let on = match on {
             Node::Internal(internal) => internal,
@@ -232,16 +238,13 @@ impl<T: HasAabb + Send + Copy + Sync + Debug> Bvh<T> {
 }
 
 impl<T> Bvh<T> {
-    fn root(&self) -> Option<Node<T>> {
-        self.root.map(|root| {
-            let root = root.get();
+    fn root(&self) -> Node<T> {
+        let root = self.root;
+        if root < 0 {
+            return Node::Leaf(&self.elements[..]);
+        }
 
-            if root < 0 {
-                return Node::Leaf(&self.elements[..]);
-            }
-
-            Node::Internal(&self.nodes[root as usize])
-        })
+        Node::Internal(&self.nodes[root as usize])
     }
 }
 
@@ -269,11 +272,6 @@ impl Heuristic for TrivialHeuristic {
     }
 }
 
-// // input: sorted f64
-fn find_split<T: HasAabb, H: Heuristic>(elements: &[T]) -> usize {
-    H::heuristic(elements)
-}
-
 fn sort_by_largest_axis<T: HasAabb>(elements: &mut [T], aabb: &Aabb) -> u8 {
     let lens = aabb.lens();
     let largest = lens.x.max(lens.y).max(lens.z);
@@ -297,7 +295,7 @@ fn sort_by_largest_axis<T: HasAabb>(elements: &mut [T], aabb: &Aabb) -> u8 {
         let a = a.aabb().min.as_ref()[key as usize];
         let b = b.aabb().min.as_ref()[key as usize];
 
-        a.partial_cmp(&b).unwrap()
+        unsafe { a.partial_cmp(&b).unwrap_unchecked() }
     });
 
     key
@@ -312,13 +310,12 @@ enum Node<'a, T> {
 impl BvhNode {
     pub const DUMMY: Self = Self {
         aabb: Aabb::NULL,
-        left: None,
-        right: None,
+        left: 0,
+        right: 0,
     };
 
     fn left<'a, T>(&self, root: &'a Bvh<T>) -> Option<&'a Self> {
-        let left = self.left?;
-        let left = left.get();
+        let left = self.left;
 
         if left < 0 {
             return None;
@@ -333,7 +330,7 @@ impl BvhNode {
         mut process_children: impl FnMut(&'a Self),
         mut process_leaf: impl FnMut(&'a [T]),
     ) {
-        let left_idx = unsafe { self.left.unwrap_unchecked().get() };
+        let left_idx = self.left;
 
         if left_idx < 0 {
             let start_idx = -left_idx - 1;
@@ -341,13 +338,13 @@ impl BvhNode {
 
             let start_idx = start_idx as usize;
 
-            let len = unsafe { self.right.unwrap_unchecked().get() } as usize;
+            let len = self.right;
 
-            let elems = &root.elements[start_idx..start_idx + len];
+            let elems = &root.elements[start_idx..start_idx + len as usize];
             process_leaf(elems);
         } else {
             let left = unsafe { self.left(root).unwrap_unchecked() };
-            let right = unsafe { self.right(root).unwrap_unchecked() };
+            let right = unsafe { self.right(root) };
 
             process_children(left);
             process_children(right);
@@ -360,23 +357,21 @@ impl BvhNode {
     }
 
     fn children_vec<'a, T>(&'a self, root: &'a Bvh<T>) -> ArrayVec<Node<T>, 2> {
-        if let Some(left) = self.left {
-            let left = left.get();
+        let left = self.left;
 
-            // leaf
-            if left < 0 {
-                // println!("left: {}", left);
-                let start_idx = left.checked_neg().expect("failed to negate index") - 1;
+        // leaf
+        if left < 0 {
+            // println!("left: {}", left);
+            let start_idx = left.checked_neg().expect("failed to negate index") - 1;
 
-                let start_idx = usize::try_from(start_idx).expect("failed to convert index");
+            let start_idx = usize::try_from(start_idx).expect("failed to convert index");
 
-                let len = self.right.unwrap().get() as usize;
+            let len = self.right as usize;
 
-                let elems = &root.elements[start_idx..start_idx + len];
-                let mut vec = ArrayVec::new();
-                vec.push(Node::Leaf(elems));
-                return vec;
-            }
+            let elems = &root.elements[start_idx..start_idx + len];
+            let mut vec = ArrayVec::new();
+            vec.push(Node::Leaf(elems));
+            return vec;
         }
 
         let mut vec = ArrayVec::new();
@@ -384,69 +379,130 @@ impl BvhNode {
             vec.push(Node::Internal(left));
         }
 
-        if let Some(right) = self.right(root) {
-            vec.push(Node::Internal(right));
-        }
+        let right = unsafe { self.right(root) };
+        vec.push(Node::Internal(right));
 
         vec
     }
 
-    fn right<'a, T>(&self, root: &'a Bvh<T>) -> Option<&'a Self> {
-        let right = self.right?;
-        let right = right.get();
+    /// Only safe to do if already checked if left exists. If left exists then right does as well.
+    unsafe fn right<'a, T>(&self, root: &'a Bvh<T>) -> &'a Self {
+        let right = self.right;
 
-        if right < 0 {
-            return None;
-        }
+        debug_assert!(right > 0);
 
-        root.nodes.get(right as usize)
+        &root.nodes[right as usize]
     }
 
     #[allow(clippy::float_cmp)]
-    fn build_in<T: HasAabb + Send + Copy + Sync + Debug, H: Heuristic>(
+    fn build_in<T>(
         root: &BvhBuild<T>,
         elements: &mut [T],
-    ) -> Option<NonZeroI32> {
-        if elements.is_empty() {
-            return None;
-        }
-
+        max_threads: usize,
+        nodes_idx: usize,
+        nodes: &mut [Self],
+    ) -> (i32, usize)
+    where
+        T: HasAabb + Send + Copy + Sync + Debug,
+    {
         if elements.len() <= MAX_ELEMENTS_PER_LEAF {
             // flush
-            let idx_start = unsafe { elements.as_ptr().offset_from(root.start_slice_pointer) };
+            let idx_start = unsafe { elements.as_ptr().offset_from(root.start_elements_ptr) };
 
             let node =
                 Self::create_leaf(Aabb::from(&*elements), idx_start as usize, elements.len());
 
-            let idx = root.nodes.push(node);
+            let set = &mut nodes[nodes_idx..=nodes_idx];
+            set[0] = node;
+            let idx = unsafe { set.as_ptr().offset_from(root.start_nodes_ptr) };
+
             let idx = i32::try_from(idx).expect("failed to convert index");
 
             debug_assert!(idx > 0);
 
-            return Some(NonZeroI32::new(idx).expect("failed to create non-max index"));
+            return (idx, nodes_idx + 1);
         }
 
         let aabb = Aabb::from(&*elements);
 
         sort_by_largest_axis(elements, &aabb);
 
-        let split_idx = find_split::<T, H>(elements);
+        let element_split_idx = elements.len() / 2;
 
-        let (left, right) = elements.split_at_mut(split_idx);
+        let (left_elems, right_elems) = elements.split_at_mut(element_split_idx);
 
-        let (left, right) = rayon::join(
-            || Self::build_in::<T, H>(root, left),
-            || Self::build_in::<T, H>(root, right),
-        );
+        debug_assert!(max_threads != 0);
+
+        let original_node_idx = nodes_idx;
+
+        let (left, right, nodes_idx, to_set) = if max_threads == 1 {
+            // let idx = unsafe { nodes.as_ptr().offset_from(root.start_nodes_ptr) } + nodes_idx as
+            // isize;
+
+            // trace!("pending add internal: {:03}", nodes_idx);
+
+            // println!("will add internal: {:03}", original_node_idx);
+
+            let start_idx = nodes_idx;
+            let (left, nodes_idx) =
+                Self::build_in(root, left_elems, max_threads, nodes_idx + 1, nodes);
+
+            // let nodes_idx = nodes_idx;
+            // trace!("boop add internal: {:03}", nodes_idx);
+
+            // println!("node_idx now: {:03}", nodes_idx + 1);
+
+            let (right, nodes_idx) =
+                Self::build_in(root, right_elems, max_threads, nodes_idx, nodes);
+            let end_idx = nodes_idx;
+
+            // println!("end_idx: {}", end_idx);
+
+            debug_assert!(start_idx != end_idx);
+
+            (
+                left,
+                right,
+                nodes_idx,
+                &mut nodes[original_node_idx..=original_node_idx],
+            )
+        } else {
+            let max_threads = max_threads >> 1;
+
+            let (to_set, nodes) = nodes.split_at_mut(1);
+
+            let node_split_idx = nodes.len() / 2;
+            // todo: remove fastrand
+            let (left_nodes, right_nodes) = match true {
+                true => {
+                    let (left, right) = nodes.split_at_mut(node_split_idx);
+                    (left, right)
+                }
+                false => {
+                    let (right, left) = nodes.split_at_mut(node_split_idx);
+                    (left, right)
+                }
+            };
+
+            let (left, right) = rayon::join(
+                || Self::build_in(root, left_elems, max_threads, 0, left_nodes),
+                || Self::build_in(root, right_elems, max_threads, 0, right_nodes),
+            );
+
+            (left.0, right.0, 0, to_set)
+        };
 
         let node = Self { aabb, left, right };
 
-        let idx = root.nodes.push(node);
+        to_set[0] = node;
+        let idx = unsafe { to_set.as_ptr().offset_from(root.start_nodes_ptr) };
         let idx = i32::try_from(idx).expect("failed to convert index");
+
+        // trace!("internal nodes_idx {:03}", original_node_idx);
 
         debug_assert!(idx > 0);
 
-        Some(NonZeroI32::new(idx).expect("failed to create non-max index"))
+        (idx, nodes_idx + 1)
     }
 }
 
@@ -460,9 +516,7 @@ where
     T: HasAabb,
 {
     fn consume(bvh: &'a Bvh<T>, target: Aabb, process: &mut impl FnMut(&T)) {
-        let Some(root) = bvh.root() else {
-            return;
-        };
+        let root = bvh.root();
 
         let root = match root {
             Node::Internal(internal) => internal,
