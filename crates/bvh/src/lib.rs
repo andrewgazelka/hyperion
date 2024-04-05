@@ -15,7 +15,8 @@ use glam::Vec3;
 
 use crate::aabb::Aabb;
 
-const MAX_ELEMENTS_PER_LEAF: usize = 16;
+const ELEMENTS_TO_ACTIVATE_LEAF: usize = 16;
+const VOLUME_TO_ACTIVATE_LEAF: f32 = 5.0;
 
 pub mod aabb;
 
@@ -124,7 +125,7 @@ impl<T: HasAabb + Send + Copy + Sync + Debug> Bvh<T> {
         let len = elements.len();
 
         // // 1.7 works too, 2.0 is upper bound ... 1.8 is probably best
-        let capacity = ((len / MAX_ELEMENTS_PER_LEAF) as f64 * 8.0) as usize;
+        let capacity = ((len / ELEMENTS_TO_ACTIVATE_LEAF) as f64 * 8.0) as usize;
         let capacity = capacity.max(16);
 
         let mut nodes = vec![BvhNode::DUMMY; capacity];
@@ -411,12 +412,14 @@ impl BvhNode {
     where
         T: HasAabb + Send + Copy + Sync + Debug,
     {
-        if elements.len() <= MAX_ELEMENTS_PER_LEAF {
+        let aabb = Aabb::from(&*elements);
+        let volume = aabb.volume();
+
+        if elements.len() <= ELEMENTS_TO_ACTIVATE_LEAF || volume <= VOLUME_TO_ACTIVATE_LEAF {
             // flush
             let idx_start = unsafe { elements.as_ptr().offset_from(root.start_elements_ptr) };
 
-            let node =
-                Self::create_leaf(Aabb::from(&*elements), idx_start as usize, elements.len());
+            let node = Self::create_leaf(aabb, idx_start as usize, elements.len());
 
             let set = &mut nodes[nodes_idx..=nodes_idx];
             set[0] = node;
@@ -428,8 +431,6 @@ impl BvhNode {
 
             return (idx, nodes_idx + 1);
         }
-
-        let aabb = Aabb::from(&*elements);
 
         sort_by_largest_axis(elements, &aabb);
 
