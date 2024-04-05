@@ -1,20 +1,11 @@
 use std::iter::Zip;
 
 use bvh::{aabb::Aabb, HasAabb};
-use evenio::{component::Component, entity::EntityId, fetch::Fetcher};
-use fnv::FnvHashMap;
+use evenio::{component::Component, entity::EntityId};
 use smallvec::SmallVec;
-use valence_protocol::math::{IVec2, Vec2, Vec3};
+use valence_protocol::math::Vec3;
 
-use crate::{EntityReaction, FullEntityPose};
-
-type Storage = SmallVec<EntityId, 4>;
-
-#[derive(Hash, Eq, PartialEq, Copy, Clone, Debug)]
-struct Index2D {
-    x: i32,
-    z: i32,
-}
+use crate::FullEntityPose;
 
 #[derive(Copy, Clone, Debug)]
 pub struct Stored {
@@ -71,25 +62,6 @@ impl BoundingBox {
         Self { min, max }
     }
 
-    fn collides(&self, other: Self) -> bool {
-        let self_min = self.min.as_ref();
-        let self_max = self.max.as_ref();
-
-        let other_min = other.min.as_ref();
-        let other_max = other.max.as_ref();
-
-        // SIMD vectorized
-
-        let mut collide = 0b1_u8;
-
-        for i in 0..3 {
-            collide &= u8::from(self_min[i] <= other_max[i]);
-            collide &= u8::from(self_max[i] >= other_min[i]);
-        }
-
-        collide == 1
-    }
-
     #[must_use]
     pub fn move_by(&self, offset: Vec3) -> Self {
         Self {
@@ -98,15 +70,6 @@ impl BoundingBox {
         }
     }
 }
-
-const fn idx(location: IVec2) -> Index2D {
-    Index2D {
-        x: location.x,
-        z: location.y,
-    }
-}
-
-const EMPTY_STORAGE: Storage = SmallVec::new();
 
 pub struct Collisions {
     pub ids: SmallVec<EntityId, 4>,

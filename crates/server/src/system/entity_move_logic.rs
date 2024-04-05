@@ -63,7 +63,7 @@ pub fn entity_move_logic(
         };
 
         let dif_mid = target.aabb.mid() - current;
-        let dif_height = target.aabb.min.y - current.y;
+        // let dif_height = target.aabb.min.y - current.y;
 
         let dif2d = Vec2::new(dif_mid.x, dif_mid.z);
 

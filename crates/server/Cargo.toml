@@ -45,7 +45,6 @@ base64 = "0.22.0"
 uuid = "1.8.0"
 rand_distr = "0.4.3"
 smallvec.workspace = true
-fnv = "1.0.7"
 rayon = "1.10.0"
 tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
 tracing-flame = "0.2.0"
