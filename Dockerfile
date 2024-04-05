@@ -59,23 +59,24 @@ RUN --mount=type=cache,target=/app/target \
     cp target/debug/server /build/server && \
     cp target/cargo-timings/cargo-timing.html /build/cargo-timing.html
 
-FROM rust as cli
+# FROM rust as cli
 
-RUN apt-get update && apt-get install -y linux-perf
+# RUN apt-get update && apt-get install -y linux-perf
 
-RUN cargo install flamegraph
+# RUN cargo install flamegraph
 
-COPY --from=release /build/server /
+# COPY --from=release /build/server /
 
-EXPOSE 25565
+# EXPOSE 25565
 
-ENTRYPOINT ["bash"]
+# ENTRYPOINT ["bash"]
 
 FROM scratch as debug-bin
-COPY --from=debug /build/server /
-ENTRYPOINT ["/server"]
+COPY --from=debug /build/server /hyperion
+ENTRYPOINT ["/hyperion"]
 
 
 FROM scratch as release-bin
-COPY --from=release /build/server /
-ENTRYPOINT ["/server"]
+COPY --from=release /build/server /hyperion
+ENTRYPOINT ["/hyperion"]
+

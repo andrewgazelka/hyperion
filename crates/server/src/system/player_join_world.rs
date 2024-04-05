@@ -412,20 +412,7 @@ fn ground_section() -> Vec<u8> {
 
 fn inner(encoder: &mut PacketEncoder) -> anyhow::Result<()> {
     send_game_join_packet(encoder)?;
-
-    encoder.append_packet(&play::PlayerSpawnPositionS2c {
-        position: BlockPos::default(),
-        angle: 3.0,
-    })?;
-
-    encoder.append_packet(&play::PlayerPositionLookS2c {
-        position: DVec3::new(0.0, 30.0, 0.0),
-        yaw: 0.0,
-        pitch: 0.0,
-        flags: PlayerPositionLookFlags::default(),
-        teleport_id: 1.into(),
-    })?;
-
+    
     encoder.append_packet(&play::ChunkRenderDistanceCenterS2c {
         chunk_x: 0.into(),
         chunk_z: 0.into(),
@@ -487,6 +474,19 @@ fn inner(encoder: &mut PacketEncoder) -> anyhow::Result<()> {
     }
 
     send_commands(encoder)?;
+
+    encoder.append_packet(&play::PlayerSpawnPositionS2c {
+        position: BlockPos::default(),
+        angle: 3.0,
+    })?;
+
+    encoder.append_packet(&play::PlayerPositionLookS2c {
+        position: DVec3::new(0.0, 30.0, 0.0),
+        yaw: 0.0,
+        pitch: 0.0,
+        flags: PlayerPositionLookFlags::default(),
+        teleport_id: 1.into(),
+    })?;
 
     if let Some(diameter) = config::CONFIG.border_diameter {
         debug!("Setting world border to diameter {}", diameter);

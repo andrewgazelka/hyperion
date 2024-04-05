@@ -28,6 +28,27 @@ jobs:
       - name: Run cargo machete
         run: |
           cargo machete
+    docker:
+      runs-on: ubuntu-latest
+      steps:
+        # - name: Set up QEMU
+        #   uses: docker/setup-qemu-action@v3
+
+        - name: Set up Docker Buildx
+          uses: docker/setup-buildx-action@v3
+
+        - name: Build and push
+          uses: docker/build-push-action@v5
+          with:
+            push: true
+            tags: user/app:latest
+            outputs: type=local,dest=/tmp/server
+
+        - name: Upload Docker image as artifact
+          uses: actions/upload-artifact@v3
+          with:
+            name: server
+            path: /tmp/server
 
 #  test:
 #    runs-on: ubuntu-latest
