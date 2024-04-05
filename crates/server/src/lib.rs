@@ -9,12 +9,8 @@ extern crate core;
 mod chunk;
 mod singleton;
 
-use std::{
-    cell::UnsafeCell,
-    collections::VecDeque,
-    sync::atomic::AtomicU32,
-    time::{Duration, Instant},
-};
+use std::{cell::UnsafeCell, collections::VecDeque, io, sync::atomic::AtomicU32, time::{Duration, Instant}};
+use std::io::Write;
 
 use anyhow::Context;
 use evenio::prelude::*;
@@ -251,7 +247,7 @@ impl Game {
 
         // aim for 20 ticks per second
         let now = Instant::now();
-
+        
         if time_for_20_tps < now {
             return None;
         }
@@ -279,12 +275,24 @@ impl Game {
         const MSPT_HISTORY_SIZE: usize = 100;
 
         let now = Instant::now();
-        self.last_ticks.push_back(now);
 
         // let mut tps = None;
         if self.last_ticks.len() > LAST_TICK_HISTORY_SIZE {
-            self.last_ticks.pop_front();
+            let last = self.last_ticks.back().unwrap();
+
+            let ms = last.elapsed().as_nanos() as f64 / 1_000_000.0;
+            if ms > 50.0 {
+                warn!("tick took too long: {ms}ms");
+            }
+            
+            let front = self.last_ticks.pop_front().unwrap();
+            
+            // let duration = front.elapsed();
+            
+            // println!("tps = {}", LAST_TICK_HISTORY_SIZE as f64 / duration.as_secs_f64());
         }
+        
+        self.last_ticks.push_back(now);
 
         while let Ok(connection) = self.incoming.try_recv() {
             let ClientConnection {
@@ -320,6 +328,17 @@ impl Game {
                       (~52 days)"
         )]
         let ms = now.elapsed().as_nanos() as f64 / 1_000_000.0;
+        
+        
+        // print!("ms = {ms}\n");
+        // flush
+        
+        io::stdout().flush().unwrap();
+        
+        
+        
+        
+        
         self.last_ms_per_tick.push_back(ms);
 
         if self.last_ms_per_tick.len() > MSPT_HISTORY_SIZE {

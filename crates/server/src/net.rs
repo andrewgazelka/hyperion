@@ -604,9 +604,12 @@ async fn run(tx: flume::Sender<ClientConnection>) {
 
     // accept incoming connections
     loop {
-        let Ok((stream, _)) = listener.accept().await else {
-            warn!("accept failed");
-            continue;
+        let stream = match listener.accept().await {
+            Ok((stream, _)) => stream,
+            Err(e) => {
+                warn!("accept failed: {e} ... {e:?}");
+                continue;
+            }
         };
 
         info!("accepted connection {id}");

@@ -24,6 +24,8 @@ pub fn tps_message(r: Receiver<StatsEvent>, mut players: Fetcher<(&mut Player, &
              {speed_mib:.2}MiB/s, {ping:.2}ms"
         );
 
+        UnixL
+
         // todo: handle error
         let _ = player.packets.writer.send_chat_message(&message);
     });
