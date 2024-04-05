@@ -5,20 +5,28 @@ use chunk::{
     chunk::{BiomeContainer, BlockStateContainer, SECTION_BLOCK_COUNT},
 };
 use evenio::prelude::*;
+use generator::EntityType;
 use itertools::Itertools;
 use tracing::{debug, info, instrument};
-use valence_protocol::{
-    math::DVec3,
-    nbt::{compound, List},
-    packets::{play, play::player_position_look_s2c::PlayerPositionLookFlags},
-    BlockPos, BlockState, ChunkPos, Encode, FixedArray, VarInt,
-};
+use valence_protocol::{math::DVec3, nbt::{compound, List}, packets::{
+    play,
+    play::{
+        player_list_s2c::PlayerListActions, player_position_look_s2c::PlayerPositionLookFlags,
+    },
+}, profile::Property, text::IntoText, BlockPos, BlockState, ByteAngle, ChunkPos, Encode, FixedArray, VarInt, Velocity, GameMode};
 use valence_registry::{biome::BiomeId, RegistryIdx};
 
 use crate::{
-    bits::BitStorage, chunk::heightmap, config, net::Packets,
-    singleton::player_lookup::PlayerUuidLookup, system::init_entity::spawn_packet, FullEntityPose,
-    KickPlayer, MinecraftEntity, Player, PlayerJoinWorld, Uuid, SHARED,
+    bits::BitStorage,
+    chunk::heightmap,
+    config,
+    net::Packets,
+    singleton::{
+        encoder::{Encoder, PacketMetadata},
+        player_lookup::PlayerUuidLookup,
+    },
+    system::init_entity::spawn_packet,
+    FullEntityPose, KickPlayer, MinecraftEntity, Player, PlayerJoinWorld, Uuid, SHARED,
 };
 
 #[derive(Query, Debug)]
@@ -34,6 +42,7 @@ pub fn player_join_world(
     r: Receiver<PlayerJoinWorld, (EntityId, &mut Player, &Uuid)>,
     entities: Fetcher<EntityQuery>,
     lookup: Single<&mut PlayerUuidLookup>,
+    encoder: Single<&mut Encoder>,
     mut s: Sender<KickPlayer>,
 ) {
     let (id, player, uuid) = r.query;
@@ -47,7 +56,58 @@ pub fn player_join_world(
             target: id,
             reason: format!("Failed to join world: {e}"),
         });
+
+        return;
     }
+
+    let entity_id = VarInt(id.index().0 as i32);
+
+    let entries = &[play::player_list_s2c::PlayerListEntry {
+        player_uuid: uuid.0,
+        username: &player.name,
+        properties: Cow::Borrowed(&[]),
+        chat_data: None,
+        listed: true,
+        ping: 0,
+        game_mode: GameMode::Survival,
+        display_name: Some("Bot1".into_cow_text()),
+    }];
+
+    let info = play::PlayerListS2c {
+        actions: PlayerListActions::default().with_add_player(true),
+        entries: Cow::Borrowed(entries),
+    };
+
+    encoder
+        .0
+        .append_round_robin(&info, PacketMetadata::REQUIRED)
+        .unwrap();
+
+    let spawn_player = play::PlayerSpawnS2c {
+        entity_id,
+        player_uuid: uuid.0,
+        position: DVec3::new(0.0, 30.0, 0.0),
+        yaw: ByteAngle(0),
+        pitch: ByteAngle(0),
+    };
+
+    // let join_world = play::EntitySpawnS2c {
+    //     entity_id,
+    //     object_uuid: uuid.0,
+    //     kind: VarInt(EntityType::Player as i32),
+    //     position: DVec3::new(0.0, 30.0, 0.0),
+    //     pitch: ByteAngle(0),
+    //     yaw: ByteAngle(0),
+    //     head_yaw: ByteAngle(0),
+    //     data: VarInt::default(),
+    //     velocity: Velocity([0, 0, 0]),
+    // };
+
+    encoder
+        .0
+        .append_round_robin(&spawn_player, PacketMetadata::REQUIRED)
+        .unwrap();
+    // encoder.0.append_round_robin(&join_world, PacketMetadata::REQUIRED).unwrap();
 }
 
 fn write_block_states(states: &BlockStateContainer, writer: &mut impl Write) -> anyhow::Result<()> {

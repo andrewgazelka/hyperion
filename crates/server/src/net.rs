@@ -186,11 +186,11 @@ impl WriterComm {
             enable_respawn_screen: false,
             dimension_name: dimension_name.into(),
             hashed_seed: 0,
-            game_mode: GameMode::Creative,
+            game_mode: GameMode::Survival,
             is_flat: false,
             last_death_location: None,
             portal_cooldown: 60.into(),
-            previous_game_mode: OptGameMode(Some(GameMode::Creative)),
+            previous_game_mode: OptGameMode(Some(GameMode::Survival)),
             dimension_type_name: "minecraft:overworld".try_into()?,
             is_debug: false,
         };
@@ -410,13 +410,10 @@ impl Io {
         debug!("[[start login phase]]");
 
         // first
-        let LoginHelloC2s {
-            username,
-            profile_id,
-        } = self.recv_packet().await?;
+        let LoginHelloC2s { username, .. } = self.recv_packet().await?;
 
         // todo: use
-        let _profile_id = profile_id.context("missing profile id")?;
+        // let _profile_id = profile_id.context("missing profile id")?;
 
         let username: Box<str> = Box::from(username.0);
 
