@@ -402,17 +402,6 @@ impl Io {
 
                 trace!("got byte len: {len}");
 
-                let mut dec = PacketDecoder::new();
-
-                dec.queue_bytes(BytesMut::from(&*bytes));
-
-                // while let Some(frame) = dec.try_next_packet().unwrap() {
-                //     let id = frame.id;
-                //     let len = frame.body.len();
-                //
-                //     trace!("got pkt: {id} {len}");
-                // }
-
                 if let Err(e) = io_write.send_packet(bytes).await {
                     error!("Error sending packet: {e} ... {e:?}");
                     break;
@@ -532,6 +521,25 @@ async fn print_errors(future: impl core::future::Future<Output = anyhow::Result<
 
 pub static GLOBAL_C2S_PACKETS: spin::Mutex<Vec<UserPacketFrame>> = spin::Mutex::new(Vec::new());
 
+
+fn set_send_buffer_size(socket: &TcpStream, size: usize) -> Result<(), std::io::Error> {
+    let fd = socket.as_raw_fd();
+    let ret = unsafe {
+        libc::setsockopt(
+            fd,
+            libc::SOL_SOCKET,
+            libc::SO_SNDBUF,
+            &size as *const _ as *const libc::c_void,
+            std::mem::size_of_val(&size) as libc::socklen_t,
+        )
+    };
+    if ret == 0 {
+        Ok(())
+    } else {
+        Err(std::io::Error::last_os_error())
+    }
+}
+
 async fn run(tx: flume::Sender<ClientConnection>) {
     // start socket 25565
     // todo: remove unwrap
@@ -558,6 +566,8 @@ async fn run(tx: flume::Sender<ClientConnection>) {
                 continue;
             }
         };
+
+        set_send_buffer_size(&stream, 1024 * 1024).unwrap();
 
         info!("accepted connection {id}");
 
