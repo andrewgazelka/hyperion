@@ -50,7 +50,7 @@ pub fn broadcast_packets(
             // Max bytes that should be sent this tick
             // TODO: Determine max_bytes using the player's network speed, latency, and current
             // send window size
-            let max_bytes = 25_000; // 4 Mbit/s
+            let max_bytes = 100_000_000;
             let mut total_bytes_sent = 0;
 
             for packet in &buf.necessary_packets {
