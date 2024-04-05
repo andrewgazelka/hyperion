@@ -31,11 +31,11 @@ fn build<H: Heuristic>(b: Bencher, count: usize) {
 fn query<T: Heuristic>(b: Bencher, count: usize) {
     let elements = create_random_elements_1(count, 100.0);
     let bvh = Bvh::build::<T>(elements);
+    let elements = (0..count).map(|_| random_aabb(100.0)).collect::<Vec<_>>();
 
     b.counter(count).bench_local(|| {
-        for _ in 0..count {
-            let element = random_aabb(100.0);
-            bvh.get_collisions(element, |elem| {
+        for element in &elements {
+            bvh.get_collisions(*element, |elem| {
                 black_box(elem);
             });
         }
@@ -46,13 +46,37 @@ fn query<T: Heuristic>(b: Bencher, count: usize) {
     args = ENTITY_COUNTS,
     types = [TrivialHeuristic],
 )]
-fn query_par<T: Heuristic>(b: Bencher, count: usize) {
+fn query_par_sparse<T: Heuristic>(b: Bencher, count: usize) {
+    let elements = create_random_elements_1(100_000, 10_000.0);
+    let bvh = Bvh::build::<T>(elements);
+
+    let elements = (0..count)
+        .map(|_| random_aabb(10_000.0))
+        .collect::<Vec<_>>();
+
+    b.counter(count).bench_local(|| {
+        (0..count).into_par_iter().for_each(|i| {
+            let element = elements[i];
+            bvh.get_collisions(element, |elem| {
+                black_box(elem);
+            });
+        })
+    });
+}
+
+#[divan::bench(
+    args = ENTITY_COUNTS,
+types = [TrivialHeuristic],
+)]
+fn query_par_compact<T: Heuristic>(b: Bencher, count: usize) {
     let elements = create_random_elements_1(100_000, 100.0);
     let bvh = Bvh::build::<T>(elements);
 
+    let elements = (0..count).map(|_| random_aabb(100.0)).collect::<Vec<_>>();
+
     b.counter(count).bench_local(|| {
-        (0..count).into_par_iter().for_each(|_| {
-            let element = random_aabb(100.0);
+        (0..count).into_par_iter().for_each(|i| {
+            let element = elements[i];
             bvh.get_collisions(element, |elem| {
                 black_box(elem);
             });

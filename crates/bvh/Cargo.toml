@@ -37,7 +37,7 @@ name = "bvh"
 harness = false
 
 [[bench]]
-name = "build"
+name = "side_by_side"
 harness = false
 
 [lints.clippy]
