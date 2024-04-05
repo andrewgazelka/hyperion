@@ -96,7 +96,7 @@ impl EntityBoundingBoxes {
         self.query.clear();
     }
 
-    pub fn get_collisions(&self, current: &CollisionContext, process: impl FnMut(&Stored)) {
+    pub fn get_collisions(&self, current: &CollisionContext, process: impl FnMut(&Stored) -> bool) {
         let bounding = current.bounding.into();
 
         self.query.get_collisions(bounding, process);

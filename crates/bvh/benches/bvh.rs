@@ -37,6 +37,7 @@ fn query<T: Heuristic>(b: Bencher, count: usize) {
         for element in &elements {
             bvh.get_collisions(*element, |elem| {
                 black_box(elem);
+                true
             });
         }
     });
@@ -59,6 +60,7 @@ fn query_par_sparse<T: Heuristic>(b: Bencher, count: usize) {
             let element = elements[i];
             bvh.get_collisions(element, |elem| {
                 black_box(elem);
+                true
             });
         })
     });
@@ -79,6 +81,7 @@ fn query_par_compact<T: Heuristic>(b: Bencher, count: usize) {
             let element = elements[i];
             bvh.get_collisions(element, |elem| {
                 black_box(elem);
+                true
             });
         })
     });

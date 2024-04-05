@@ -52,6 +52,7 @@ fn test_query_one() {
         num_collisions += 1;
         assert!(elem.collides(&element));
         bvh_collisions.push(CheckableAabb::try_from(*elem).unwrap());
+        true
     });
 
     for elem in &naive_collisions {
@@ -75,6 +76,7 @@ fn test_query_all() {
 
     bvh.get_collisions(Aabb::EVERYTHING, |_| {
         num_collisions += 1;
+        true
     });
 
     assert_eq!(num_collisions, 10_000);

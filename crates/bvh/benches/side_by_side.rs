@@ -39,6 +39,7 @@ fn build_benchmarks() -> impl IntoBenchmarks {
     let sparse_tree = build_tree(sparse_build_elements.clone());
     let dense_tree = build_tree(dense_build_elements.clone());
     let very_dense_tree = build_tree(very_dense_build_elements.clone());
+    let very_dense_tree2 = very_dense_tree.clone();
 
     let sparse_aabbs = (0..COUNT)
         .map(|_| random_aabb(10_000.0))
@@ -47,6 +48,7 @@ fn build_benchmarks() -> impl IntoBenchmarks {
     let dense_aabbs = (0..COUNT).map(|_| random_aabb(100.0)).collect::<Vec<_>>();
 
     let very_dense_aabbs = (0..COUNT).map(|_| random_aabb(1.0)).collect::<Vec<_>>();
+    let very_dense_aabbs2 = very_dense_aabbs.clone();
 
     [
         benchmark_fn("build_sparse_bvh", move || {
@@ -62,6 +64,7 @@ fn build_benchmarks() -> impl IntoBenchmarks {
             (0..COUNT).into_par_iter().for_each(|i| {
                 sparse_tree.get_collisions(sparse_aabbs[i], |elem| {
                     black_box(elem);
+                    true
                 });
             });
         }),
@@ -69,13 +72,32 @@ fn build_benchmarks() -> impl IntoBenchmarks {
             (0..COUNT).into_par_iter().for_each(|i| {
                 dense_tree.get_collisions(dense_aabbs[i], |elem| {
                     black_box(elem);
+                    true
                 });
             });
         }),
         benchmark_fn("collisions_very_dense_bvh", move || {
             (0..COUNT).into_par_iter().for_each(|i| {
+                let mut collision_count = 0;
+
                 very_dense_tree.get_collisions(very_dense_aabbs[i], |elem| {
                     black_box(elem);
+                    collision_count += 1;
+
+                    true
+                });
+            });
+        }),
+        benchmark_fn("collisions_very_dense_bvh_limited", move || {
+            let max_collisions = 10;
+            (0..COUNT).into_par_iter().for_each(|i| {
+                let mut collision_count = 0;
+
+                very_dense_tree2.get_collisions(very_dense_aabbs2[i], |elem| {
+                    black_box(elem);
+                    collision_count += 1;
+
+                    collision_count < max_collisions
                 });
             });
         }),

@@ -52,6 +52,7 @@ impl BvhNode {
     }
 }
 
+#[derive(Clone)]
 pub struct Bvh<T> {
     nodes: Vec<BvhNode>,
     elements: Vec<T>,
@@ -237,7 +238,7 @@ impl<T: HasAabb + Send + Copy + Sync + Debug> Bvh<T> {
         min_node.map(|elem| (elem, min_dist2))
     }
 
-    pub fn get_collisions(&self, target: Aabb, mut process: impl FnMut(&T)) {
+    pub fn get_collisions(&self, target: Aabb, mut process: impl FnMut(&T) -> bool) {
         BvhIter::consume(self, target, &mut process);
     }
 }
@@ -520,15 +521,15 @@ impl<'a, T> BvhIter<'a, T>
 where
     T: HasAabb,
 {
-    fn consume(bvh: &'a Bvh<T>, target: Aabb, process: &mut impl FnMut(&T)) {
+    fn consume(bvh: &'a Bvh<T>, target: Aabb, process: &mut impl FnMut(&T) -> bool) {
         let root = bvh.root();
 
         let root = match root {
             Node::Internal(internal) => internal,
             Node::Leaf(leaf) => {
                 for elem in leaf.iter() {
-                    if elem.aabb().collides(&target) {
-                        process(elem);
+                    if elem.aabb().collides(&target) && !process(elem) {
+                        return;
                     }
                 }
                 return;
@@ -549,7 +550,7 @@ where
         iter.process(root, process);
     }
 
-    pub fn process(&mut self, on: &BvhNode, process: &mut impl FnMut(&T)) {
+    pub fn process(&mut self, on: &BvhNode, process: &mut impl FnMut(&T) -> bool) {
         let mut stack: ArrayVec<&BvhNode, 64> = ArrayVec::new();
         stack.push(on);
 
@@ -563,8 +564,8 @@ where
                 },
                 |elements| {
                     for elem in elements {
-                        if elem.aabb().collides(&self.target) {
-                            process(elem);
+                        if elem.aabb().collides(&self.target) && !process(elem) {
+                            return;
                         }
                     }
                 },
