@@ -6,6 +6,10 @@ authors = ["Andrew Gazelka <andrew.gazelka@gmail.com>"]
 readme = "README.md"
 publish = false
 
+[features]
+plot = ["dep:plotters", "dep:plotters-bitmap"]
+default = []
+
 [dependencies]
 fastrand = "2.0.2"
 glam.workspace = true
@@ -13,10 +17,8 @@ rayon = "1.10.0"
 arrayvec = "0.7.4"
 ordered-float = "4.2.0"
 itertools = "0.12.1"
-plotters = { version = "0.3.5", default-features = false, features = ["plotters-bitmap", "image"] }
-plotters-bitmap = "0.3.3"
-debug_print = "1.0.0"
-tracing = { version = "0.1.40"  }
+plotters = { version = "0.3.5", default-features = false, features = ["plotters-bitmap", "image"], optional = true}
+plotters-bitmap = { version = "0.3.3" , optional = true }
 
 [dev-dependencies]
 divan = "0.1.14"

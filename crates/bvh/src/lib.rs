@@ -18,6 +18,8 @@ use crate::aabb::Aabb;
 const MAX_ELEMENTS_PER_LEAF: usize = 16;
 
 pub mod aabb;
+
+#[cfg(feature = "plot")]
 pub mod plot;
 
 #[derive(Debug, Copy, Clone, PartialEq)]
@@ -31,16 +33,19 @@ struct BvhNode {
 }
 
 impl BvhNode {
-    fn create_leaf(aabb: Aabb, idx_left: usize, len: usize) -> Self {
-        let left = isize::try_from(idx_left).expect("failed to convert index");
-        let right = isize::try_from(len).expect("failed to convert index");
+    #[allow(dead_code)]
+    const EMPTY_LEAF: Self = Self {
+        aabb: Aabb::NULL,
+        left: -1,
+        right: 0,
+    };
 
-        let left = left.checked_neg().expect("failed to negate index");
-        // let right = right.checked_neg().expect("failed to negate index");
+    const fn create_leaf(aabb: Aabb, idx_left: usize, len: usize) -> Self {
+        let left = idx_left as i32;
+        let right = len as i32;
 
-        let left = i32::try_from(left).expect("failed to convert index");
-        let right = i32::try_from(right).expect("failed to convert index");
-        // so it is not 0
+        let left = -left;
+
         let left = left - 1;
 
         Self { aabb, left, right }
@@ -416,7 +421,7 @@ impl BvhNode {
             set[0] = node;
             let idx = unsafe { set.as_ptr().offset_from(root.start_nodes_ptr) };
 
-            let idx = i32::try_from(idx).expect("failed to convert index");
+            let idx = idx as i32;
 
             debug_assert!(idx > 0);
 
@@ -496,7 +501,7 @@ impl BvhNode {
 
         to_set[0] = node;
         let idx = unsafe { to_set.as_ptr().offset_from(root.start_nodes_ptr) };
-        let idx = i32::try_from(idx).expect("failed to convert index");
+        let idx = idx as i32;
 
         // trace!("internal nodes_idx {:03}", original_node_idx);
 

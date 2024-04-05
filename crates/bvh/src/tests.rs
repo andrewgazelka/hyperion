@@ -34,11 +34,6 @@ fn test_build_all_sizes() {
 fn test_query_one() {
     let elements = create_random_elements_1(10_000, 100.0);
 
-    // for elem in &mut elements {
-    //     elem.min.z = -0.0001;
-    //     elem.max.z = 0.0001;
-    // }
-
     let elems = elements.clone();
     let bvh = Bvh::build::<TrivialHeuristic>(elems);
 
@@ -85,47 +80,43 @@ fn test_query_all() {
     assert_eq!(num_collisions, 10_000);
 }
 
-// #[test]
-// fn children_returns_none_when_no_children() {
-//     let node = BvhNode {
-//         aabb: Aabb::NULL,
-//         left: None,
-//         right: None,
-//     };
-//     let bvh: Bvh<i32> = Bvh {
-//         nodes: Vec::new(),
-//         elements: Vec::new(),
-//         root: None,
-//     };
-//     assert!(node.children(&bvh).next().is_none());
-// }
+#[test]
+fn children_returns_empty_leaf_when_no_children() {
+    let node = BvhNode {
+        aabb: Aabb::NULL,
+        left: -1,
+        right: 0,
+    };
+    let bvh: Bvh<i32> = Bvh {
+        nodes: vec![BvhNode::DUMMY, node],
+        elements: Vec::new(),
+        root: 1,
+    };
+    assert_eq!(node.children(&bvh).next(), Some(Node::Leaf(&[])));
+}
 
-// #[test]
-// fn children_returns_internal_nodes() {
-//     let aabb = random_aabb(100.0);
-//
-//     let child_node = BvhNode {
-//         aabb,
-//         left: None,
-//         right: None,
-//     };
-//
-//     let node = BvhNode {
-//         aabb: aabb.expand(10.0),
-//         left: Some(NonZeroI32::new(1).unwrap()),
-//         right: Some(NonZeroI32::new(2).unwrap()),
-//     };
-//
-//     let bvh: Bvh<i32> = Bvh {
-//         nodes: vec![BvhNode::DUMMY, child_node, child_node],
-//         elements: Vec::new(),
-//         root: None,
-//     };
-//     let mut children = node.children(&bvh);
-//     assert_eq!(children.next(), Some(Node::Internal(&child_node)));
-//     assert_eq!(children.next(), Some(Node::Internal(&child_node)));
-//     assert!(children.next().is_none());
-// }
+#[test]
+fn children_returns_internal_nodes() {
+    let aabb = random_aabb(100.0);
+
+    let child_node = BvhNode::EMPTY_LEAF;
+
+    let node = BvhNode {
+        aabb: aabb.expand(10.0),
+        left: 1,
+        right: 2,
+    };
+
+    let bvh: Bvh<i32> = Bvh {
+        nodes: vec![BvhNode::DUMMY, child_node, child_node],
+        elements: Vec::new(),
+        root: 42, // root does not matter in this case
+    };
+    let mut children = node.children(&bvh);
+    assert_eq!(children.next(), Some(Node::Internal(&child_node)));
+    assert_eq!(children.next(), Some(Node::Internal(&child_node)));
+    assert!(children.next().is_none());
+}
 
 #[test]
 fn get_closest_returns_closest_element() {
@@ -189,23 +180,3 @@ fn get_closest_returns_none_when_no_elements() {
 
     assert!(closest.is_none());
 }
-
-// #[test]
-// fn children_returns_leaf_nodes() {
-//     let node = BvhNode {
-//         aabb: Aabb::NULL,
-//         left: Some(NonZeroI32::new(-1).unwrap()),
-//         right: Some(NonZeroI32::new(-2).unwrap()),
-//     };
-//     let bvh: Bvh<i32> = Bvh {
-//         nodes: vec![BvhNode::DUMMY],
-//         elems: Cow::Borrowed(&[
-//             child_elems.clone(),
-//             child_elems.clone(),
-//         ]),
-//         root: None,
-//     };
-//     let mut children = node.children(&bvh);
-//     assert_eq!(children.next(), Some(Node::Leaf(&child_elems)));
-//     assert_eq!(children.next(), Some(Node::Leaf(&child_elems)));
-// }

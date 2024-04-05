@@ -23,6 +23,7 @@ fn build_tree(elements: Vec<Aabb>) -> Bvh<Aabb> {
 }
 
 fn build_benchmarks() -> impl IntoBenchmarks {
+    // so reproducible
     fastrand::seed(7);
 
     let elements = (0..COUNT)
