@@ -8,7 +8,7 @@ use evenio::prelude::Component;
 use rayon::iter::IntoParallelRefMutIterator;
 pub use rayon::iter::ParallelIterator;
 use rayon_local::RayonLocal;
-use tracing::{debug, info, trace};
+use tracing::trace;
 use uuid::Uuid;
 use valence_protocol::{math::Vec2, Encode, Packet, VarInt};
 
@@ -57,11 +57,15 @@ pub struct DroppablePacket {
 #[derive(Default)]
 pub struct PacketBuffer {
     pub packet_data: Vec<u8>,
-    pub necessary_packets: Vec<NecessaryPacket>,
-    pub droppable_packets: Vec<DroppablePacket>,
+    // pub necessary_packets: Vec<NecessaryPacket>,
+    // pub droppable_packets: Vec<DroppablePacket>,
 }
 
 impl PacketBuffer {
+    #[expect(
+        unused_variables,
+        reason = "will be implemented soon; do not want to break API"
+    )]
     pub fn append_packet<P>(&mut self, pkt: &P, metadata: PacketMetadata) -> anyhow::Result<()>
     where
         P: Packet + Encode,
@@ -105,25 +109,25 @@ impl PacketBuffer {
 
         let packet_len_including_size = packet_len + packet_len_var_int.written_size();
 
-        match metadata.necessity {
-            PacketNecessity::Required => {
-                self.necessary_packets.push(NecessaryPacket {
-                    exclude_player: metadata.exclude_player,
-                    offset: packet_start,
-                    len: packet_len_including_size,
-                });
-            }
-            PacketNecessity::Droppable {
-                prioritize_location,
-            } => {
-                self.droppable_packets.push(DroppablePacket {
-                    prioritize_location,
-                    exclude_player: metadata.exclude_player,
-                    offset: packet_start,
-                    len: packet_len_including_size,
-                });
-            }
-        }
+        // match metadata.necessity {
+        //     PacketNecessity::Required => {
+        //         self.necessary_packets.push(NecessaryPacket {
+        //             exclude_player: metadata.exclude_player,
+        //             offset: packet_start,
+        //             len: packet_len_including_size,
+        //         });
+        //     }
+        //     PacketNecessity::Droppable {
+        //         prioritize_location,
+        //     } => {
+        //         self.droppable_packets.push(DroppablePacket {
+        //             prioritize_location,
+        //             exclude_player: metadata.exclude_player,
+        //             offset: packet_start,
+        //             len: packet_len_including_size,
+        //         });
+        //     }
+        // }
 
         trace!(
             "append packet {} {} len {} ... total bytes len -> {}",
@@ -139,10 +143,14 @@ impl PacketBuffer {
         Ok(())
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.packet_data.is_empty()
+    }
+
     pub fn clear_packets(&mut self) {
         self.packet_data.clear();
-        self.necessary_packets.clear();
-        self.droppable_packets.clear();
+        // self.necessary_packets.clear();
+        // self.droppable_packets.clear();
     }
 }
 
@@ -188,8 +196,16 @@ impl Encoder {
         self.rayon_local
             .get_all_locals()
             .par_iter_mut()
-            .for_each(|x| {
-                f(x.get_mut());
+            .for_each(|buf| {
+                let buf = buf.get_mut();
+                if buf.is_empty() {
+                    return;
+                }
+
+                // buf.
+
+                f(buf);
+                buf.clear_packets();
             });
     }
 }

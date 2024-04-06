@@ -6,7 +6,7 @@ use valence_protocol::PacketEncoder;
 
 use crate::{system::player_join_world::send_keep_alive, Gametick, Player};
 
-#[instrument(skip_all)]
+#[instrument(skip_all, level = "trace")]
 pub fn keep_alive(_: Receiver<Gametick>, mut fetcher: Fetcher<&mut Player>) {
     fetcher.par_iter_mut().for_each(|player| {
         // if we haven't sent a keep alive packet in 5 seconds, and a keep alive hasn't already

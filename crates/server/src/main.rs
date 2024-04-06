@@ -1,4 +1,5 @@
 use server::Game;
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[cfg(feature = "trace")]
 fn setup_global_subscriber() -> impl Drop {
@@ -10,12 +11,12 @@ fn setup_global_subscriber() -> impl Drop {
 
     // Define an environment filter layer
     // This reads the `RUST_LOG` environment variable to set the log level
-    let filter_layer = EnvFilter::try_from_default_env()
+    let env_filter = EnvFilter::try_from_default_env()
         .or_else(|_| EnvFilter::try_new("info")) // Fallback to "info" level if `RUST_LOG` is not set
         .unwrap();
 
     tracing_subscriber::registry()
-        .with(filter_layer)
+        .with(env_filter)
         .with(fmt_layer)
         .with(flame_layer)
         .init();
@@ -25,7 +26,21 @@ fn setup_global_subscriber() -> impl Drop {
 
 #[cfg(all(feature = "trace-simple", not(feature = "trace")))]
 fn setup_simple_trace() {
-    tracing_subscriber::fmt::try_init().unwrap();
+    // tracing_subscriber::fmt()
+    //     .pretty()
+    //     .with_timer(tracing_subscriber::fmt::time::ChronoLocal::new(
+    //         "%H:%M:%S%.3f".to_owned(),
+    //     ))
+    //     .with_file(false)
+    //     .with_line_number(false)
+    //     .with_target(false)
+    //     .try_init()
+    //     .unwrap();
+
+    tracing::subscriber::set_global_default(
+        tracing_subscriber::registry().with(tracing_tracy::TracyLayer::default()),
+    )
+    .expect("setup tracy layer");
 }
 
 // https://tracing-rs.netlify.app/tracing/

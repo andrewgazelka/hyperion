@@ -1,18 +1,11 @@
 use evenio::prelude::*;
 use tracing::instrument;
 
-use crate::{
-    bytes_to_mb, system::player_join_world::encode_chat_message, FullEntityPose, Player, StatsEvent,
-};
+use crate::{FullEntityPose, Player, StatsEvent};
 
-#[instrument(skip_all, name = "tps_message")]
-pub fn tps_message(r: Receiver<StatsEvent>, mut players: Fetcher<(&mut Player, &FullEntityPose)>) {
-    let StatsEvent {
-        ms_per_tick_mean_1s,
-        ms_per_tick_mean_5s,
-        resident,
-        ..
-    } = r.event;
+#[instrument(skip_all, name = "tps_message", level = "trace")]
+pub fn tps_message(r: Receiver<StatsEvent>, players: Fetcher<(&mut Player, &FullEntityPose)>) {
+    let StatsEvent { .. } = r.event;
 
     // // let allocated = bytes_to_mb(*allocated);
     // let resident = bytes_to_mb(*resident);

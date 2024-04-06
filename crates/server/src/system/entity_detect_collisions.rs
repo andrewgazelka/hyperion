@@ -11,7 +11,7 @@ use crate::{
     EntityReaction, FullEntityPose, Gametick,
 };
 
-#[instrument(skip_all, name = "entity_detect_collisions")]
+#[instrument(skip_all, level = "trace")]
 pub fn entity_detect_collisions(
     _: Receiver<Gametick>,
     entity_bounding_boxes: Single<&EntityBoundingBoxes>,

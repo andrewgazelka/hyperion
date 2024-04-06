@@ -7,8 +7,7 @@ use evenio::{
     query::Not,
 };
 use fastrand::Rng;
-use tracing::{debug, instrument, trace};
-use valence_protocol::math::Vec2;
+use tracing::{instrument, trace};
 
 use crate::{
     singleton::encoder::Encoder, BroadcastPackets, FullEntityPose, MinecraftEntity, Player, Uuid,
@@ -17,27 +16,21 @@ use crate::{
 #[thread_local]
 static RNG: Cell<Option<Rng>> = Cell::new(None);
 
-// TODO: Split broadcast_packets into separate functions
-#[expect(
-    clippy::cognitive_complexity,
-    reason = "https://github.com/andrewgazelka/hyperion/issues/68"
-)]
-#[instrument(skip_all)]
+#[instrument(skip_all, level = "trace")]
 pub fn broadcast_packets(
     _: Receiver<BroadcastPackets>,
     player: Fetcher<(&Uuid, &FullEntityPose, &Player, Not<&MinecraftEntity>)>,
     encoder: Single<&mut Encoder>,
 ) {
-    let start = std::time::Instant::now();
-
+    // let start = std::time::Instant::now();
     let encoder = encoder.0;
 
     encoder.par_drain(|buf| {
-        if buf.necessary_packets.is_empty() && buf.droppable_packets.is_empty() {
-            return;
-        }
+        // if buf.necessary_packets.is_empty() && buf.droppable_packets.is_empty() {
+        //     return;
+        // }
 
-        let start = std::time::Instant::now();
+        // let start = std::time::Instant::now();
 
         // let mut rng = RNG.take().unwrap_or_default();
 
@@ -151,10 +144,10 @@ pub fn broadcast_packets(
         // RNG.set(Some(rng));
         buf.clear_packets();
 
-        trace!(
-            "took {:?} to broadcast packets with specific encoder",
-            start.elapsed()
-        );
+        // trace!(
+        //     "took {:?} to broadcast packets with specific encoder",
+        //     start.elapsed()
+        // );
     });
-    trace!("took {:?} to broadcast packets", start.elapsed());
+    // trace!("took {:?} to broadcast packets", start.elapsed());
 }

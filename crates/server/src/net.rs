@@ -2,7 +2,6 @@
 
 use std::{
     borrow::Cow,
-    collections::BTreeSet,
     io,
     io::ErrorKind,
     os::fd::{AsRawFd, RawFd},
@@ -23,23 +22,19 @@ use monoio::{
 };
 use serde_json::json;
 use sha2::Digest;
-use tracing::{debug, error, info, trace, warn};
+use tracing::{debug, error, info, instrument, trace, warn};
 use valence_protocol::{
     decode::PacketFrame,
-    game_mode::OptGameMode,
-    ident,
     nbt::{compound, Compound, List},
     packets::{
         handshaking::{handshake_c2s::HandshakeNextState, HandshakeC2s},
         login::{LoginHelloC2s, LoginSuccessS2c},
-        play::GameJoinS2c,
         status,
     },
-    text::IntoText,
     uuid::Uuid,
-    Bounded, Decode, Encode, GameMode, Ident, PacketDecoder, PacketEncoder, VarInt,
+    Bounded, Decode, Encode, PacketDecoder, PacketEncoder, VarInt,
 };
-use valence_registry::{BiomeRegistry, RegistryCodec};
+use valence_registry::RegistryCodec;
 
 use crate::{config, SHARED};
 
@@ -307,6 +302,7 @@ impl Io {
         Ok(())
     }
 
+    #[instrument(skip(self, tx))]
     async fn server_process(
         mut self,
         id: usize,
@@ -314,11 +310,9 @@ impl Io {
     ) -> anyhow::Result<()> {
         // self.stream.set_nodelay(true)?;
 
-        info!("connection id {id}");
-
         let ip = self.stream.peer_addr()?;
 
-        info!("connection from {ip}");
+        debug!("connection from {ip}");
 
         let HandshakeC2s {
             protocol_version,
@@ -384,7 +378,7 @@ impl Io {
             dec: self.dec,
         };
 
-        info!("Finished handshake for {username}");
+        debug!("Finished handshake for {username}");
 
         monoio::spawn(async move {
             while let Ok(packet) = io_read.recv_packet_raw().await {
@@ -521,26 +515,8 @@ async fn print_errors(future: impl core::future::Future<Output = anyhow::Result<
 
 pub static GLOBAL_C2S_PACKETS: spin::Mutex<Vec<UserPacketFrame>> = spin::Mutex::new(Vec::new());
 
-
-fn set_send_buffer_size(socket: &TcpStream, size: usize) -> Result<(), std::io::Error> {
-    let fd = socket.as_raw_fd();
-    let ret = unsafe {
-        libc::setsockopt(
-            fd,
-            libc::SOL_SOCKET,
-            libc::SO_SNDBUF,
-            &size as *const _ as *const libc::c_void,
-            std::mem::size_of_val(&size) as libc::socklen_t,
-        )
-    };
-    if ret == 0 {
-        Ok(())
-    } else {
-        Err(std::io::Error::last_os_error())
-    }
-}
-
-async fn run(tx: flume::Sender<ClientConnection>) {
+#[instrument(skip_all)]
+async fn io_thread(tx: flume::Sender<ClientConnection>) {
     // start socket 25565
     // todo: remove unwrap
     let addr = "0.0.0.0:25565";
@@ -567,10 +543,6 @@ async fn run(tx: flume::Sender<ClientConnection>) {
             }
         };
 
-        set_send_buffer_size(&stream, 1024 * 1024).unwrap();
-
-        info!("accepted connection {id}");
-
         let process = Io::new(stream);
 
         let tx = tx.clone();
@@ -583,7 +555,9 @@ async fn run(tx: flume::Sender<ClientConnection>) {
     }
 }
 
-pub fn server(shutdown: flume::Receiver<()>) -> anyhow::Result<flume::Receiver<ClientConnection>> {
+pub fn start_io_thread(
+    shutdown: flume::Receiver<()>,
+) -> anyhow::Result<flume::Receiver<ClientConnection>> {
     let (connection_tx, connection_rx) = flume::unbounded();
 
     std::thread::Builder::new()
@@ -594,7 +568,7 @@ pub fn server(shutdown: flume::Receiver<()>) -> anyhow::Result<flume::Receiver<C
                 .unwrap();
 
             runtime.block_on(async move {
-                let run = run(connection_tx);
+                let run = io_thread(connection_tx);
                 let shutdown = shutdown.recv_async();
 
                 monoio::select! {

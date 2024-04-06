@@ -35,7 +35,7 @@ pub struct EntityQuery<'a> {
     _entity: With<&'static MinecraftEntity>,
 }
 
-#[instrument(skip_all, name = "entity_move_logic")]
+#[instrument(skip_all, level = "trace")]
 pub fn entity_move_logic(
     _: Receiver<Gametick>,
     mut entities: Fetcher<EntityQuery>,

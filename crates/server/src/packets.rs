@@ -8,7 +8,7 @@ use std::str::FromStr;
 
 use anyhow::{bail, ensure};
 use evenio::event::Sender;
-use tracing::{debug, warn};
+use tracing::debug;
 use valence_protocol::{decode::PacketFrame, math::Vec3, packets::play, Decode, Packet};
 
 use crate::{
@@ -152,7 +152,7 @@ impl FromStr for HybridPos {
 
 fn chat_command(
     mut data: &[u8],
-    player: &mut Player,
+    player: &Player,
     full_entity_pose: &FullEntityPose,
     sender: &mut Sender<(KickPlayer, InitEntity, KillAllEntities)>,
 ) -> anyhow::Result<()> {

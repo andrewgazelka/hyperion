@@ -46,7 +46,7 @@ uuid = "1.8.0"
 rand_distr = "0.4.3"
 smallvec.workspace = true
 rayon = "1.10.0"
-tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
+tracing-subscriber = { version = "0.3.18", features = ["env-filter", "chrono"] }
 tracing-flame = "0.2.0"
 ndarray = "0.15.6"
 jemallocator = "0.5.4"
@@ -60,6 +60,9 @@ toml = "0.8.12"
 bvh.workspace = true
 glam.workspace = true
 once_cell = "1.19.0"
+tracing-tree = "0.3.0"
+spin_sleep = "1.2.0"
+tracing-tracy = "0.11.0"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 io-uring = "0.6.3"
@@ -89,7 +92,12 @@ complexity = "deny"
 nursery = { level = "deny", priority = -1 }
 redundant_pub_crate = "allow"
 
-pedantic = "deny"
+pedantic = { level = "deny", priority = -1 }
+cast_possible_truncation = "allow"
+cast_possible_wrap = "allow"
+cast_precision_loss = "allow"
+missing_errors_doc = "allow"
+
 perf = "deny"
 style = "deny"
 suspicious = "deny"

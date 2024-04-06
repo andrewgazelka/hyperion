@@ -22,16 +22,15 @@ use evenio::prelude::*;
 use glam::Vec2;
 use jemalloc_ctl::{epoch, stats};
 use ndarray::s;
-use rayon::iter::IntoParallelRefMutIterator;
 pub use rayon::iter::ParallelIterator;
 use signal_hook::iterator::Signals;
 use spin::Lazy;
-use tracing::{info, instrument, warn};
+use tracing::{debug, info, info_span, instrument, trace, warn};
 use valence_protocol::{math::Vec3, ByteAngle, VarInt};
 
 use crate::{
     bounding_box::BoundingBox,
-    net::{server, ClientConnection, Packets, GLOBAL_C2S_PACKETS},
+    net::{start_io_thread, ClientConnection, Packets, GLOBAL_C2S_PACKETS},
     singleton::{
         encoder::{Encoder, PacketMetadata, PacketNecessity},
         player_location_lookup::PlayerLocationLookup,
@@ -158,9 +157,8 @@ impl Game {
         &mut self.world
     }
 
-    #[instrument]
     pub fn init() -> anyhow::Result<Self> {
-        info!("Starting mc-server");
+        info!("Starting hyperion");
         Lazy::force(&config::CONFIG);
 
         // if linux
@@ -178,7 +176,7 @@ impl Game {
         let current_threads = rayon::current_num_threads();
         let max_threads = rayon::max_num_threads();
 
-        info!("rayon\tcurrent threads: {current_threads}, max threads: {max_threads}");
+        info!("rayon: current threads: {current_threads}, max threads: {max_threads}");
 
         let mut signals = Signals::new([signal_hook::consts::SIGINT, signal_hook::consts::SIGTERM])
             .context("failed to create signal handler")?;
@@ -193,7 +191,7 @@ impl Game {
             }
         });
 
-        let incoming = server(shutdown_rx)?;
+        let incoming = start_io_thread(shutdown_rx)?;
 
         let mut world = World::new();
 
@@ -254,27 +252,35 @@ impl Game {
         let now = Instant::now();
 
         if time_for_20_tps < now {
+            warn!("tick took full 50ms; skipping sleep");
             return None;
         }
 
         let duration = time_for_20_tps - now;
+        let duration = duration.mul_f64(0.8);
+
+        if duration.as_millis() > 47 {
+            trace!("duration is long");
+            return Some(Duration::from_millis(47));
+        }
 
         // this is a bit of a hack to be conservative when sleeping
-        Some(duration.mul_f64(0.8))
+        Some(duration)
     }
 
-    #[instrument(skip_all)]
     pub fn game_loop(&mut self) {
         while !SHUTDOWN.load(std::sync::atomic::Ordering::Relaxed) {
             self.tick();
 
             if let Some(wait_duration) = self.wait_duration() {
-                std::thread::sleep(wait_duration);
+                info_span!("sleeping", duration = ?wait_duration).in_scope(|| {
+                    spin_sleep::sleep(wait_duration);
+                });
             }
         }
     }
 
-    #[instrument(skip_all)]
+    #[instrument(skip(self), fields(tick_on = self.tick_on))]
     pub fn tick(&mut self) {
         const LAST_TICK_HISTORY_SIZE: usize = 100;
         const MSPT_HISTORY_SIZE: usize = 100;
@@ -286,11 +292,11 @@ impl Game {
             let last = self.last_ticks.back().unwrap();
 
             let ms = last.elapsed().as_nanos() as f64 / 1_000_000.0;
-            if ms > 50.0 * 1.2 {
+            if ms > 60.0 {
                 warn!("tick took too long: {ms}ms");
             }
 
-            let front = self.last_ticks.pop_front().unwrap();
+            self.last_ticks.pop_front().unwrap();
 
             // let duration = front.elapsed();
 
@@ -362,7 +368,7 @@ impl Game {
             let allocated = allocated.read().unwrap();
             let resident = resident.read().unwrap();
 
-            info!("ms / tick: {mean_1_second:.2}ms");
+            debug!("ms / tick: {mean_1_second:.2}ms");
 
             self.world.send(StatsEvent {
                 ms_per_tick_mean_1s: mean_1_second,
@@ -381,7 +387,7 @@ impl Game {
 }
 
 // The `Receiver<Tick>` parameter tells our handler to listen for the `Tick` event.
-#[instrument(skip_all)]
+#[instrument(skip_all, level = "trace")]
 fn process_packets(
     _: Receiver<Gametick>,
     mut fetcher: Fetcher<(EntityId, &mut Player, &mut FullEntityPose)>,

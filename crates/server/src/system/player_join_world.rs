@@ -5,7 +5,6 @@ use chunk::{
     chunk::{BiomeContainer, BlockStateContainer, SECTION_BLOCK_COUNT},
 };
 use evenio::prelude::*;
-use generator::EntityType;
 use itertools::Itertools;
 use tracing::{debug, info, instrument};
 use valence_protocol::{
@@ -20,10 +19,9 @@ use valence_protocol::{
             GameJoinS2c,
         },
     },
-    profile::Property,
     text::IntoText,
     BlockPos, BlockState, ByteAngle, ChunkPos, Encode, FixedArray, GameMode, Ident, PacketEncoder,
-    VarInt, Velocity,
+    VarInt,
 };
 use valence_registry::{biome::BiomeId, BiomeRegistry, RegistryCodec, RegistryIdx};
 
@@ -31,7 +29,6 @@ use crate::{
     bits::BitStorage,
     chunk::heightmap,
     config,
-    net::Packets,
     singleton::{
         encoder::{Encoder, PacketMetadata},
         player_lookup::PlayerUuidLookup,
@@ -59,6 +56,7 @@ pub fn player_join_world(
     static CACHED_DATA: once_cell::sync::Lazy<bytes::Bytes> = once_cell::sync::Lazy::new(|| {
         let mut encoder = PacketEncoder::new();
 
+        info!("Caching world data for new players");
         inner(&mut encoder).unwrap();
 
         let bytes = encoder.take();
@@ -69,9 +67,6 @@ pub fn player_join_world(
 
     lookup.0.insert(uuid.0, id);
 
-    info!("Player {} joined the world", player.name);
-
-    info!("send cached");
     player.packets.writer.send_raw(CACHED_DATA.clone()).unwrap();
 
     let mut all_entities = PacketEncoder::new();
@@ -141,6 +136,8 @@ pub fn player_join_world(
         .0
         .append_round_robin(&spawn_player, PacketMetadata::REQUIRED)
         .unwrap();
+
+    info!("Player {} joined the world", player.name);
     // encoder.0.append_round_robin(&join_world, PacketMetadata::REQUIRED).unwrap();
 }
 
@@ -412,7 +409,7 @@ fn ground_section() -> Vec<u8> {
 
 fn inner(encoder: &mut PacketEncoder) -> anyhow::Result<()> {
     send_game_join_packet(encoder)?;
-    
+
     encoder.append_packet(&play::ChunkRenderDistanceCenterS2c {
         chunk_x: 0.into(),
         chunk_z: 0.into(),
