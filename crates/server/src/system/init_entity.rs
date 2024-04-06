@@ -34,7 +34,7 @@ pub fn spawn_packet(
     }
 }
 
-#[instrument(skip_all, name = "init_entity")]
+#[instrument(skip_all)]
 pub fn init_entity(
     r: Receiver<InitEntity>,
     mut s: Sender<(

@@ -51,6 +51,8 @@ mod quad_tree;
 pub mod bounding_box;
 mod config;
 
+const MSPT_HISTORY_SIZE: usize = 100;
+
 // A zero-sized component, often called a "marker" or "tag".
 #[derive(Component)]
 struct Player {
@@ -283,7 +285,6 @@ impl Game {
     #[instrument(skip(self), fields(tick_on = self.tick_on))]
     pub fn tick(&mut self) {
         const LAST_TICK_HISTORY_SIZE: usize = 100;
-        const MSPT_HISTORY_SIZE: usize = 100;
 
         let now = Instant::now();
 
@@ -339,12 +340,12 @@ impl Game {
                       (~52 days)"
         )]
         let ms = now.elapsed().as_nanos() as f64 / 1_000_000.0;
+        self.update_tick_stats(ms);
+        // info!("Tick took: {:02.8}ms", ms);
+    }
 
-        // print!("ms = {ms}\n");
-        // flush
-
-        io::stdout().flush().unwrap();
-
+    #[instrument(skip(self))]
+    fn update_tick_stats(&mut self, ms: f64) {
         self.last_ms_per_tick.push_back(ms);
 
         if self.last_ms_per_tick.len() > MSPT_HISTORY_SIZE {
@@ -360,15 +361,17 @@ impl Game {
 
             let e = epoch::mib().unwrap();
 
+            debug!("ms / tick: {mean_1_second:.2}ms");
+
             // todo: profile; does this need to be done in a separate thread?
             // if self.tick_on % 100 == 0 {
-            e.advance().unwrap();
-            // }
-
-            let allocated = allocated.read().unwrap();
-            let resident = resident.read().unwrap();
-
-            debug!("ms / tick: {mean_1_second:.2}ms");
+            let (allocated, resident) = info_span!("jemalloc").in_scope(|| {
+                // e.advance().unwrap();
+                // let allocated = allocated.read().unwrap();
+                // let resident = resident.read().unwrap();
+                // (allocated, resident)
+                (0, 0)
+            });
 
             self.world.send(StatsEvent {
                 ms_per_tick_mean_1s: mean_1_second,
@@ -381,8 +384,6 @@ impl Game {
         }
 
         self.tick_on += 1;
-
-        // info!("Tick took: {:02.8}ms", ms);
     }
 }
 

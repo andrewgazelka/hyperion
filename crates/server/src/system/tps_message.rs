@@ -3,7 +3,7 @@ use tracing::instrument;
 
 use crate::{FullEntityPose, Player, StatsEvent};
 
-#[instrument(skip_all, name = "tps_message", level = "trace")]
+#[instrument(skip_all, level = "trace")]
 pub fn tps_message(r: Receiver<StatsEvent>, players: Fetcher<(&mut Player, &FullEntityPose)>) {
     let StatsEvent { .. } = r.event;
 

@@ -5,6 +5,7 @@ use evenio::{
     fetch::{Fetcher, Single},
     query::{Query, With},
 };
+use tracing::instrument;
 
 use crate::{
     singleton::player_location_lookup::{LookupData, PlayerLocationLookup},
@@ -21,6 +22,7 @@ pub(crate) struct EntityQuery<'a> {
     clippy::needless_pass_by_value,
     reason = "The ECS framework requires this"
 )]
+#[instrument(skip_all, level = "trace")]
 pub fn rebuild_player_location(
     _: Receiver<Gametick>,
     lookup: Single<&mut PlayerLocationLookup>,

@@ -5,6 +5,7 @@ use evenio::{
     fetch::{Fetcher, Single},
     query::Query,
 };
+use tracing::instrument;
 
 use crate::{
     bounding_box::{EntityBoundingBoxes, Stored},
@@ -21,6 +22,7 @@ pub struct EntityQuery<'a> {
     clippy::needless_pass_by_value,
     reason = "The ECS framework requires this"
 )]
+#[instrument(skip_all, level = "trace")]
 pub fn reset_bounding_boxes(
     _: Receiver<Gametick>,
     entity_bounding_boxes: Single<&mut EntityBoundingBoxes>,
