@@ -1,7 +1,10 @@
 use server::Game;
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
-#[cfg(feature = "trace")]
+#[cfg(all(
+    feature = "trace",
+    not(feature = "trace-simple"),
+    not(feature = "tracy")
+))]
 fn setup_global_subscriber() -> impl Drop {
     use tracing_flame::FlameLayer;
     use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
@@ -24,31 +27,49 @@ fn setup_global_subscriber() -> impl Drop {
     guard
 }
 
-#[cfg(all(feature = "trace-simple", not(feature = "trace")))]
+#[cfg(all(
+    feature = "trace-simple",
+    not(feature = "trace"),
+    not(feature = "tracy")
+))]
 fn setup_simple_trace() {
-    // tracing_subscriber::fmt()
-    //     .pretty()
-    //     .with_timer(tracing_subscriber::fmt::time::ChronoLocal::new(
-    //         "%H:%M:%S%.3f".to_owned(),
-    //     ))
-    //     .with_file(false)
-    //     .with_line_number(false)
-    //     .with_target(false)
-    //     .try_init()
-    //     .unwrap();
+    tracing_subscriber::fmt()
+        .pretty()
+        .with_timer(tracing_subscriber::fmt::time::ChronoLocal::new(
+            "%H:%M:%S%.3f".to_owned(),
+        ))
+        .with_file(false)
+        .with_line_number(false)
+        .with_target(false)
+        .try_init()
+        .unwrap();
+}
 
+#[cfg(all(
+    feature = "tracy",
+    not(feature = "trace"),
+    not(feature = "trace-simple")
+))]
+fn setup_tracy() {
     tracing::subscriber::set_global_default(
         tracing_subscriber::registry().with(tracing_tracy::TracyLayer::default()),
     )
     .expect("setup tracy layer");
 }
-
 // https://tracing-rs.netlify.app/tracing/
 fn main() -> anyhow::Result<()> {
-    #[cfg(all(feature = "trace-simple", not(feature = "trace")))]
+    #[cfg(all(
+        feature = "trace-simple",
+        not(feature = "trace"),
+        not(feature = "tracy")
+    ))]
     setup_simple_trace();
 
-    #[cfg(feature = "trace")]
+    #[cfg(all(
+        feature = "tracy",
+        not(feature = "trace"),
+        not(feature = "trace-simple")
+    ))]
     let _guard = setup_global_subscriber();
 
     #[cfg(feature = "pprof")]

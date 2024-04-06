@@ -18,10 +18,6 @@ pub struct EntityQuery<'a> {
     pose: &'a FullEntityPose,
 }
 
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "The ECS framework requires this"
-)]
 #[instrument(skip_all, level = "trace")]
 pub fn reset_bounding_boxes(
     _: Receiver<Gametick>,

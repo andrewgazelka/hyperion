@@ -2,17 +2,12 @@
 #![feature(lint_reasons)]
 #![expect(clippy::type_complexity, reason = "evenio uses a lot of complex types")]
 
-#[global_allocator]
-static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
-
 mod chunk;
 mod singleton;
 
 use std::{
     cell::UnsafeCell,
     collections::VecDeque,
-    io,
-    io::Write,
     sync::atomic::AtomicU32,
     time::{Duration, Instant},
 };
@@ -20,7 +15,6 @@ use std::{
 use anyhow::Context;
 use evenio::prelude::*;
 use glam::Vec2;
-use jemalloc_ctl::{epoch, stats};
 use ndarray::s;
 pub use rayon::iter::ParallelIterator;
 use signal_hook::iterator::Signals;
@@ -122,14 +116,6 @@ struct KillAllEntities;
 struct StatsEvent {
     ms_per_tick_mean_1s: f64,
     ms_per_tick_mean_5s: f64,
-    #[expect(dead_code, reason = "not used currently, will in future")]
-    allocated: usize,
-    resident: usize,
-}
-
-#[expect(clippy::cast_precision_loss, reason = "2^52 bytes is over 1000 TB")]
-fn bytes_to_mb(bytes: usize) -> f64 {
-    bytes as f64 / 1024.0 / 1024.0
 }
 
 #[derive(Event)]
@@ -356,28 +342,11 @@ impl Game {
             let mean_1_second = arr.slice(s![..20]).mean().unwrap();
             let mean_5_seconds = arr.slice(s![..100]).mean().unwrap();
 
-            let allocated = stats::allocated::mib().unwrap();
-            let resident = stats::resident::mib().unwrap();
-
-            let e = epoch::mib().unwrap();
-
             debug!("ms / tick: {mean_1_second:.2}ms");
-
-            // todo: profile; does this need to be done in a separate thread?
-            // if self.tick_on % 100 == 0 {
-            let (allocated, resident) = info_span!("jemalloc").in_scope(|| {
-                // e.advance().unwrap();
-                // let allocated = allocated.read().unwrap();
-                // let resident = resident.read().unwrap();
-                // (allocated, resident)
-                (0, 0)
-            });
 
             self.world.send(StatsEvent {
                 ms_per_tick_mean_1s: mean_1_second,
                 ms_per_tick_mean_5s: mean_5_seconds,
-                allocated,
-                resident,
             });
 
             self.last_ms_per_tick.pop_front();
@@ -424,7 +393,7 @@ fn process_packets(
 
     let encoder = encoder.0;
 
-    fetcher.iter_mut().for_each(|(id, player, pose)| {
+    fetcher.iter_mut().for_each(|(id, _, pose)| {
         let vec2d = Vec2::new(pose.position.x, pose.position.z);
         let pos = pose.position.as_dvec3();
 

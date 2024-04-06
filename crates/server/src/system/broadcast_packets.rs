@@ -1,20 +1,14 @@
-use std::cell::Cell;
-
 use bytes::Bytes;
 use evenio::{
     event::Receiver,
     fetch::{Fetcher, Single},
     query::Not,
 };
-use fastrand::Rng;
 use tracing::{instrument, trace};
 
 use crate::{
     singleton::encoder::Encoder, BroadcastPackets, FullEntityPose, MinecraftEntity, Player, Uuid,
 };
-
-#[thread_local]
-static RNG: Cell<Option<Rng>> = Cell::new(None);
 
 #[instrument(skip_all, level = "trace")]
 pub fn broadcast_packets(
@@ -37,7 +31,7 @@ pub fn broadcast_packets(
         // TODO: Avoid taking packet_data so that the capacity can be reused
         let packet_data = Bytes::from(core::mem::take(&mut buf.packet_data));
 
-        for (player_uuid, pose, player, _) in &player {
+        for (_, _, player, _) in &player {
             trace!("about to broadcast bytes {:?}", packet_data.len());
             let _ = player.packets.writer.send_raw(packet_data.clone());
         }

@@ -18,10 +18,7 @@ pub(crate) struct EntityQuery<'a> {
     pose: &'a FullEntityPose,
     _player: With<&'static Player>,
 }
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "The ECS framework requires this"
-)]
+
 #[instrument(skip_all, level = "trace")]
 pub fn rebuild_player_location(
     _: Receiver<Gametick>,

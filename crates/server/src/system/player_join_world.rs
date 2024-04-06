@@ -34,7 +34,7 @@ use crate::{
         player_lookup::PlayerUuidLookup,
     },
     system::init_entity::spawn_packet,
-    FullEntityPose, KickPlayer, MinecraftEntity, Player, PlayerJoinWorld, Uuid, SHARED,
+    FullEntityPose, MinecraftEntity, Player, PlayerJoinWorld, Uuid, SHARED,
 };
 
 #[derive(Query, Debug)]
@@ -51,7 +51,6 @@ pub fn player_join_world(
     entities: Fetcher<EntityQuery>,
     lookup: Single<&mut PlayerUuidLookup>,
     encoder: Single<&mut Encoder>,
-    s: Sender<KickPlayer>,
 ) {
     static CACHED_DATA: once_cell::sync::Lazy<bytes::Bytes> = once_cell::sync::Lazy::new(|| {
         let mut encoder = PacketEncoder::new();
@@ -184,19 +183,6 @@ impl<T, const N: usize> Array3d for [T; N] {
     fn get3_mut(&mut self, x: usize, y: usize, z: usize) -> &mut Self::Item {
         &mut self[x + z * 16 + y * 16 * 16]
     }
-}
-
-pub fn encode_chat_message(encoder: &mut PacketEncoder, message: &str) -> anyhow::Result<()> {
-    let text = message.to_owned().into_text();
-    // system chat message
-    // System Chat Message
-    let pkt = valence_protocol::packets::play::OverlayMessageS2c {
-        action_bar_text: text.into(),
-    };
-
-    encoder.append_packet(&pkt)?;
-
-    Ok(())
 }
 
 pub fn send_keep_alive(encoder: &mut PacketEncoder) -> anyhow::Result<()> {

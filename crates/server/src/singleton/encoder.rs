@@ -17,10 +17,20 @@ const PACKET_LEN_BYTES_MAX: usize = 3;
 #[derive(Copy, Clone)]
 pub enum PacketNecessity {
     Required,
-    Droppable { prioritize_location: Vec2 },
+    Droppable {
+        #[expect(
+            dead_code,
+            reason = "this is not used, but we plan to use it in the future"
+        )]
+        prioritize_location: Vec2,
+    },
 }
 
 #[derive(Copy, Clone)]
+#[expect(
+    dead_code,
+    reason = "this is not used, but we plan to use it in the future"
+)]
 pub struct PacketMetadata {
     pub necessity: PacketNecessity,
     pub exclude_player: Option<Uuid>,
@@ -40,6 +50,10 @@ impl PacketMetadata {
 }
 
 /// Packet which should not be dropped
+#[expect(
+    dead_code,
+    reason = "this is not used, but we plan to use it in the future"
+)]
 pub struct NecessaryPacket {
     pub exclude_player: Option<Uuid>,
     pub offset: usize,
@@ -47,6 +61,10 @@ pub struct NecessaryPacket {
 }
 
 /// Packet which may be dropped
+#[expect(
+    dead_code,
+    reason = "this is not used, but we plan to use it in the future"
+)]
 pub struct DroppablePacket {
     pub prioritize_location: Vec2,
     pub exclude_player: Option<Uuid>,

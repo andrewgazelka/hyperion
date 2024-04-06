@@ -101,6 +101,10 @@ impl WriterComm {
         self.tx.is_disconnected()
     }
 
+    #[expect(
+        dead_code,
+        reason = "not used, but we plan it to be used in the future"
+    )]
     pub fn speed_mib_per_second(&self) -> u32 {
         self.speed_mib_per_second.load(Ordering::Relaxed)
     }
