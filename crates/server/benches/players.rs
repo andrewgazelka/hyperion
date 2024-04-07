@@ -1,11 +1,14 @@
 use std::{net::SocketAddr, sync::atomic::AtomicU16};
 
-use divan::Bencher;
+use divan::{AllocProfiler, Bencher};
 use libc::{getrlimit, setrlimit, RLIMIT_NOFILE};
 use rust_mc_bot::{Address, BotManager};
 use server::Game;
 
 static PORT: AtomicU16 = AtomicU16::new(25565);
+
+#[global_allocator]
+static ALLOC: AllocProfiler = AllocProfiler::system();
 
 fn adjust_file_limits() {
     unsafe {
@@ -31,8 +34,7 @@ fn adjust_file_limits() {
 }
 
 fn main() {
-    // get current limit
-
+    // this is to make sure we don't run out of file descriptors
     adjust_file_limits();
 
     divan::main();
