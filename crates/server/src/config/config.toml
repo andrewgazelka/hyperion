@@ -1,0 +1,46 @@
+#
+# ██╗  ██╗██╗   ██╗██████╗ ███████╗██████╗ ██╗ ██████╗ ███╗   ██╗
+# ██║  ██║╚██╗ ██╔╝██╔══██╗██╔════╝██╔══██╗██║██╔═══██╗████╗  ██║
+# ███████║ ╚████╔╝ ██████╔╝█████╗  ██████╔╝██║██║   ██║██╔██╗ ██║
+# ██╔══██║  ╚██╔╝  ██╔═══╝ ██╔══╝  ██╔══██╗██║██║   ██║██║╚██╗██║
+# ██║  ██║   ██║   ██║     ███████╗██║  ██║██║╚██████╔╝██║ ╚████║
+# ╚═╝  ╚═╝   ╚═╝   ╚═╝     ╚══════╝╚═╝  ╚═╝╚═╝ ╚═════╝ ╚═╝  ╚═══╝
+#
+#            [ High Performance Minecraft Server ]
+#                    Supports 10k+ players
+#                https://discord.gg/YDaAnGGBEt
+#
+# Created with <3 by
+# @andrewgazelka <andrew.gazelka@gmail.com, @andrewgazelka on Discord>
+# @TestingPlant
+# @LukasHering
+# ... maybe u should add your name here ;)
+#
+# Also, this file is completely optional. You can provide provide the config file to the hyperion
+# library. However, having a config file is nice as it does not require you to recompile the
+# library every time you want to change the config.
+
+border_diameter = 300.0
+max_players = 10000
+view_distance = 32
+
+# change this to 0.0.0.0:25565 to listen on all interfaces
+address = "127.0.0.1:25565"
+
+# simulation distance is the distance in chunks that the server will simulate the world
+# this includes: block updates, block entity updates, fluid updates, and entity updates
+simulation_distance = 10
+
+server_desc = "10k babyyyyyyyyyy"
+server_image = "saul.png"
+
+has_whitelist = true
+
+# whitelist
+[[whitelist]]
+# username = "username"
+# uuid = "uuid"
+# ip = "ip"
+
+[[whitelist]]
+username = "Emerald_Explorer"

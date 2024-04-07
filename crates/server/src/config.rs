@@ -4,6 +4,8 @@ use serde::{Deserialize, Serialize};
 use spin::lazy::Lazy;
 use tracing::{info, instrument, warn};
 
+mod default;
+
 pub static CONFIG: Lazy<Config> = Lazy::new(|| Config::load("run/config.toml").unwrap());
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -11,8 +13,10 @@ pub struct Config {
     pub border_diameter: Option<f64>,
     pub max_players: i32,
     pub view_distance: i32,
+    pub address: String,
     pub simulation_distance: i32,
     pub server_desc: String,
+    pub server_image: String,
 }
 
 impl Default for Config {
@@ -21,8 +25,9 @@ impl Default for Config {
             border_diameter: Some(100.0),
             max_players: 10_000,
             view_distance: 32,
+            address: "0.0.0.0:25565".to_owned(),
             simulation_distance: 10,
-            server_desc: "10k babyyyy".to_owned(),
+            server_desc: "Hyperion".to_owned(),
         }
     }
 }
