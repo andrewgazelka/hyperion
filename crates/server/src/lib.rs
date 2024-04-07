@@ -21,7 +21,7 @@ use ndarray::s;
 pub use rayon::iter::ParallelIterator;
 use signal_hook::iterator::Signals;
 use spin::Lazy;
-use tracing::{debug, error, info, info_span, instrument, trace, warn};
+use tracing::{debug, error, info, instrument, trace, warn};
 use valence_protocol::{math::Vec3, ByteAngle, VarInt};
 
 use crate::{
@@ -241,7 +241,7 @@ impl Game {
         world.add_handler(system::broadcast_packets);
         world.add_handler(system::keep_alive);
         world.add_handler(handle_ingress);
-        world.add_handler(system::tps_message);
+        world.add_handler(system::stats_message);
         world.add_handler(system::kill_all);
 
         let global = world.spawn();
@@ -306,9 +306,7 @@ impl Game {
             self.tick();
 
             if let Some(wait_duration) = self.wait_duration() {
-                info_span!("sleeping", duration = ?wait_duration).in_scope(|| {
-                    spin_sleep::sleep(wait_duration);
-                });
+                spin_sleep::sleep(wait_duration);
             }
         }
     }
@@ -329,10 +327,6 @@ impl Game {
             }
 
             self.last_ticks.pop_front().unwrap();
-
-            // let duration = front.elapsed();
-
-            // println!("tps = {}", LAST_TICK_HISTORY_SIZE as f64 / duration.as_secs_f64());
         }
 
         self.last_ticks.push_back(now);

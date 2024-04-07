@@ -10,7 +10,7 @@ mod player_join_world;
 mod player_kick;
 mod rebuild_player_location;
 mod reset_bounding_boxes;
-mod tps_message;
+mod stats_message;
 mod update_time;
 
 pub use broadcast_packets::broadcast_packets;
@@ -25,5 +25,5 @@ pub use player_join_world::player_join_world;
 pub use player_kick::player_kick;
 pub use rebuild_player_location::rebuild_player_location;
 pub use reset_bounding_boxes::reset_bounding_boxes;
-pub use tps_message::tps_message;
+pub use stats_message::stats_message;
 pub use update_time::update_time;
