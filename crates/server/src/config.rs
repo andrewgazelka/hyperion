@@ -1,8 +1,8 @@
-use std::{fs::File, io::Read, path::Path};
+use std::{fmt::Debug, fs::File, io::Read, path::Path};
 
 use serde::{Deserialize, Serialize};
 use spin::lazy::Lazy;
-use tracing::{info, instrument};
+use tracing::{info, instrument, warn};
 
 pub static CONFIG: Lazy<Config> = Lazy::new(|| Config::load("run/config.toml").unwrap());
 
@@ -28,8 +28,8 @@ impl Default for Config {
 }
 
 impl Config {
-    #[instrument(skip_all)]
-    pub fn load<P: AsRef<Path>>(path: P) -> anyhow::Result<Self> {
+    #[instrument]
+    pub fn load<P: AsRef<Path> + Debug>(path: P) -> anyhow::Result<Self> {
         info!("loading configuration file");
         if path.as_ref().exists() {
             let mut file = File::open(path)?;
@@ -38,7 +38,7 @@ impl Config {
             let config = toml::from_str::<Self>(contents.as_str())?;
             Ok(config)
         } else {
-            info!("configuration file not found, using defaults");
+            warn!("configuration file not found, using defaults");
             Ok(Self::default())
         }
     }

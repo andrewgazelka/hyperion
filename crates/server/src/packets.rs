@@ -8,7 +8,7 @@ use std::str::FromStr;
 
 use anyhow::{bail, ensure};
 use evenio::event::Sender;
-use tracing::warn;
+use tracing::debug;
 use valence_protocol::{decode::PacketFrame, math::Vec3, packets::play, Decode, Packet};
 
 use crate::{
@@ -45,13 +45,13 @@ fn full(mut data: &[u8], full_entity_pose: &mut FullEntityPose) -> anyhow::Resul
     // if they are, ignore the packet
 
     let position = position.as_vec3();
-    if position.distance_squared(full_entity_pose.position) > MAX_SPEED.powi(2) {
+    let d_pos = position - full_entity_pose.position;
+    if d_pos.length_squared() > MAX_SPEED.powi(2) {
         bail!("Player is moving too fast max speed: {MAX_SPEED}");
     }
 
     // todo: analyze clustering
-
-    full_entity_pose.position = position;
+    full_entity_pose.move_to(position);
     full_entity_pose.yaw = yaw;
     full_entity_pose.pitch = pitch;
 
@@ -90,7 +90,8 @@ fn position_and_on_ground(
 
     let play::PositionAndOnGroundC2s { position, .. } = pkt;
 
-    full_entity_pose.position = position.as_vec3();
+    // todo: handle like full
+    full_entity_pose.move_to(position.as_vec3());
 
     Ok(())
 }
@@ -151,7 +152,7 @@ impl FromStr for HybridPos {
 
 fn chat_command(
     mut data: &[u8],
-    player: &mut Player,
+    player: &Player,
     full_entity_pose: &FullEntityPose,
     sender: &mut Sender<(KickPlayer, InitEntity, KillAllEntities)>,
 ) -> anyhow::Result<()> {
@@ -217,10 +218,10 @@ fn chat_command(
             HybridPos::Relative(z) => loc.z + z,
         };
 
-        player
-            .packets
-            .writer
-            .send_chat_message(&format!("Spawning zombie at {x}, {y}, {z}"))?;
+        // player
+        //     .packets
+        //     .writer
+        //     .send_chat_message(&format!("Spawning zombie at {x}, {y}, {z}"))?;
 
         sender.send(InitEntity {
             pose: FullEntityPose {
@@ -257,7 +258,7 @@ pub fn switch(
         play::UpdateSelectedSlotC2s::ID => update_selected_slot(data)?,
         play::KeepAliveC2s::ID => keep_alive(player)?,
         play::CommandExecutionC2s::ID => chat_command(data, player, full_entity_pose, sender)?,
-        _ => warn!("unknown packet id: 0x{:02X}", id),
+        _ => debug!("unknown packet id: 0x{:02X}", id),
     }
 
     Ok(())

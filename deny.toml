@@ -220,7 +220,9 @@ skip = [
     "regex-syntax",
     "regex-automata",
     "bitflags",
-    "glam"
+#    "glam",
+    "toml_edit",
+    "winnow"
     #{ crate = "ansi_term@0.11.0", reason = "you can specify a reason why it can't be updated/removed" },
 ]
 # Similarly to `skip` allows you to skip certain crates during duplicate
@@ -247,7 +249,7 @@ unknown-git = "warn"
 allow-registry = ["https://github.com/rust-lang/crates.io-index"]
 # List of URLs for allowed Git repositories
 allow-git = [
-    "https://github.com/andrewgazelka/evenio",
+    "https://github.com/rj00a/evenio",
     "https://github.com/servo/rust-smallvec"
 ]
 

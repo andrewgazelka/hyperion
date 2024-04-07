@@ -1,11 +1,12 @@
 use std::time::Instant;
 
 use evenio::{prelude::*, rayon::prelude::*};
-use tracing::{debug, instrument};
+use tracing::{debug, instrument, trace};
+use valence_protocol::PacketEncoder;
 
-use crate::{Gametick, Player};
+use crate::{system::player_join_world::send_keep_alive, Gametick, Player};
 
-#[instrument(skip_all)]
+#[instrument(skip_all, level = "trace")]
 pub fn keep_alive(_: Receiver<Gametick>, mut fetcher: Fetcher<&mut Player>) {
     fetcher.par_iter_mut().for_each(|player| {
         // if we haven't sent a keep alive packet in 5 seconds, and a keep alive hasn't already
@@ -15,7 +16,12 @@ pub fn keep_alive(_: Receiver<Gametick>, mut fetcher: Fetcher<&mut Player>) {
             // todo: handle and disconnect
             let name = &player.name;
             debug!("sending keep alive to {name}");
-            let _ = player.packets.writer.send_keep_alive();
+
+            let mut encoder = PacketEncoder::new();
+            send_keep_alive(&mut encoder).unwrap();
+
+            trace!("keep alive");
+            let _ = player.packets.writer.send_raw(encoder.take().freeze());
         }
     });
 }

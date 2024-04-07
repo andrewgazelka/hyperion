@@ -1,30 +1,28 @@
 use evenio::prelude::*;
 use tracing::instrument;
+use valence_protocol::text::IntoText;
 
-use crate::{bytes_to_mb, FullEntityPose, Player, StatsEvent};
+use crate::{
+    singleton::encoder::{Encoder, PacketMetadata},
+    StatsEvent,
+};
 
-#[instrument(skip_all, name = "tps_message")]
-pub fn tps_message(r: Receiver<StatsEvent>, mut players: Fetcher<(&mut Player, &FullEntityPose)>) {
+#[instrument(skip_all, level = "trace")]
+pub fn tps_message(r: Receiver<StatsEvent>, encoder: Single<&mut Encoder>) {
     let StatsEvent {
         ms_per_tick_mean_1s,
         ms_per_tick_mean_5s,
-        resident,
         ..
     } = r.event;
 
-    // let allocated = bytes_to_mb(*allocated);
-    let resident = bytes_to_mb(*resident);
+    let message = format!("µms {ms_per_tick_mean_1s:.2} {ms_per_tick_mean_5s:.2}");
+    let packet = valence_protocol::packets::play::OverlayMessageS2c {
+        action_bar_text: message.into_cow_text(),
+    };
 
-    players.iter_mut().for_each(|(player, _)| {
-        // make sexy with stddev & mean symbol
-        let ping = player.ping.as_secs_f32() * 1000.0;
-        let speed_mib = f64::from(player.packets.writer.speed_mib_per_second()) / 1024.0 / 1024.0;
-        let message = format!(
-            "µms {ms_per_tick_mean_1s:.2} {ms_per_tick_mean_5s:.2}, {resident:.2}MiB, \
-             {speed_mib:.2}MiB/s, {ping:.2}ms"
-        );
+    let encoder = encoder.0;
 
-        // todo: handle error
-        let _ = player.packets.writer.send_chat_message(&message);
-    });
+    encoder
+        .append_round_robin(&packet, PacketMetadata::DROPPABLE)
+        .unwrap();
 }

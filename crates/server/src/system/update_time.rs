@@ -7,7 +7,7 @@ use crate::{
     Gametick,
 };
 
-#[instrument(skip_all)]
+#[instrument(skip_all, level = "trace")]
 pub fn update_time(
     _: ReceiverMut<Gametick>,
     encoder: Single<&mut Encoder>,

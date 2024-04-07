@@ -7,12 +7,12 @@ use valence_protocol::{
     text::{Color, IntoText},
 };
 
-use crate::{singleton::player_lookup::PlayerLookup, KickPlayer, Player, Uuid, SHARED};
+use crate::{singleton::player_lookup::PlayerUuidLookup, KickPlayer, Player, Uuid, SHARED};
 
 #[instrument(skip_all)]
 pub fn player_kick(
     r: Receiver<KickPlayer, (EntityId, &mut Player, &Uuid)>,
-    lookup: Single<&mut PlayerLookup>,
+    lookup: Single<&mut PlayerUuidLookup>,
     mut s: Sender<Despawn>,
 ) {
     let (id, player, uuid) = r.query;

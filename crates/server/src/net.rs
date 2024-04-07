@@ -2,9 +2,9 @@
 
 use std::{
     borrow::Cow,
-    collections::BTreeSet,
     io,
     io::ErrorKind,
+    net::ToSocketAddrs,
     os::fd::{AsRawFd, RawFd},
     ptr::addr_of_mut,
     sync::{
@@ -23,23 +23,19 @@ use monoio::{
 };
 use serde_json::json;
 use sha2::Digest;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, instrument, trace, warn};
 use valence_protocol::{
     decode::PacketFrame,
-    game_mode::OptGameMode,
-    ident,
     nbt::{compound, Compound, List},
     packets::{
         handshaking::{handshake_c2s::HandshakeNextState, HandshakeC2s},
         login::{LoginHelloC2s, LoginSuccessS2c},
-        play::GameJoinS2c,
         status,
     },
-    text::IntoText,
     uuid::Uuid,
-    Bounded, Decode, Encode, GameMode, Ident, PacketDecoder, PacketEncoder, VarInt,
+    Bounded, Decode, Encode, PacketDecoder, PacketEncoder, VarInt,
 };
-use valence_registry::{BiomeRegistry, RegistryCodec};
+use valence_registry::RegistryCodec;
 
 use crate::{config, SHARED};
 
@@ -102,6 +98,14 @@ pub struct WriterComm {
 }
 
 impl WriterComm {
+    pub fn is_closed(&self) -> bool {
+        self.tx.is_disconnected()
+    }
+
+    #[expect(
+        dead_code,
+        reason = "not used, but we plan it to be used in the future"
+    )]
     pub fn speed_mib_per_second(&self) -> u32 {
         self.speed_mib_per_second.load(Ordering::Relaxed)
     }
@@ -117,6 +121,7 @@ impl WriterComm {
     }
 
     pub fn send_raw(&self, bytes: bytes::Bytes) -> anyhow::Result<()> {
+        trace!("send raw bytes");
         self.tx.send(bytes)?;
         Ok(())
     }
@@ -126,73 +131,8 @@ impl WriterComm {
         P: valence_protocol::Packet + Encode,
     {
         let bytes = self.serialize(pkt)?;
+        trace!("send packet {}", P::NAME);
         self.send_raw(bytes)?;
-        Ok(())
-    }
-
-    pub fn send_chat_message(&mut self, message: &str) -> anyhow::Result<()> {
-        let text = message.to_owned().into_text();
-        // system chat message
-        // System Chat Message
-        let pkt = valence_protocol::packets::play::OverlayMessageS2c {
-            action_bar_text: text.into(),
-        };
-
-        self.send_packet(&pkt)?;
-
-        Ok(())
-    }
-
-    pub fn send_keep_alive(&mut self) -> anyhow::Result<()> {
-        let pkt = valence_protocol::packets::play::KeepAliveS2c {
-            // The ID can be set to zero because it doesn't matter
-            id: 0,
-        };
-
-        self.send_packet(&pkt)?;
-
-        Ok(())
-    }
-
-    pub fn send_game_join_packet(&mut self) -> anyhow::Result<()> {
-        // recv ack
-
-        let codec = RegistryCodec::default();
-
-        let registry_codec = registry_codec_raw(&codec)?;
-
-        let dimension_names: BTreeSet<Ident<Cow<str>>> = codec
-            .registry(BiomeRegistry::KEY)
-            .iter()
-            .map(|value| value.name.as_str_ident().into())
-            .collect();
-
-        let dimension_name = ident!("overworld");
-        // let dimension_name: Ident<Cow<str>> = chunk_layer.dimension_type_name().into();
-
-        let pkt = GameJoinS2c {
-            entity_id: 0,
-            is_hardcore: false,
-            dimension_names: Cow::Owned(dimension_names),
-            registry_codec: Cow::Borrowed(&registry_codec),
-            max_players: config::CONFIG.max_players.into(),
-            view_distance: config::CONFIG.view_distance.into(), // max view distance
-            simulation_distance: config::CONFIG.simulation_distance.into(),
-            reduced_debug_info: false,
-            enable_respawn_screen: false,
-            dimension_name: dimension_name.into(),
-            hashed_seed: 0,
-            game_mode: GameMode::Creative,
-            is_flat: false,
-            last_death_location: None,
-            portal_cooldown: 60.into(),
-            previous_game_mode: OptGameMode(Some(GameMode::Creative)),
-            dimension_type_name: "minecraft:overworld".try_into()?,
-            is_debug: false,
-        };
-
-        self.send_packet(&pkt)?;
-
         Ok(())
     }
 }
@@ -228,13 +168,12 @@ impl IoRead {
 }
 
 impl IoWrite {
-    pub(crate) async fn send_packet(&mut self, bytes: bytes::Bytes) -> anyhow::Result<()> {
+    pub(crate) async fn send_packet(&mut self, bytes: bytes::Bytes) -> io::Result<()> {
+        // self.write.write_k
+
         let (result, _) = self.write.write_all(bytes).await;
 
-        result?;
-
-        // todo: is flush needed?
-        // self.write.flush().await?;
+        result?; // error occurs here
 
         Ok(())
     }
@@ -368,6 +307,7 @@ impl Io {
         Ok(())
     }
 
+    #[instrument(skip(self, tx))]
     async fn server_process(
         mut self,
         id: usize,
@@ -375,11 +315,9 @@ impl Io {
     ) -> anyhow::Result<()> {
         // self.stream.set_nodelay(true)?;
 
-        info!("connection id {id}");
-
         let ip = self.stream.peer_addr()?;
 
-        info!("connection from {ip}");
+        debug!("connection from {ip}");
 
         let HandshakeC2s {
             protocol_version,
@@ -406,13 +344,10 @@ impl Io {
         debug!("[[start login phase]]");
 
         // first
-        let LoginHelloC2s {
-            username,
-            profile_id,
-        } = self.recv_packet().await?;
+        let LoginHelloC2s { username, .. } = self.recv_packet().await?;
 
         // todo: use
-        let _profile_id = profile_id.context("missing profile id")?;
+        // let _profile_id = profile_id.context("missing profile id")?;
 
         let username: Box<str> = Box::from(username.0);
 
@@ -448,11 +383,11 @@ impl Io {
             dec: self.dec,
         };
 
-        info!("Finished handshake for {username}");
+        debug!("Finished handshake for {username}");
 
         monoio::spawn(async move {
             while let Ok(packet) = io_read.recv_packet_raw().await {
-                GLOBAL_PACKETS
+                GLOBAL_C2S_PACKETS
                     .lock()
                     .push(UserPacketFrame { packet, user: uuid });
             }
@@ -463,8 +398,11 @@ impl Io {
             let mut past_instant = Instant::now();
             while let Ok(bytes) = s2c_rx.recv_async().await {
                 let len = bytes.len();
+
+                trace!("got byte len: {len}");
+
                 if let Err(e) = io_write.send_packet(bytes).await {
-                    error!("{e:?}");
+                    error!("Error sending packet: {e} ... {e:?}");
                     break;
                 }
                 let elapsed = past_instant.elapsed();
@@ -525,9 +463,7 @@ impl Io {
         debug!("status");
         let status::QueryRequestC2s = self.recv_packet().await?;
 
-        let player_count = SHARED
-            .player_count
-            .load(std::sync::atomic::Ordering::Relaxed);
+        let player_count = SHARED.player_count.load(Ordering::Relaxed);
 
         //  64x64 pixels image
         let bytes = include_bytes!("saul.png");
@@ -582,33 +518,29 @@ async fn print_errors(future: impl core::future::Future<Output = anyhow::Result<
     }
 }
 
-pub static GLOBAL_PACKETS: spin::Mutex<Vec<UserPacketFrame>> = spin::Mutex::new(Vec::new());
+pub static GLOBAL_C2S_PACKETS: spin::Mutex<Vec<UserPacketFrame>> = spin::Mutex::new(Vec::new());
 
-async fn run(tx: flume::Sender<ClientConnection>) {
-    // start socket 25565
-    // todo: remove unwrap
-    let addr = "0.0.0.0:25565";
-
-    let listener = match TcpListener::bind(addr) {
+#[instrument(skip_all)]
+async fn io_thread(tx: flume::Sender<ClientConnection>, address: impl ToSocketAddrs) {
+    let listener = match TcpListener::bind(address) {
         Ok(listener) => listener,
         Err(e) => {
-            error!("failed to bind to {addr}: {e}");
+            error!("failed to bind: {e}");
             return;
         }
     };
 
-    info!("listening on {addr}");
-
-    let mut id = 0;
+    let id = 0;
 
     // accept incoming connections
     loop {
-        let Ok((stream, _)) = listener.accept().await else {
-            warn!("accept failed");
-            continue;
+        let stream = match listener.accept().await {
+            Ok((stream, _)) => stream,
+            Err(e) => {
+                warn!("accept failed: {e} ... {e:?}");
+                continue;
+            }
         };
-
-        info!("accepted connection {id}");
 
         let process = Io::new(stream);
 
@@ -618,11 +550,13 @@ async fn run(tx: flume::Sender<ClientConnection>) {
         let action = print_errors(action);
 
         monoio::spawn(action);
-        id += 1;
     }
 }
 
-pub fn server(shutdown: flume::Receiver<()>) -> anyhow::Result<flume::Receiver<ClientConnection>> {
+pub fn start_io_thread(
+    shutdown: flume::Receiver<()>,
+    address: impl ToSocketAddrs + Send + Sync + 'static,
+) -> anyhow::Result<flume::Receiver<ClientConnection>> {
     let (connection_tx, connection_rx) = flume::unbounded();
 
     std::thread::Builder::new()
@@ -633,7 +567,7 @@ pub fn server(shutdown: flume::Receiver<()>) -> anyhow::Result<flume::Receiver<C
                 .unwrap();
 
             runtime.block_on(async move {
-                let run = run(connection_tx);
+                let run = io_thread(connection_tx, address);
                 let shutdown = shutdown.recv_async();
 
                 monoio::select! {
@@ -647,7 +581,7 @@ pub fn server(shutdown: flume::Receiver<()>) -> anyhow::Result<flume::Receiver<C
     Ok(connection_rx)
 }
 
-fn registry_codec_raw(codec: &RegistryCodec) -> anyhow::Result<Compound> {
+pub fn registry_codec_raw(codec: &RegistryCodec) -> anyhow::Result<Compound> {
     // codec.cached_codec.clear();
 
     let mut compound = Compound::default();

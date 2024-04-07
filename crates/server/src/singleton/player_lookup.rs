@@ -4,11 +4,11 @@ use evenio::{entity::EntityId, prelude::Component};
 use uuid::Uuid;
 
 #[derive(Component, Default, Debug)]
-pub struct PlayerLookup {
+pub struct PlayerUuidLookup {
     inner: HashMap<Uuid, EntityId>,
 }
 
-impl PlayerLookup {
+impl PlayerUuidLookup {
     pub fn insert(&mut self, uuid: Uuid, entity: EntityId) {
         self.inner.insert(uuid, entity);
     }
