@@ -49,6 +49,8 @@ fn setup_simple_trace() {
     not(feature = "trace-simple")
 ))]
 fn setup_tracy() {
+    use tracing_subscriber::layer::SubscriberExt;
+
     tracing::subscriber::set_global_default(
         tracing_subscriber::registry().with(tracing_tracy::TracyLayer::default()),
     )
@@ -66,6 +68,13 @@ pub fn with_tracing<T>(f: impl FnOnce() -> T) -> T {
     #[cfg(all(
         feature = "tracy",
         not(feature = "trace"),
+        not(feature = "trace-simple")
+    ))]
+    setup_tracy();
+
+    #[cfg(all(
+        feature = "trace",
+        not(feature = "tracy"),
         not(feature = "trace-simple")
     ))]
     let _guard = setup_global_subscriber();

@@ -313,8 +313,6 @@ impl Io {
         id: usize,
         tx: flume::Sender<ClientConnection>,
     ) -> anyhow::Result<()> {
-        // self.stream.set_nodelay(true)?;
-
         let ip = self.stream.peer_addr()?;
 
         debug!("connection from {ip}");
@@ -340,6 +338,7 @@ impl Io {
         Ok(())
     }
 
+    #[instrument(skip(self, tx))]
     async fn server_login(mut self, tx: flume::Sender<ClientConnection>) -> anyhow::Result<()> {
         debug!("[[start login phase]]");
 
@@ -387,9 +386,11 @@ impl Io {
 
         monoio::spawn(async move {
             while let Ok(packet) = io_read.recv_packet_raw().await {
-                GLOBAL_C2S_PACKETS
-                    .lock()
-                    .push(UserPacketFrame { packet, user: uuid });
+                tracing::info_span!("adding global packets").in_scope(|| {
+                    GLOBAL_C2S_PACKETS
+                        .lock()
+                        .push(UserPacketFrame { packet, user: uuid });
+                });
             }
         });
 
@@ -459,6 +460,7 @@ impl Io {
         Ok(())
     }
 
+    #[instrument(skip(self))]
     async fn server_status(mut self) -> anyhow::Result<()> {
         debug!("status");
         let status::QueryRequestC2s = self.recv_packet().await?;
