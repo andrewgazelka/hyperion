@@ -37,7 +37,7 @@ use valence_protocol::{
 };
 use valence_registry::RegistryCodec;
 
-use crate::{config, SHARED};
+use crate::{config, global};
 
 const DEFAULT_SPEED: u32 = 1024 * 1024;
 
@@ -76,6 +76,7 @@ pub struct Io {
     dec: PacketDecoder,
     enc: PacketEncoder,
     frame: PacketFrame,
+    shared: Arc<global::Shared>,
 }
 
 pub struct IoWrite {
@@ -266,7 +267,7 @@ impl Io {
         }
     }
 
-    fn new(stream: TcpStream) -> Self {
+    fn new(stream: TcpStream, shared: Arc<global::Shared>) -> Self {
         Self {
             stream,
             dec: PacketDecoder::default(),
@@ -275,6 +276,7 @@ impl Io {
                 id: 0,
                 body: BytesMut::new(),
             },
+            shared,
         }
     }
 
@@ -463,7 +465,7 @@ impl Io {
         debug!("status");
         let status::QueryRequestC2s = self.recv_packet().await?;
 
-        let player_count = SHARED.player_count.load(Ordering::Relaxed);
+        let player_count = self.shared.player_count.load(Ordering::Relaxed);
 
         //  64x64 pixels image
         let bytes = include_bytes!("saul.png");
@@ -521,7 +523,11 @@ async fn print_errors(future: impl core::future::Future<Output = anyhow::Result<
 pub static GLOBAL_C2S_PACKETS: spin::Mutex<Vec<UserPacketFrame>> = spin::Mutex::new(Vec::new());
 
 #[instrument(skip_all)]
-async fn io_thread(tx: flume::Sender<ClientConnection>, address: impl ToSocketAddrs) {
+async fn main_loop(
+    tx: flume::Sender<ClientConnection>,
+    address: impl ToSocketAddrs,
+    shared: Arc<global::Shared>,
+) {
     let listener = match TcpListener::bind(address) {
         Ok(listener) => listener,
         Err(e) => {
@@ -542,7 +548,7 @@ async fn io_thread(tx: flume::Sender<ClientConnection>, address: impl ToSocketAd
             }
         };
 
-        let process = Io::new(stream);
+        let process = Io::new(stream, shared.clone());
 
         let tx = tx.clone();
 
@@ -553,9 +559,10 @@ async fn io_thread(tx: flume::Sender<ClientConnection>, address: impl ToSocketAd
     }
 }
 
-pub fn start_io_thread(
+pub fn init_io_thread(
     shutdown: flume::Receiver<()>,
     address: impl ToSocketAddrs + Send + Sync + 'static,
+    shared: Arc<global::Shared>,
 ) -> anyhow::Result<flume::Receiver<ClientConnection>> {
     let (connection_tx, connection_rx) = flume::unbounded();
 
@@ -567,7 +574,7 @@ pub fn start_io_thread(
                 .unwrap();
 
             runtime.block_on(async move {
-                let run = io_thread(connection_tx, address);
+                let run = main_loop(connection_tx, address, shared);
                 let shutdown = shutdown.recv_async();
 
                 monoio::select! {

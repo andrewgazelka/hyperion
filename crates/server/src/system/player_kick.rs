@@ -7,11 +7,12 @@ use valence_protocol::{
     text::{Color, IntoText},
 };
 
-use crate::{singleton::player_lookup::PlayerUuidLookup, KickPlayer, Player, Uuid, SHARED};
+use crate::{global::Global, singleton::player_lookup::PlayerUuidLookup, KickPlayer, Player, Uuid};
 
 #[instrument(skip_all)]
 pub fn player_kick(
     r: Receiver<KickPlayer, (EntityId, &mut Player, &Uuid)>,
+    global: Single<&Global>,
     lookup: Single<&mut PlayerUuidLookup>,
     mut s: Sender<Despawn>,
 ) {
@@ -31,7 +32,8 @@ pub fn player_kick(
     });
 
     // todo: also handle disconnecting without kicking, io socket being closed, etc
-    SHARED.player_count.fetch_sub(1, Ordering::Relaxed);
+
+    global.0.shared.player_count.fetch_sub(1, Ordering::Relaxed);
 
     s.send(Despawn(id));
 }
