@@ -58,7 +58,7 @@ jobs:
 
       - name: Run cargo deny
         run: |
-          cargo deny check
+          cargo deny check  -D warnings
 
   fmt:
     runs-on: ubuntu-latest
