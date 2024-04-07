@@ -4,7 +4,7 @@ use std::{
     borrow::Cow,
     io,
     io::ErrorKind,
-    net::{ToSocketAddrs},
+    net::ToSocketAddrs,
     os::fd::{AsRawFd, RawFd},
     ptr::addr_of_mut,
     sync::{
