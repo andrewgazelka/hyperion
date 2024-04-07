@@ -16,11 +16,12 @@ use std::{
 use anyhow::Context;
 use evenio::prelude::*;
 use glam::Vec2;
+use libc::{getrlimit, setrlimit, RLIMIT_NOFILE};
 use ndarray::s;
 pub use rayon::iter::ParallelIterator;
 use signal_hook::iterator::Signals;
 use spin::Lazy;
-use tracing::{debug, info, info_span, instrument, trace, warn};
+use tracing::{debug, error, info, info_span, instrument, trace, warn};
 use valence_protocol::{math::Vec3, ByteAngle, VarInt};
 
 use crate::{
@@ -128,6 +129,38 @@ struct BroadcastPackets;
 static SHARED: global::Shared = global::Shared {
     player_count: AtomicU32::new(0),
 };
+
+pub fn adjust_file_limits(recommended_min: u64) -> std::io::Result<()> {
+    let mut limits = libc::rlimit {
+        rlim_cur: 0, // Initialize soft limit to 0
+        rlim_max: 0, // Initialize hard limit to 0
+    };
+
+    if unsafe { getrlimit(RLIMIT_NOFILE, &mut limits) } == 0 {
+        info!("Current file handle soft limit: {}", limits.rlim_cur);
+        info!("Current file handle hard limit: {}", limits.rlim_max);
+    } else {
+        error!("Failed to get the current file handle limits");
+        return Err(std::io::Error::last_os_error());
+    };
+
+    if limits.rlim_max < recommended_min {
+        warn!(
+            "Could only set file handle limit to {}. Recommended minimum is {}",
+            limits.rlim_cur, recommended_min
+        );
+    }
+
+    limits.rlim_cur = limits.rlim_max;
+    info!("Setting soft limit to: {}", limits.rlim_cur);
+
+    if unsafe { setrlimit(RLIMIT_NOFILE, &limits) } != 0 {
+        error!("Failed to set the file handle limits");
+        return Err(std::io::Error::last_os_error());
+    }
+
+    Ok(())
+}
 
 pub struct Game {
     world: World,
