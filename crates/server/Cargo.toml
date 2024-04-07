@@ -12,7 +12,7 @@ full = ["trace"]
 pprof = ["dep:pprof"]
 tracy = ["dep:tracing-tracy"]
 trace-simple = []
-default = ["trace-simple"]
+default = []
 
 
 [dependencies]
