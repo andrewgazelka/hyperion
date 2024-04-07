@@ -1260,6 +1260,24 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9c198f91728a82281a64e1f4f9eeb25d82cb32a5de251c6bd1b5154d63a8e7bd"
 
 [[package]]
+name = "libdeflate-sys"
+version = "0.14.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "012437ac39c1e7d7ba12af3aceceb5c93149779aa17c2b1c483f33954957ddc8"
+dependencies = [
+ "cc",
+]
+
+[[package]]
+name = "libdeflater"
+version = "0.14.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "58b30f982ddb14aae2a24a7ed7b3d512d687c2483493f95de7a6d167942a19c3"
+dependencies = [
+ "libdeflate-sys",
+]
+
+[[package]]
 name = "libloading"
 version = "0.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1925,6 +1943,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "rust-mc-bot"
+version = "0.1.0"
+source = "git+https://github.com/andrewgazelka/rust-mc-bot?branch=optimize#3529308733eb8669c9fcfc0c539a377910e362b2"
+dependencies = [
+ "libdeflater",
+ "mio",
+ "num_cpus",
+ "rand 0.8.5",
+]
+
+[[package]]
 name = "rustc-demangle"
 version = "0.1.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2058,6 +2087,7 @@ dependencies = [
  "rand_distr",
  "rayon",
  "rayon-local",
+ "rust-mc-bot",
  "serde",
  "serde_json",
  "sha2",
@@ -2065,7 +2095,7 @@ dependencies = [
  "smallvec 2.0.0-alpha.5",
  "spin",
  "spin_sleep",
- "thread-priority",
+ "tango-bench",
  "toml",
  "tracing",
  "tracing-flame",
@@ -2319,20 +2349,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
-]
-
-[[package]]
-name = "thread-priority"
-version = "0.16.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a617e9eeeb20448b01a8e2427fb80dfbc9c49d79a1de3b11f25731edbf547e3c"
-dependencies = [
- "bitflags 2.5.0",
- "cfg-if",
- "libc",
- "log",
- "rustversion",
- "winapi",
 ]
 
 [[package]]

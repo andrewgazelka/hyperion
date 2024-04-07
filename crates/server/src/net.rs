@@ -4,6 +4,7 @@ use std::{
     borrow::Cow,
     io,
     io::ErrorKind,
+    net::{ToSocketAddrs},
     os::fd::{AsRawFd, RawFd},
     ptr::addr_of_mut,
     sync::{
@@ -22,7 +23,7 @@ use monoio::{
 };
 use serde_json::json;
 use sha2::Digest;
-use tracing::{debug, error, info, instrument, trace, warn};
+use tracing::{debug, error, instrument, trace, warn};
 use valence_protocol::{
     decode::PacketFrame,
     nbt::{compound, Compound, List},
@@ -520,22 +521,16 @@ async fn print_errors(future: impl core::future::Future<Output = anyhow::Result<
 pub static GLOBAL_C2S_PACKETS: spin::Mutex<Vec<UserPacketFrame>> = spin::Mutex::new(Vec::new());
 
 #[instrument(skip_all)]
-async fn io_thread(tx: flume::Sender<ClientConnection>) {
-    // start socket 25565
-    // todo: remove unwrap
-    let addr = "0.0.0.0:25565";
-
-    let listener = match TcpListener::bind(addr) {
+async fn io_thread(tx: flume::Sender<ClientConnection>, address: impl ToSocketAddrs) {
+    let listener = match TcpListener::bind(address) {
         Ok(listener) => listener,
         Err(e) => {
-            error!("failed to bind to {addr}: {e}");
+            error!("failed to bind: {e}");
             return;
         }
     };
 
-    info!("listening on {addr}");
-
-    let mut id = 0;
+    let id = 0;
 
     // accept incoming connections
     loop {
@@ -555,12 +550,12 @@ async fn io_thread(tx: flume::Sender<ClientConnection>) {
         let action = print_errors(action);
 
         monoio::spawn(action);
-        id += 1;
     }
 }
 
 pub fn start_io_thread(
     shutdown: flume::Receiver<()>,
+    address: impl ToSocketAddrs + Send + Sync + 'static,
 ) -> anyhow::Result<flume::Receiver<ClientConnection>> {
     let (connection_tx, connection_rx) = flume::unbounded();
 
@@ -572,7 +567,7 @@ pub fn start_io_thread(
                 .unwrap();
 
             runtime.block_on(async move {
-                let run = io_thread(connection_tx);
+                let run = io_thread(connection_tx, address);
                 let shutdown = shutdown.recv_async();
 
                 monoio::select! {

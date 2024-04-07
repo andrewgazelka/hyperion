@@ -79,7 +79,8 @@ fn main() -> anyhow::Result<()> {
         .build()
         .unwrap();
 
-    let mut game = Game::init()?;
+    let default_address = "0.0.0.0:25565";
+    let mut game = Game::init(default_address)?;
     game.game_loop();
 
     #[cfg(feature = "pprof")]

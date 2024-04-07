@@ -8,6 +8,7 @@ mod singleton;
 use std::{
     cell::UnsafeCell,
     collections::VecDeque,
+    net::ToSocketAddrs,
     sync::atomic::AtomicU32,
     time::{Duration, Instant},
 };
@@ -134,6 +135,7 @@ pub struct Game {
     last_ms_per_tick: VecDeque<f64>,
     tick_on: u64,
     incoming: flume::Receiver<ClientConnection>,
+    shutdown_tx: flume::Sender<()>,
 }
 
 impl Game {
@@ -145,7 +147,13 @@ impl Game {
         &mut self.world
     }
 
-    pub fn init() -> anyhow::Result<Self> {
+    /// # Panics
+    /// This function will panic if the game is already shutdown.
+    pub fn shutdown(&self) {
+        self.shutdown_tx.send(()).unwrap();
+    }
+
+    pub fn init(address: impl ToSocketAddrs + Send + Sync + 'static) -> anyhow::Result<Self> {
         info!("Starting hyperion");
         Lazy::force(&config::CONFIG);
 
@@ -171,15 +179,18 @@ impl Game {
 
         let (shutdown_tx, shutdown_rx) = flume::bounded(1);
 
-        std::thread::spawn(move || {
-            for _ in signals.forever() {
-                warn!("Shutting down...");
-                SHUTDOWN.store(true, std::sync::atomic::Ordering::Relaxed);
-                let _ = shutdown_tx.send(());
+        std::thread::spawn({
+            let shutdown_tx = shutdown_tx.clone();
+            move || {
+                for _ in signals.forever() {
+                    warn!("Shutting down...");
+                    SHUTDOWN.store(true, std::sync::atomic::Ordering::Relaxed);
+                    let _ = shutdown_tx.send(());
+                }
             }
         });
 
-        let incoming = start_io_thread(shutdown_rx)?;
+        let incoming = start_io_thread(shutdown_rx, address)?;
 
         let mut world = World::new();
 
@@ -221,6 +232,7 @@ impl Game {
             last_ms_per_tick: VecDeque::default(),
             tick_on: 0,
             incoming,
+            shutdown_tx,
         };
 
         game.last_ticks.push_back(Instant::now());

@@ -66,21 +66,16 @@ io-uring = "0.6.3"
 
 
 [dev-dependencies]
-#criterion = { version = "0.5.1", features = ["html_reports"] }
 divan = "0.1.14"
-#tango-bench = "0.4.0"
-#iai = "0.1"
-#iai-callgrind = "0.10.2"
-thread-priority = "0.16.0"
-
-# removing this because jemalloc-ctl is nice for memory stats also
-# https://github.com/rust-lang/rust-analyzer/issues/1441#issuecomment-509506279
-# jemalloc uses significantly less memory
-#mimalloc = { version = "0.1.39" , default-features = false }
-
+rust-mc-bot.workspace = true
+tango-bench = "0.4.0"
 
 [[bench]]
 name = "many_zombies"
+harness = false
+
+[[bench]]
+name = "side_by_side"
 harness = false
 
 [lints.clippy]
