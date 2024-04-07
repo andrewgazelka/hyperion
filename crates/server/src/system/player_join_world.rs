@@ -106,38 +106,36 @@ pub fn player_join_world(
         entries: Cow::Borrowed(entries),
     };
 
-    encoder
-        .0
-        .append_round_robin(&info, PacketMetadata::REQUIRED)
-        .unwrap();
+    let buf = encoder.0.get_round_robin();
+
+    buf.append_packet(&info, PacketMetadata::REQUIRED).unwrap();
+
+    let dx = fastrand::f64().mul_add(10.0, -5.0);
+    let dz = fastrand::f64().mul_add(10.0, -5.0);
 
     let spawn_player = play::PlayerSpawnS2c {
         entity_id,
         player_uuid: uuid.0,
-        position: DVec3::new(0.0, 30.0, 0.0),
+        position: DVec3::new(dx, 30.0, dz),
         yaw: ByteAngle(0),
         pitch: ByteAngle(0),
     };
 
-    // let join_world = play::EntitySpawnS2c {
-    //     entity_id,
-    //     object_uuid: uuid.0,
-    //     kind: VarInt(EntityType::Player as i32),
-    //     position: DVec3::new(0.0, 30.0, 0.0),
-    //     pitch: ByteAngle(0),
-    //     yaw: ByteAngle(0),
-    //     head_yaw: ByteAngle(0),
-    //     data: VarInt::default(),
-    //     velocity: Velocity([0, 0, 0]),
-    // };
+    buf.append_packet(&spawn_player, PacketMetadata::REQUIRED)
+        .unwrap();
+
+    let text = valence_protocol::packets::play::GameMessageS2c {
+        chat: format!("Player {} joined the world", player.name).into_cow_text(),
+        overlay: false,
+    };
 
     encoder
         .0
-        .append_round_robin(&spawn_player, PacketMetadata::REQUIRED)
+        .get_round_robin()
+        .append_packet(&text, PacketMetadata::REQUIRED)
         .unwrap();
 
     info!("Player {} joined the world", player.name);
-    // encoder.0.append_round_robin(&join_world, PacketMetadata::REQUIRED).unwrap();
 }
 
 fn write_block_states(states: &BlockStateContainer, writer: &mut impl Write) -> anyhow::Result<()> {
@@ -463,8 +461,11 @@ fn inner(encoder: &mut PacketEncoder) -> anyhow::Result<()> {
         angle: 3.0,
     })?;
 
+    let dx = fastrand::f64().mul_add(10.0, -5.0);
+    let dz = fastrand::f64().mul_add(10.0, -5.0);
+
     encoder.append_packet(&play::PlayerPositionLookS2c {
-        position: DVec3::new(0.0, 30.0, 0.0),
+        position: DVec3::new(dx, 30.0, dz),
         yaw: 0.0,
         pitch: 0.0,
         flags: PlayerPositionLookFlags::default(),

@@ -23,6 +23,7 @@ pub fn tps_message(r: Receiver<StatsEvent>, encoder: Single<&mut Encoder>) {
     let encoder = encoder.0;
 
     encoder
-        .append_round_robin(&packet, PacketMetadata::DROPPABLE)
+        .get_round_robin()
+        .append_packet(&packet, PacketMetadata::DROPPABLE)
         .unwrap();
 }

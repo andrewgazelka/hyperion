@@ -65,7 +65,8 @@ pub fn init_entity(
 
     encoder
         .0
-        .append_round_robin(&pkt, PacketMetadata::REQUIRED)
+        .get_round_robin()
+        .append_packet(&pkt, PacketMetadata::REQUIRED)
         .unwrap();
 }
 
