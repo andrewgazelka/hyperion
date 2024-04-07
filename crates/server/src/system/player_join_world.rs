@@ -45,10 +45,12 @@ pub(crate) struct EntityQuery<'a> {
     _player: With<&'static MinecraftEntity>,
 }
 
+// todo: clean up player_join_world; the file is super super super long and hard to understand
 #[instrument(skip_all)]
 pub fn player_join_world(
-    r: Receiver<PlayerJoinWorld, (EntityId, &mut Player, &Uuid)>,
+    r: Receiver<PlayerJoinWorld, (EntityId, &Player, &Uuid)>,
     entities: Fetcher<EntityQuery>,
+    players: Fetcher<(EntityId, &Player, &Uuid, &FullEntityPose)>,
     lookup: Single<&mut PlayerUuidLookup>,
     encoder: Single<&mut Encoder>,
 ) {
@@ -62,37 +64,15 @@ pub fn player_join_world(
         bytes.freeze()
     });
 
-    let (id, player, uuid) = r.query;
+    let buf = encoder.0.get_round_robin();
+
+    let (id, current_player, uuid) = r.query;
 
     lookup.0.insert(uuid.0, id);
 
-    player.packets.writer.send_raw(CACHED_DATA.clone()).unwrap();
-
-    let mut all_entities = PacketEncoder::new();
-
-    for entity in entities {
-        let pkt = spawn_packet(entity.id, *entity.uuid, entity.pose);
-        all_entities.append_packet(&pkt).unwrap();
-    }
-
-    SHARED
-        .player_count
-        .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-
-    // if let Err(e) = inner(player, entities) {
-    //     s.send(KickPlayer {
-    //         target: id,
-    //         reason: format!("Failed to join world: {e}"),
-    //     });
-    //
-    //     return;
-    // }
-
-    let entity_id = VarInt(id.index().0 as i32);
-
     let entries = &[play::player_list_s2c::PlayerListEntry {
         player_uuid: uuid.0,
-        username: &player.name,
+        username: &current_player.name,
         properties: Cow::Borrowed(&[]),
         chat_data: None,
         listed: true,
@@ -106,9 +86,71 @@ pub fn player_join_world(
         entries: Cow::Borrowed(entries),
     };
 
-    let buf = encoder.0.get_round_robin();
-
     buf.append_packet(&info, PacketMetadata::REQUIRED).unwrap();
+
+    let text = valence_protocol::packets::play::GameMessageS2c {
+        chat: format!("{} joined the world", current_player.name).into_cow_text(),
+        overlay: false,
+    };
+
+    buf.append_packet(&text, PacketMetadata::REQUIRED).unwrap();
+
+    current_player
+        .packets
+        .writer
+        .send_raw(CACHED_DATA.clone())
+        .unwrap();
+
+    let mut local_encoder = PacketEncoder::new();
+
+    for entity in entities {
+        let pkt = spawn_packet(entity.id, *entity.uuid, entity.pose);
+        local_encoder.append_packet(&pkt).unwrap();
+    }
+
+    // todo: cache
+    let entries = players
+        .iter()
+        .map(
+            |(_, player, uuid, _)| play::player_list_s2c::PlayerListEntry {
+                player_uuid: uuid.0,
+                username: &player.name,
+                properties: Cow::Borrowed(&[]),
+                chat_data: None,
+                listed: true,
+                ping: 0,
+                game_mode: GameMode::Creative,
+                display_name: Some("SomeBot".into_cow_text()),
+            },
+        )
+        .collect::<Vec<_>>();
+
+    local_encoder
+        .append_packet(&play::PlayerListS2c {
+            actions: PlayerListActions::default().with_add_player(true),
+            entries: Cow::Owned(entries),
+        })
+        .unwrap();
+
+    // todo: cache
+    for (id, _, uuid, pose) in &players {
+        let entity_id = VarInt(id.index().0 as i32);
+
+        let pkt = play::PlayerSpawnS2c {
+            entity_id,
+            player_uuid: uuid.0,
+            position: pose.position.as_dvec3(),
+            yaw: ByteAngle::from_degrees(pose.yaw),
+            pitch: ByteAngle::from_degrees(pose.pitch),
+        };
+        local_encoder.append_packet(&pkt).unwrap();
+    }
+
+    SHARED
+        .player_count
+        .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+
+    let entity_id = VarInt(id.index().0 as i32);
 
     let dx = fastrand::f64().mul_add(10.0, -5.0);
     let dz = fastrand::f64().mul_add(10.0, -5.0);
@@ -124,18 +166,13 @@ pub fn player_join_world(
     buf.append_packet(&spawn_player, PacketMetadata::REQUIRED)
         .unwrap();
 
-    let text = valence_protocol::packets::play::GameMessageS2c {
-        chat: format!("{} joined the world", player.name).into_cow_text(),
-        overlay: false,
-    };
-
-    encoder
-        .0
-        .get_round_robin()
-        .append_packet(&text, PacketMetadata::REQUIRED)
+    current_player
+        .packets
+        .writer
+        .send_raw(local_encoder.take().freeze())
         .unwrap();
 
-    info!("Player {} joined the world", player.name);
+    info!("Player {} joined the world", current_player.name);
 }
 
 fn write_block_states(states: &BlockStateContainer, writer: &mut impl Write) -> anyhow::Result<()> {
