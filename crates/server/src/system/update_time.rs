@@ -25,7 +25,8 @@ pub fn update_time(
     };
 
     encoder
-        .append_round_robin(&pkt, PacketMetadata::DROPPABLE)
+        .get_round_robin()
+        .append_packet(&pkt, PacketMetadata::DROPPABLE)
         .unwrap();
 
     // update the tick
