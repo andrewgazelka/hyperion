@@ -21,9 +21,9 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install cargo-machete
-        uses: baptiste0928/cargo-install@v3
+        uses: taiki-e/install-action@v2
         with:
-          crate: cargo-machete
+          tool: cargo-machete
 
       - name: Run cargo machete
         run: |
@@ -74,9 +74,9 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install cargo-deny
-        uses: baptiste0928/cargo-install@v3
+        uses: taiki-e/install-action@v2
         with:
-          crate: cargo-deny
+          tool: cargo-deny
 
       - name: Run cargo deny
         run: |
@@ -89,15 +89,32 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Rust toolchain and cache
-        uses: actions-rust-lang/setup-rust-toolchain@v1
+      - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ env.RUST_NIGHTLY_TOOLCHAIN }}
           components: rustfmt
-
+      - uses: Swatinem/rust-cache@v2
       - name: Run rustfmt
         run: |
           cargo fmt --all -- --check
+
+  docs:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_NIGHTLY_TOOLCHAIN }}
+      - uses: Swatinem/rust-cache@v2
+      - name: Run cargo doc
+        run: | 
+          cargo doc --workspace --no-deps --all-features
+        env:
+          RUSTDOCFLAGS: -D warnings
+
   clippy:
     runs-on: ubuntu-latest
 
@@ -106,26 +123,30 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup Rust toolchain and cache
-        uses: actions-rust-lang/setup-rust-toolchain@v1
+        uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ env.RUST_NIGHTLY_TOOLCHAIN }}
           components: clippy
 
-      - name: Clippy check
-        run: cargo clippy --workspace --benches --tests --examples --all-features
-
-  clippy-macos:
-    runs-on: macos-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Setup Rust toolchain and cache
-        uses: actions-rust-lang/setup-rust-toolchain@v1
-        with:
-          toolchain: ${{ env.RUST_NIGHTLY_TOOLCHAIN }}
-          components: clippy
+      - uses: Swatinem/rust-cache@v2
 
       - name: Clippy check
-        run: cargo clippy --workspace --benches --tests --examples --all-features
+        run: cargo clippy --workspace --benches --tests --examples --all-features -- -D warnings
+
+#  clippy-macos:
+#    runs-on: macos-latest
+#    steps:
+#      - name: Checkout repository
+#        uses: actions/checkout@v4
+#
+#      - name: Setup Rust toolchain and cache
+#        uses: dtolnay/rust-toolchain@master
+#        with:
+#          toolchain: ${{ env.RUST_NIGHTLY_TOOLCHAIN }}
+#          components: clippy
+#
+#      - uses: Swatinem/rust-cache@v2
+#
+#      - name: Clippy check
+#        run: cargo clippy --workspace --benches --tests --examples --all-features -- -D warnings
 
