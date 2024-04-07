@@ -125,7 +125,7 @@ pub fn player_join_world(
         .unwrap();
 
     let text = valence_protocol::packets::play::GameMessageS2c {
-        chat: format!("Player {} joined the world", player.name).into_cow_text(),
+        chat: format!("{} joined the world", player.name).into_cow_text(),
         overlay: false,
     };
 

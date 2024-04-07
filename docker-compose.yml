@@ -7,6 +7,7 @@ services:
       target: release-bin
     ports:
       - "25565:25565"
+      - "8086:8086"
     environment:
       - RUST_LOG=${RUST_LOG:-info}
     security_opt:

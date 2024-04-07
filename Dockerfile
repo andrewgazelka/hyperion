@@ -9,7 +9,7 @@ FROM alpine:3.19 as packages
 
 # Install curl, build-base (Alpine's equivalent of build-essential), and OpenSSL development packages
 RUN apk update && \
-    apk add --no-cache curl build-base openssl-dev pkgconfig musl-dev clang llvm lld mold
+    apk add --no-cache curl build-base openssl-dev pkgconfig musl-dev clang llvm lld mold linux-headers
 
 FROM packages as builder
 
@@ -41,7 +41,7 @@ FROM builder as release
 RUN --mount=type=cache,target=/root/.cargo/registry \
     --mount=type=cache,target=/root/.cargo/git \
     --mount=type=cache,target=/app/target \
-    CARGO_TERM_COLOR=never cargo build --release --locked -p server
+    CARGO_TERM_COLOR=never cargo build --release --locked -p server -F tracy
 
 RUN --mount=type=cache,target=/app/target \
     mkdir -p /build && \

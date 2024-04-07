@@ -368,7 +368,6 @@ impl BvhNode {
 
         // leaf
         if left < 0 {
-            // println!("left: {}", left);
             let start_idx = left.checked_neg().expect("failed to negate index") - 1;
 
             let start_idx = usize::try_from(start_idx).expect("failed to convert index");
@@ -443,27 +442,13 @@ impl BvhNode {
         let original_node_idx = nodes_idx;
 
         let (left, right, nodes_idx, to_set) = if max_threads == 1 {
-            // let idx = unsafe { nodes.as_ptr().offset_from(root.start_nodes_ptr) } + nodes_idx as
-            // isize;
-
-            // trace!("pending add internal: {:03}", nodes_idx);
-
-            // println!("will add internal: {:03}", original_node_idx);
-
             let start_idx = nodes_idx;
             let (left, nodes_idx) =
                 Self::build_in(root, left_elems, max_threads, nodes_idx + 1, nodes);
 
-            // let nodes_idx = nodes_idx;
-            // trace!("boop add internal: {:03}", nodes_idx);
-
-            // println!("node_idx now: {:03}", nodes_idx + 1);
-
             let (right, nodes_idx) =
                 Self::build_in(root, right_elems, max_threads, nodes_idx, nodes);
             let end_idx = nodes_idx;
-
-            // println!("end_idx: {}", end_idx);
 
             debug_assert!(start_idx != end_idx);
 
