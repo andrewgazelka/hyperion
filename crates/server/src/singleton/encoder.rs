@@ -8,6 +8,7 @@ use evenio::prelude::Component;
 use rayon::iter::IntoParallelRefMutIterator;
 pub use rayon::iter::ParallelIterator;
 use rayon_local::RayonLocal;
+use tracing::trace;
 use uuid::Uuid;
 use valence_protocol::{math::Vec2, Encode, Packet, VarInt};
 
@@ -16,10 +17,20 @@ const PACKET_LEN_BYTES_MAX: usize = 3;
 #[derive(Copy, Clone)]
 pub enum PacketNecessity {
     Required,
-    Droppable { prioritize_location: Vec2 },
+    Droppable {
+        #[expect(
+            dead_code,
+            reason = "this is not used, but we plan to use it in the future"
+        )]
+        prioritize_location: Vec2,
+    },
 }
 
 #[derive(Copy, Clone)]
+#[expect(
+    dead_code,
+    reason = "this is not used, but we plan to use it in the future"
+)]
 pub struct PacketMetadata {
     pub necessity: PacketNecessity,
     pub exclude_player: Option<Uuid>,
@@ -39,6 +50,10 @@ impl PacketMetadata {
 }
 
 /// Packet which should not be dropped
+#[expect(
+    dead_code,
+    reason = "this is not used, but we plan to use it in the future"
+)]
 pub struct NecessaryPacket {
     pub exclude_player: Option<Uuid>,
     pub offset: usize,
@@ -46,6 +61,10 @@ pub struct NecessaryPacket {
 }
 
 /// Packet which may be dropped
+#[expect(
+    dead_code,
+    reason = "this is not used, but we plan to use it in the future"
+)]
 pub struct DroppablePacket {
     pub prioritize_location: Vec2,
     pub exclude_player: Option<Uuid>,
@@ -56,11 +75,15 @@ pub struct DroppablePacket {
 #[derive(Default)]
 pub struct PacketBuffer {
     pub packet_data: Vec<u8>,
-    pub necessary_packets: Vec<NecessaryPacket>,
-    pub droppable_packets: Vec<DroppablePacket>,
+    // pub necessary_packets: Vec<NecessaryPacket>,
+    // pub droppable_packets: Vec<DroppablePacket>,
 }
 
 impl PacketBuffer {
+    #[expect(
+        unused_variables,
+        reason = "will be implemented soon; do not want to break API"
+    )]
     pub fn append_packet<P>(&mut self, pkt: &P, metadata: PacketMetadata) -> anyhow::Result<()>
     where
         P: Packet + Encode,
@@ -69,6 +92,7 @@ impl PacketBuffer {
         // size without shifting the packet body. This means that there is some amount of unused
         // memory, but the amount of unused memory should be negligible.
         let mut packet_start = self.packet_data.len();
+        let original_packet_start = packet_start;
         self.packet_data
             .resize(packet_start + PACKET_LEN_BYTES_MAX, 0);
 
@@ -103,41 +127,54 @@ impl PacketBuffer {
 
         let packet_len_including_size = packet_len + packet_len_var_int.written_size();
 
-        match metadata.necessity {
-            PacketNecessity::Required => {
-                self.necessary_packets.push(NecessaryPacket {
-                    exclude_player: metadata.exclude_player,
-                    offset: packet_start,
-                    len: packet_len_including_size,
-                });
-            }
-            PacketNecessity::Droppable {
-                prioritize_location,
-            } => {
-                self.droppable_packets.push(DroppablePacket {
-                    prioritize_location,
-                    exclude_player: metadata.exclude_player,
-                    offset: packet_start,
-                    len: packet_len_including_size,
-                });
-            }
-        }
+        // match metadata.necessity {
+        //     PacketNecessity::Required => {
+        //         self.necessary_packets.push(NecessaryPacket {
+        //             exclude_player: metadata.exclude_player,
+        //             offset: packet_start,
+        //             len: packet_len_including_size,
+        //         });
+        //     }
+        //     PacketNecessity::Droppable {
+        //         prioritize_location,
+        //     } => {
+        //         self.droppable_packets.push(DroppablePacket {
+        //             prioritize_location,
+        //             exclude_player: metadata.exclude_player,
+        //             offset: packet_start,
+        //             len: packet_len_including_size,
+        //         });
+        //     }
+        // }
+
+        trace!(
+            "append packet {} {} len {} ... total bytes len -> {}",
+            P::ID,
+            P::NAME,
+            packet_len_including_size,
+            self.packet_data.len()
+        );
+
+        // todo: super inefficient
+        self.packet_data.drain(original_packet_start..packet_start);
 
         Ok(())
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.packet_data.is_empty()
+    }
+
     pub fn clear_packets(&mut self) {
         self.packet_data.clear();
-        self.necessary_packets.clear();
-        self.droppable_packets.clear();
+        // self.necessary_packets.clear();
+        // self.droppable_packets.clear();
     }
 }
 
 // // todo init
 // #[thread_local]
 // static BROADCASTER: RefCell<Option<Broadcaster>> = RefCell::new(None);
-
-// pub struct Encoder;
 
 #[derive(Component, Default)]
 pub struct Encoder {
@@ -152,6 +189,9 @@ impl Encoder {
     ) -> anyhow::Result<()> {
         let local = self.rayon_local.get_rayon_local();
         let mut encoder = local.take();
+
+        trace!("append broadcast packet {} {}", P::ID, P::NAME);
+
         let result = encoder.append_packet(packet, metadata);
         local.set(encoder);
         result
@@ -174,8 +214,16 @@ impl Encoder {
         self.rayon_local
             .get_all_locals()
             .par_iter_mut()
-            .for_each(|x| {
-                f(x.get_mut());
+            .for_each(|buf| {
+                let buf = buf.get_mut();
+                if buf.is_empty() {
+                    return;
+                }
+
+                // buf.
+
+                f(buf);
+                buf.clear_packets();
             });
     }
 }

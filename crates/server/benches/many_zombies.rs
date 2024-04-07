@@ -6,6 +6,8 @@
 
 #![feature(lint_reasons)]
 
+use std::net::SocketAddr;
+
 use divan::Bencher;
 use server::{bounding_box::BoundingBox, FullEntityPose, Game, InitEntity, Targetable};
 use valence_protocol::math::Vec3;
@@ -33,7 +35,8 @@ fn world_bench(bencher: Bencher, thread_count: usize) {
         .build()
         .unwrap();
 
-    let mut game = Game::init().unwrap();
+    let addr = SocketAddr::from(([127, 0, 0, 1], 25565));
+    let mut game = Game::init(addr).unwrap();
 
     let count: u32 = 100_000;
 

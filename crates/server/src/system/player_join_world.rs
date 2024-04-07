@@ -1,4 +1,4 @@
-use std::{borrow::Cow, io::Write};
+use std::{borrow::Cow, collections::BTreeSet, io::Write};
 
 use chunk::{
     bit_width,
@@ -8,36 +8,136 @@ use evenio::prelude::*;
 use itertools::Itertools;
 use tracing::{debug, info, instrument};
 use valence_protocol::{
+    game_mode::OptGameMode,
+    ident,
     math::DVec3,
     nbt::{compound, List},
-    packets::{play, play::player_position_look_s2c::PlayerPositionLookFlags},
-    BlockPos, BlockState, ChunkPos, Encode, FixedArray, VarInt,
+    packets::{
+        play,
+        play::{
+            player_list_s2c::PlayerListActions, player_position_look_s2c::PlayerPositionLookFlags,
+            GameJoinS2c,
+        },
+    },
+    text::IntoText,
+    BlockPos, BlockState, ByteAngle, ChunkPos, Encode, FixedArray, GameMode, Ident, PacketEncoder,
+    VarInt,
 };
-use valence_registry::{biome::BiomeId, RegistryIdx};
+use valence_registry::{biome::BiomeId, BiomeRegistry, RegistryCodec, RegistryIdx};
 
 use crate::{
-    bits::BitStorage, chunk::heightmap, config, net::Packets,
-    singleton::player_lookup::PlayerLookup, KickPlayer, Player, PlayerJoinWorld, Uuid, SHARED,
+    bits::BitStorage,
+    chunk::heightmap,
+    config,
+    singleton::{
+        encoder::{Encoder, PacketMetadata},
+        player_lookup::PlayerUuidLookup,
+    },
+    system::init_entity::spawn_packet,
+    FullEntityPose, MinecraftEntity, Player, PlayerJoinWorld, Uuid, SHARED,
 };
+
+#[derive(Query, Debug)]
+pub(crate) struct EntityQuery<'a> {
+    id: EntityId,
+    uuid: &'a Uuid,
+    pose: &'a FullEntityPose,
+    _player: With<&'static MinecraftEntity>,
+}
 
 #[instrument(skip_all)]
 pub fn player_join_world(
     r: Receiver<PlayerJoinWorld, (EntityId, &mut Player, &Uuid)>,
-    lookup: Single<&mut PlayerLookup>,
-    mut s: Sender<KickPlayer>,
+    entities: Fetcher<EntityQuery>,
+    lookup: Single<&mut PlayerUuidLookup>,
+    encoder: Single<&mut Encoder>,
 ) {
+    static CACHED_DATA: once_cell::sync::Lazy<bytes::Bytes> = once_cell::sync::Lazy::new(|| {
+        let mut encoder = PacketEncoder::new();
+
+        info!("Caching world data for new players");
+        inner(&mut encoder).unwrap();
+
+        let bytes = encoder.take();
+        bytes.freeze()
+    });
+
     let (id, player, uuid) = r.query;
 
     lookup.0.insert(uuid.0, id);
 
-    info!("Player {} joined the world", player.name);
+    player.packets.writer.send_raw(CACHED_DATA.clone()).unwrap();
 
-    if let Err(e) = inner(player) {
-        s.send(KickPlayer {
-            target: id,
-            reason: format!("Failed to join world: {e}"),
-        });
+    let mut all_entities = PacketEncoder::new();
+
+    for entity in entities {
+        let pkt = spawn_packet(entity.id, *entity.uuid, entity.pose);
+        all_entities.append_packet(&pkt).unwrap();
     }
+
+    SHARED
+        .player_count
+        .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+
+    // if let Err(e) = inner(player, entities) {
+    //     s.send(KickPlayer {
+    //         target: id,
+    //         reason: format!("Failed to join world: {e}"),
+    //     });
+    //
+    //     return;
+    // }
+
+    let entity_id = VarInt(id.index().0 as i32);
+
+    let entries = &[play::player_list_s2c::PlayerListEntry {
+        player_uuid: uuid.0,
+        username: &player.name,
+        properties: Cow::Borrowed(&[]),
+        chat_data: None,
+        listed: true,
+        ping: 0,
+        game_mode: GameMode::Creative,
+        display_name: Some("SomeBot".into_cow_text()),
+    }];
+
+    let info = play::PlayerListS2c {
+        actions: PlayerListActions::default().with_add_player(true),
+        entries: Cow::Borrowed(entries),
+    };
+
+    encoder
+        .0
+        .append_round_robin(&info, PacketMetadata::REQUIRED)
+        .unwrap();
+
+    let spawn_player = play::PlayerSpawnS2c {
+        entity_id,
+        player_uuid: uuid.0,
+        position: DVec3::new(0.0, 30.0, 0.0),
+        yaw: ByteAngle(0),
+        pitch: ByteAngle(0),
+    };
+
+    // let join_world = play::EntitySpawnS2c {
+    //     entity_id,
+    //     object_uuid: uuid.0,
+    //     kind: VarInt(EntityType::Player as i32),
+    //     position: DVec3::new(0.0, 30.0, 0.0),
+    //     pitch: ByteAngle(0),
+    //     yaw: ByteAngle(0),
+    //     head_yaw: ByteAngle(0),
+    //     data: VarInt::default(),
+    //     velocity: Velocity([0, 0, 0]),
+    // };
+
+    encoder
+        .0
+        .append_round_robin(&spawn_player, PacketMetadata::REQUIRED)
+        .unwrap();
+
+    info!("Player {} joined the world", player.name);
+    // encoder.0.append_round_robin(&join_world, PacketMetadata::REQUIRED).unwrap();
 }
 
 fn write_block_states(states: &BlockStateContainer, writer: &mut impl Write) -> anyhow::Result<()> {
@@ -85,7 +185,60 @@ impl<T, const N: usize> Array3d for [T; N] {
     }
 }
 
-fn send_commands(io: &mut Packets) -> anyhow::Result<()> {
+pub fn send_keep_alive(encoder: &mut PacketEncoder) -> anyhow::Result<()> {
+    let pkt = valence_protocol::packets::play::KeepAliveS2c {
+        // The ID can be set to zero because it doesn't matter
+        id: 0,
+    };
+
+    encoder.append_packet(&pkt)?;
+
+    Ok(())
+}
+
+pub fn send_game_join_packet(encoder: &mut PacketEncoder) -> anyhow::Result<()> {
+    // recv ack
+
+    let codec = RegistryCodec::default();
+
+    let registry_codec = crate::net::registry_codec_raw(&codec)?;
+
+    let dimension_names: BTreeSet<Ident<Cow<str>>> = codec
+        .registry(BiomeRegistry::KEY)
+        .iter()
+        .map(|value| value.name.as_str_ident().into())
+        .collect();
+
+    let dimension_name = ident!("overworld");
+    // let dimension_name: Ident<Cow<str>> = chunk_layer.dimension_type_name().into();
+
+    let pkt = GameJoinS2c {
+        entity_id: 0,
+        is_hardcore: false,
+        dimension_names: Cow::Owned(dimension_names),
+        registry_codec: Cow::Borrowed(&registry_codec),
+        max_players: config::CONFIG.max_players.into(),
+        view_distance: config::CONFIG.view_distance.into(), // max view distance
+        simulation_distance: config::CONFIG.simulation_distance.into(),
+        reduced_debug_info: false,
+        enable_respawn_screen: false,
+        dimension_name: dimension_name.into(),
+        hashed_seed: 0,
+        game_mode: GameMode::Creative,
+        is_flat: false,
+        last_death_location: None,
+        portal_cooldown: 60.into(),
+        previous_game_mode: OptGameMode(Some(GameMode::Creative)),
+        dimension_type_name: "minecraft:overworld".try_into()?,
+        is_debug: false,
+    };
+
+    encoder.append_packet(&pkt)?;
+
+    Ok(())
+}
+
+fn send_commands(encoder: &mut PacketEncoder) -> anyhow::Result<()> {
     // https://wiki.vg/Command_Data
     use valence_protocol::packets::play::command_tree_s2c::{
         CommandTreeS2c, Node, NodeData, Parser,
@@ -141,7 +294,7 @@ fn send_commands(io: &mut Packets) -> anyhow::Result<()> {
     //     redirect_node: Some(VarInt(3)),
     // };
 
-    io.writer.send_packet(&CommandTreeS2c {
+    encoder.append_packet(&CommandTreeS2c {
         commands: vec![root, spawn, spawn_arg, clear],
         root_index: VarInt(0),
     })?;
@@ -240,25 +393,10 @@ fn ground_section() -> Vec<u8> {
     section_bytes
 }
 
-fn inner(io: &mut Player) -> anyhow::Result<()> {
-    let io = &mut io.packets;
+fn inner(encoder: &mut PacketEncoder) -> anyhow::Result<()> {
+    send_game_join_packet(encoder)?;
 
-    io.writer.send_game_join_packet()?;
-
-    io.writer.send_packet(&play::PlayerSpawnPositionS2c {
-        position: BlockPos::default(),
-        angle: 3.0,
-    })?;
-
-    io.writer.send_packet(&play::PlayerPositionLookS2c {
-        position: DVec3::new(0.0, 30.0, 0.0),
-        yaw: 0.0,
-        pitch: 0.0,
-        flags: PlayerPositionLookFlags::default(),
-        teleport_id: 1.into(),
-    })?;
-
-    io.writer.send_packet(&play::ChunkRenderDistanceCenterS2c {
+    encoder.append_packet(&play::ChunkRenderDistanceCenterS2c {
         chunk_x: 0.into(),
         chunk_z: 0.into(),
     })?;
@@ -314,16 +452,29 @@ fn inner(io: &mut Player) -> anyhow::Result<()> {
     for x in -16..=16 {
         for z in -16..=16 {
             pkt.pos = ChunkPos::new(x, z);
-            io.writer.send_packet(&pkt)?;
+            encoder.append_packet(&pkt)?;
         }
     }
 
-    send_commands(io)?;
+    send_commands(encoder)?;
+
+    encoder.append_packet(&play::PlayerSpawnPositionS2c {
+        position: BlockPos::default(),
+        angle: 3.0,
+    })?;
+
+    encoder.append_packet(&play::PlayerPositionLookS2c {
+        position: DVec3::new(0.0, 30.0, 0.0),
+        yaw: 0.0,
+        pitch: 0.0,
+        flags: PlayerPositionLookFlags::default(),
+        teleport_id: 1.into(),
+    })?;
 
     if let Some(diameter) = config::CONFIG.border_diameter {
         debug!("Setting world border to diameter {}", diameter);
 
-        io.writer.send_packet(&play::WorldBorderInitializeS2c {
+        encoder.append_packet(&play::WorldBorderInitializeS2c {
             x: 0.0,
             z: 0.0,
             old_diameter: diameter,
@@ -334,29 +485,13 @@ fn inner(io: &mut Player) -> anyhow::Result<()> {
             warning_time: 200.into(),
         })?;
 
-        io.writer
-            .send_packet(&play::WorldBorderSizeChangedS2c { diameter })?;
+        encoder.append_packet(&play::WorldBorderSizeChangedS2c { diameter })?;
 
-        io.writer.send_packet(&play::WorldBorderCenterChangedS2c {
+        encoder.append_packet(&play::WorldBorderCenterChangedS2c {
             x_pos: 0.0,
             z_pos: 0.0,
         })?;
     }
-
-    // set fly speed
-
-    // io.writer.send_packet(&play::PlayerAbilitiesS2c {
-    //     flags: PlayerAbilitiesFlags::default()
-    //         .with_flying(true)
-    //         .with_allow_flying(true),
-    //     flying_speed: 1.0,
-    //     fov_modifier: 0.0,
-    // })?;
-    // io.writer.send_packet(&play::EntityA
-
-    SHARED
-        .player_count
-        .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 
     Ok(())
 }
