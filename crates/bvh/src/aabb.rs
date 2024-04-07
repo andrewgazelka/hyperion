@@ -77,12 +77,14 @@ impl Aabb {
     pub fn overlap(a: &Self, b: &Self) -> Option<Self> {
         let min_x = a.min.x.max(b.min.x);
         let min_y = a.min.y.max(b.min.y);
+        let min_z = a.min.z.max(b.min.z);
 
         let max_x = a.max.x.min(b.max.x);
         let max_y = a.max.y.min(b.max.y);
+        let max_z = a.max.z.min(b.max.z);
 
         // Check if there is an overlap. If any dimension does not overlap, return None.
-        if min_x < max_x && min_y < max_y {
+        if min_x < max_x && min_y < max_y && min_z < max_z {
             Some(Self {
                 min: glam::Vec3::new(min_x, min_y, 0.0),
                 max: glam::Vec3::new(max_x, max_y, 0.0),
