@@ -97,6 +97,24 @@ jobs:
       - name: Run rustfmt
         run: |
           cargo fmt --all -- --check
+
+  docs:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_NIGHTLY_TOOLCHAIN }}
+      - uses: Swatinem/rust-cache@v2
+      - name: Run cargo doc
+        run: | 
+          cargo doc --workspace --no-deps --all-features
+        env:
+          RUSTDOCFLAGS: -D warnings
+
   clippy:
     runs-on: ubuntu-latest
 
@@ -113,22 +131,22 @@ jobs:
       - uses: Swatinem/rust-cache@v2
 
       - name: Clippy check
-        run: cargo clippy --workspace --benches --tests --examples --all-features
+        run: cargo clippy --workspace --benches --tests --examples --all-features -- -D warnings
 
-  clippy-macos:
-    runs-on: macos-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Setup Rust toolchain and cache
-        uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: ${{ env.RUST_NIGHTLY_TOOLCHAIN }}
-          components: clippy
-
-      - uses: Swatinem/rust-cache@v2
-
-      - name: Clippy check
-        run: cargo clippy --workspace --benches --tests --examples --all-features
+#  clippy-macos:
+#    runs-on: macos-latest
+#    steps:
+#      - name: Checkout repository
+#        uses: actions/checkout@v4
+#
+#      - name: Setup Rust toolchain and cache
+#        uses: dtolnay/rust-toolchain@master
+#        with:
+#          toolchain: ${{ env.RUST_NIGHTLY_TOOLCHAIN }}
+#          components: clippy
+#
+#      - uses: Swatinem/rust-cache@v2
+#
+#      - name: Clippy check
+#        run: cargo clippy --workspace --benches --tests --examples --all-features -- -D warnings
 
