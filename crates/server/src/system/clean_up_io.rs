@@ -1,10 +1,12 @@
+use std::sync::atomic::Ordering;
+
 use evenio::prelude::*;
 use tracing::instrument;
 use valence_protocol::{packets::play, VarInt};
 
 use crate::{
     singleton::encoder::{Encoder, PacketMetadata},
-    Gametick, Player, Uuid,
+    Gametick, Player, Uuid, SHARED,
 };
 
 #[instrument(skip_all, level = "trace")]
@@ -34,6 +36,14 @@ pub fn clean_up_io(
     }
 
     let encoder = encoder.0.get_round_robin();
+
+    let num_removed = despawn_ids.len();
+
+    if num_removed > 0 {
+        SHARED
+            .player_count
+            .fetch_sub(num_removed as u32, Ordering::Relaxed);
+    }
 
     encoder
         .append_packet(
