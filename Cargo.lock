@@ -1455,6 +1455,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "no_denormals"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fc8d4edce03a3be51d7736ddd5cf811f1852c2bb4d03637b82e2d1340e6f0bf9"
+
+[[package]]
 name = "nonmax"
 version = "0.5.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2063,6 +2069,7 @@ dependencies = [
  "libc",
  "monoio",
  "ndarray",
+ "no_denormals",
  "once_cell",
  "pprof",
  "rand 0.8.5",
