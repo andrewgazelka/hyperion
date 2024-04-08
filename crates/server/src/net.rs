@@ -227,8 +227,8 @@ impl IoWrite {
         let mut buf = Buf(ArrayVec::new());
 
         for bytes in bytes {
+            #[expect(clippy::as_ptr_cast_mut, reason = "The pointer won't be written to")]
             buf.0.push(iovec {
-                // This cast to *mut is okay because the data won't be written to
                 iov_base: bytes.as_ptr() as *mut _,
                 iov_len: bytes.len(),
             });
@@ -510,7 +510,7 @@ impl Io {
                     );
                 }
 
-                let len = bytes_buf.iter().map(|bytes| bytes.len()).sum::<usize>();
+                let len = bytes_buf.iter().map(bytes::Bytes::len).sum::<usize>();
 
                 trace!("got byte len: {len}");
 
