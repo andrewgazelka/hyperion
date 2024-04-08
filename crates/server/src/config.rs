@@ -1,5 +1,6 @@
 use std::{fmt::Debug, fs::File, io::Read, path::Path};
 
+use anyhow::Context;
 use serde::{Deserialize, Serialize};
 use spin::lazy::Lazy;
 use tracing::{info, instrument, warn};
@@ -22,7 +23,7 @@ impl Default for Config {
             max_players: 10_000,
             view_distance: 32,
             simulation_distance: 10,
-            server_desc: "10k babyyyy".to_owned(),
+            server_desc: "Hyperion Test Server".to_owned(),
         }
     }
 }
@@ -38,7 +39,24 @@ impl Config {
             let config = toml::from_str::<Self>(contents.as_str())?;
             Ok(config)
         } else {
-            warn!("configuration file not found, using defaults");
+            info!("configuration file not found, using defaults");
+
+            // make required folders
+            if let Some(parent) = path.as_ref().parent() {
+                std::fs::create_dir_all(parent).with_context(|| {
+                    format!(
+                        "failed to create parent directories for {:?}",
+                        path.as_ref()
+                    )
+                })?;
+            }
+
+            // write default config to file
+            let default_config = Self::default();
+            std::fs::write(&path, toml::to_string(&default_config)?.as_bytes())?;
+
+            info!("wrote default configuration to {:?}", path.as_ref());
+
             Ok(Self::default())
         }
     }
