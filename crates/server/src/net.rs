@@ -325,6 +325,11 @@ impl Io {
     }
 
     fn new(stream: TcpStream, shared: Arc<global::Shared>) -> Self {
+        // TCP_NODELAY is enabled because the code already has a WRITE_DELAY
+        if let Err(e) = stream.set_nodelay(true) {
+            warn!("set_nodelay failed: {e}");
+        }
+
         let enc = PacketEncoder::default();
         let dec = PacketDecoder::default();
 
