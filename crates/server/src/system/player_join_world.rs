@@ -15,7 +15,9 @@ use valence_protocol::{
     packets::{
         play,
         play::{
-            player_list_s2c::PlayerListActions, player_position_look_s2c::PlayerPositionLookFlags,
+            player_list_s2c::PlayerListActions,
+            player_position_look_s2c::PlayerPositionLookFlags,
+            team_s2c::{CollisionRule, Mode, NameTagVisibility, TeamColor, TeamFlags},
             GameJoinS2c,
         },
     },
@@ -124,6 +126,30 @@ pub fn player_join_world(
             },
         )
         .collect::<Vec<_>>();
+
+    let player_names = players
+        .iter()
+        .map(|(_, player, ..)| &*player.name)
+        .collect::<Vec<_>>();
+
+    encoder
+        .encode(&play::TeamS2c {
+            team_name: "no_tag",
+            mode: Mode::AddEntities {
+                entities: player_names,
+            },
+        })
+        .unwrap();
+
+    let current_name = &*current_player.name;
+
+    buf.append_packet(&play::TeamS2c {
+        team_name: "no_tag",
+        mode: Mode::AddEntities {
+            entities: vec![current_name],
+        },
+    })
+    .unwrap();
 
     encoder
         .encode(&play::PlayerListS2c {
@@ -502,6 +528,20 @@ fn inner(encoder: &mut PacketEncoder) -> anyhow::Result<()> {
         pitch: 0.0,
         flags: PlayerPositionLookFlags::default(),
         teleport_id: 1.into(),
+    })?;
+
+    encoder.append_packet(&play::TeamS2c {
+        team_name: "no_tag",
+        mode: Mode::CreateTeam {
+            team_display_name: Cow::default(),
+            friendly_flags: TeamFlags::default(),
+            name_tag_visibility: NameTagVisibility::Never,
+            collision_rule: CollisionRule::Always,
+            team_color: TeamColor::Black,
+            team_prefix: Cow::default(),
+            team_suffix: Cow::default(),
+            entities: vec![],
+        },
     })?;
 
     if let Some(diameter) = config::CONFIG.border_diameter {
