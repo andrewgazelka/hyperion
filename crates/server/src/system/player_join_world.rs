@@ -193,6 +193,8 @@ pub fn player_join_world(
 
     buf.append_packet(&spawn_player).unwrap();
 
+    encoder.deallocate_on_process();
+
     info!("Player {} joined the world", current_player.name);
 }
 

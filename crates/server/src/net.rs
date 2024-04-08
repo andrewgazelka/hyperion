@@ -36,7 +36,7 @@ use valence_protocol::{
         status,
     },
     uuid::Uuid,
-    Bounded, Decode, Encode, PacketDecoder, PacketEncoder, VarInt,
+    Bounded, CompressionThreshold, Decode, Encode, PacketDecoder, PacketEncoder, VarInt,
 };
 use valence_registry::RegistryCodec;
 
@@ -115,6 +115,9 @@ impl Connection {
 pub struct Encoder {
     enc: PacketEncoder,
 
+    // if we should clear the allocation when clearing
+    deallocate_on_process: bool,
+
     /// Approximate speed that the other side can receive the data that this sends.
     /// Measured in bytes/second.
     speed_mib_per_second: Arc<AtomicU32>,
@@ -129,8 +132,21 @@ impl Encoder {
         self.speed_mib_per_second.load(Ordering::Relaxed)
     }
 
-    pub fn take(&mut self) -> bytes::Bytes {
-        self.enc.take().freeze()
+    pub fn deallocate_on_process(&mut self) {
+        self.deallocate_on_process = true;
+    }
+
+    pub fn take(&mut self, compression: CompressionThreshold) -> bytes::Bytes {
+        let result = self.enc.take().freeze();
+
+        if self.deallocate_on_process {
+            // to clear the allocation, we need to create a new encoder
+            self.enc = PacketEncoder::new();
+            self.enc.set_compression(compression);
+            self.deallocate_on_process = false;
+        }
+
+        result
     }
 
     pub fn inner_mut(&mut self) -> &mut PacketEncoder {
@@ -402,6 +418,7 @@ impl Io {
 
         let encoder = Encoder {
             enc: self.enc,
+            deallocate_on_process: false,
             speed_mib_per_second: Arc::clone(&speed),
         };
 
