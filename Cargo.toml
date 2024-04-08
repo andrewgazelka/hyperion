@@ -41,6 +41,5 @@ rayon-local = { path = "crates/rayon-local" }
 rust-mc-bot = { git = "https://github.com/andrewgazelka/rust-mc-bot", branch = "optimize" }
 glam = "0.26.0"
 
-#evenio = { git = "https://github.com/andrewgazelka/evenio", features = ["rayon"], branch = "fix-collisions-gt-2" }
 evenio = { git = "https://github.com/rj00a/evenio", features = ["rayon"] }
 smallvec = { git = "https://github.com/servo/rust-smallvec" }
