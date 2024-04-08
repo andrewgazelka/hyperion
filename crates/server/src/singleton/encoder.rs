@@ -33,10 +33,6 @@ pub struct PacketMetadata {
 }
 
 impl PacketMetadata {
-    #[expect(
-        dead_code,
-        reason = "this is not used, but we plan to use it in the future"
-    )]
     pub const DROPPABLE: Self = Self {
         necessity: PacketNecessity::Droppable {
             prioritize_location: Vec2::new(0.0, 0.0),
@@ -129,6 +125,9 @@ impl Broadcast {
             .for_each(|encoder| {
                 let encoder = encoder.get_mut();
                 let bytes = encoder.take().freeze();
+                if bytes.is_empty() {
+                    return;
+                }
                 f(bytes);
             });
     }

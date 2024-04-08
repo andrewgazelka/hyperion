@@ -382,7 +382,18 @@ impl Io {
         // todo: use
         // let _profile_id = profile_id.context("missing profile id")?;
 
-        let username: Box<str> = Box::from(username.0);
+        let username = username.0;
+
+        // trim username to 10 chars
+        let username = username[..10].to_owned();
+
+        // add 2 random chars to the end of the username
+        let username = format!(
+            "{}-{}{}",
+            username,
+            fastrand::alphanumeric(),
+            fastrand::alphanumeric()
+        );
 
         let uuid = offline_uuid(&username)?; // todo: random
 
@@ -495,7 +506,7 @@ impl Io {
         let conn = ClientConnection {
             encoder,
             tx: s2c_tx,
-            name: username,
+            name: username.into_boxed_str(),
             uuid,
         };
 
