@@ -9,7 +9,7 @@ use tracing::instrument;
 use valence_protocol::{ByteAngle, VarInt, Velocity};
 
 use crate::{
-    singleton::encoder::{Encoder, PacketMetadata},
+    singleton::encoder::{Broadcast, PacketMetadata},
     EntityReaction, FullEntityPose, InitEntity, MinecraftEntity, RunningSpeed, Uuid,
 };
 
@@ -45,7 +45,7 @@ pub fn init_entity(
         Insert<EntityReaction>,
         Spawn,
     )>,
-    encoder: Single<&mut Encoder>,
+    encoder: Single<&mut Broadcast>,
 ) {
     let event = r.event;
 

@@ -62,6 +62,7 @@ spin_sleep = "1.2.0"
 tracing-tracy = { version = "0.11.0" , optional = true }
 fastrand = "2.0.2"
 no_denormals = "0.1.2"
+derive-build = "0.1.1"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 io-uring = "0.6.3"

@@ -13,7 +13,7 @@ use valence_protocol::{
 
 use crate::{
     singleton::{
-        encoder::{Encoder, PacketMetadata, PacketNecessity},
+        encoder::{Broadcast, PacketMetadata, PacketNecessity},
         player_location_lookup::PlayerLocationLookup,
     },
     EntityReaction, FullEntityPose, Gametick, MinecraftEntity, RunningSpeed,
@@ -39,7 +39,7 @@ pub struct EntityQuery<'a> {
 pub fn entity_move_logic(
     _: Receiver<Gametick>,
     mut entities: Fetcher<EntityQuery>,
-    encoder: Single<&mut Encoder>,
+    encoder: Single<&mut Broadcast>,
     lookup: Single<&PlayerLocationLookup>,
 ) {
     use valence_protocol::packets::play;

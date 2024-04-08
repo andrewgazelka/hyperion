@@ -17,6 +17,8 @@ use std::{
 use anyhow::{ensure, Context};
 use base64::Engine;
 use bytes::BytesMut;
+use derive_build::Build;
+use evenio::prelude::Component;
 use monoio::{
     io::{AsyncReadRent, AsyncWriteRentExt, OwnedReadHalf, OwnedWriteHalf, Splitable},
     net::{TcpListener, TcpStream},
@@ -66,7 +68,8 @@ fn offline_uuid(username: &str) -> anyhow::Result<Uuid> {
 }
 
 pub struct ClientConnection {
-    pub packets: Packets,
+    pub encoder: Encoder,
+    pub tx: flume::Sender<bytes::Bytes>,
     pub name: Box<str>,
     pub uuid: Uuid,
 }
@@ -88,8 +91,26 @@ pub struct IoRead {
     dec: PacketDecoder,
 }
 
-pub struct WriterComm {
+#[derive(Component, Build)]
+pub struct Connection {
+    #[required]
     tx: flume::Sender<bytes::Bytes>,
+}
+
+impl Connection {
+    pub fn is_closed(&self) -> bool {
+        self.tx.is_disconnected()
+    }
+
+    pub fn send(&self, bytes: bytes::Bytes) -> anyhow::Result<()> {
+        trace!("send raw bytes");
+        self.tx.send(bytes)?;
+        Ok(())
+    }
+}
+
+#[derive(Component)]
+pub struct Encoder {
     enc: PacketEncoder,
 
     /// Approximate speed that the other side can receive the data that this sends.
@@ -97,11 +118,7 @@ pub struct WriterComm {
     speed_mib_per_second: Arc<AtomicU32>,
 }
 
-impl WriterComm {
-    pub fn is_closed(&self) -> bool {
-        self.tx.is_disconnected()
-    }
-
+impl Encoder {
     #[expect(
         dead_code,
         reason = "not used, but we plan it to be used in the future"
@@ -110,30 +127,29 @@ impl WriterComm {
         self.speed_mib_per_second.load(Ordering::Relaxed)
     }
 
-    pub fn serialize<P>(&mut self, pkt: &P) -> anyhow::Result<bytes::Bytes>
+    pub fn take(&mut self) -> bytes::Bytes {
+        self.enc.take().freeze()
+    }
+
+    pub fn inner_mut(&mut self) -> &mut PacketEncoder {
+        &mut self.enc
+    }
+
+    pub fn encode<P>(&mut self, pkt: &P) -> anyhow::Result<()>
     where
         P: valence_protocol::Packet + Encode,
     {
         self.enc.append_packet(pkt)?;
-        let bytes = self.enc.take();
 
-        Ok(bytes.freeze())
+        Ok(())
     }
 
-    pub fn send_raw(&self, bytes: bytes::Bytes) -> anyhow::Result<()> {
+    /// This sends the bytes to the connection.
+    /// [`PacketEncoder`] can have compression enabled.
+    /// One must make sure the bytes are pre-compressed if compression is enabled.
+    pub fn append(&mut self, bytes: &[u8]) {
         trace!("send raw bytes");
-        self.tx.send(bytes)?;
-        Ok(())
-    }
-
-    pub(crate) fn send_packet<P>(&mut self, pkt: &P) -> anyhow::Result<()>
-    where
-        P: valence_protocol::Packet + Encode,
-    {
-        let bytes = self.serialize(pkt)?;
-        trace!("send packet {}", P::NAME);
-        self.send_raw(bytes)?;
-        Ok(())
+        self.enc.append_bytes(bytes);
     }
 }
 
@@ -226,10 +242,6 @@ impl IoWrite {
 
         // TODO: Support getting queued send for other OS
     }
-}
-
-pub struct Packets {
-    pub writer: WriterComm,
 }
 
 impl Io {
@@ -362,15 +374,14 @@ impl Io {
         self.send_packet(&packet).await?;
 
         // bound at 1024 packets
-        let (s2c_tx, s2c_rx) = flume::unbounded();
+        let (s2c_tx, s2c_rx) = flume::unbounded::<bytes::Bytes>();
 
         let raw_fd = self.stream.as_raw_fd();
         let (read, write) = self.stream.into_split();
 
         let speed = Arc::new(AtomicU32::new(DEFAULT_SPEED));
 
-        let writer_comm = WriterComm {
-            tx: s2c_tx,
+        let encoder = Encoder {
             enc: self.enc,
             speed_mib_per_second: Arc::clone(&speed),
         };
@@ -445,12 +456,9 @@ impl Io {
             }
         });
 
-        let packets = Packets {
-            writer: writer_comm,
-        };
-
         let conn = ClientConnection {
-            packets,
+            encoder,
+            tx: s2c_tx,
             name: username,
             uuid,
         };

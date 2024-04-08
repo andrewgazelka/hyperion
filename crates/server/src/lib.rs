@@ -26,9 +26,9 @@ use valence_protocol::{math::Vec3, ByteAngle, VarInt};
 
 use crate::{
     bounding_box::BoundingBox,
-    net::{start_io_thread, ClientConnection, Packets, GLOBAL_C2S_PACKETS},
+    net::{start_io_thread, ClientConnection, Connection, Encoder, GLOBAL_C2S_PACKETS},
     singleton::{
-        encoder::{Encoder, PacketMetadata, PacketNecessity},
+        encoder::{Broadcast, PacketMetadata, PacketNecessity},
         player_location_lookup::PlayerLocationLookup,
         player_lookup::PlayerUuidLookup,
     },
@@ -52,7 +52,6 @@ const MSPT_HISTORY_SIZE: usize = 100;
 // A zero-sized component, often called a "marker" or "tag".
 #[derive(Component)]
 struct Player {
-    packets: Packets,
     name: Box<str>,
     last_keep_alive_sent: Instant,
 
@@ -68,7 +67,8 @@ struct Player {
 #[derive(Event)]
 struct InitPlayer {
     entity: EntityId,
-    io: Packets,
+    encoder: Encoder,
+    connection: Connection,
     name: Box<str>,
     uuid: uuid::Uuid,
     pos: FullEntityPose,
@@ -124,7 +124,7 @@ struct StatsEvent {
 struct Gametick;
 
 #[derive(Event)]
-struct BroadcastPackets;
+struct Egress;
 
 static SHARED: global::Shared = global::Shared {
     player_count: AtomicU32::new(0),
@@ -238,7 +238,8 @@ impl Game {
         world.add_handler(system::rebuild_player_location);
         world.add_handler(system::clean_up_io);
 
-        world.add_handler(system::broadcast_packets);
+        world.add_handler(system::egress_broadcast);
+        world.add_handler(system::egress_local);
         world.add_handler(system::keep_alive);
         world.add_handler(handle_ingress);
         world.add_handler(system::stats_message);
@@ -257,7 +258,7 @@ impl Game {
         world.insert(player_location_lookup, PlayerLocationLookup::default());
 
         let encoder = world.spawn();
-        world.insert(encoder, Encoder::default());
+        world.insert(encoder, Broadcast::default());
 
         let mut game = Self {
             world,
@@ -333,16 +334,20 @@ impl Game {
 
         while let Ok(connection) = self.incoming.try_recv() {
             let ClientConnection {
-                packets,
+                encoder,
                 name,
                 uuid,
+                tx,
             } = connection;
 
             let player = self.world.spawn();
 
+            let connection = Connection::new(tx);
+
             let event = InitPlayer {
                 entity: player,
-                io: packets,
+                encoder,
+                connection,
                 name,
                 uuid,
                 pos: FullEntityPose {
@@ -357,7 +362,7 @@ impl Game {
         }
 
         self.world.send(Gametick);
-        self.world.send(BroadcastPackets);
+        self.world.send(Egress);
 
         #[expect(
             clippy::cast_precision_loss,
@@ -402,7 +407,7 @@ fn handle_ingress(
     mut fetcher: Fetcher<(EntityId, &mut Player, &mut FullEntityPose)>,
     lookup: Single<&PlayerUuidLookup>,
     mut sender: Sender<(KickPlayer, InitEntity, KillAllEntities)>,
-    encoder: Single<&mut Encoder>,
+    encoder: Single<&mut Broadcast>,
 ) {
     // uuid to entity id map
 

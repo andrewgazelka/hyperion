@@ -29,8 +29,9 @@ use crate::{
     bits::BitStorage,
     chunk::heightmap,
     config,
+    net::Encoder,
     singleton::{
-        encoder::{Encoder, PacketMetadata},
+        encoder::{Broadcast, PacketMetadata},
         player_lookup::PlayerUuidLookup,
     },
     system::init_entity::spawn_packet,
@@ -48,11 +49,12 @@ pub(crate) struct EntityQuery<'a> {
 // todo: clean up player_join_world; the file is super super super long and hard to understand
 #[instrument(skip_all)]
 pub fn player_join_world(
-    r: Receiver<PlayerJoinWorld, (EntityId, &Player, &Uuid)>,
+    // todo: I doubt &mut Player will work here due to aliasing
+    r: Receiver<PlayerJoinWorld, (EntityId, &Player, &Uuid, &mut Encoder)>,
     entities: Fetcher<EntityQuery>,
     players: Fetcher<(EntityId, &Player, &Uuid, &FullEntityPose)>,
     lookup: Single<&mut PlayerUuidLookup>,
-    encoder: Single<&mut Encoder>,
+    encoder: Single<&mut Broadcast>,
 ) {
     static CACHED_DATA: once_cell::sync::Lazy<bytes::Bytes> = once_cell::sync::Lazy::new(|| {
         let mut encoder = PacketEncoder::new();
@@ -66,7 +68,7 @@ pub fn player_join_world(
 
     let buf = encoder.0.get_round_robin();
 
-    let (id, current_player, uuid) = r.query;
+    let (id, current_player, uuid, encoder) = r.query;
 
     lookup.0.insert(uuid.0, id);
 
@@ -95,17 +97,11 @@ pub fn player_join_world(
 
     buf.append_packet(&text, PacketMetadata::REQUIRED).unwrap();
 
-    current_player
-        .packets
-        .writer
-        .send_raw(CACHED_DATA.clone())
-        .unwrap();
-
-    let mut local_encoder = PacketEncoder::new();
+    encoder.append(&CACHED_DATA);
 
     for entity in entities {
         let pkt = spawn_packet(entity.id, *entity.uuid, entity.pose);
-        local_encoder.append_packet(&pkt).unwrap();
+        encoder.encode(&pkt).unwrap();
     }
 
     // todo: cache
@@ -125,8 +121,8 @@ pub fn player_join_world(
         )
         .collect::<Vec<_>>();
 
-    local_encoder
-        .append_packet(&play::PlayerListS2c {
+    encoder
+        .encode(&play::PlayerListS2c {
             actions: PlayerListActions::default().with_add_player(true),
             entries: Cow::Owned(entries),
         })
@@ -143,7 +139,7 @@ pub fn player_join_world(
             yaw: ByteAngle::from_degrees(pose.yaw),
             pitch: ByteAngle::from_degrees(pose.pitch),
         };
-        local_encoder.append_packet(&pkt).unwrap();
+        encoder.encode(&pkt).unwrap();
     }
 
     SHARED
@@ -164,12 +160,6 @@ pub fn player_join_world(
     };
 
     buf.append_packet(&spawn_player, PacketMetadata::REQUIRED)
-        .unwrap();
-
-    current_player
-        .packets
-        .writer
-        .send_raw(local_encoder.take().freeze())
         .unwrap();
 
     info!("Player {} joined the world", current_player.name);

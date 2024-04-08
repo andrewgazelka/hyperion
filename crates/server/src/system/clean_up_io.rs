@@ -5,15 +5,16 @@ use tracing::instrument;
 use valence_protocol::{packets::play, VarInt};
 
 use crate::{
-    singleton::encoder::{Encoder, PacketMetadata},
+    net::Connection,
+    singleton::encoder::{Broadcast, PacketMetadata},
     Gametick, Player, Uuid, SHARED,
 };
 
 #[instrument(skip_all, level = "trace")]
 pub fn clean_up_io(
     _r: Receiver<Gametick>,
-    io_entities: Fetcher<(EntityId, &mut Player, &Uuid)>,
-    encoder: Single<&mut Encoder>,
+    io_entities: Fetcher<(EntityId, &mut Player, &Uuid, &Connection)>,
+    encoder: Single<&mut Broadcast>,
 
     mut s: Sender<Despawn>,
 ) {
@@ -21,8 +22,8 @@ pub fn clean_up_io(
     let mut despawn_uuids = Vec::new();
     let mut despawn_ids = Vec::new();
 
-    for (id, player, uuid) in io_entities {
-        if !player.packets.writer.is_closed() {
+    for (id, _, uuid, connection) in io_entities {
+        if !connection.is_closed() {
             continue;
         }
 
