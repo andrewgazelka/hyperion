@@ -1983,7 +1983,7 @@ dependencies = [
 [[package]]
 name = "rust-mc-bot"
 version = "0.1.0"
-source = "git+https://github.com/andrewgazelka/rust-mc-bot?branch=optimize#9cba3f552bf26cd43ff56eb8c736cb5505c30f37"
+source = "git+https://github.com/andrewgazelka/rust-mc-bot?branch=optimize#9a4333e5c6bb3739987abdcc2195d96a38896019"
 dependencies = [
  "anyhow",
  "libdeflater",
