@@ -21,11 +21,11 @@ pub use rayon::iter::ParallelIterator;
 use signal_hook::iterator::Signals;
 use spin::Lazy;
 use tracing::{debug, error, info, instrument, trace, warn};
-use valence_protocol::{math::Vec3, ByteAngle, CompressionThreshold, VarInt};
+use valence_protocol::{math::Vec3, CompressionThreshold};
 
 use crate::{
     bounding_box::BoundingBox,
-    net::{init_io_thread, ClientConnection, Connection, Encoder, GLOBAL_C2S_PACKETS},
+    net::{init_io_thread, ClientConnection, Connection, Encoder},
     singleton::{
         encoder::Broadcast, player_location_lookup::PlayerLocationLookup,
         player_lookup::PlayerUuidLookup,
@@ -231,6 +231,7 @@ impl Game {
 
         let mut world = World::new();
 
+        world.add_handler(system::ingress);
         world.add_handler(system::init_player);
         world.add_handler(system::player_join_world);
         world.add_handler(system::player_kick);
@@ -245,7 +246,6 @@ impl Game {
         world.add_handler(system::egress_broadcast);
         world.add_handler(system::egress_local);
         world.add_handler(system::keep_alive);
-        world.add_handler(handle_ingress);
         world.add_handler(system::stats_message);
         world.add_handler(system::kill_all);
 
@@ -406,63 +406,6 @@ impl Game {
 
         self.tick_on += 1;
     }
-}
-
-// The `Receiver<Tick>` parameter tells our handler to listen for the `Tick` event.
-#[instrument(skip_all, level = "trace")]
-fn handle_ingress(
-    _: Receiver<Gametick>,
-    mut fetcher: Fetcher<(EntityId, &mut Player, &mut FullEntityPose)>,
-    lookup: Single<&PlayerUuidLookup>,
-    mut sender: Sender<(KickPlayer, InitEntity, KillAllEntities)>,
-    mut broadcast: Single<&mut Broadcast>,
-) {
-    // uuid to entity id map
-
-    let packets: Vec<_> = core::mem::take(&mut *GLOBAL_C2S_PACKETS.lock());
-
-    for packet in packets {
-        let id = packet.user;
-        let Some(&user) = lookup.get(&id) else { return };
-
-        let Ok((_, player, position)) = fetcher.get_mut(user) else {
-            return;
-        };
-
-        let packet = packet.packet;
-
-        if let Err(e) = packets::switch(packet, player, position, &mut sender) {
-            let reason = format!("error: {e}");
-
-            // todo: handle error
-            // let _ = player.packets.writer.send_chat_message(&reason);
-
-            warn!("invalid packet: {reason}");
-        }
-    }
-
-    fetcher.iter_mut().for_each(|(id, _, pose)| {
-        // let vec2d = Vec2::new(pose.position.x, pose.position.z);
-        let pos = pose.position.as_dvec3();
-
-        let packet = valence_protocol::packets::play::EntityPositionS2c {
-            entity_id: VarInt(id.index().0 as i32),
-            position: pos,
-            yaw: ByteAngle(0),
-            pitch: ByteAngle(0),
-            on_ground: false,
-        };
-
-        // let meta = PacketMetadata {
-        //     necessity: PacketNecessity::Droppable {
-        //         prioritize_location: vec2d,
-        //     },
-        //     exclude_player: None, // todo: include player
-        // };
-
-        // todo: what it panics otherwise
-        broadcast.get_round_robin().append_packet(&packet).unwrap();
-    });
 }
 
 static SHUTDOWN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
