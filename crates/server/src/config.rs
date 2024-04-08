@@ -1,9 +1,9 @@
-use std::{fs::File, io::Read, path::Path};
+use std::{fmt::Debug, fs::File, io::Read, path::Path};
 
 use anyhow::Context;
 use serde::{Deserialize, Serialize};
 use spin::lazy::Lazy;
-use tracing::{info, instrument};
+use tracing::{info, instrument, warn};
 
 pub static CONFIG: Lazy<Config> = Lazy::new(|| Config::load("run/config.toml").unwrap());
 
@@ -23,14 +23,14 @@ impl Default for Config {
             max_players: 10_000,
             view_distance: 32,
             simulation_distance: 10,
-            server_desc: "10k babyyyy".to_owned(),
+            server_desc: "Hyperion Test Server".to_owned(),
         }
     }
 }
 
 impl Config {
-    #[instrument(skip_all)]
-    pub fn load<P: AsRef<Path>>(path: P) -> anyhow::Result<Self> {
+    #[instrument]
+    pub fn load<P: AsRef<Path> + Debug>(path: P) -> anyhow::Result<Self> {
         info!("loading configuration file");
         if path.as_ref().exists() {
             let mut file = File::open(path)?;

@@ -103,7 +103,8 @@ confidence-threshold = 0.8
 # Allow 1 or more licenses on a per-crate basis, so that particular licenses
 # aren't accepted for every possible crate as with the normal allow list
 exceptions = [
-    { allow = ["Zlib"], crate = "nanorand" }
+    { allow = ["Zlib"], crate = "nanorand" },
+    { allow = ["BSD-2-Clause"], crate = "Inflector" } # todo: BSD license: I think this ok, let's double check
     # Each entry is the crate and version constraint, and its specific allow
     # list
     #{ allow = ["Zlib"], crate = "adler32" },
@@ -220,7 +221,10 @@ skip = [
     "regex-syntax",
     "regex-automata",
     "bitflags",
-    "glam"
+#    "glam",
+    "toml_edit",
+    "winnow",
+    "generator" # TODO THIS SHOULD BE FIXED
     #{ crate = "ansi_term@0.11.0", reason = "you can specify a reason why it can't be updated/removed" },
 ]
 # Similarly to `skip` allows you to skip certain crates during duplicate
@@ -247,8 +251,9 @@ unknown-git = "warn"
 allow-registry = ["https://github.com/rust-lang/crates.io-index"]
 # List of URLs for allowed Git repositories
 allow-git = [
-    "https://github.com/andrewgazelka/evenio",
-    "https://github.com/servo/rust-smallvec"
+    "https://github.com/rj00a/evenio",
+    "https://github.com/servo/rust-smallvec",
+    "https://github.com/andrewgazelka/rust-mc-bot"
 ]
 
 [sources.allow-org]

@@ -1,56 +1,29 @@
-use server::Game;
+use anyhow::Context;
+use server::{adjust_file_limits, Game};
 
-#[cfg(feature = "trace")]
-fn setup_global_subscriber() -> impl Drop {
-    use tracing_flame::FlameLayer;
-    use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
-    let fmt_layer = fmt::Layer::default();
+mod tracing_utils;
 
-    let (flame_layer, guard) = FlameLayer::with_file("./tracing.folded").unwrap();
-
-    // Define an environment filter layer
-    // This reads the `RUST_LOG` environment variable to set the log level
-    let filter_layer = EnvFilter::try_from_default_env()
-        .or_else(|_| EnvFilter::try_new("info")) // Fallback to "info" level if `RUST_LOG` is not set
-        .unwrap();
-
-    tracing_subscriber::registry()
-        .with(filter_layer)
-        .with(fmt_layer)
-        .with(flame_layer)
-        .init();
-
-    guard
-}
-
-#[cfg(all(feature = "trace-simple", not(feature = "trace")))]
-fn setup_simple_trace() {
-    tracing_subscriber::fmt::try_init().unwrap();
-}
-
-// https://tracing-rs.netlify.app/tracing/
 fn main() -> anyhow::Result<()> {
-    #[cfg(all(feature = "trace-simple", not(feature = "trace")))]
-    setup_simple_trace();
+    tracing_utils::with_tracing(init)
+}
 
-    #[cfg(feature = "trace")]
-    let _guard = setup_global_subscriber();
+fn init() -> anyhow::Result<()> {
+    // 10k players, we want at least 2^14 = 16,384 file handles
+    adjust_file_limits(16_384)?;
 
-    #[cfg(feature = "pprof")]
-    let guard = pprof::ProfilerGuardBuilder::default()
-        .frequency(2999)
-        .blocklist(&["libc", "libgcc", "pthread", "vdso", "rayon"])
-        .build()
-        .unwrap();
+    rayon::ThreadPoolBuilder::new()
+        .spawn_handler(|thread| {
+            std::thread::spawn(|| no_denormals::no_denormals(|| thread.run()));
+            Ok(())
+        })
+        .build_global()
+        .context("failed to build thread pool")?;
 
-    let mut game = Game::init()?;
-    game.game_loop();
+    let default_address = "0.0.0.0:25565";
 
-    #[cfg(feature = "pprof")]
-    if let Ok(report) = guard.report().build() {
-        let file = std::fs::File::create("flamegraph.svg").unwrap();
-        report.flamegraph(file).unwrap();
-    };
-
-    Ok(())
+    no_denormals::no_denormals(|| {
+        let mut game = Game::init(default_address)?;
+        game.game_loop();
+        Ok(())
+    })
 }

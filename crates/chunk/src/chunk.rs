@@ -31,6 +31,7 @@ pub trait Chunk {
     #[track_caller]
     fn set_block(&mut self, x: u32, y: u32, z: u32, block: impl IntoBlock) -> Block {
         let block = block.into_block();
+
         let state = self.set_block_state(x, y, z, block.state);
         let nbt = self.set_block_entity(x, y, z, block.nbt);
 

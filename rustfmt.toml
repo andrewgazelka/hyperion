@@ -17,5 +17,5 @@ overflow_delimited_expr = true
 reorder_impl_items = true
 reorder_imports = true
 unstable_features = true
-wrap_comments = true
+#wrap_comments = true
 

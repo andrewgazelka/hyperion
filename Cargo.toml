@@ -7,6 +7,7 @@ resolver = "2"
 
 members = [
     "crates/broadcast",
+    "crates/bvh",
     "crates/chunk",
     "crates/generator",
     "crates/generator-build",
@@ -32,9 +33,13 @@ lto = "fat"
 codegen-units = 1
 
 [workspace.dependencies]
-broadcast = { path = "crates/broadcast" }
+bvh = { path = "crates/bvh" }
 chunk = { path = "crates/chunk" }
 generator = { path = "crates/generator" }
 generator-build = { path = "crates/generator-build" }
 rayon-local = { path = "crates/rayon-local" }
-evenio = { git = "https://github.com/andrewgazelka/evenio", features = ["rayon"], branch = "fix-collisions-gt-2" }
+rust-mc-bot = { git = "https://github.com/andrewgazelka/rust-mc-bot", branch = "optimize" }
+glam = "0.26.0"
+
+evenio = { git = "https://github.com/rj00a/evenio", features = ["rayon"] }
+smallvec = { git = "https://github.com/servo/rust-smallvec" }
