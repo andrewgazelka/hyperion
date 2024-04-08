@@ -5,15 +5,17 @@ use tracing::instrument;
 use valence_protocol::{packets::play, VarInt};
 
 use crate::{
+    global::Global,
     net::Connection,
     singleton::encoder::{Broadcast, PacketMetadata},
-    Gametick, Player, Uuid, SHARED,
+    Gametick, Player, Uuid,
 };
 
 #[instrument(skip_all, level = "trace")]
 pub fn clean_up_io(
     _r: Receiver<Gametick>,
     io_entities: Fetcher<(EntityId, &mut Player, &Uuid, &Connection)>,
+    global: Single<&Global>,
     encoder: Single<&mut Broadcast>,
 
     mut s: Sender<Despawn>,
@@ -41,7 +43,9 @@ pub fn clean_up_io(
     let num_removed = despawn_ids.len();
 
     if num_removed > 0 {
-        SHARED
+        global
+            .0
+            .shared
             .player_count
             .fetch_sub(num_removed as u32, Ordering::Relaxed);
     }

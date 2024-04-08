@@ -29,13 +29,14 @@ use crate::{
     bits::BitStorage,
     chunk::heightmap,
     config,
+    global::Global,
     net::Encoder,
     singleton::{
         encoder::{Broadcast, PacketMetadata},
         player_lookup::PlayerUuidLookup,
     },
     system::init_entity::spawn_packet,
-    FullEntityPose, MinecraftEntity, Player, PlayerJoinWorld, Uuid, SHARED,
+    FullEntityPose, MinecraftEntity, Player, PlayerJoinWorld, Uuid,
 };
 
 #[derive(Query, Debug)]
@@ -52,6 +53,7 @@ pub fn player_join_world(
     // todo: I doubt &mut Player will work here due to aliasing
     r: Receiver<PlayerJoinWorld, (EntityId, &Player, &Uuid, &mut Encoder)>,
     entities: Fetcher<EntityQuery>,
+    global: Single<&Global>,
     players: Fetcher<(EntityId, &Player, &Uuid, &FullEntityPose)>,
     lookup: Single<&mut PlayerUuidLookup>,
     encoder: Single<&mut Broadcast>,
@@ -142,7 +144,9 @@ pub fn player_join_world(
         encoder.encode(&pkt).unwrap();
     }
 
-    SHARED
+    global
+        .0
+        .shared
         .player_count
         .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 

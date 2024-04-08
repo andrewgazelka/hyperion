@@ -70,10 +70,15 @@ io-uring = "0.6.3"
 
 [dev-dependencies]
 divan = "0.1.14"
+rust-mc-bot.workspace = true
 tango-bench = "0.4.0"
 
 [[bench]]
 name = "many_zombies"
+harness = false
+
+[[bench]]
+name = "players"
 harness = false
 
 [lints.clippy]

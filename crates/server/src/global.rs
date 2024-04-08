@@ -1,4 +1,4 @@
-use std::sync::atomic::AtomicU32;
+use std::sync::{atomic::AtomicU32, Arc};
 
 use evenio::component::Component;
 
@@ -10,11 +10,5 @@ pub struct Shared {
 #[derive(Component)]
 pub struct Global {
     pub tick: i64,
-}
-
-#[expect(clippy::derivable_impls, reason = "default impl for explicitness")]
-impl Default for Global {
-    fn default() -> Self {
-        Self { tick: 0 }
-    }
+    pub shared: Arc<Shared>,
 }

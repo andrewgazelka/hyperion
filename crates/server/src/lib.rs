@@ -9,7 +9,7 @@ use std::{
     cell::UnsafeCell,
     collections::VecDeque,
     net::ToSocketAddrs,
-    sync::atomic::AtomicU32,
+    sync::{atomic::AtomicU32, Arc},
     time::{Duration, Instant},
 };
 
@@ -26,7 +26,7 @@ use valence_protocol::{math::Vec3, ByteAngle, VarInt};
 
 use crate::{
     bounding_box::BoundingBox,
-    net::{start_io_thread, ClientConnection, Connection, Encoder, GLOBAL_C2S_PACKETS},
+    net::{init_io_thread, ClientConnection, Connection, Encoder, GLOBAL_C2S_PACKETS},
     singleton::{
         encoder::{Broadcast, PacketMetadata, PacketNecessity},
         player_location_lookup::PlayerLocationLookup,
@@ -126,10 +126,6 @@ struct Gametick;
 #[derive(Event)]
 struct Egress;
 
-static SHARED: global::Shared = global::Shared {
-    player_count: AtomicU32::new(0),
-};
-
 pub fn adjust_file_limits(recommended_min: u64) -> std::io::Result<()> {
     let mut limits = libc::rlimit {
         rlim_cur: 0, // Initialize soft limit to 0
@@ -163,6 +159,7 @@ pub fn adjust_file_limits(recommended_min: u64) -> std::io::Result<()> {
 }
 
 pub struct Game {
+    shared: Arc<global::Shared>,
     world: World,
     last_ticks: VecDeque<Instant>,
     last_ms_per_tick: VecDeque<f64>,
@@ -174,6 +171,10 @@ pub struct Game {
 impl Game {
     pub const fn world(&self) -> &World {
         &self.world
+    }
+
+    pub const fn shared(&self) -> &Arc<global::Shared> {
+        &self.shared
     }
 
     pub fn world_mut(&mut self) -> &mut World {
@@ -223,7 +224,11 @@ impl Game {
             }
         });
 
-        let incoming = start_io_thread(shutdown_rx, address)?;
+        let shared = Arc::new(global::Shared {
+            player_count: AtomicU32::new(0),
+        });
+
+        let incoming = init_io_thread(shutdown_rx, address, shared.clone())?;
 
         let mut world = World::new();
 
@@ -246,7 +251,10 @@ impl Game {
         world.add_handler(system::kill_all);
 
         let global = world.spawn();
-        world.insert(global, global::Global::default());
+        world.insert(global, global::Global {
+            tick: 0,
+            shared: shared.clone(),
+        });
 
         let bounding_boxes = world.spawn();
         world.insert(bounding_boxes, bounding_box::EntityBoundingBoxes::default());
@@ -261,6 +269,7 @@ impl Game {
         world.insert(encoder, Broadcast::default());
 
         let mut game = Self {
+            shared,
             world,
             last_ticks: VecDeque::default(),
             last_ms_per_tick: VecDeque::default(),
