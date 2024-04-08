@@ -67,6 +67,7 @@ fastrand = "2.0.2"
 no_denormals = "0.1.2"
 derive-build = "0.1.1"
 flate2 = { version = "1.0.28", features = ["zlib-ng"], default-features = false }
+arrayvec = "0.7.4"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 io-uring = "0.6.3"

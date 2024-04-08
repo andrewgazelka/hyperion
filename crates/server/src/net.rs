@@ -15,11 +15,14 @@ use std::{
 };
 
 use anyhow::{ensure, Context};
+use arrayvec::ArrayVec;
 use base64::Engine;
 use bytes::BytesMut;
 use derive_build::Build;
 use evenio::prelude::Component;
+use libc::iovec;
 use monoio::{
+    buf::IoVecBuf,
     io::{AsyncReadRent, AsyncWriteRentExt, OwnedReadHalf, OwnedWriteHalf, Splitable},
     net::{TcpListener, TcpStream},
     FusionRuntime,
@@ -44,6 +47,8 @@ use valence_registry::RegistryCodec;
 use crate::{config, global};
 
 const DEFAULT_SPEED: u32 = 1024 * 1024;
+const MAX_VECTORED_WRITE_BUFS: usize = 8;
+const WRITE_DELAY: Duration = Duration::from_millis(1);
 
 const READ_BUF_SIZE: usize = 4096;
 
@@ -203,11 +208,33 @@ impl IoRead {
 }
 
 impl IoWrite {
-    pub(crate) async fn send_packet(&mut self, bytes: bytes::Bytes) -> io::Result<()> {
+    pub(crate) async fn send_data(&mut self, bytes: &[bytes::Bytes]) -> io::Result<()> {
         // self.write.write_k
 
-        let (result, _) = self.write.write_all(bytes).await;
+        struct Buf(ArrayVec<iovec, MAX_VECTORED_WRITE_BUFS>);
 
+        // SAFETY: The underlying data will live longer than this struct.
+        unsafe impl IoVecBuf for Buf {
+            fn read_iovec_ptr(&self) -> *const iovec {
+                self.0.as_ptr()
+            }
+
+            fn read_iovec_len(&self) -> usize {
+                self.0.len()
+            }
+        }
+
+        let mut buf = Buf(ArrayVec::new());
+
+        for bytes in bytes {
+            buf.0.push(iovec {
+                // This cast to *mut is okay because the data won't be written to
+                iov_base: bytes.as_ptr() as *mut _,
+                iov_len: bytes.len(),
+            });
+        }
+
+        let (result, _) = self.write.write_vectored_all(buf).await;
         result?; // error occurs here
 
         Ok(())
@@ -458,11 +485,31 @@ impl Io {
             let mut past_queued_send = 0;
             let mut past_instant = Instant::now();
             while let Ok(bytes) = s2c_rx.recv_async().await {
-                let len = bytes.len();
+                let mut bytes_buf = ArrayVec::<_, MAX_VECTORED_WRITE_BUFS>::new();
+                bytes_buf.push(bytes);
+
+                monoio::time::sleep(WRITE_DELAY).await;
+                // Try getting more bytes if it's already in the channel before sending data
+                while !bytes_buf.is_full() {
+                    if let Ok(bytes) = s2c_rx.try_recv() {
+                        bytes_buf.push(bytes);
+                    } else {
+                        break;
+                    }
+                }
+
+                if bytes_buf.is_full() {
+                    warn!(
+                        "bytes_buf is full; consider increasing MAX_VECTORED_WRITE_BUFS for \
+                         better performance"
+                    );
+                }
+
+                let len = bytes_buf.iter().map(|bytes| bytes.len()).sum::<usize>();
 
                 trace!("got byte len: {len}");
 
-                if let Err(e) = io_write.send_packet(bytes).await {
+                if let Err(e) = io_write.send_data(&bytes_buf).await {
                     error!("Error sending packet: {e} ... {e:?}");
                     break;
                 }
@@ -627,6 +674,7 @@ pub fn init_io_thread(
         .name("io".to_string())
         .spawn(move || {
             let mut runtime = monoio::RuntimeBuilder::<monoio::FusionDriver>::new()
+                .enable_timer()
                 .build()
                 .unwrap();
 
