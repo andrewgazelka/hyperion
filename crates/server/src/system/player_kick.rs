@@ -15,12 +15,12 @@ use crate::{
 pub fn player_kick(
     r: Receiver<KickPlayer, (EntityId, &Uuid, &mut Encoder)>,
     global: Single<&Global>,
-    lookup: Single<&mut PlayerUuidLookup>,
+    mut lookup: Single<&mut PlayerUuidLookup>,
     mut s: Sender<Despawn>,
 ) {
     let (id, uuid, encoder) = r.query;
 
-    lookup.0.remove(&uuid.0);
+    lookup.remove(&uuid.0);
 
     let reason = &r.event.reason;
 

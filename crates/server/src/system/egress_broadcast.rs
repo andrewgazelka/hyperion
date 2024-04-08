@@ -10,10 +10,8 @@ use crate::{net::Connection, singleton::encoder::Broadcast, Egress};
 pub fn egress_broadcast(
     _: Receiver<Egress>,
     connections: Fetcher<&Connection>,
-    broadcast: Single<&mut Broadcast>,
+    mut broadcast: Single<&mut Broadcast>,
 ) {
-    let broadcast = broadcast.0;
-
     broadcast.par_drain(|buf| {
         for connection in &connections {
             trace!("about to broadcast bytes {:?}", buf.len());

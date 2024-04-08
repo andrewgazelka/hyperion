@@ -10,12 +10,12 @@ publish = false
 anyhow = "1.0.81"
 heck = "0.5.0"
 itertools = "0.12.1"
-prettyplease = "0.2.16"
+prettyplease = "0.2.17"
 proc-macro2 = "1.0.79"
 quote = "1.0.35"
 serde = { version = "1.0.197", features = ["derive"] }
-serde_json = "1.0.114"
-syn = "2.0.55"
+serde_json = "1.0.115"
+syn = "2.0.58"
 
 [lints.rust]
 warnings = "deny"

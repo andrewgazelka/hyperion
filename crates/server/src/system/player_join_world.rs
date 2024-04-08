@@ -53,7 +53,7 @@ pub fn player_join_world(
     global: Single<&Global>,
     players: Fetcher<(EntityId, &Player, &Uuid, &FullEntityPose)>,
     lookup: Single<&mut PlayerUuidLookup>,
-    encoder: Single<&mut Broadcast>,
+    mut broadcast: Single<&mut Broadcast>,
 ) {
     static CACHED_DATA: once_cell::sync::OnceCell<bytes::Bytes> = once_cell::sync::OnceCell::new();
 
@@ -70,7 +70,7 @@ pub fn player_join_world(
         bytes.freeze()
     });
 
-    let buf = encoder.0.get_round_robin();
+    let buf = broadcast.get_round_robin();
 
     let (id, current_player, uuid, encoder) = r.query;
 

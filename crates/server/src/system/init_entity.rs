@@ -45,7 +45,7 @@ pub fn init_entity(
         Insert<EntityReaction>,
         Spawn,
     )>,
-    encoder: Single<&mut Broadcast>,
+    mut broadcast: Single<&mut Broadcast>,
 ) {
     let event = r.event;
 
@@ -63,7 +63,7 @@ pub fn init_entity(
 
     let pkt = spawn_packet(id, uuid, &pose);
 
-    encoder.0.get_round_robin().append_packet(&pkt).unwrap();
+    broadcast.get_round_robin().append_packet(&pkt).unwrap();
 }
 
 fn generate_running_speed() -> RunningSpeed {
