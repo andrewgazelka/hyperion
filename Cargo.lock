@@ -2731,6 +2731,7 @@ dependencies = [
  "byteorder",
  "bytes",
  "derive_more",
+ "flate2",
  "serde",
  "serde_json",
  "thiserror",

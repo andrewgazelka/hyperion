@@ -31,6 +31,7 @@ use valence_protocol::{
     nbt::{compound, Compound, List},
     packets::{
         handshaking::{handshake_c2s::HandshakeNextState, HandshakeC2s},
+        login,
         login::{LoginHelloC2s, LoginSuccessS2c},
         status,
     },
@@ -280,10 +281,13 @@ impl Io {
     }
 
     fn new(stream: TcpStream, shared: Arc<global::Shared>) -> Self {
+        let enc = PacketEncoder::default();
+        let dec = PacketDecoder::default();
+
         Self {
             stream,
-            dec: PacketDecoder::default(),
-            enc: PacketEncoder::default(),
+            dec,
+            enc,
             frame: PacketFrame {
                 id: 0,
                 body: BytesMut::new(),
@@ -322,7 +326,7 @@ impl Io {
     }
 
     #[instrument(skip(self, tx))]
-    async fn server_process(
+    async fn process_new_connection(
         mut self,
         id: usize,
         tx: flume::Sender<ClientConnection>,
@@ -365,6 +369,19 @@ impl Io {
         let username: Box<str> = Box::from(username.0);
 
         let uuid = offline_uuid(&username)?; // todo: random
+
+        let compression_level = self.shared.compression_level;
+        if compression_level.0 > 0 {
+            self.send_packet(&login::LoginCompressionS2c {
+                threshold: compression_level.0.into(),
+            })
+            .await?;
+
+            self.enc.set_compression(compression_level);
+            self.dec.set_compression(compression_level);
+
+            debug!("compression level set to {}", compression_level.0);
+        }
 
         let packet = LoginSuccessS2c {
             uuid,
@@ -562,7 +579,7 @@ async fn main_loop(
 
         let tx = tx.clone();
 
-        let action = process.server_process(id, tx);
+        let action = process.process_new_connection(id, tx);
         let action = print_errors(action);
 
         monoio::spawn(action);

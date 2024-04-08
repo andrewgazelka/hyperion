@@ -31,10 +31,7 @@ use crate::{
     config,
     global::Global,
     net::Encoder,
-    singleton::{
-        encoder::{Broadcast, PacketMetadata},
-        player_lookup::PlayerUuidLookup,
-    },
+    singleton::{encoder::Broadcast, player_lookup::PlayerUuidLookup},
     system::init_entity::spawn_packet,
     FullEntityPose, MinecraftEntity, Player, PlayerJoinWorld, Uuid,
 };
@@ -58,8 +55,13 @@ pub fn player_join_world(
     lookup: Single<&mut PlayerUuidLookup>,
     encoder: Single<&mut Broadcast>,
 ) {
-    static CACHED_DATA: once_cell::sync::Lazy<bytes::Bytes> = once_cell::sync::Lazy::new(|| {
+    static CACHED_DATA: once_cell::sync::OnceCell<bytes::Bytes> = once_cell::sync::OnceCell::new();
+
+    let compression_level = global.0.shared.compression_level;
+
+    let cached_data = CACHED_DATA.get_or_init(|| {
         let mut encoder = PacketEncoder::new();
+        encoder.set_compression(compression_level);
 
         info!("Caching world data for new players");
         inner(&mut encoder).unwrap();
@@ -90,16 +92,16 @@ pub fn player_join_world(
         entries: Cow::Borrowed(entries),
     };
 
-    buf.append_packet(&info, PacketMetadata::REQUIRED).unwrap();
+    buf.append_packet(&info).unwrap();
 
     let text = valence_protocol::packets::play::GameMessageS2c {
         chat: format!("{} joined the world", current_player.name).into_cow_text(),
         overlay: false,
     };
 
-    buf.append_packet(&text, PacketMetadata::REQUIRED).unwrap();
+    buf.append_packet(&text).unwrap();
 
-    encoder.append(&CACHED_DATA);
+    encoder.append(cached_data);
 
     for entity in entities {
         let pkt = spawn_packet(entity.id, *entity.uuid, entity.pose);
@@ -163,8 +165,7 @@ pub fn player_join_world(
         pitch: ByteAngle(0),
     };
 
-    buf.append_packet(&spawn_player, PacketMetadata::REQUIRED)
-        .unwrap();
+    buf.append_packet(&spawn_player).unwrap();
 
     info!("Player {} joined the world", current_player.name);
 }

@@ -36,6 +36,18 @@ impl<S: Default> RayonLocal<S> {
         }
     }
 
+    /// Create a new `RayonLocal` with the value of `S` provided by the closure for each thread.
+    pub fn init_with(mut f: impl FnMut() -> S) -> Self {
+        let num_threads = rayon::current_num_threads();
+
+        let thread_locals = (0..num_threads).map(|_| f()).collect();
+
+        Self {
+            thread_locals,
+            idx: 0,
+        }
+    }
+
     /// Get the local value for the current thread.
     ///
     /// # Panics

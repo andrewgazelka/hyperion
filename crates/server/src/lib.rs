@@ -15,21 +15,19 @@ use std::{
 
 use anyhow::Context;
 use evenio::prelude::*;
-use glam::Vec2;
 use libc::{getrlimit, setrlimit, RLIMIT_NOFILE};
 use ndarray::s;
 pub use rayon::iter::ParallelIterator;
 use signal_hook::iterator::Signals;
 use spin::Lazy;
 use tracing::{debug, error, info, instrument, trace, warn};
-use valence_protocol::{math::Vec3, ByteAngle, VarInt};
+use valence_protocol::{math::Vec3, ByteAngle, CompressionThreshold, VarInt};
 
 use crate::{
     bounding_box::BoundingBox,
     net::{init_io_thread, ClientConnection, Connection, Encoder, GLOBAL_C2S_PACKETS},
     singleton::{
-        encoder::{Broadcast, PacketMetadata, PacketNecessity},
-        player_location_lookup::PlayerLocationLookup,
+        encoder::Broadcast, player_location_lookup::PlayerLocationLookup,
         player_lookup::PlayerUuidLookup,
     },
 };
@@ -226,6 +224,7 @@ impl Game {
 
         let shared = Arc::new(global::Shared {
             player_count: AtomicU32::new(0),
+            compression_level: CompressionThreshold(64), // todo: test
         });
 
         let incoming = init_io_thread(shutdown_rx, address, shared.clone())?;
@@ -266,7 +265,7 @@ impl Game {
         world.insert(player_location_lookup, PlayerLocationLookup::default());
 
         let encoder = world.spawn();
-        world.insert(encoder, Broadcast::default());
+        world.insert(encoder, Broadcast::new(shared.compression_level));
 
         let mut game = Self {
             shared,
@@ -447,7 +446,7 @@ fn handle_ingress(
     let encoder = encoder.0;
 
     fetcher.iter_mut().for_each(|(id, _, pose)| {
-        let vec2d = Vec2::new(pose.position.x, pose.position.z);
+        // let vec2d = Vec2::new(pose.position.x, pose.position.z);
         let pos = pose.position.as_dvec3();
 
         let packet = valence_protocol::packets::play::EntityPositionS2c {
@@ -458,18 +457,15 @@ fn handle_ingress(
             on_ground: false,
         };
 
-        let meta = PacketMetadata {
-            necessity: PacketNecessity::Droppable {
-                prioritize_location: vec2d,
-            },
-            exclude_player: None, // todo: include player
-        };
+        // let meta = PacketMetadata {
+        //     necessity: PacketNecessity::Droppable {
+        //         prioritize_location: vec2d,
+        //     },
+        //     exclude_player: None, // todo: include player
+        // };
 
         // todo: what it panics otherwise
-        encoder
-            .get_round_robin()
-            .append_packet(&packet, meta)
-            .unwrap();
+        encoder.get_round_robin().append_packet(&packet).unwrap();
     });
 }
 

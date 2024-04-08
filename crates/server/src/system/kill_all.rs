@@ -2,10 +2,7 @@ use evenio::prelude::*;
 use tracing::instrument;
 use valence_protocol::VarInt;
 
-use crate::{
-    singleton::encoder::{Broadcast, PacketMetadata},
-    KillAllEntities, MinecraftEntity, Player,
-};
+use crate::{singleton::encoder::Broadcast, KillAllEntities, MinecraftEntity, Player};
 
 #[instrument(skip_all)]
 pub fn kill_all(
@@ -24,7 +21,7 @@ pub fn kill_all(
     broadcast
         .0
         .get_round_robin()
-        .append_packet(&despawn_packet, PacketMetadata::REQUIRED)
+        .append_packet(&despawn_packet)
         .unwrap();
 
     for id in ids {
