@@ -9,7 +9,7 @@ FROM alpine:3.19 as packages
 
 # Install curl, build-base (Alpine's equivalent of build-essential), and OpenSSL development packages
 RUN apk update && \
-    apk add --no-cache curl build-base openssl-dev pkgconfig musl-dev clang llvm lld mold
+    apk add --no-cache curl build-base openssl-dev pkgconfig musl-dev clang llvm lld mold cmake
 
 FROM packages as builder
 
