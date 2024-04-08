@@ -30,8 +30,9 @@ use crate::{
     chunk::heightmap,
     config,
     global::Global,
+    net::Encoder,
     singleton::{
-        encoder::{Encoder, PacketMetadata},
+        encoder::{Broadcast, PacketMetadata},
         player_lookup::PlayerUuidLookup,
     },
     system::init_entity::spawn_packet,
@@ -46,13 +47,16 @@ pub(crate) struct EntityQuery<'a> {
     _player: With<&'static MinecraftEntity>,
 }
 
+// todo: clean up player_join_world; the file is super super super long and hard to understand
 #[instrument(skip_all)]
 pub fn player_join_world(
-    r: Receiver<PlayerJoinWorld, (EntityId, &mut Player, &Uuid)>,
+    // todo: I doubt &mut Player will work here due to aliasing
+    r: Receiver<PlayerJoinWorld, (EntityId, &Player, &Uuid, &mut Encoder)>,
     entities: Fetcher<EntityQuery>,
     global: Single<&Global>,
+    players: Fetcher<(EntityId, &Player, &Uuid, &FullEntityPose)>,
     lookup: Single<&mut PlayerUuidLookup>,
-    encoder: Single<&mut Encoder>,
+    encoder: Single<&mut Broadcast>,
 ) {
     static CACHED_DATA: once_cell::sync::Lazy<bytes::Bytes> = once_cell::sync::Lazy::new(|| {
         let mut encoder = PacketEncoder::new();
@@ -64,39 +68,15 @@ pub fn player_join_world(
         bytes.freeze()
     });
 
-    let (id, player, uuid) = r.query;
+    let buf = encoder.0.get_round_robin();
+
+    let (id, current_player, uuid, encoder) = r.query;
 
     lookup.0.insert(uuid.0, id);
 
-    player.packets.writer.send_raw(CACHED_DATA.clone()).unwrap();
-
-    let mut all_entities = PacketEncoder::new();
-
-    for entity in entities {
-        let pkt = spawn_packet(entity.id, *entity.uuid, entity.pose);
-        all_entities.append_packet(&pkt).unwrap();
-    }
-
-    global
-        .0
-        .shared
-        .player_count
-        .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-
-    // if let Err(e) = inner(player, entities) {
-    //     s.send(KickPlayer {
-    //         target: id,
-    //         reason: format!("Failed to join world: {e}"),
-    //     });
-    //
-    //     return;
-    // }
-
-    let entity_id = VarInt(id.index().0 as i32);
-
     let entries = &[play::player_list_s2c::PlayerListEntry {
         player_uuid: uuid.0,
-        username: &player.name,
+        username: &current_player.name,
         properties: Cow::Borrowed(&[]),
         chat_data: None,
         listed: true,
@@ -110,38 +90,83 @@ pub fn player_join_world(
         entries: Cow::Borrowed(entries),
     };
 
+    buf.append_packet(&info, PacketMetadata::REQUIRED).unwrap();
+
+    let text = valence_protocol::packets::play::GameMessageS2c {
+        chat: format!("{} joined the world", current_player.name).into_cow_text(),
+        overlay: false,
+    };
+
+    buf.append_packet(&text, PacketMetadata::REQUIRED).unwrap();
+
+    encoder.append(&CACHED_DATA);
+
+    for entity in entities {
+        let pkt = spawn_packet(entity.id, *entity.uuid, entity.pose);
+        encoder.encode(&pkt).unwrap();
+    }
+
+    // todo: cache
+    let entries = players
+        .iter()
+        .map(
+            |(_, player, uuid, _)| play::player_list_s2c::PlayerListEntry {
+                player_uuid: uuid.0,
+                username: &player.name,
+                properties: Cow::Borrowed(&[]),
+                chat_data: None,
+                listed: true,
+                ping: 0,
+                game_mode: GameMode::Creative,
+                display_name: Some("SomeBot".into_cow_text()),
+            },
+        )
+        .collect::<Vec<_>>();
+
     encoder
-        .0
-        .append_round_robin(&info, PacketMetadata::REQUIRED)
+        .encode(&play::PlayerListS2c {
+            actions: PlayerListActions::default().with_add_player(true),
+            entries: Cow::Owned(entries),
+        })
         .unwrap();
+
+    // todo: cache
+    for (id, _, uuid, pose) in &players {
+        let entity_id = VarInt(id.index().0 as i32);
+
+        let pkt = play::PlayerSpawnS2c {
+            entity_id,
+            player_uuid: uuid.0,
+            position: pose.position.as_dvec3(),
+            yaw: ByteAngle::from_degrees(pose.yaw),
+            pitch: ByteAngle::from_degrees(pose.pitch),
+        };
+        encoder.encode(&pkt).unwrap();
+    }
+
+    global
+        .0
+        .shared
+        .player_count
+        .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+
+    let entity_id = VarInt(id.index().0 as i32);
+
+    let dx = fastrand::f64().mul_add(10.0, -5.0);
+    let dz = fastrand::f64().mul_add(10.0, -5.0);
 
     let spawn_player = play::PlayerSpawnS2c {
         entity_id,
         player_uuid: uuid.0,
-        position: DVec3::new(0.0, 30.0, 0.0),
+        position: DVec3::new(dx, 30.0, dz),
         yaw: ByteAngle(0),
         pitch: ByteAngle(0),
     };
 
-    // let join_world = play::EntitySpawnS2c {
-    //     entity_id,
-    //     object_uuid: uuid.0,
-    //     kind: VarInt(EntityType::Player as i32),
-    //     position: DVec3::new(0.0, 30.0, 0.0),
-    //     pitch: ByteAngle(0),
-    //     yaw: ByteAngle(0),
-    //     head_yaw: ByteAngle(0),
-    //     data: VarInt::default(),
-    //     velocity: Velocity([0, 0, 0]),
-    // };
-
-    encoder
-        .0
-        .append_round_robin(&spawn_player, PacketMetadata::REQUIRED)
+    buf.append_packet(&spawn_player, PacketMetadata::REQUIRED)
         .unwrap();
 
-    info!("Player {} joined the world", player.name);
-    // encoder.0.append_round_robin(&join_world, PacketMetadata::REQUIRED).unwrap();
+    info!("Player {} joined the world", current_player.name);
 }
 
 fn write_block_states(states: &BlockStateContainer, writer: &mut impl Write) -> anyhow::Result<()> {
@@ -467,8 +492,11 @@ fn inner(encoder: &mut PacketEncoder) -> anyhow::Result<()> {
         angle: 3.0,
     })?;
 
+    let dx = fastrand::f64().mul_add(10.0, -5.0);
+    let dz = fastrand::f64().mul_add(10.0, -5.0);
+
     encoder.append_packet(&play::PlayerPositionLookS2c {
-        position: DVec3::new(0.0, 30.0, 0.0),
+        position: DVec3::new(dx, 30.0, dz),
         yaw: 0.0,
         pitch: 0.0,
         flags: PlayerPositionLookFlags::default(),

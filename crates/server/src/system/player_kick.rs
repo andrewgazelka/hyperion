@@ -7,29 +7,30 @@ use valence_protocol::{
     text::{Color, IntoText},
 };
 
-use crate::{global::Global, singleton::player_lookup::PlayerUuidLookup, KickPlayer, Player, Uuid};
+use crate::{
+    global::Global, net::Encoder, singleton::player_lookup::PlayerUuidLookup, KickPlayer, Uuid,
+};
 
 #[instrument(skip_all)]
 pub fn player_kick(
-    r: Receiver<KickPlayer, (EntityId, &mut Player, &Uuid)>,
+    r: Receiver<KickPlayer, (EntityId, &Uuid, &mut Encoder)>,
     global: Single<&Global>,
     lookup: Single<&mut PlayerUuidLookup>,
     mut s: Sender<Despawn>,
 ) {
-    let (id, player, uuid) = r.query;
+    let (id, uuid, encoder) = r.query;
 
     lookup.0.remove(&uuid.0);
 
     let reason = &r.event.reason;
 
-    let io = &mut player.packets;
-
     let reason = reason.into_text().color(Color::RED);
 
-    // if we can't send ignore
-    let _ = io.writer.send_packet(&play::DisconnectS2c {
-        reason: reason.into(),
-    });
+    encoder
+        .encode(&play::DisconnectS2c {
+            reason: reason.into(),
+        })
+        .unwrap();
 
     // todo: also handle disconnecting without kicking, io socket being closed, etc
 

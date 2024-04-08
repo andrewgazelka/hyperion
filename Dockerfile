@@ -41,7 +41,7 @@ FROM builder as release
 RUN --mount=type=cache,target=/root/.cargo/registry \
     --mount=type=cache,target=/root/.cargo/git \
     --mount=type=cache,target=/app/target \
-    CARGO_TERM_COLOR=never cargo build --release --locked -p server
+    CARGO_TERM_COLOR=never cargo build --release --locked -p server -F trace-simple
 
 RUN --mount=type=cache,target=/app/target \
     mkdir -p /build && \

@@ -3,6 +3,16 @@
 version = 3
 
 [[package]]
+name = "Inflector"
+version = "0.11.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fe438c63458706e03479442743baae6c88256498e6431708f6dfc520a26515d3"
+dependencies = [
+ "lazy_static",
+ "regex",
+]
+
+[[package]]
 name = "addr2line"
 version = "0.21.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -147,9 +157,9 @@ dependencies = [
 
 [[package]]
 name = "async-executor"
-version = "1.9.1"
+version = "1.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "10b3e585719c2358d2660232671ca8ca4ddb4be4ce8a1842d6c2dc8685303316"
+checksum = "5f98c37cf288e302c16ef6c8472aad1e034c6c84ce5ea7b8101c98eb4a802fee"
 dependencies = [
  "async-lock",
  "async-task",
@@ -453,9 +463,9 @@ dependencies = [
 
 [[package]]
 name = "cc"
-version = "1.0.90"
+version = "1.0.91"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8cd6604a82acf3039f1144f54b8eb34e91ffba622051189e71b781822d5ee1f5"
+checksum = "1fd97381a8cc6493395a5afc4c691c1084b3768db713b73aa215217aa245d153"
 dependencies = [
  "jobserver",
  "libc",
@@ -676,6 +686,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "derive-build"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f5a4711aec01a4552d938112abeb89f2ad2d00bde527bfd48d3ae3b376c595ca"
+dependencies = [
+ "Inflector",
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "derive_more"
 version = "1.0.0-beta.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -761,8 +783,8 @@ dependencies = [
 
 [[package]]
 name = "evenio"
-version = "0.4.2"
-source = "git+https://github.com/rj00a/evenio#56b82b01b47ad091cbd6be6bb5c9e9db7bbb2727"
+version = "0.5.0"
+source = "git+https://github.com/rj00a/evenio#b3b1cacc4de23244f846a5c50592a3e91b89097a"
 dependencies = [
  "ahash",
  "bumpalo",
@@ -775,8 +797,8 @@ dependencies = [
 
 [[package]]
 name = "evenio_macros"
-version = "0.4.2"
-source = "git+https://github.com/rj00a/evenio#56b82b01b47ad091cbd6be6bb5c9e9db7bbb2727"
+version = "0.5.0"
+source = "git+https://github.com/rj00a/evenio#b3b1cacc4de23244f846a5c50592a3e91b89097a"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1348,6 +1370,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "md-5"
+version = "0.10.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d89e7ee0cfbedfc4da3340218492196241d89eefb6dab27de5df917a6d2e78cf"
+dependencies = [
+ "cfg-if",
+ "digest",
+]
+
+[[package]]
 name = "memchr"
 version = "2.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1461,6 +1493,12 @@ dependencies = [
  "memoffset",
  "pin-utils",
 ]
+
+[[package]]
+name = "no_denormals"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fc8d4edce03a3be51d7736ddd5cf811f1852c2bb4d03637b82e2d1340e6f0bf9"
 
 [[package]]
 name = "nonmax"
@@ -1945,7 +1983,7 @@ dependencies = [
 [[package]]
 name = "rust-mc-bot"
 version = "0.1.0"
-source = "git+https://github.com/andrewgazelka/rust-mc-bot?branch=optimize#dfe76cc0f3d7c8af3c6163ee67c5191e259306a8"
+source = "git+https://github.com/andrewgazelka/rust-mc-bot?branch=optimize#9cba3f552bf26cd43ff56eb8c736cb5505c30f37"
 dependencies = [
  "anyhow",
  "libdeflater",
@@ -2072,8 +2110,10 @@ dependencies = [
  "bvh",
  "bytes",
  "chunk",
+ "derive-build",
  "divan",
  "evenio",
+ "fastrand 2.0.2",
  "flume",
  "generator 0.1.0",
  "glam",
@@ -2082,6 +2122,7 @@ dependencies = [
  "libc",
  "monoio",
  "ndarray",
+ "no_denormals",
  "once_cell",
  "pprof",
  "rand 0.8.5",
@@ -2606,6 +2647,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a183cf7feeba97b4dd1c0d46788634f6221d87fa961b305bed08c851829efcc0"
 dependencies = [
  "getrandom",
+ "md-5",
  "serde",
 ]
 

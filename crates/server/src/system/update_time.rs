@@ -3,14 +3,14 @@ use tracing::instrument;
 
 use crate::{
     global::Global,
-    singleton::encoder::{Encoder, PacketMetadata},
+    singleton::encoder::{Broadcast, PacketMetadata},
     Gametick,
 };
 
 #[instrument(skip_all, level = "trace")]
 pub fn update_time(
     _: ReceiverMut<Gametick>,
-    encoder: Single<&mut Encoder>,
+    encoder: Single<&mut Broadcast>,
     global: Single<&mut Global>,
 ) {
     let global = global.0;
@@ -25,7 +25,8 @@ pub fn update_time(
     };
 
     encoder
-        .append_round_robin(&pkt, PacketMetadata::DROPPABLE)
+        .get_round_robin()
+        .append_packet(&pkt, PacketMetadata::DROPPABLE)
         .unwrap();
 
     // update the tick

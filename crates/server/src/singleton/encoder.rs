@@ -177,11 +177,11 @@ impl PacketBuffer {
 // static BROADCASTER: RefCell<Option<Broadcaster>> = RefCell::new(None);
 
 #[derive(Component, Default)]
-pub struct Encoder {
+pub struct Broadcast {
     rayon_local: RayonLocal<Cell<PacketBuffer>>,
 }
 
-impl Encoder {
+impl Broadcast {
     pub fn append<P: Packet + Encode>(
         &self,
         packet: &P,
@@ -197,14 +197,9 @@ impl Encoder {
         result
     }
 
-    pub fn append_round_robin<P: Packet + Encode>(
-        &mut self,
-        packet: &P,
-        metadata: PacketMetadata,
-    ) -> anyhow::Result<()> {
+    pub fn get_round_robin(&mut self) -> &mut PacketBuffer {
         let local = self.rayon_local.get_local_round_robin();
-        let result = local.get_mut().append_packet(packet, metadata);
-        result
+        local.get_mut()
     }
 
     pub fn par_drain<F>(&mut self, f: F)

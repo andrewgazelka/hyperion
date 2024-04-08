@@ -16,18 +16,19 @@ use std::{
 use anyhow::Context;
 use evenio::prelude::*;
 use glam::Vec2;
+use libc::{getrlimit, setrlimit, RLIMIT_NOFILE};
 use ndarray::s;
 pub use rayon::iter::ParallelIterator;
 use signal_hook::iterator::Signals;
 use spin::Lazy;
-use tracing::{debug, info, info_span, instrument, trace, warn};
+use tracing::{debug, error, info, instrument, trace, warn};
 use valence_protocol::{math::Vec3, ByteAngle, VarInt};
 
 use crate::{
     bounding_box::BoundingBox,
-    net::{init_io_thread, ClientConnection, Packets, GLOBAL_C2S_PACKETS},
+    net::{init_io_thread, ClientConnection, Connection, Encoder, GLOBAL_C2S_PACKETS},
     singleton::{
-        encoder::{Encoder, PacketMetadata, PacketNecessity},
+        encoder::{Broadcast, PacketMetadata, PacketNecessity},
         player_location_lookup::PlayerLocationLookup,
         player_lookup::PlayerUuidLookup,
     },
@@ -51,7 +52,6 @@ const MSPT_HISTORY_SIZE: usize = 100;
 // A zero-sized component, often called a "marker" or "tag".
 #[derive(Component)]
 struct Player {
-    packets: Packets,
     name: Box<str>,
     last_keep_alive_sent: Instant,
 
@@ -67,7 +67,8 @@ struct Player {
 #[derive(Event)]
 struct InitPlayer {
     entity: EntityId,
-    io: Packets,
+    encoder: Encoder,
+    connection: Connection,
     name: Box<str>,
     uuid: uuid::Uuid,
     pos: FullEntityPose,
@@ -123,7 +124,39 @@ struct StatsEvent {
 struct Gametick;
 
 #[derive(Event)]
-struct BroadcastPackets;
+struct Egress;
+
+pub fn adjust_file_limits(recommended_min: u64) -> std::io::Result<()> {
+    let mut limits = libc::rlimit {
+        rlim_cur: 0, // Initialize soft limit to 0
+        rlim_max: 0, // Initialize hard limit to 0
+    };
+
+    if unsafe { getrlimit(RLIMIT_NOFILE, &mut limits) } == 0 {
+        info!("Current file handle soft limit: {}", limits.rlim_cur);
+        info!("Current file handle hard limit: {}", limits.rlim_max);
+    } else {
+        error!("Failed to get the current file handle limits");
+        return Err(std::io::Error::last_os_error());
+    };
+
+    if limits.rlim_max < recommended_min {
+        warn!(
+            "Could only set file handle limit to {}. Recommended minimum is {}",
+            limits.rlim_cur, recommended_min
+        );
+    }
+
+    limits.rlim_cur = limits.rlim_max;
+    info!("Setting soft limit to: {}", limits.rlim_cur);
+
+    if unsafe { setrlimit(RLIMIT_NOFILE, &limits) } != 0 {
+        error!("Failed to set the file handle limits");
+        return Err(std::io::Error::last_os_error());
+    }
+
+    Ok(())
+}
 
 pub struct Game {
     shared: Arc<global::Shared>,
@@ -210,10 +243,11 @@ impl Game {
         world.add_handler(system::rebuild_player_location);
         world.add_handler(system::clean_up_io);
 
-        world.add_handler(system::broadcast_packets);
+        world.add_handler(system::egress_broadcast);
+        world.add_handler(system::egress_local);
         world.add_handler(system::keep_alive);
-        world.add_handler(process_packets);
-        world.add_handler(system::tps_message);
+        world.add_handler(handle_ingress);
+        world.add_handler(system::stats_message);
         world.add_handler(system::kill_all);
 
         let global = world.spawn();
@@ -232,7 +266,7 @@ impl Game {
         world.insert(player_location_lookup, PlayerLocationLookup::default());
 
         let encoder = world.spawn();
-        world.insert(encoder, Encoder::default());
+        world.insert(encoder, Broadcast::default());
 
         let mut game = Self {
             shared,
@@ -282,9 +316,7 @@ impl Game {
             self.tick();
 
             if let Some(wait_duration) = self.wait_duration() {
-                info_span!("sleeping", duration = ?wait_duration).in_scope(|| {
-                    spin_sleep::sleep(wait_duration);
-                });
+                spin_sleep::sleep(wait_duration);
             }
         }
     }
@@ -305,26 +337,26 @@ impl Game {
             }
 
             self.last_ticks.pop_front().unwrap();
-
-            // let duration = front.elapsed();
-
-            // println!("tps = {}", LAST_TICK_HISTORY_SIZE as f64 / duration.as_secs_f64());
         }
 
         self.last_ticks.push_back(now);
 
         while let Ok(connection) = self.incoming.try_recv() {
             let ClientConnection {
-                packets,
+                encoder,
                 name,
                 uuid,
+                tx,
             } = connection;
 
             let player = self.world.spawn();
 
+            let connection = Connection::new(tx);
+
             let event = InitPlayer {
                 entity: player,
-                io: packets,
+                encoder,
+                connection,
                 name,
                 uuid,
                 pos: FullEntityPose {
@@ -339,7 +371,7 @@ impl Game {
         }
 
         self.world.send(Gametick);
-        self.world.send(BroadcastPackets);
+        self.world.send(Egress);
 
         #[expect(
             clippy::cast_precision_loss,
@@ -379,12 +411,12 @@ impl Game {
 
 // The `Receiver<Tick>` parameter tells our handler to listen for the `Tick` event.
 #[instrument(skip_all, level = "trace")]
-fn process_packets(
+fn handle_ingress(
     _: Receiver<Gametick>,
     mut fetcher: Fetcher<(EntityId, &mut Player, &mut FullEntityPose)>,
     lookup: Single<&PlayerUuidLookup>,
     mut sender: Sender<(KickPlayer, InitEntity, KillAllEntities)>,
-    encoder: Single<&mut Encoder>,
+    encoder: Single<&mut Broadcast>,
 ) {
     // uuid to entity id map
 
@@ -418,7 +450,6 @@ fn process_packets(
         let vec2d = Vec2::new(pose.position.x, pose.position.z);
         let pos = pose.position.as_dvec3();
 
-        // send packet for player moving
         let packet = valence_protocol::packets::play::EntityPositionS2c {
             entity_id: VarInt(id.index().0 as i32),
             position: pos,
@@ -435,7 +466,10 @@ fn process_packets(
         };
 
         // todo: what it panics otherwise
-        encoder.append_round_robin(&packet, meta).unwrap();
+        encoder
+            .get_round_robin()
+            .append_packet(&packet, meta)
+            .unwrap();
     });
 }
 

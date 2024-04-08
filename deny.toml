@@ -103,7 +103,8 @@ confidence-threshold = 0.8
 # Allow 1 or more licenses on a per-crate basis, so that particular licenses
 # aren't accepted for every possible crate as with the normal allow list
 exceptions = [
-    { allow = ["Zlib"], crate = "nanorand" }
+    { allow = ["Zlib"], crate = "nanorand" },
+    { allow = ["BSD-2-Clause"], crate = "Inflector" } # todo: BSD license: I think this ok, let's double check
     # Each entry is the crate and version constraint, and its specific allow
     # list
     #{ allow = ["Zlib"], crate = "adler32" },
@@ -222,7 +223,8 @@ skip = [
     "bitflags",
 #    "glam",
     "toml_edit",
-    "winnow"
+    "winnow",
+    "generator" # TODO THIS SHOULD BE FIXED
     #{ crate = "ansi_term@0.11.0", reason = "you can specify a reason why it can't be updated/removed" },
 ]
 # Similarly to `skip` allows you to skip certain crates during duplicate

@@ -1,4 +1,10 @@
-use std::{net::SocketAddr, sync::atomic::AtomicU16};
+use std::{
+    net::SocketAddr,
+    sync::{
+        atomic::{AtomicU16, AtomicU32},
+        Arc,
+    },
+};
 
 use divan::{AllocProfiler, Bencher};
 use libc::{getrlimit, setrlimit, RLIMIT_NOFILE};
@@ -52,7 +58,8 @@ fn n_bots_moving(bencher: Bencher, player_count: u32) {
     let mut game = Game::init(addr).unwrap();
 
     let addrs = Address::TCP(addr);
-    let mut bot_manager = BotManager::create(player_count, addrs, 0, 1).unwrap();
+    let mut bot_manager =
+        BotManager::create(player_count, addrs, 0, Arc::new(AtomicU32::new(0))).unwrap();
 
     loop {
         game.tick();
