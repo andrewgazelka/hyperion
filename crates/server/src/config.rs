@@ -1,6 +1,5 @@
 use std::{fmt::Debug, fs::File, io::Read, path::Path};
 
-use anyhow::Context;
 use serde::{Deserialize, Serialize};
 use spin::lazy::Lazy;
 use tracing::{info, instrument, warn};
@@ -43,13 +42,17 @@ impl Config {
 
             // make required folders
             if let Some(parent) = path.as_ref().parent() {
-                std::fs::create_dir_all(parent).with_context(|| {
-                    format!(
-                        "failed to create parent directories for {:?}",
-                        path.as_ref()
-                    )
-                })?;
-            }
+                if let Err(e) = std::fs::create_dir_all(parent) {
+                    // this might happen on a read-only filesystem (i.e.,
+                    // when running on a CI, profiling in Instruments, etc.)
+                    warn!(
+                        "failed to create parent directories for {:?}: {}, using defaults",
+                        path.as_ref(),
+                        e
+                    );
+                    return Ok(Self::default());
+                }
+            };
 
             // write default config to file
             let default_config = Self::default();

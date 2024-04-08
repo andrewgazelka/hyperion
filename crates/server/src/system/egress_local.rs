@@ -1,18 +1,28 @@
-use evenio::{event::Receiver, fetch::Fetcher};
+use evenio::{
+    event::Receiver,
+    fetch::{Fetcher, Single},
+};
 use rayon::prelude::*;
 use tracing::{instrument, trace};
 
 use crate::{
+    global::Global,
     net::{Connection, Encoder},
     Egress,
 };
 
 #[instrument(skip_all, level = "trace")]
-pub fn egress_local(_: Receiver<Egress>, mut connections: Fetcher<(&Connection, &mut Encoder)>) {
+pub fn egress_local(
+    _: Receiver<Egress>,
+    mut connections: Fetcher<(&Connection, &mut Encoder)>,
+    global: Single<&Global>,
+) {
+    let compression = global.0.shared.compression_level;
+
     connections
         .par_iter_mut()
         .for_each(|(connection, encoder)| {
-            let bytes = encoder.take();
+            let bytes = encoder.take(compression);
             trace!("about to send bytes {:?}", bytes.len());
             let _ = connection.send(bytes);
         });
