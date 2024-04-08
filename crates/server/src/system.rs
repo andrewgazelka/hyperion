@@ -1,5 +1,6 @@
-mod broadcast_packets;
 mod clean_up_io;
+mod egress_broadcast;
+mod egress_local;
 mod entity_detect_collisions;
 mod entity_move_logic;
 mod init_entity;
@@ -13,8 +14,9 @@ mod reset_bounding_boxes;
 mod stats_message;
 mod update_time;
 
-pub use broadcast_packets::broadcast_packets;
 pub use clean_up_io::clean_up_io;
+pub use egress_broadcast::egress_broadcast;
+pub use egress_local::egress_local;
 pub use entity_detect_collisions::entity_detect_collisions;
 pub use entity_move_logic::entity_move_logic;
 pub use init_entity::init_entity as entity_spawn;

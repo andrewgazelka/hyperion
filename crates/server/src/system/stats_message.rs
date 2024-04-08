@@ -3,12 +3,12 @@ use tracing::instrument;
 use valence_protocol::text::IntoText;
 
 use crate::{
-    singleton::encoder::{Encoder, PacketMetadata},
+    singleton::encoder::{Broadcast, PacketMetadata},
     StatsEvent,
 };
 
 #[instrument(skip_all, level = "trace")]
-pub fn stats_message(r: Receiver<StatsEvent>, encoder: Single<&mut Encoder>) {
+pub fn stats_message(r: Receiver<StatsEvent>, encoder: Single<&mut Broadcast>) {
     let StatsEvent {
         ms_per_tick_mean_1s,
         ms_per_tick_mean_5s,

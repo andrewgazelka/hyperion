@@ -177,11 +177,11 @@ impl PacketBuffer {
 // static BROADCASTER: RefCell<Option<Broadcaster>> = RefCell::new(None);
 
 #[derive(Component, Default)]
-pub struct Encoder {
+pub struct Broadcast {
     rayon_local: RayonLocal<Cell<PacketBuffer>>,
 }
 
-impl Encoder {
+impl Broadcast {
     pub fn append<P: Packet + Encode>(
         &self,
         packet: &P,
