@@ -5,10 +5,7 @@ use tracing::instrument;
 use valence_protocol::{packets::play, VarInt};
 
 use crate::{
-    global::Global,
-    net::Connection,
-    singleton::encoder::{Broadcast, PacketMetadata},
-    Gametick, Player, Uuid,
+    global::Global, net::Connection, singleton::encoder::Broadcast, Gametick, Player, Uuid,
 };
 
 #[instrument(skip_all, level = "trace")]
@@ -51,20 +48,14 @@ pub fn clean_up_io(
     }
 
     encoder
-        .append_packet(
-            &play::EntitiesDestroyS2c {
-                entity_ids: despawn_ids.into(),
-            },
-            PacketMetadata::REQUIRED,
-        )
+        .append_packet(&play::EntitiesDestroyS2c {
+            entity_ids: despawn_ids.into(),
+        })
         .unwrap();
 
     encoder
-        .append_packet(
-            &play::PlayerRemoveS2c {
-                uuids: despawn_uuids.into(),
-            },
-            PacketMetadata::REQUIRED,
-        )
+        .append_packet(&play::PlayerRemoveS2c {
+            uuids: despawn_uuids.into(),
+        })
         .unwrap();
 }

@@ -9,8 +9,8 @@ use tracing::instrument;
 use valence_protocol::{ByteAngle, VarInt, Velocity};
 
 use crate::{
-    singleton::encoder::{Broadcast, PacketMetadata},
-    EntityReaction, FullEntityPose, InitEntity, MinecraftEntity, RunningSpeed, Uuid,
+    singleton::encoder::Broadcast, EntityReaction, FullEntityPose, InitEntity, MinecraftEntity,
+    RunningSpeed, Uuid,
 };
 
 pub fn spawn_packet(
@@ -63,11 +63,7 @@ pub fn init_entity(
 
     let pkt = spawn_packet(id, uuid, &pose);
 
-    encoder
-        .0
-        .get_round_robin()
-        .append_packet(&pkt, PacketMetadata::REQUIRED)
-        .unwrap();
+    encoder.0.get_round_robin().append_packet(&pkt).unwrap();
 }
 
 fn generate_running_speed() -> RunningSpeed {

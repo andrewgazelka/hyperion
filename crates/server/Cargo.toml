@@ -12,7 +12,7 @@ full = ["trace"]
 pprof = ["dep:pprof"]
 tracy = ["dep:tracing-tracy"]
 trace-simple = []
-default = []
+default = ["trace-simple"]
 
 
 [dependencies]
@@ -24,7 +24,7 @@ bytes = "1.6.0"
 # get terminated by signal SIGBUS (Misaligned address error) without frame-pointer
 pprof = { version =  "0.13.0", optional = true , features = ["flamegraph", "frame-pointer"] }
 
-valence_protocol = { git = "https://github.com/valence-rs/valence" }
+valence_protocol = { git = "https://github.com/valence-rs/valence", features = ["compression"] }
 valence_registry = { git = "https://github.com/valence-rs/valence" }
 
 generator.workspace = true

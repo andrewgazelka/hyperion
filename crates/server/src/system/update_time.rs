@@ -1,11 +1,7 @@
 use evenio::prelude::*;
 use tracing::instrument;
 
-use crate::{
-    global::Global,
-    singleton::encoder::{Broadcast, PacketMetadata},
-    Gametick,
-};
+use crate::{global::Global, singleton::encoder::Broadcast, Gametick};
 
 #[instrument(skip_all, level = "trace")]
 pub fn update_time(
@@ -24,10 +20,7 @@ pub fn update_time(
         time_of_day,
     };
 
-    encoder
-        .get_round_robin()
-        .append_packet(&pkt, PacketMetadata::DROPPABLE)
-        .unwrap();
+    encoder.get_round_robin().append_packet(&pkt).unwrap();
 
     // update the tick
     global.tick += 1;

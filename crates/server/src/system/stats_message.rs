@@ -2,10 +2,7 @@ use evenio::prelude::*;
 use tracing::instrument;
 use valence_protocol::text::IntoText;
 
-use crate::{
-    singleton::encoder::{Broadcast, PacketMetadata},
-    StatsEvent,
-};
+use crate::{singleton::encoder::Broadcast, StatsEvent};
 
 #[instrument(skip_all, level = "trace")]
 pub fn stats_message(r: Receiver<StatsEvent>, encoder: Single<&mut Broadcast>) {
@@ -22,8 +19,5 @@ pub fn stats_message(r: Receiver<StatsEvent>, encoder: Single<&mut Broadcast>) {
 
     let encoder = encoder.0;
 
-    encoder
-        .get_round_robin()
-        .append_packet(&packet, PacketMetadata::DROPPABLE)
-        .unwrap();
+    encoder.get_round_robin().append_packet(&packet).unwrap();
 }
