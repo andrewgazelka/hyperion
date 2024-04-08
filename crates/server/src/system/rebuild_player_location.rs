@@ -22,7 +22,7 @@ pub(crate) struct EntityQuery<'a> {
 #[instrument(skip_all, level = "trace")]
 pub fn rebuild_player_location(
     _: Receiver<Gametick>,
-    lookup: Single<&mut PlayerLocationLookup>,
+    mut lookup: Single<&mut PlayerLocationLookup>,
     entities: Fetcher<EntityQuery>,
 ) {
     let elements: Vec<_> = entities
@@ -32,8 +32,6 @@ pub fn rebuild_player_location(
             aabb: query.pose.bounding.into(),
         })
         .collect();
-
-    let lookup = lookup.0;
 
     let bvh = Bvh::build::<TrivialHeuristic>(elements);
 

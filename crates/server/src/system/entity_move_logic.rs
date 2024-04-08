@@ -39,13 +39,10 @@ pub struct EntityQuery<'a> {
 pub fn entity_move_logic(
     _: Receiver<Gametick>,
     mut entities: Fetcher<EntityQuery>,
-    encoder: Single<&mut Broadcast>,
+    broadcast: Single<&Broadcast>,
     lookup: Single<&PlayerLocationLookup>,
 ) {
     use valence_protocol::packets::play;
-
-    let encoder = encoder.0;
-    let lookup = lookup.0;
 
     entities.par_iter_mut().for_each(|query| {
         let EntityQuery {
@@ -121,7 +118,7 @@ pub fn entity_move_logic(
         };
 
         // todo: remove unwrap
-        encoder.append(&pos, metadata).unwrap();
-        encoder.append(&look, metadata).unwrap();
+        broadcast.append(&pos, metadata).unwrap();
+        broadcast.append(&look, metadata).unwrap();
     });
 }

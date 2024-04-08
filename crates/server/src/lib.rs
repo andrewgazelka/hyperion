@@ -415,13 +415,11 @@ fn handle_ingress(
     mut fetcher: Fetcher<(EntityId, &mut Player, &mut FullEntityPose)>,
     lookup: Single<&PlayerUuidLookup>,
     mut sender: Sender<(KickPlayer, InitEntity, KillAllEntities)>,
-    encoder: Single<&mut Broadcast>,
+    mut broadcast: Single<&mut Broadcast>,
 ) {
     // uuid to entity id map
 
     let packets: Vec<_> = core::mem::take(&mut *GLOBAL_C2S_PACKETS.lock());
-
-    let lookup = lookup.0;
 
     for packet in packets {
         let id = packet.user;
@@ -443,8 +441,6 @@ fn handle_ingress(
         }
     }
 
-    let encoder = encoder.0;
-
     fetcher.iter_mut().for_each(|(id, _, pose)| {
         // let vec2d = Vec2::new(pose.position.x, pose.position.z);
         let pos = pose.position.as_dvec3();
@@ -465,7 +461,7 @@ fn handle_ingress(
         // };
 
         // todo: what it panics otherwise
-        encoder.get_round_robin().append_packet(&packet).unwrap();
+        broadcast.get_round_robin().append_packet(&packet).unwrap();
     });
 }
 

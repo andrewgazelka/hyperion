@@ -13,7 +13,7 @@ pub fn clean_up_io(
     _r: Receiver<Gametick>,
     io_entities: Fetcher<(EntityId, &mut Player, &Uuid, &Connection)>,
     global: Single<&Global>,
-    encoder: Single<&mut Broadcast>,
+    mut broadcast: Single<&mut Broadcast>,
 
     mut s: Sender<Despawn>,
 ) {
@@ -35,7 +35,7 @@ pub fn clean_up_io(
         despawn_ids.push(id_raw);
     }
 
-    let encoder = encoder.0.get_round_robin();
+    let broadcast = broadcast.get_round_robin();
 
     let num_removed = despawn_ids.len();
 
@@ -47,13 +47,13 @@ pub fn clean_up_io(
             .fetch_sub(num_removed as u32, Ordering::Relaxed);
     }
 
-    encoder
+    broadcast
         .append_packet(&play::EntitiesDestroyS2c {
             entity_ids: despawn_ids.into(),
         })
         .unwrap();
 
-    encoder
+    broadcast
         .append_packet(&play::PlayerRemoveS2c {
             uuids: despawn_uuids.into(),
         })

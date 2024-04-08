@@ -19,8 +19,6 @@ pub fn entity_detect_collisions(
 ) {
     const MAX_COLLISIONS: usize = 4;
 
-    let entity_bounding_boxes = entity_bounding_boxes.0;
-
     poses_fetcher.par_iter().for_each(|(id, pose, reaction)| {
         let context = CollisionContext {
             bounding: pose.bounding,
