@@ -19,6 +19,8 @@ jobs:
         with:
           toolchain: ${{ env.RUST_NIGHTLY_TOOLCHAIN }}
 
+      - uses: Swatinem/rust-cache@v2
+
       - uses: bencherdev/bencher@main
       - name: Track PR Benchmarks with Bencher
         run: |

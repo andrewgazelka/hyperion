@@ -1,6 +1,6 @@
 use std::hint::black_box;
 
-use criterion::{criterion_group, Criterion, Bencher, criterion_main};
+use criterion::{criterion_group, criterion_main, Bencher, Criterion};
 use ordered_float::OrderedFloat;
 
 const LEN: usize = 100;
