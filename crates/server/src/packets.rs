@@ -7,12 +7,13 @@
 use std::str::FromStr;
 
 use anyhow::{bail, ensure};
-use evenio::event::Sender;
+use evenio::{entity::EntityId, event::Sender};
 use tracing::debug;
 use valence_protocol::{decode::PacketFrame, math::Vec3, packets::play, Decode, Packet};
 
 use crate::{
-    bounding_box::BoundingBox, FullEntityPose, InitEntity, KickPlayer, KillAllEntities, Player,
+    bounding_box::BoundingBox, system::IngressSender, FullEntityPose, InitEntity, KickPlayer,
+    KillAllEntities, Player, SwingArm,
 };
 
 const fn confirm_teleport(_pkt: &[u8]) {
@@ -154,7 +155,7 @@ fn chat_command(
     mut data: &[u8],
     player: &Player,
     full_entity_pose: &FullEntityPose,
-    sender: &mut Sender<(KickPlayer, InitEntity, KillAllEntities)>,
+    sender: &mut IngressSender,
 ) -> anyhow::Result<()> {
     const BASE_RADIUS: f32 = 4.0;
     let pkt = play::CommandExecutionC2s::decode(&mut data)?;
@@ -236,17 +237,34 @@ fn chat_command(
     Ok(())
 }
 
+fn hand_swing(mut data: &[u8], id: EntityId, sender: &mut IngressSender) -> anyhow::Result<()> {
+    let packet = play::HandSwingC2s::decode(&mut data)?;
+
+    let packet = packet.hand;
+
+    let event = SwingArm {
+        target: id,
+        hand: packet,
+    };
+
+    sender.send(event);
+
+    Ok(())
+}
+
 pub fn switch(
     raw: PacketFrame,
+    id: EntityId,
     player: &mut Player,
     full_entity_pose: &mut FullEntityPose,
-    sender: &mut Sender<(KickPlayer, InitEntity, KillAllEntities)>,
+    sender: &mut Sender<(KickPlayer, InitEntity, KillAllEntities, SwingArm)>,
 ) -> anyhow::Result<()> {
-    let id = raw.id;
+    let packet_id = raw.id;
     let data = raw.body;
     let data = &*data;
 
-    match id {
+    match packet_id {
+        play::HandSwingC2s::ID => hand_swing(data, id, sender)?,
         play::TeleportConfirmC2s::ID => confirm_teleport(data),
         play::ClientSettingsC2s::ID => client_settings(data, player)?,
         play::CustomPayloadC2s::ID => custom_payload(data),
@@ -258,7 +276,7 @@ pub fn switch(
         play::UpdateSelectedSlotC2s::ID => update_selected_slot(data)?,
         play::KeepAliveC2s::ID => keep_alive(player)?,
         play::CommandExecutionC2s::ID => chat_command(data, player, full_entity_pose, sender)?,
-        _ => debug!("unknown packet id: 0x{:02X}", id),
+        _ => debug!("unknown packet id: 0x{:02X}", packet_id),
     }
 
     Ok(())

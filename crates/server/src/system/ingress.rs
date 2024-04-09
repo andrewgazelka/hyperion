@@ -1,6 +1,6 @@
 use evenio::{
     entity::EntityId,
-    event::{Receiver, Sender},
+    event::Receiver,
     fetch::{Fetcher, Single},
 };
 use rayon::prelude::*;
@@ -14,7 +14,8 @@ use crate::{
         encoder::{Broadcast, PacketMetadata},
         player_lookup::PlayerUuidLookup,
     },
-    FullEntityPose, Gametick, InitEntity, KickPlayer, KillAllEntities, Player,
+    system::IngressSender,
+    FullEntityPose, Gametick, Player,
 };
 
 // The `Receiver<Tick>` parameter tells our handler to listen for the `Tick` event.
@@ -23,7 +24,7 @@ pub fn ingress(
     _: Receiver<Gametick>,
     mut fetcher: Fetcher<(EntityId, &mut Player, &mut FullEntityPose)>,
     lookup: Single<&PlayerUuidLookup>,
-    mut sender: Sender<(KickPlayer, InitEntity, KillAllEntities)>,
+    mut sender: IngressSender,
     broadcast: Single<&Broadcast>,
 ) {
     // uuid to entity id map
@@ -32,15 +33,17 @@ pub fn ingress(
 
     for packet in packets {
         let id = packet.user;
-        let Some(&user) = lookup.get(&id) else { return };
+        let Some(&player_id) = lookup.get(&id) else {
+            return;
+        };
 
-        let Ok((_, player, position)) = fetcher.get_mut(user) else {
+        let Ok((_, player, position)) = fetcher.get_mut(player_id) else {
             return;
         };
 
         let packet = packet.packet;
 
-        if let Err(e) = packets::switch(packet, player, position, &mut sender) {
+        if let Err(e) = packets::switch(packet, player_id, player, position, &mut sender) {
             let reason = format!("error: {e}");
 
             // todo: handle error
