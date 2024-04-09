@@ -11,6 +11,7 @@ Please [join our Discord server](https://discord.gg/PBfnDtj5Wb).
       - [As a software developer](#as-a-software-developer)
       - [As an event organizer/facilitator/sponsor](#as-an-event-organizerfacilitatorsponsor)
       - [As a beta/pen tester](#as-a-betapen-tester)
+    - [How will anti-cheat be implemented?](#how-will-anti-cheat-be-implemented)
     - [As a software developer how should I contribute?](#as-a-software-developer-how-should-i-contribute)
 
 # FAQ
@@ -63,6 +64,15 @@ You are a good person to contribute to this project if you are:
 
 #### As a beta/pen tester
 - You think outside of the box and are determined to try to break the server.
+
+### How will anti-cheat be implemented?
+- Good question.
+- Will there be some type of proxy server? hmmm maybe.
+- We will probably want a decently naïve anti-cheat system that will be able to give us a confidence score for each player cheating.
+  - Players who are doing "too well" will be flagged for moderators to take action.
+  - We will have several moderations who will be able to take action on flagged players.
+
+
 
 ### As a software developer how should I contribute?
 - Look at the [milestones](https://github.com/andrewgazelka/hyperion/milestones). Currently, we are on [PvP Sword test server](https://github.com/andrewgazelka/hyperion/milestone/1).
