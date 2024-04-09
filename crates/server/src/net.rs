@@ -22,10 +22,11 @@ use evenio::prelude::Component;
 use monoio::{
     io::{AsyncReadRent, AsyncWriteRentExt, OwnedReadHalf, OwnedWriteHalf, Splitable},
     net::{TcpListener, TcpStream},
+    FusionRuntime,
 };
 use serde_json::json;
 use sha2::Digest;
-use tracing::{debug, error, instrument, trace, warn};
+use tracing::{debug, error, info, instrument, trace, warn};
 use valence_protocol::{
     decode::PacketFrame,
     nbt::{compound, Compound, List},
@@ -627,6 +628,16 @@ pub fn init_io_thread(
             let mut runtime = monoio::RuntimeBuilder::<monoio::FusionDriver>::new()
                 .build()
                 .unwrap();
+
+            match &runtime {
+                #[cfg(target_os = "linux")]
+                FusionRuntime::Uring(_) => {
+                    info!("monoio is using io_uring runtime");
+                }
+                FusionRuntime::Legacy(_) => {
+                    info!("monoio is using legacy runtime");
+                }
+            }
 
             runtime.block_on(async move {
                 let run = main_loop(connection_tx, address, shared);
