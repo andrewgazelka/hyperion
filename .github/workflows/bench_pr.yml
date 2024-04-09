@@ -17,24 +17,54 @@ jobs:
       pull-requests: write
     runs-on: ubuntu-latest
     steps:
+      # checkout main
       - uses: actions/checkout@v4
+        with:
+          ref: main
+
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ env.RUST_NIGHTLY_TOOLCHAIN }}
 
       - uses: Swatinem/rust-cache@v2
-
       - uses: bencherdev/bencher@main
-      - name: Track PR Benchmarks with Bencher
+
+      - name: Step 1
         run: |
           bencher run \
           --project hyperion \
           --token '${{ secrets.BENCHER_API_TOKEN }}' \
           --branch '${{ github.head_ref }}' \
-          --branch-start-point '${{ github.base_ref }}' \
-          --branch-start-point-hash '${{ github.event.pull_request.base.sha }}' \
+          --branch-reset
           --testbed ubuntu-latest \
           --adapter rust_criterion \
-          --err \
           --github-actions '${{ secrets.GITHUB_TOKEN }}' \
+          cargo bench --bench=sort
+
+      - name: Step 2
+        run: |
+          bencher threshold create \
+          --branch '${{ github.head_ref }}' \
+          --token '${{ secrets.BENCHER_API_TOKEN }}' \
+          --testbed ci-runner \
+          --measure Latency \
+          --test percentage \
+          --upper-boundary 0.05 \
+          hyperion
+
+      # checkout PR branch
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+
+      - name: Step 3
+        run: |
+          bencher run \
+          --project hyperion \
+          --token '${{ secrets.BENCHER_API_TOKEN }}' \
+          --branch '${{ github.head_ref }}' \
+          --testbed ubuntu-latest \
+          --adapter rust_criterion \
+          --github-actions '${{ secrets.GITHUB_TOKEN }}' \
+          --err \
           cargo bench --bench=sort
