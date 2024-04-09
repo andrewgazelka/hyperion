@@ -1,0 +1,35 @@
+on:
+  pull_request:
+    types: [opened, reopened, edited, synchronize]
+
+env:
+  RUST_NIGHTLY_TOOLCHAIN: nightly-2024-03-24
+
+jobs:
+  benchmark_pr_branch:
+    name: Continuous Benchmarking PRs with Bencher
+    # DO NOT REMOVE: For handling Fork PRs see Pull Requests from Forks
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    permissions:
+      pull-requests: write
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_NIGHTLY_TOOLCHAIN }}
+
+      - uses: bencherdev/bencher@main
+      - name: Track PR Benchmarks with Bencher
+        run: |
+          bencher run \
+          --project hyperion \
+          --token '${{ secrets.BENCHER_API_TOKEN }}' \
+          --branch '${{ github.head_ref }}' \
+          --branch-start-point '${{ github.base_ref }}' \
+          --branch-start-point-hash '${{ github.event.pull_request.base.sha }}' \
+          --testbed ci-runner \
+          --adapter json \
+          --err \
+          --github-actions '${{ secrets.GITHUB_TOKEN }}' \
+          cargo bench --bench=sort
