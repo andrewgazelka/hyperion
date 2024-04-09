@@ -31,7 +31,12 @@ fn setup_global_subscriber() -> impl Drop {
     not(feature = "tracy")
 ))]
 fn setup_simple_trace() {
+    let env_filter = tracing_subscriber::EnvFilter::try_from_default_env()
+        .or_else(|_| tracing_subscriber::EnvFilter::try_new("info")) // Fallback to "info" level if `RUST_LOG` is not set
+        .unwrap();
+
     tracing_subscriber::fmt()
+        .with_env_filter(env_filter)
         .pretty()
         .with_timer(tracing_subscriber::fmt::time::ChronoLocal::new(
             "%H:%M:%S%.3f".to_owned(),
