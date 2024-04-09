@@ -630,7 +630,7 @@ pub fn init_io_thread(
                 .unwrap();
 
             match &runtime {
-                #[cfg(all(target_os = "linux", feature = "iouring"))]
+                #[cfg(target_os = "linux")]
                 FusionRuntime::Uring(_) => {
                     info!("monoio is using io_uring runtime");
                 }
