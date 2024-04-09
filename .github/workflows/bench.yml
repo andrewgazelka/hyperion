@@ -30,7 +30,7 @@ jobs:
           --branch '${{ github.head_ref }}' \
           --branch-start-point '${{ github.base_ref }}' \
           --branch-start-point-hash '${{ github.event.pull_request.base.sha }}' \
-          --testbed ci-runner \
+          --testbed ubuntu-latest \
           --adapter rust_criterion \
           --err \
           --github-actions '${{ secrets.GITHUB_TOKEN }}' \
