@@ -386,7 +386,8 @@ impl Io {
         let username = username.0;
 
         // trim username to 10 chars
-        let username = username[..10].to_owned();
+        let username_len = std::cmp::min(username.len(), 10);
+        let username = &username[..username_len];
 
         // add 2 random chars to the end of the username
         let username = format!(
