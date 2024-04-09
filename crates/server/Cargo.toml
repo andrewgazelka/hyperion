@@ -10,11 +10,11 @@ publish = false
 ignored = ["flate2"]
 
 [features]
-trace = []
+trace = ["dep:tracing-subscriber"]
 full = ["trace"]
 pprof = ["dep:pprof"]
-tracy = ["dep:tracing-tracy"]
-trace-simple = []
+tracy = ["dep:tracing-tracy", "dep:tracing-subscriber"]
+trace-simple = ["dep:tracing-subscriber"]
 default = ["trace-simple"]
 
 
@@ -50,7 +50,7 @@ uuid = { version = "1.8.0", features = ["v3"] }
 rand_distr = "0.4.3"
 smallvec.workspace = true
 rayon = "1.10.0"
-tracing-subscriber = { version = "0.3.18", features = ["env-filter", "chrono"] }
+tracing-subscriber = { version = "0.3.18", features = ["chrono", "env-filter"], optional = true }
 tracing-flame = "0.2.0"
 ndarray = "0.15.6"
 libc = "0.2.153"
