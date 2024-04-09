@@ -93,6 +93,7 @@ jobs:
         with:
           toolchain: ${{ env.RUST_NIGHTLY_TOOLCHAIN }}
           components: rustfmt
+
       - uses: Swatinem/rust-cache@v2
       - name: Run rustfmt
         run: |

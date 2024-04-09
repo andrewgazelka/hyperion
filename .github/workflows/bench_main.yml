@@ -1,0 +1,31 @@
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  benchmark_base_branch:
+    name: Continuous Benchmarking with Bencher
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_NIGHTLY_TOOLCHAIN }}
+
+        # https://github.com/Swatinem/rust-cache
+      - uses: Swatinem/rust-cache@v2
+
+
+      - uses: bencherdev/bencher@main
+      - name: Track base branch benchmarks with Bencher
+        run: |
+          bencher run \
+          --project hyperion \
+          --token '${{ secrets.BENCHER_API_TOKEN }}' \
+          --branch main \
+          --testbed ubuntu-latest \
+          --adapter rust_criterion \
+          --err \
+          cargo bench --bench=sort

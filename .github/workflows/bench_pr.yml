@@ -1,9 +1,7 @@
 on:
   pull_request:
-    types: [opened, reopened, edited, synchronize]
-
-env:
-  RUST_NIGHTLY_TOOLCHAIN: nightly-2024-03-24
+    branches: [ main ]
+#    types: [opened, reopened, edited, synchronize]
 
 jobs:
   benchmark_pr_branch:
