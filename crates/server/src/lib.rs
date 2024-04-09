@@ -21,7 +21,7 @@ pub use rayon::iter::ParallelIterator;
 use signal_hook::iterator::Signals;
 use spin::Lazy;
 use tracing::{debug, error, info, instrument, trace, warn};
-use valence_protocol::{math::Vec3, CompressionThreshold};
+use valence_protocol::{math::Vec3, CompressionThreshold, Hand};
 
 use crate::{
     bounding_box::BoundingBox,
@@ -107,6 +107,13 @@ struct KickPlayer {
     #[event(target)] // Works on tuple struct fields as well.
     target: EntityId,
     reason: String,
+}
+
+#[derive(Event)]
+struct SwingArm {
+    #[event(target)]
+    target: EntityId,
+    hand: Hand,
 }
 
 #[derive(Event)]
@@ -243,6 +250,7 @@ impl Game {
         world.add_handler(system::rebuild_player_location);
         world.add_handler(system::clean_up_io);
 
+        world.add_handler(system::pkt_hand_swing);
         world.add_handler(system::egress_broadcast);
         world.add_handler(system::egress_local);
         world.add_handler(system::keep_alive);
