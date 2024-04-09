@@ -385,8 +385,8 @@ impl Io {
 
         let username = username.0;
 
-        // trim username to 10 chars
-        let username = username[..10].to_owned();
+        // trim username to first 10 chars (or length of username if username is shorter than 10 chars)
+        let username = username[..username.chars().take(10).count()].to_owned();
 
         // add 2 random chars to the end of the username
         let username = format!(
