@@ -33,5 +33,4 @@ jobs:
         uses: actions/upload-artifact@v2
         with:
           name: bench_side_by_side
-          # include sha
           path: target/benchmarks/side_by_side-${{ github.sha }}
