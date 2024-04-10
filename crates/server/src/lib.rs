@@ -1,6 +1,5 @@
 #![feature(thread_local)]
 #![feature(lint_reasons)]
-#![feature(write_all_vectored)]
 #![expect(clippy::type_complexity, reason = "evenio uses a lot of complex types")]
 
 mod chunk;
