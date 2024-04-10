@@ -1,4 +1,4 @@
-name: Build and Upload Artifact
+name: Export benchmarks
 
 on:
   push:
@@ -33,4 +33,5 @@ jobs:
         uses: actions/upload-artifact@v2
         with:
           name: bench_side_by_side
-          path: target/benchmarks/side_by_side
+          # include sha
+          path: target/benchmarks/side_by_side-${{ github.sha }}
