@@ -493,13 +493,19 @@ impl Io {
                 let mut bytes_buf = ArrayVec::<_, MAX_VECTORED_WRITE_BUFS>::new();
                 bytes_buf.push(bytes);
 
-                monoio::time::sleep(WRITE_DELAY).await;
-                // Try getting more bytes if it's already in the channel before sending data
+                let mut already_delayed = false;
+
                 while !bytes_buf.is_full() {
+                    // Try getting more bytes if it's already in the channel before sending data
                     if let Ok(bytes) = s2c_rx.try_recv() {
                         bytes_buf.push(bytes);
-                    } else {
+                    } else if already_delayed {
+                        // This write request has already been delayed, so send the data now
                         break;
+                    } else {
+                        // Wait for WRITE_DELAY and then check if any more packets are queued
+                        monoio::time::sleep(WRITE_DELAY).await;
+                        already_delayed = true;
                     }
                 }
 
