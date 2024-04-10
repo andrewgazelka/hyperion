@@ -701,9 +701,6 @@ async fn main_loop(
             }
         };
 
-        // set buffer size to 10 MB
-        // set_buffer_size(stream.as_raw_fd(), 10 * 1024 * 1024).unwrap();
-
         let process = Io::new(stream, shared.clone());
 
         let tx = tx.clone();
