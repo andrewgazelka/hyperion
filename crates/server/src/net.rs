@@ -278,6 +278,7 @@ impl IoWrite {
                     buf_on = buf.progress(len_read);
                 }
                 Err(e) if e.kind() == std::io::ErrorKind::Interrupted => {
+                    buf_on = buf;
                     continue;
                 }
                 Err(e) => {
