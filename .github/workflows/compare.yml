@@ -1,0 +1,35 @@
+name: Build and Upload Artifact
+
+on:
+  pull_request:
+    branches: [ main ]
+#  merge_group:
+#    branches: [ main ]
+
+env:
+  RUST_NIGHTLY_TOOLCHAIN: nightly-2024-03-24
+  RUSTFLAGS: -C target-cpu=native -Zexport-executable-symbols -Zshare-generics=y -Zthreads=0
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # download artifact from previous job
+      - name: Download Artifact
+        uses: actions/download-artifact@v3
+        with:
+          # sha of main branch
+          name: bench_side_by_side-${{ github.event.pull_request.base.sha }}
+          path: target/benchmarks/side_by_side
+
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_NIGHTLY_TOOLCHAIN }}
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Run cargo bench
+        run: cargo bench --bench=side_by_side -- compare target/benchmarks/side_by_side
