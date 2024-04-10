@@ -8,7 +8,7 @@ on:
 
 env:
   RUST_NIGHTLY_TOOLCHAIN: nightly-2024-03-24
-  RUSTFLAGS: -C target-cpu=native -Zexport-executable-symbols -Zshare-generics=y -Zthreads=0
+  RUSTFLAGS: -Clinker=/usr/bin/clang -Clink-arg=--ld-path=/usr/local/bin/mold -Ctarget-cpu=native -Zshare-generics=y -Zthreads=0 -Zexport-executable-symbols
 
 jobs:
   export:
@@ -18,6 +18,7 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+      - uses: rui314/setup-mold@v1
 
       - name: Install cargo-export
         uses: taiki-e/install-action@v2
@@ -36,7 +37,7 @@ jobs:
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: bench_side_by_side-${{ github.sha }}
+          name: bench_side_by_side
           path: target/benchmarks/side_by_side
 
   compare:
@@ -48,10 +49,19 @@ jobs:
 
       # download artifact from previous job
       - name: Download Artifact
-        uses: actions/download-artifact@v4
+        uses: dawidd6/action-download-artifact@v3
         with:
+          commit: ${{ github.event.pull_request.base.sha }}
           name: bench_side_by_side-${{ github.event.pull_request.base.sha }}
-          path: target/benchmarks/side_by_side
+          path: /tmp/bench/
+
+      - name: get tree of /tmp/bench
+        run: tree /tmp/bench
+
+      - name: run nm
+        run: nm /tmp/bench/side_by_side
+
+      - uses: rui314/setup-mold@v1
 
       - uses: dtolnay/rust-toolchain@master
         with:
@@ -59,5 +69,9 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
+
       - name: Run cargo bench
-        run: cargo bench --bench=side_by_side -- compare target/benchmarks/side_by_side
+        run: cargo bench --bench=side_by_side -- compare /tmp/bench/side_by_side
+
+      - name: remove /tmp/bench
+        run: rm -rf /tmp/bench
