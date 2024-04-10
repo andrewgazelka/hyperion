@@ -231,10 +231,14 @@ impl Buf {
     fn progress(mut self, mut len: usize) -> Option<Self> {
         loop {
             let vec = self.iovecs.get_mut(self.idx)?;
+            let iov_len = vec.iov_len;
 
-            if len >= vec.iov_len {
-                len -= vec.iov_len;
-                // todo: swap remove
+            // this is perhaps not strictly needed, but we should not be writing zero-length iovecs
+            // anyway. It probably hurts performance.
+            debug_assert!(iov_len > 0);
+
+            if len >= iov_len {
+                len -= iov_len;
                 self.idx += 1;
                 continue;
             }
