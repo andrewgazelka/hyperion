@@ -66,34 +66,8 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
-
       - name: Run cargo bench
-        run: cargo bench --bench=side_by_side -- compare /tmp/bench/side_by_side > bench_output.txt
+        run: cargo bench --bench=side_by_side -- compare /tmp/bench/side_by_side
 
       - name: remove /tmp/bench
         run: rm -rf /tmp/bench
-
-
-      - name: Post benchmark results as PR comment
-        uses: actions/github-script@v6
-
-        with:
-          github-token: ${{ secrets.PAT }}
-          script: |
-            const fs = require('fs');
-            const path = 'bench_output.txt';
-            const output = fs.readFileSync(path, 'utf8');
-            const originalSha = context.payload.pull_request.base.sha;
-            
-            const issue_number = context.issue.number;
-            if(issue_number) {
-              const comment = {
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: issue_number,
-                body: `### Benchmark Results\n\`\`\`\n${output}\`\`\`\n\nComparing to ${originalSha}`,
-              };
-              await github.rest.issues.createComment(comment);
-            } else {
-              console.log('This action must be run in the context of a pull request');
-            }
