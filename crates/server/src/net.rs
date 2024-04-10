@@ -248,6 +248,7 @@ impl IoWrite {
         Ok(())
     }
 
+    #[cfg(target_os = "macos")]
     pub async fn send_data_macos(
         &mut self,
         bytes: ArrayVec<bytes::Bytes, MAX_VECTORED_WRITE_BUFS>,
