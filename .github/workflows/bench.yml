@@ -71,7 +71,26 @@ jobs:
 
 
       - name: Run cargo bench
-        run: cargo bench --bench=side_by_side -- compare /tmp/bench/side_by_side
+        run: cargo bench --bench=side_by_side -- compare /tmp/bench/side_by_side > bench_output.txt
 
       - name: remove /tmp/bench
         run: rm -rf /tmp/bench
+
+
+      - name: Upload Bench Results
+        uses: actions/upload-artifact@v4
+        with:
+          name: bench-results
+          path: bench_output.txt
+
+      - name: Post PR Comment with Bench Results
+        uses: peter-evans/create-or-update-comment@v4
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          body: |
+            ## Benchmark Results
+            ```
+            ${{ steps.bench.outputs.results }}
+            ```
