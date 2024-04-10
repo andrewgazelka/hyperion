@@ -273,8 +273,17 @@ impl IoWrite {
 
         while let Some(buf) = buf_on.take() {
             let (result, buf) = self.write.writev(buf).await;
-            let len_read = result?;
-            buf_on = buf.progress(len_read);
+            match result {
+                Ok(len_read) => {
+                    buf_on = buf.progress(len_read);
+                }
+                Err(e) if e.kind() == std::io::ErrorKind::Interrupted => {
+                    continue;
+                }
+                Err(e) => {
+                    return Err(e);
+                }
+            }
         }
 
         Ok(())
