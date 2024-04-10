@@ -77,20 +77,23 @@ jobs:
         run: rm -rf /tmp/bench
 
 
-      - name: Upload Bench Results
-        uses: actions/upload-artifact@v4
+      - name: Post benchmark results as PR comment
+        uses: actions/github-script@v6
         with:
-          name: bench-results
-          path: bench_output.txt
-
-      - name: Post PR Comment with Bench Results
-        uses: peter-evans/create-or-update-comment@v4
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          issue-number: ${{ github.event.pull_request.number }}
-          body: |
-            ## Benchmark Results
-            ```
-            ${{ steps.bench.outputs.results }}
-            ```
+          script: |
+            const fs = require('fs');
+            const path = 'bench_output.txt';
+            const output = fs.readFileSync(path, 'utf8');
+            
+            const issue_number = context.issue.number;
+            if(issue_number) {
+              const comment = {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue_number,
+                body: `### Benchmark Results\n\`\`\`\n${output}\n\`\`\``,
+              };
+              await github.rest.issues.createComment(comment);
+            } else {
+              console.log('This action must be run in the context of a pull request');
+            }
