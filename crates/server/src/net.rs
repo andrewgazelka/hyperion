@@ -20,9 +20,7 @@ use base64::Engine;
 use bytes::BytesMut;
 use derive_build::Build;
 use evenio::prelude::Component;
-use libc::iovec;
 use monoio::{
-    buf::IoVecBuf,
     io::{AsyncReadRent, AsyncWriteRentExt, OwnedReadHalf, OwnedWriteHalf, Splitable},
     net::{TcpListener, TcpStream},
     FusionRuntime,
@@ -47,7 +45,7 @@ use valence_registry::RegistryCodec;
 use crate::{config, global};
 
 const DEFAULT_SPEED: u32 = 1024 * 1024;
-const MAX_VECTORED_WRITE_BUFS: usize = 8;
+const MAX_VECTORED_WRITE_BUFS: usize = 16;
 const WRITE_DELAY: Duration = Duration::from_millis(1);
 
 const READ_BUF_SIZE: usize = 4096;
@@ -208,36 +206,69 @@ impl IoRead {
 }
 
 impl IoWrite {
-    pub(crate) async fn send_data(&mut self, bytes: &[bytes::Bytes]) -> io::Result<()> {
-        // self.write.write_k
+    #[cfg(target_os = "linux")]
+    async fn send_data_linux(
+        &mut self,
+        bytes: ArrayVec<bytes::Bytes, MAX_VECTORED_WRITE_BUFS>,
+    ) -> io::Result<()> {
+        use buf::IoVecBuf;
+        use libc::iovec;
 
-        struct Buf(ArrayVec<iovec, MAX_VECTORED_WRITE_BUFS>);
+        struct Buf {
+            iovecs: ArrayVec<iovec, MAX_VECTORED_WRITE_BUFS>,
+            bytes: ArrayVec<bytes::Bytes, MAX_VECTORED_WRITE_BUFS>,
+        }
 
         // SAFETY: The underlying data will live longer than this struct.
         unsafe impl IoVecBuf for Buf {
             fn read_iovec_ptr(&self) -> *const iovec {
-                self.0.as_ptr()
+                self.iovecs.as_ptr()
             }
 
             fn read_iovec_len(&self) -> usize {
-                self.0.len()
+                self.iovecs.len()
             }
         }
 
-        let mut buf = Buf(ArrayVec::new());
-
-        for bytes in bytes {
-            #[expect(clippy::as_ptr_cast_mut, reason = "The pointer won't be written to")]
-            buf.0.push(iovec {
+        let iovecs = bytes
+            .iter()
+            .map(|bytes| iovec {
+                #[expect(clippy::as_ptr_cast_mut, reason = "The pointer won't be written to")]
                 iov_base: bytes.as_ptr() as *mut _,
                 iov_len: bytes.len(),
-            });
-        }
+            })
+            .collect();
 
+        let buf = Buf { iovecs, bytes };
+
+        // todo: figure out why this does not work properly on macOS
         let (result, _) = self.write.write_vectored_all(buf).await;
         result?; // error occurs here
 
         Ok(())
+    }
+
+    pub async fn send_data_macos(
+        &mut self,
+        bytes: ArrayVec<bytes::Bytes, MAX_VECTORED_WRITE_BUFS>,
+    ) -> io::Result<()> {
+        for bytes in bytes {
+            let (result, _) = self.write.write_all(bytes).await;
+            result?; // error occurs here
+        }
+
+        Ok(())
+    }
+
+    pub(crate) async fn send_data(
+        &mut self,
+        bytes: ArrayVec<bytes::Bytes, MAX_VECTORED_WRITE_BUFS>,
+    ) -> io::Result<()> {
+        #[cfg(target_os = "linux")]
+        return self.send_data_linux(bytes).await;
+
+        #[cfg(target_os = "macos")]
+        return self.send_data_macos(bytes).await;
     }
 
     /// This function returns the number of bytes in the TCP send queue that have
@@ -520,7 +551,7 @@ impl Io {
 
                 trace!("got byte len: {len}");
 
-                if let Err(e) = io_write.send_data(&bytes_buf).await {
+                if let Err(e) = io_write.send_data(bytes_buf).await {
                     error!("Error sending packet: {e} ... {e:?}");
                     break;
                 }

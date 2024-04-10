@@ -10,8 +10,8 @@ services:
       - "8086:8086"
     environment:
       - RUST_LOG=${RUST_LOG:-info}
-    security_opt:
-      - seccomp:unconfined
+#    security_opt:
+#      - seccomp:unconfined
 
   debug:
     build:
