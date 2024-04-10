@@ -158,6 +158,16 @@ pub fn player_join_world(
         })
         .unwrap();
 
+    let tick = global.tick;
+    let time_of_day = tick % 24000;
+
+    encoder
+        .encode(&play::WorldTimeUpdateS2c {
+            world_age: tick,
+            time_of_day,
+        })
+        .unwrap();
+
     // todo: cache
     for (id, _, uuid, pose) in &players {
         let entity_id = VarInt(id.index().0 as i32);
