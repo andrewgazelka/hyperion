@@ -76,7 +76,9 @@ jobs:
 
       - name: Post benchmark results as PR comment
         uses: actions/github-script@v6
+
         with:
+          github-token: ${{ secrets.PAT }}
           script: |
             const fs = require('fs');
             const path = 'bench_output.txt';
