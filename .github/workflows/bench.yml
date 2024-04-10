@@ -61,4 +61,4 @@ jobs:
       - uses: Swatinem/rust-cache@v2
 
       - name: Run cargo bench
-        run: cargo bench --bench=side_by_side -- compare target/benchmarks/side_by_side
+        run: cargo bench --bench=side_by_side -- compare target/benchmarks/side_by_side-{{ github.event.pull_request.base.sha }}
