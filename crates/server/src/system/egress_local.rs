@@ -23,6 +23,9 @@ pub fn egress_local(
         .par_iter_mut()
         .for_each(|(connection, encoder)| {
             let bytes = encoder.take(compression);
+            if bytes.is_empty() {
+                return;
+            }
             trace!("about to send bytes {:?}", bytes.len());
             let _ = connection.send(bytes);
         });

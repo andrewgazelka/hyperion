@@ -15,6 +15,7 @@ use std::{
 };
 
 use anyhow::{ensure, Context};
+use arrayvec::ArrayVec;
 use base64::Engine;
 use bytes::BytesMut;
 use derive_build::Build;
@@ -44,6 +45,8 @@ use valence_registry::RegistryCodec;
 use crate::{config, global};
 
 const DEFAULT_SPEED: u32 = 1024 * 1024;
+const MAX_VECTORED_WRITE_BUFS: usize = 16;
+const WRITE_DELAY: Duration = Duration::from_millis(1);
 
 const READ_BUF_SIZE: usize = 4096;
 
@@ -203,14 +206,71 @@ impl IoRead {
 }
 
 impl IoWrite {
-    pub(crate) async fn send_packet(&mut self, bytes: bytes::Bytes) -> io::Result<()> {
-        // self.write.write_k
+    #[cfg(target_os = "linux")]
+    async fn send_data_linux(
+        &mut self,
+        bytes: ArrayVec<bytes::Bytes, MAX_VECTORED_WRITE_BUFS>,
+    ) -> io::Result<()> {
+        use libc::iovec;
+        use monoio::buf::IoVecBuf;
 
-        let (result, _) = self.write.write_all(bytes).await;
+        struct Buf {
+            iovecs: ArrayVec<iovec, MAX_VECTORED_WRITE_BUFS>,
+            #[expect(dead_code, reason = "this is so that allocations are not freed")]
+            bytes: ArrayVec<bytes::Bytes, MAX_VECTORED_WRITE_BUFS>,
+        }
 
+        // SAFETY: The underlying data will live longer than this struct.
+        unsafe impl IoVecBuf for Buf {
+            fn read_iovec_ptr(&self) -> *const iovec {
+                self.iovecs.as_ptr()
+            }
+
+            fn read_iovec_len(&self) -> usize {
+                self.iovecs.len()
+            }
+        }
+
+        let iovecs = bytes
+            .iter()
+            .map(|bytes| iovec {
+                #[expect(clippy::as_ptr_cast_mut, reason = "The pointer won't be written to")]
+                iov_base: bytes.as_ptr() as *mut _,
+                iov_len: bytes.len(),
+            })
+            .collect();
+
+        let buf = Buf { iovecs, bytes };
+
+        // todo: figure out why this does not work properly on macOS
+        let (result, _) = self.write.write_vectored_all(buf).await;
         result?; // error occurs here
 
         Ok(())
+    }
+
+    #[cfg(target_os = "macos")]
+    pub async fn send_data_macos(
+        &mut self,
+        bytes: ArrayVec<bytes::Bytes, MAX_VECTORED_WRITE_BUFS>,
+    ) -> io::Result<()> {
+        for bytes in bytes {
+            let (result, _) = self.write.write_all(bytes).await;
+            result?; // error occurs here
+        }
+
+        Ok(())
+    }
+
+    pub(crate) async fn send_data(
+        &mut self,
+        bytes: ArrayVec<bytes::Bytes, MAX_VECTORED_WRITE_BUFS>,
+    ) -> io::Result<()> {
+        #[cfg(target_os = "linux")]
+        return self.send_data_linux(bytes).await;
+
+        #[cfg(target_os = "macos")]
+        return self.send_data_macos(bytes).await;
     }
 
     /// This function returns the number of bytes in the TCP send queue that have
@@ -298,6 +358,11 @@ impl Io {
     }
 
     fn new(stream: TcpStream, shared: Arc<global::Shared>) -> Self {
+        // TCP_NODELAY is enabled because the code already has a WRITE_DELAY
+        if let Err(e) = stream.set_nodelay(true) {
+            warn!("set_nodelay failed: {e}");
+        }
+
         let enc = PacketEncoder::default();
         let dec = PacketDecoder::default();
 
@@ -458,11 +523,37 @@ impl Io {
             let mut past_queued_send = 0;
             let mut past_instant = Instant::now();
             while let Ok(bytes) = s2c_rx.recv_async().await {
-                let len = bytes.len();
+                let mut bytes_buf = ArrayVec::<_, MAX_VECTORED_WRITE_BUFS>::new();
+                bytes_buf.push(bytes);
+
+                let mut already_delayed = false;
+
+                while !bytes_buf.is_full() {
+                    // Try getting more bytes if it's already in the channel before sending data
+                    if let Ok(bytes) = s2c_rx.try_recv() {
+                        bytes_buf.push(bytes);
+                    } else if already_delayed {
+                        // This write request has already been delayed, so send the data now
+                        break;
+                    } else {
+                        // Wait for WRITE_DELAY and then check if any more packets are queued
+                        monoio::time::sleep(WRITE_DELAY).await;
+                        already_delayed = true;
+                    }
+                }
+
+                if bytes_buf.is_full() {
+                    warn!(
+                        "bytes_buf is full; consider increasing MAX_VECTORED_WRITE_BUFS for \
+                         better performance"
+                    );
+                }
+
+                let len = bytes_buf.iter().map(bytes::Bytes::len).sum::<usize>();
 
                 trace!("got byte len: {len}");
 
-                if let Err(e) = io_write.send_packet(bytes).await {
+                if let Err(e) = io_write.send_data(bytes_buf).await {
                     error!("Error sending packet: {e} ... {e:?}");
                     break;
                 }
@@ -627,6 +718,7 @@ pub fn init_io_thread(
         .name("io".to_string())
         .spawn(move || {
             let mut runtime = monoio::RuntimeBuilder::<monoio::FusionDriver>::new()
+                .enable_timer()
                 .build()
                 .unwrap();
 
