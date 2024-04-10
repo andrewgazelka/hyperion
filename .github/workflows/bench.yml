@@ -52,7 +52,7 @@ jobs:
         uses: dawidd6/action-download-artifact@v3
         with:
           commit: ${{ github.event.pull_request.base.sha }}
-          name: bench_side_by_side-${{ github.event.pull_request.base.sha }}
+          name: bench_side_by_side
           path: /tmp/bench/
 
       - name: get tree of /tmp/bench
