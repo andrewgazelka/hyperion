@@ -45,17 +45,17 @@ pub fn clean_up_io(
             .shared
             .player_count
             .fetch_sub(num_removed as u32, Ordering::Relaxed);
+
+        broadcast
+            .append_packet(&play::EntitiesDestroyS2c {
+                entity_ids: despawn_ids.into(),
+            })
+            .unwrap();
+
+        broadcast
+            .append_packet(&play::PlayerRemoveS2c {
+                uuids: despawn_uuids.into(),
+            })
+            .unwrap();
     }
-
-    broadcast
-        .append_packet(&play::EntitiesDestroyS2c {
-            entity_ids: despawn_ids.into(),
-        })
-        .unwrap();
-
-    broadcast
-        .append_packet(&play::PlayerRemoveS2c {
-            uuids: despawn_uuids.into(),
-        })
-        .unwrap();
 }
