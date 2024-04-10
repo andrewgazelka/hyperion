@@ -2,22 +2,14 @@ use std::hint::black_box;
 
 use bvh::{aabb::Aabb, random_aabb, Bvh, TrivialHeuristic};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
-use tango_bench::{benchmark_fn, tango_benchmarks, tango_main, IntoBenchmarks};
+use tango_bench::{
+    benchmark_fn, tango_benchmarks, tango_main, IntoBenchmarks, MeasurementSettings,
+};
 
 const COUNT: usize = 10_000;
 
 fn benchmark_build_4_cores(elements: Vec<Aabb>) {
-    // this is side by side;
-    // it is important to use a number of threads that is at most the number of cores divided by 2
-    let threads = 4;
-    let thread_pool = rayon::ThreadPoolBuilder::default()
-        .num_threads(threads)
-        .build()
-        .expect("Failed to build global thread pool");
-
-    thread_pool.install(|| {
-        build_tree(elements);
-    });
+    build_tree(elements);
 }
 
 fn build_tree(elements: Vec<Aabb>) -> Bvh<Aabb> {
@@ -25,6 +17,11 @@ fn build_tree(elements: Vec<Aabb>) -> Bvh<Aabb> {
 }
 
 fn build_benchmarks() -> impl IntoBenchmarks {
+    // thread pool
+    rayon::ThreadPoolBuilder::default()
+        .build_global()
+        .expect("Failed to build global thread pool");
+
     // so reproducible
     fastrand::seed(7);
 
@@ -105,4 +102,10 @@ fn build_benchmarks() -> impl IntoBenchmarks {
 }
 
 tango_benchmarks!(build_benchmarks());
-tango_main!();
+
+tango_main!(MeasurementSettings {
+    min_iterations_per_sample: 10,
+    max_iterations_per_sample: 10_000,
+    yield_before_sample: true,
+    ..Default::default()
+});
