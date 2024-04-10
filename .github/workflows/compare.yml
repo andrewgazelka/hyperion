@@ -1,4 +1,4 @@
-name: Build and Upload Artifact
+name: Compare benchmarks
 
 on:
   pull_request:
