@@ -43,6 +43,8 @@ jobs:
   compare:
     if: github.event_name == 'pull_request' && github.base_ref == 'main'
     runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
 
     steps:
       - uses: actions/checkout@v4
@@ -54,12 +56,6 @@ jobs:
           commit: ${{ github.event.pull_request.base.sha }}
           name: bench_side_by_side
           path: /tmp/bench/
-
-      - name: get tree of /tmp/bench
-        run: tree /tmp/bench
-
-      - name: run nm
-        run: nm /tmp/bench/side_by_side
 
       - uses: rui314/setup-mold@v1
 
