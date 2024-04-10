@@ -384,7 +384,7 @@ impl Io {
         // let _profile_id = profile_id.context("missing profile id")?;
 
         let username = username.0;
-        
+
         println!("username: {username}");
 
         // trim username to 10 chars
