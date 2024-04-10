@@ -385,8 +385,6 @@ impl Io {
 
         let username = username.0;
 
-        println!("username: {username}");
-
         // trim username to 10 chars
         let username_len = std::cmp::min(username.len(), 10);
         let username = &username[..username_len];
