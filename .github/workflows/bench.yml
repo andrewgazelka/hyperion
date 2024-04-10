@@ -80,7 +80,6 @@ jobs:
             const fs = require('fs');
             const path = 'bench_output.txt';
             const output = fs.readFileSync(path, 'utf8');
-            const currentSha = context.payload.pull_request.head.sha;
             const originalSha = context.payload.pull_request.base.sha;
             
             const issue_number = context.issue.number;
@@ -89,7 +88,7 @@ jobs:
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 issue_number: issue_number,
-                body: `### Benchmark Results\n\`\`\`\n${output}\`\`\`\n\nComparing ${currentSha} to ${originalSha}`,
+                body: `### Benchmark Results\n\`\`\`\n${output}\`\`\`\n\nComparing to ${originalSha}`,
               };
               await github.rest.issues.createComment(comment);
             } else {
