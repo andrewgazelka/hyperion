@@ -216,6 +216,7 @@ impl IoWrite {
 
         struct Buf {
             iovecs: ArrayVec<iovec, MAX_VECTORED_WRITE_BUFS>,
+            #[expect(dead_code, reason = "this is so that allocations are not freed")]
             bytes: ArrayVec<bytes::Bytes, MAX_VECTORED_WRITE_BUFS>,
         }
 
