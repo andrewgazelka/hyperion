@@ -21,7 +21,9 @@ use bytes::BytesMut;
 use derive_build::Build;
 use evenio::prelude::Component;
 use monoio::{
-    io::{AsyncReadRent, AsyncWriteRentExt, OwnedReadHalf, OwnedWriteHalf, Splitable},
+    io::{
+        AsyncReadRent, AsyncWriteRent, AsyncWriteRentExt, OwnedReadHalf, OwnedWriteHalf, Splitable,
+    },
     net::{TcpListener, TcpStream},
     FusionRuntime,
 };
@@ -205,32 +207,55 @@ impl IoRead {
     }
 }
 
+use libc::iovec;
+use monoio::buf::IoVecBuf;
+struct Buf {
+    iovecs: ArrayVec<iovec, MAX_VECTORED_WRITE_BUFS>,
+    #[expect(dead_code, reason = "this is so that allocations are not freed")]
+    bytes: ArrayVec<bytes::Bytes, MAX_VECTORED_WRITE_BUFS>,
+    idx: usize,
+}
+
+// SAFETY: The underlying data will live longer than this struct.
+unsafe impl IoVecBuf for Buf {
+    fn read_iovec_ptr(&self) -> *const iovec {
+        unsafe { self.iovecs.as_ptr().add(self.idx) }
+    }
+
+    fn read_iovec_len(&self) -> usize {
+        self.iovecs.len() - self.idx
+    }
+}
+
+impl Buf {
+    fn progress(mut self, mut len: usize) -> Option<Self> {
+        loop {
+            let vec = self.iovecs.get_mut(self.idx)?;
+            let iov_len = vec.iov_len;
+
+            // this is perhaps not strictly needed, but we should not be writing zero-length iovecs
+            // anyway. It probably hurts performance.
+            debug_assert!(iov_len > 0);
+
+            if len >= iov_len {
+                len -= iov_len;
+                self.idx += 1;
+                continue;
+            }
+
+            vec.iov_len -= len;
+            vec.iov_base = unsafe { vec.iov_base.add(len) };
+
+            return Some(self);
+        }
+    }
+}
+
 impl IoWrite {
-    #[cfg(target_os = "linux")]
-    async fn send_data_linux(
+    async fn send_data(
         &mut self,
         bytes: ArrayVec<bytes::Bytes, MAX_VECTORED_WRITE_BUFS>,
     ) -> io::Result<()> {
-        use libc::iovec;
-        use monoio::buf::IoVecBuf;
-
-        struct Buf {
-            iovecs: ArrayVec<iovec, MAX_VECTORED_WRITE_BUFS>,
-            #[expect(dead_code, reason = "this is so that allocations are not freed")]
-            bytes: ArrayVec<bytes::Bytes, MAX_VECTORED_WRITE_BUFS>,
-        }
-
-        // SAFETY: The underlying data will live longer than this struct.
-        unsafe impl IoVecBuf for Buf {
-            fn read_iovec_ptr(&self) -> *const iovec {
-                self.iovecs.as_ptr()
-            }
-
-            fn read_iovec_len(&self) -> usize {
-                self.iovecs.len()
-            }
-        }
-
         let iovecs = bytes
             .iter()
             .map(|bytes| iovec {
@@ -240,37 +265,29 @@ impl IoWrite {
             })
             .collect();
 
-        let buf = Buf { iovecs, bytes };
+        let mut buf_on = Some(Buf {
+            iovecs,
+            bytes,
+            idx: 0,
+        });
 
-        // todo: figure out why this does not work properly on macOS
-        let (result, _) = self.write.write_vectored_all(buf).await;
-        result?; // error occurs here
-
-        Ok(())
-    }
-
-    #[cfg(target_os = "macos")]
-    pub async fn send_data_macos(
-        &mut self,
-        bytes: ArrayVec<bytes::Bytes, MAX_VECTORED_WRITE_BUFS>,
-    ) -> io::Result<()> {
-        for bytes in bytes {
-            let (result, _) = self.write.write_all(bytes).await;
-            result?; // error occurs here
+        while let Some(buf) = buf_on.take() {
+            let (result, buf) = self.write.writev(buf).await;
+            match result {
+                Ok(len_read) => {
+                    buf_on = buf.progress(len_read);
+                }
+                Err(e) if e.kind() == std::io::ErrorKind::Interrupted => {
+                    buf_on = Some(buf);
+                    continue;
+                }
+                Err(e) => {
+                    return Err(e);
+                }
+            }
         }
 
         Ok(())
-    }
-
-    pub(crate) async fn send_data(
-        &mut self,
-        bytes: ArrayVec<bytes::Bytes, MAX_VECTORED_WRITE_BUFS>,
-    ) -> io::Result<()> {
-        #[cfg(target_os = "linux")]
-        return self.send_data_linux(bytes).await;
-
-        #[cfg(target_os = "macos")]
-        return self.send_data_macos(bytes).await;
     }
 
     /// This function returns the number of bytes in the TCP send queue that have
@@ -305,16 +322,18 @@ impl IoWrite {
             // to write to, and value and len do not alias
             unsafe {
                 // TODO: Handle getsockopt error properly
-                assert_ne!(
-                    libc::getsockopt(
-                        self.raw_fd,
-                        libc::SOL_SOCKET,
-                        libc::SO_NWRITE,
-                        addr_of_mut!(value).cast(),
-                        addr_of_mut!(len)
-                    ),
-                    -1
+                let result = libc::getsockopt(
+                    self.raw_fd,
+                    libc::SOL_SOCKET,
+                    libc::SO_NWRITE,
+                    addr_of_mut!(value).cast(),
+                    addr_of_mut!(len),
                 );
+
+                if result == -1 {
+                    let err = io::Error::last_os_error();
+                    panic!("getsockopt failed: {err}");
+                }
             }
             value
         }
