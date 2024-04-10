@@ -211,8 +211,8 @@ impl IoWrite {
         &mut self,
         bytes: ArrayVec<bytes::Bytes, MAX_VECTORED_WRITE_BUFS>,
     ) -> io::Result<()> {
-        use buf::IoVecBuf;
         use libc::iovec;
+        use monoio::buf::IoVecBuf;
 
         struct Buf {
             iovecs: ArrayVec<iovec, MAX_VECTORED_WRITE_BUFS>,
