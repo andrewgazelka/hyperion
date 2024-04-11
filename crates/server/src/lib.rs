@@ -1,6 +1,5 @@
 //! Hyperion
 
-#![feature(thread_local)]
 #![feature(lint_reasons)]
 #![expect(clippy::type_complexity, reason = "evenio uses a lot of complex types")]
 
@@ -233,7 +232,7 @@ impl Game {
 
         let shared = Arc::new(global::Shared {
             player_count: AtomicU32::new(0),
-            compression_level: CompressionThreshold(64), // todo: test
+            compression_level: CompressionThreshold(64),
         });
 
         let incoming = init_io_thread(shutdown_rx, address, shared.clone())?;
