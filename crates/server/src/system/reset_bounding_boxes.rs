@@ -8,7 +8,7 @@ use evenio::{
 use tracing::instrument;
 
 use crate::{
-    bounding_box::{EntityBoundingBoxes, Stored},
+    singleton::bounding_box::{EntityBoundingBoxes, Stored},
     FullEntityPose, Gametick,
 };
 
@@ -33,7 +33,7 @@ pub fn reset_bounding_boxes(
     let stored: Vec<_> = entities
         .iter()
         .map(|query| Stored {
-            aabb: query.pose.bounding.into(),
+            aabb: query.pose.bounding,
             id: query.id,
         })
         .collect();

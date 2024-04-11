@@ -15,17 +15,18 @@ use std::{
 };
 
 use anyhow::Context;
+use bvh::aabb::Aabb;
 use evenio::prelude::*;
 use libc::{getrlimit, setrlimit, RLIMIT_NOFILE};
 use ndarray::s;
 pub use rayon::iter::ParallelIterator;
 use signal_hook::iterator::Signals;
+use singleton::bounding_box;
 use spin::Lazy;
 use tracing::{debug, error, info, instrument, trace, warn};
 use valence_protocol::{math::Vec3, CompressionThreshold, Hand};
 
 use crate::{
-    bounding_box::BoundingBox,
     net::{init_io_thread, ClientConnection, Connection, Encoder},
     singleton::{
         broadcast::BroadcastBuf, player_aabb_lookup::PlayerAabbs,
@@ -43,7 +44,6 @@ mod bits;
 
 mod quad_tree;
 
-pub mod bounding_box;
 mod config;
 
 const MSPT_HISTORY_SIZE: usize = 100;
@@ -371,7 +371,7 @@ impl Game {
                 uuid,
                 pos: FullEntityPose {
                     position: Vec3::new(0.0, 2.0, 0.0),
-                    bounding: BoundingBox::create(Vec3::new(0.0, 2.0, 0.0), 0.6, 1.8),
+                    bounding: Aabb::create(Vec3::new(0.0, 2.0, 0.0), 0.6, 1.8),
                     yaw: 0.0,
                     pitch: 0.0,
                 },
@@ -437,7 +437,7 @@ pub struct FullEntityPose {
     pub pitch: f32,
 
     /// The bounding box of the entity.
-    pub bounding: BoundingBox,
+    pub bounding: Aabb,
 }
 
 impl FullEntityPose {

@@ -8,8 +8,9 @@
 
 use std::net::SocketAddr;
 
+use bvh::aabb::Aabb;
 use divan::Bencher;
-use server::{bounding_box::BoundingBox, FullEntityPose, Game, InitEntity, Targetable};
+use server::{FullEntityPose, Game, InitEntity, Targetable};
 use valence_protocol::math::Vec3;
 
 fn main() {
@@ -58,7 +59,7 @@ fn world_bench(bencher: Bencher, thread_count: usize) {
                 position: Vec3::new(x, y, z),
                 yaw: 0.0,
                 pitch: 0.0,
-                bounding: BoundingBox::create(Vec3::new(x, y, z), 0.6, 1.8),
+                bounding: Aabb::create(Vec3::new(x, y, z), 0.6, 1.8),
             },
         });
     }
@@ -71,7 +72,7 @@ fn world_bench(bencher: Bencher, thread_count: usize) {
 
     world.insert(id, FullEntityPose {
         position: Vec3::new(0.0, 2.0, 0.0),
-        bounding: BoundingBox::create(Vec3::new(0.0, 2.0, 0.0), 0.6, 1.8),
+        bounding: Aabb::create(Vec3::new(0.0, 2.0, 0.0), 0.6, 1.8),
         yaw: 0.0,
         pitch: 0.0,
     });
