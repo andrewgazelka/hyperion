@@ -28,7 +28,19 @@ impl<S: Default> RayonLocal<S> {
     pub fn init() -> Self {
         let num_threads = rayon::current_num_threads();
 
-        let thread_locals = (0..num_threads).map(|_| S::default()).collect();
+        let thread_locals = (0..=num_threads).map(|_| S::default()).collect();
+
+        Self {
+            thread_locals,
+            idx: 0,
+        }
+    }
+
+    /// Create a new `RayonLocal` with the value of `S` provided by the closure for each thread.
+    pub fn init_with(mut f: impl FnMut() -> S) -> Self {
+        let num_threads = rayon::current_num_threads();
+
+        let thread_locals = (0..=num_threads).map(|_| f()).collect();
 
         Self {
             thread_locals,
@@ -42,7 +54,9 @@ impl<S: Default> RayonLocal<S> {
     /// If the current thread is not a Rayon thread.
     #[must_use]
     pub fn get_rayon_local(&self) -> &S {
-        let index = rayon::current_thread_index().expect("not in a rayon thread");
+        // this is so the main thread will still have a place to put data
+        // todo: priority—this is currently unsafe in the situation where there is another thread beyond the main thread
+        let index = rayon::current_thread_index().unwrap_or(self.thread_locals.len() - 1);
         &self.thread_locals[index]
     }
 

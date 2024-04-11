@@ -1,10 +1,12 @@
+//! All the networking related code.
+
 #![expect(clippy::future_not_send, reason = "monoio is not Send")]
 
 use std::{
     borrow::Cow,
-    collections::BTreeSet,
     io,
     io::ErrorKind,
+    net::ToSocketAddrs,
     os::fd::{AsRawFd, RawFd},
     ptr::addr_of_mut,
     sync::{
@@ -15,51 +17,61 @@ use std::{
 };
 
 use anyhow::{ensure, Context};
+use arrayvec::ArrayVec;
 use base64::Engine;
 use bytes::BytesMut;
+use derive_build::Build;
+use evenio::prelude::Component;
+use libc::iovec;
 use monoio::{
-    io::{AsyncReadRent, AsyncWriteRentExt, OwnedReadHalf, OwnedWriteHalf, Splitable},
+    buf::IoVecBuf,
+    io::{
+        AsyncReadRent, AsyncWriteRent, AsyncWriteRentExt, OwnedReadHalf, OwnedWriteHalf, Splitable,
+    },
     net::{TcpListener, TcpStream},
+    FusionRuntime,
 };
 use serde_json::json;
 use sha2::Digest;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info, instrument, trace, warn};
 use valence_protocol::{
     decode::PacketFrame,
-    game_mode::OptGameMode,
-    ident,
-    nbt::{compound, Compound, List},
     packets::{
         handshaking::{handshake_c2s::HandshakeNextState, HandshakeC2s},
+        login,
         login::{LoginHelloC2s, LoginSuccessS2c},
-        play::GameJoinS2c,
         status,
     },
-    text::IntoText,
     uuid::Uuid,
-    Bounded, Decode, Encode, GameMode, Ident, PacketDecoder, PacketEncoder, VarInt,
+    Bounded, CompressionThreshold, Decode, Encode, PacketDecoder, PacketEncoder, VarInt,
 };
-use valence_registry::{BiomeRegistry, RegistryCodec};
 
-use crate::{config, SHARED};
+use crate::{config, global};
 
+/// Default MiB/s threshold before we start to limit the sending of some packets.
 const DEFAULT_SPEED: u32 = 1024 * 1024;
 
+/// The maximum number of buffers a vectored write can have.
+const MAX_VECTORED_WRITE_BUFS: usize = 16;
+
+/// How long we wait from when we get the first buffer to when we start sending all of the ones we have collected.
+/// This is closely related to [`MAX_VECTORED_WRITE_BUFS`].
+const WRITE_DELAY: Duration = Duration::from_millis(1);
+
+/// How much we expand our read buffer each time a packet is too large.
 const READ_BUF_SIZE: usize = 4096;
 
 /// The Minecraft protocol version this library currently targets.
 pub const PROTOCOL_VERSION: i32 = 763;
 
-pub const MAX_JAVA_PACKET_SIZE: usize = 0x001F_FFFF;
-// pub const MAX_BEDROCK_PACKET_SIZE: usize = 0x0010_0000;
-
-// max
-pub const MAX_PACKET_SIZE: usize = MAX_JAVA_PACKET_SIZE;
+/// The maximum number of bytes that can be sent in a single packet.
+pub const MAX_PACKET_SIZE: usize = 0x001F_FFFF;
 
 /// The stringified name of the Minecraft version this library currently
 /// targets.
 pub const MINECRAFT_VERSION: &str = "1.20.1";
 
+/// Get a [`Uuid`] based on the given user's name.
 fn offline_uuid(username: &str) -> anyhow::Result<Uuid> {
     let digest = sha2::Sha256::digest(username);
 
@@ -69,140 +81,136 @@ fn offline_uuid(username: &str) -> anyhow::Result<Uuid> {
     Uuid::from_slice(slice).context("failed to create uuid")
 }
 
+/// Sent from the I/O thread when it has established a connection with the player through a handshake
 pub struct ClientConnection {
-    pub packets: Packets,
+    /// The local encoder used by that player
+    pub encoder: Encoder,
+    /// Send channel to send bytes to the player.
+    pub tx: flume::Sender<bytes::Bytes>,
+    /// The name of the player.
     pub name: Box<str>,
+    /// The UUID of the player.
     pub uuid: Uuid,
 }
 
+/// Used during handshake to communicate with the client.
 pub struct Io {
+    /// The stream of bytes from the client.
     stream: TcpStream,
+    /// The decoding buffer and logic
     dec: PacketDecoder,
+    /// The encoding buffer and logic
     enc: PacketEncoder,
+    /// The latest frame received from the client.
     frame: PacketFrame,
+    /// The shared state between the ECS framework and the I/O thread.
+    shared: Arc<global::Shared>,
 }
 
+/// The writer for the connection once handshake is complete.
 pub struct IoWrite {
+    /// The stream of bytes to the client.
     write: OwnedWriteHalf<TcpStream>,
+    /// The raw file descriptor of the stream.
     raw_fd: RawFd,
 }
 
+/// The reader for the connection once handshake is complete.
 pub struct IoRead {
+    /// The stream of bytes from the client.
     stream: OwnedReadHalf<TcpStream>,
+    /// The decoding buffer and logic
     dec: PacketDecoder,
 }
 
-pub struct WriterComm {
+/// The connection to the client that allows for sending packets.
+#[derive(Component, Build)]
+pub struct Connection {
+    /// The tx channel that send bytes to be received by the client.
+    #[required]
     tx: flume::Sender<bytes::Bytes>,
-    enc: PacketEncoder,
-
-    /// Approximate speed that the other side can receive the data that this sends.
-    /// Measured in bytes/second.
-    speed_mib_per_second: Arc<AtomicU32>,
 }
 
-impl WriterComm {
-    pub fn speed_mib_per_second(&self) -> u32 {
-        self.speed_mib_per_second.load(Ordering::Relaxed)
+impl Connection {
+    /// Returns true if the connection is closed.
+    pub fn is_closed(&self) -> bool {
+        self.tx.is_disconnected()
     }
 
-    pub fn serialize<P>(&mut self, pkt: &P) -> anyhow::Result<bytes::Bytes>
+    /// Sends a bunch of bytes to the client.
+    pub fn send(&self, bytes: bytes::Bytes) -> anyhow::Result<()> {
+        trace!("send raw bytes");
+        self.tx.send(bytes)?;
+        Ok(())
+    }
+}
+
+#[derive(Component)]
+pub struct Encoder {
+    /// The encoding buffer and logic
+    enc: PacketEncoder,
+
+    /// If we should clear the `enc` allocation once we are done sending it off.
+    ///
+    /// In the future, perhaps we will have a global buffer if it is performant enough.
+    deallocate_on_process: bool,
+}
+
+impl Encoder {
+    /// The [`Encoder`] will deallocate its allocation when it is done sending it off.
+    pub fn deallocate_on_process(&mut self) {
+        self.deallocate_on_process = true;
+    }
+
+    /// Takes all bytes from the encoding buffer and returns them.
+    pub fn take(&mut self, compression: CompressionThreshold) -> bytes::Bytes {
+        let result = self.enc.take().freeze();
+
+        if self.deallocate_on_process {
+            // to clear the allocation, we need to create a new encoder
+            self.enc = PacketEncoder::new();
+            self.enc.set_compression(compression);
+            self.deallocate_on_process = false;
+        }
+
+        result
+    }
+
+    /// A mutable reference to the raw encoder
+    pub fn inner_mut(&mut self) -> &mut PacketEncoder {
+        &mut self.enc
+    }
+
+    /// Encode a packet.
+    pub fn encode<P>(&mut self, pkt: &P) -> anyhow::Result<()>
     where
         P: valence_protocol::Packet + Encode,
     {
         self.enc.append_packet(pkt)?;
-        let bytes = self.enc.take();
-
-        Ok(bytes.freeze())
-    }
-
-    pub fn send_raw(&self, bytes: bytes::Bytes) -> anyhow::Result<()> {
-        self.tx.send(bytes)?;
-        Ok(())
-    }
-
-    pub(crate) fn send_packet<P>(&mut self, pkt: &P) -> anyhow::Result<()>
-    where
-        P: valence_protocol::Packet + Encode,
-    {
-        let bytes = self.serialize(pkt)?;
-        self.send_raw(bytes)?;
-        Ok(())
-    }
-
-    pub fn send_chat_message(&mut self, message: &str) -> anyhow::Result<()> {
-        let text = message.to_owned().into_text();
-        // system chat message
-        // System Chat Message
-        let pkt = valence_protocol::packets::play::OverlayMessageS2c {
-            action_bar_text: text.into(),
-        };
-
-        self.send_packet(&pkt)?;
 
         Ok(())
     }
 
-    pub fn send_keep_alive(&mut self) -> anyhow::Result<()> {
-        let pkt = valence_protocol::packets::play::KeepAliveS2c {
-            // The ID can be set to zero because it doesn't matter
-            id: 0,
-        };
-
-        self.send_packet(&pkt)?;
-
-        Ok(())
-    }
-
-    pub fn send_game_join_packet(&mut self) -> anyhow::Result<()> {
-        // recv ack
-
-        let codec = RegistryCodec::default();
-
-        let registry_codec = registry_codec_raw(&codec)?;
-
-        let dimension_names: BTreeSet<Ident<Cow<str>>> = codec
-            .registry(BiomeRegistry::KEY)
-            .iter()
-            .map(|value| value.name.as_str_ident().into())
-            .collect();
-
-        let dimension_name = ident!("overworld");
-        // let dimension_name: Ident<Cow<str>> = chunk_layer.dimension_type_name().into();
-
-        let pkt = GameJoinS2c {
-            entity_id: 0,
-            is_hardcore: false,
-            dimension_names: Cow::Owned(dimension_names),
-            registry_codec: Cow::Borrowed(&registry_codec),
-            max_players: config::CONFIG.max_players.into(),
-            view_distance: config::CONFIG.view_distance.into(), // max view distance
-            simulation_distance: config::CONFIG.simulation_distance.into(),
-            reduced_debug_info: false,
-            enable_respawn_screen: false,
-            dimension_name: dimension_name.into(),
-            hashed_seed: 0,
-            game_mode: GameMode::Survival,
-            is_flat: false,
-            last_death_location: None,
-            portal_cooldown: 60.into(),
-            previous_game_mode: OptGameMode(Some(GameMode::Creative)),
-            dimension_type_name: "minecraft:overworld".try_into()?,
-            is_debug: false,
-        };
-
-        self.send_packet(&pkt)?;
-
-        Ok(())
+    /// This sends the bytes to the connection.
+    /// [`PacketEncoder`] can have compression enabled.
+    /// One must make sure the bytes are pre-compressed if compression is enabled.
+    pub fn append(&mut self, bytes: &[u8]) {
+        trace!("send raw bytes");
+        self.enc.append_bytes(bytes);
     }
 }
 
+/// An incoming packet that is tied to a user.
 pub struct UserPacketFrame {
+    /// The raw packet
     pub packet: PacketFrame,
+    /// The UUID of the user
+    /// todo: user is 128 bits, could we get away with fewer?
     pub user: Uuid,
 }
 
 impl IoRead {
+    /// Receives a packet from the connection.
     pub async fn recv_packet_raw(&mut self) -> anyhow::Result<PacketFrame> {
         loop {
             if let Some(frame) = self.dec.try_next_packet()? {
@@ -227,14 +235,91 @@ impl IoRead {
     }
 }
 
+/// A buffer which can be used with `writev`.
+struct Buf {
+    /// The [`iovec`]s to write
+    iovecs: ArrayVec<iovec, MAX_VECTORED_WRITE_BUFS>,
+    /// Reference to the original [`bytes::Bytes`] used to create the [`iovec`]s. This is important so they do
+    /// not get freed.
+    _ref: ArrayVec<bytes::Bytes, MAX_VECTORED_WRITE_BUFS>,
+    /// The index of the [`iovec`] that is currently being written to.
+    idx: usize,
+}
+
+// SAFETY: The underlying data will live longer than this struct.
+unsafe impl IoVecBuf for Buf {
+    fn read_iovec_ptr(&self) -> *const iovec {
+        unsafe { self.iovecs.as_ptr().add(self.idx) }
+    }
+
+    fn read_iovec_len(&self) -> usize {
+        self.iovecs.len() - self.idx
+    }
+}
+
+impl Buf {
+    /// Given a result of `writev`, this will allow for progressing the buffer by the number of bytes written.
+    ///
+    /// If the number of bytes is the entire buffer, then `None` is returned.
+    fn progress(mut self, mut len: usize) -> Option<Self> {
+        loop {
+            let vec = self.iovecs.get_mut(self.idx)?;
+            let iov_len = vec.iov_len;
+
+            // this is perhaps not strictly needed, but we should not be writing zero-length iovecs
+            // anyway. It probably hurts performance.
+            debug_assert!(iov_len > 0);
+
+            if len >= iov_len {
+                len -= iov_len;
+                self.idx += 1;
+                continue;
+            }
+
+            vec.iov_len -= len;
+            vec.iov_base = unsafe { vec.iov_base.add(len) };
+
+            return Some(self);
+        }
+    }
+}
+
 impl IoWrite {
-    pub(crate) async fn send_packet(&mut self, bytes: bytes::Bytes) -> anyhow::Result<()> {
-        let (result, _) = self.write.write_all(bytes).await;
+    /// Given a vector of bytes, this will send them to the connection using `writev`.
+    async fn send_data(
+        &mut self,
+        bytes: ArrayVec<bytes::Bytes, MAX_VECTORED_WRITE_BUFS>,
+    ) -> io::Result<()> {
+        let iovecs = bytes
+            .iter()
+            .map(|bytes| iovec {
+                #[expect(clippy::as_ptr_cast_mut, reason = "The pointer won't be written to")]
+                iov_base: bytes.as_ptr() as *mut _,
+                iov_len: bytes.len(),
+            })
+            .collect();
 
-        result?;
+        let mut buf_on = Some(Buf {
+            iovecs,
+            _ref: bytes,
+            idx: 0,
+        });
 
-        // todo: is flush needed?
-        // self.write.flush().await?;
+        while let Some(buf) = buf_on.take() {
+            let (result, buf) = self.write.writev(buf).await;
+            match result {
+                Ok(len_read) => {
+                    buf_on = buf.progress(len_read);
+                }
+                Err(e) if e.kind() == std::io::ErrorKind::Interrupted => {
+                    buf_on = Some(buf);
+                    continue;
+                }
+                Err(e) => {
+                    return Err(e);
+                }
+            }
+        }
 
         Ok(())
     }
@@ -253,11 +338,11 @@ impl IoWrite {
             // SAFETY: raw_fd is valid since the TcpStream is still alive, and value is valid to
             // write to
             unsafe {
-                // TODO: Handle ioctl error properly
-                assert_ne!(
-                    libc::ioctl(self.raw_fd, libc::TIOCOUTQ, addr_of_mut!(value)),
-                    -1
-                );
+                let result = libc::ioctl(self.raw_fd, libc::TIOCOUTQ, addr_of_mut!(value));
+                if result == -1 {
+                    let err = io::Error::last_os_error();
+                    panic!("getsockopt failed: {err}");
+                }
             }
             value
         }
@@ -270,17 +355,18 @@ impl IoWrite {
             // SAFETY: raw_fd is valid since the TcpStream is still alive, value and len are valid
             // to write to, and value and len do not alias
             unsafe {
-                // TODO: Handle getsockopt error properly
-                assert_ne!(
-                    libc::getsockopt(
-                        self.raw_fd,
-                        libc::SOL_SOCKET,
-                        libc::SO_NWRITE,
-                        addr_of_mut!(value).cast(),
-                        addr_of_mut!(len)
-                    ),
-                    -1
+                let result = libc::getsockopt(
+                    self.raw_fd,
+                    libc::SOL_SOCKET,
+                    libc::SO_NWRITE,
+                    addr_of_mut!(value).cast(),
+                    addr_of_mut!(len),
                 );
+
+                if result == -1 {
+                    let err = io::Error::last_os_error();
+                    panic!("getsockopt failed: {err}");
+                }
             }
             value
         }
@@ -289,11 +375,8 @@ impl IoWrite {
     }
 }
 
-pub struct Packets {
-    pub writer: WriterComm,
-}
-
 impl Io {
+    /// Receives a packet from the connection.
     pub async fn recv_packet<'a, P>(&'a mut self) -> anyhow::Result<P>
     where
         P: valence_protocol::Packet + Decode<'a>,
@@ -327,18 +410,29 @@ impl Io {
         }
     }
 
-    fn new(stream: TcpStream) -> Self {
+    /// Creates a new [`Io`] with the given stream.
+    fn new(stream: TcpStream, shared: Arc<global::Shared>) -> Self {
+        // TCP_NODELAY is enabled because the code already has a WRITE_DELAY
+        if let Err(e) = stream.set_nodelay(true) {
+            warn!("set_nodelay failed: {e}");
+        }
+
+        let enc = PacketEncoder::default();
+        let dec = PacketDecoder::default();
+
         Self {
             stream,
-            dec: PacketDecoder::default(),
-            enc: PacketEncoder::default(),
+            dec,
+            enc,
             frame: PacketFrame {
                 id: 0,
                 body: BytesMut::new(),
             },
+            shared,
         }
     }
 
+    /// Send a packet to the connection.
     pub(crate) async fn send_packet<P>(&mut self, pkt: &P) -> anyhow::Result<()>
     where
         P: valence_protocol::Packet + Encode,
@@ -363,23 +457,19 @@ impl Io {
 
         let (result, _) = self.stream.write_all(bytes).await;
         result?;
-        // self.stream.flush().await?; // todo: remove
 
         Ok(())
     }
 
-    async fn server_process(
+    #[instrument(skip(self, tx))]
+    async fn process_new_connection(
         mut self,
         id: usize,
         tx: flume::Sender<ClientConnection>,
     ) -> anyhow::Result<()> {
-        // self.stream.set_nodelay(true)?;
-
-        info!("connection id {id}");
-
         let ip = self.stream.peer_addr()?;
 
-        info!("connection from {ip}");
+        debug!("connection from {ip}");
 
         let HandshakeC2s {
             protocol_version,
@@ -402,21 +492,44 @@ impl Io {
         Ok(())
     }
 
+    #[instrument(skip(self, tx))]
     async fn server_login(mut self, tx: flume::Sender<ClientConnection>) -> anyhow::Result<()> {
         debug!("[[start login phase]]");
 
         // first
-        let LoginHelloC2s {
-            username,
-            profile_id,
-        } = self.recv_packet().await?;
+        let LoginHelloC2s { username, .. } = self.recv_packet().await?;
 
         // todo: use
-        let _profile_id = profile_id.context("missing profile id")?;
+        // let _profile_id = profile_id.context("missing profile id")?;
 
-        let username: Box<str> = Box::from(username.0);
+        let username = username.0;
 
-        let uuid = offline_uuid(&username)?; // todo: random
+        // trim username to 10 chars
+        let username_len = std::cmp::min(username.len(), 10);
+        let username = &username[..username_len];
+
+        // add 2 random chars to the end of the username
+        let username = format!(
+            "{}-{}{}",
+            username,
+            fastrand::alphanumeric(),
+            fastrand::alphanumeric()
+        );
+
+        let uuid = offline_uuid(&username)?;
+
+        let compression_level = self.shared.compression_level;
+        if compression_level.0 > 0 {
+            self.send_packet(&login::LoginCompressionS2c {
+                threshold: compression_level.0.into(),
+            })
+            .await?;
+
+            self.enc.set_compression(compression_level);
+            self.dec.set_compression(compression_level);
+
+            debug!("compression level set to {}", compression_level.0);
+        }
 
         let packet = LoginSuccessS2c {
             uuid,
@@ -428,17 +541,16 @@ impl Io {
         self.send_packet(&packet).await?;
 
         // bound at 1024 packets
-        let (s2c_tx, s2c_rx) = flume::unbounded();
+        let (s2c_tx, s2c_rx) = flume::unbounded::<bytes::Bytes>();
 
         let raw_fd = self.stream.as_raw_fd();
         let (read, write) = self.stream.into_split();
 
         let speed = Arc::new(AtomicU32::new(DEFAULT_SPEED));
 
-        let writer_comm = WriterComm {
-            tx: s2c_tx,
+        let encoder = Encoder {
             enc: self.enc,
-            speed_mib_per_second: Arc::clone(&speed),
+            deallocate_on_process: false,
         };
 
         let mut io_write = IoWrite { write, raw_fd };
@@ -448,13 +560,15 @@ impl Io {
             dec: self.dec,
         };
 
-        info!("Finished handshake for {username}");
+        debug!("Finished handshake for {username}");
 
         monoio::spawn(async move {
             while let Ok(packet) = io_read.recv_packet_raw().await {
-                GLOBAL_PACKETS
-                    .lock()
-                    .push(UserPacketFrame { packet, user: uuid });
+                tracing::info_span!("adding global packets").in_scope(|| {
+                    GLOBAL_C2S_PACKETS
+                        .lock()
+                        .push(UserPacketFrame { packet, user: uuid });
+                });
             }
         });
 
@@ -462,9 +576,38 @@ impl Io {
             let mut past_queued_send = 0;
             let mut past_instant = Instant::now();
             while let Ok(bytes) = s2c_rx.recv_async().await {
-                let len = bytes.len();
-                if let Err(e) = io_write.send_packet(bytes).await {
-                    error!("{e:?}");
+                let mut bytes_buf = ArrayVec::<_, MAX_VECTORED_WRITE_BUFS>::new();
+                bytes_buf.push(bytes);
+
+                let mut already_delayed = false;
+
+                while !bytes_buf.is_full() {
+                    // Try getting more bytes if it's already in the channel before sending data
+                    if let Ok(bytes) = s2c_rx.try_recv() {
+                        bytes_buf.push(bytes);
+                    } else if already_delayed {
+                        // This write request has already been delayed, so send the data now
+                        break;
+                    } else {
+                        // Wait for WRITE_DELAY and then check if any more packets are queued
+                        monoio::time::sleep(WRITE_DELAY).await;
+                        already_delayed = true;
+                    }
+                }
+
+                if bytes_buf.is_full() {
+                    warn!(
+                        "bytes_buf is full; consider increasing MAX_VECTORED_WRITE_BUFS for \
+                         better performance"
+                    );
+                }
+
+                let len = bytes_buf.iter().map(bytes::Bytes::len).sum::<usize>();
+
+                trace!("got byte len: {len}");
+
+                if let Err(e) = io_write.send_data(bytes_buf).await {
+                    error!("Error sending packet: {e} ... {e:?}");
                     break;
                 }
                 let elapsed = past_instant.elapsed();
@@ -506,13 +649,10 @@ impl Io {
             }
         });
 
-        let packets = Packets {
-            writer: writer_comm,
-        };
-
         let conn = ClientConnection {
-            packets,
-            name: username,
+            encoder,
+            tx: s2c_tx,
+            name: username.into_boxed_str(),
             uuid,
         };
 
@@ -521,13 +661,12 @@ impl Io {
         Ok(())
     }
 
+    #[instrument(skip(self))]
     async fn server_status(mut self) -> anyhow::Result<()> {
         debug!("status");
         let status::QueryRequestC2s = self.recv_packet().await?;
 
-        let player_count = SHARED
-            .player_count
-            .load(std::sync::atomic::Ordering::Relaxed);
+        let player_count = self.shared.player_count.load(Ordering::Relaxed);
 
         //  64x64 pixels image
         let bytes = include_bytes!("saul.png");
@@ -576,64 +715,91 @@ impl Io {
     }
 }
 
+/// logs all errors that occur when writing to the connection.
+///
+/// this is far better than panicking because it allows us to log the error and continue handling other
+/// clients/connections
 async fn print_errors(future: impl core::future::Future<Output = anyhow::Result<()>>) {
     if let Err(err) = future.await {
         error!("{:?}", err);
     }
 }
 
-pub static GLOBAL_PACKETS: spin::Mutex<Vec<UserPacketFrame>> = spin::Mutex::new(Vec::new());
+/// All incoming packets.
+///
+/// todo: `GLOBAL_CTS_PACKETS` there is a lot of room for improvement and experimentation here.
+/// Perhaps could implement some type of `MultiMap` such that a certain player can have their packets queried
+/// easier.
+/// This would be especially useful when we are processing packets in parallel.
+///
+/// Also, this should not be a static ideally but instead an `Arc` probably in [`global::Shared`].
+pub static GLOBAL_C2S_PACKETS: spin::Mutex<Vec<UserPacketFrame>> = spin::Mutex::new(Vec::new());
 
-async fn run(tx: flume::Sender<ClientConnection>) {
-    // start socket 25565
-    // todo: remove unwrap
-    let addr = "0.0.0.0:25565";
-
-    let listener = match TcpListener::bind(addr) {
+#[instrument(skip_all)]
+async fn main_loop(
+    tx: flume::Sender<ClientConnection>,
+    address: impl ToSocketAddrs,
+    shared: Arc<global::Shared>,
+) {
+    let listener = match TcpListener::bind(address) {
         Ok(listener) => listener,
         Err(e) => {
-            error!("failed to bind to {addr}: {e}");
+            error!("failed to bind: {e}");
             return;
         }
     };
 
-    info!("listening on {addr}");
-
-    let mut id = 0;
+    let id = 0;
 
     // accept incoming connections
     loop {
-        let Ok((stream, _)) = listener.accept().await else {
-            warn!("accept failed");
-            continue;
+        let stream = match listener.accept().await {
+            Ok((stream, _)) => stream,
+            Err(e) => {
+                warn!("accept failed: {e} ... {e:?}");
+                continue;
+            }
         };
 
-        info!("accepted connection {id}");
-
-        let process = Io::new(stream);
+        let process = Io::new(stream, shared.clone());
 
         let tx = tx.clone();
 
-        let action = process.server_process(id, tx);
+        let action = process.process_new_connection(id, tx);
         let action = print_errors(action);
 
         monoio::spawn(action);
-        id += 1;
     }
 }
 
-pub fn server(shutdown: flume::Receiver<()>) -> anyhow::Result<flume::Receiver<ClientConnection>> {
+/// Initializes the I/O thread.
+pub fn init_io_thread(
+    shutdown: flume::Receiver<()>,
+    address: impl ToSocketAddrs + Send + Sync + 'static,
+    shared: Arc<global::Shared>,
+) -> anyhow::Result<flume::Receiver<ClientConnection>> {
     let (connection_tx, connection_rx) = flume::unbounded();
 
     std::thread::Builder::new()
         .name("io".to_string())
         .spawn(move || {
             let mut runtime = monoio::RuntimeBuilder::<monoio::FusionDriver>::new()
+                .enable_timer()
                 .build()
                 .unwrap();
 
+            match &runtime {
+                #[cfg(target_os = "linux")]
+                FusionRuntime::Uring(_) => {
+                    info!("monoio is using io_uring runtime");
+                }
+                FusionRuntime::Legacy(_) => {
+                    info!("monoio is using legacy runtime");
+                }
+            }
+
             runtime.block_on(async move {
-                let run = run(connection_tx);
+                let run = main_loop(connection_tx, address, shared);
                 let shutdown = shutdown.recv_async();
 
                 monoio::select! {
@@ -645,32 +811,4 @@ pub fn server(shutdown: flume::Receiver<()>) -> anyhow::Result<flume::Receiver<C
         .context("failed to spawn io thread")?;
 
     Ok(connection_rx)
-}
-
-fn registry_codec_raw(codec: &RegistryCodec) -> anyhow::Result<Compound> {
-    // codec.cached_codec.clear();
-
-    let mut compound = Compound::default();
-
-    for (reg_name, reg) in &codec.registries {
-        let mut value = vec![];
-
-        for (id, v) in reg.iter().enumerate() {
-            let id = i32::try_from(id).context("id too large")?;
-            value.push(compound! {
-                "id" => id,
-                "name" => v.name.as_str(),
-                "element" => v.element.clone(),
-            });
-        }
-
-        let registry = compound! {
-            "type" => reg_name.as_str(),
-            "value" => List::Compound(value),
-        };
-
-        compound.insert(reg_name.as_str(), registry);
-    }
-
-    Ok(compound)
 }

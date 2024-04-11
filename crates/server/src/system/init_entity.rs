@@ -1,4 +1,5 @@
 use evenio::{
+    entity::EntityId,
     event::{Insert, Receiver, Sender, Spawn},
     prelude::Single,
 };
@@ -8,11 +9,32 @@ use tracing::instrument;
 use valence_protocol::{ByteAngle, VarInt, Velocity};
 
 use crate::{
-    singleton::encoder::{Encoder, PacketMetadata},
-    EntityReaction, FullEntityPose, InitEntity, MinecraftEntity, RunningSpeed, Uuid,
+    singleton::broadcast::BroadcastBuf, EntityReaction, FullEntityPose, InitEntity,
+    MinecraftEntity, RunningSpeed, Uuid,
 };
 
-#[instrument(skip_all, name = "init_entity")]
+pub fn spawn_packet(
+    id: EntityId,
+    uuid: Uuid,
+    pose: &FullEntityPose,
+) -> valence_protocol::packets::play::EntitySpawnS2c {
+    #[expect(clippy::cast_possible_wrap, reason = "wrapping is ok in this case")]
+    let entity_id = VarInt(id.index().0 as i32);
+
+    valence_protocol::packets::play::EntitySpawnS2c {
+        entity_id,
+        object_uuid: uuid.0,
+        kind: VarInt(EntityType::Zombie as i32),
+        position: pose.position.as_dvec3(),
+        pitch: ByteAngle::from_degrees(pose.pitch),
+        yaw: ByteAngle::from_degrees(pose.yaw),
+        head_yaw: ByteAngle(0),
+        data: VarInt::default(),
+        velocity: Velocity([0; 3]),
+    }
+}
+
+#[instrument(skip_all)]
 pub fn init_entity(
     r: Receiver<InitEntity>,
     mut s: Sender<(
@@ -23,10 +45,8 @@ pub fn init_entity(
         Insert<EntityReaction>,
         Spawn,
     )>,
-    encoder: Single<&mut Encoder>,
+    mut broadcast: Single<&mut BroadcastBuf>,
 ) {
-    use valence_protocol::packets::play;
-
     let event = r.event;
 
     let id = s.spawn();
@@ -39,27 +59,11 @@ pub fn init_entity(
     s.insert(id, EntityReaction::default());
     s.insert(id, generate_running_speed());
 
-    #[expect(clippy::cast_possible_wrap, reason = "wrapping is ok in this case")]
-    let entity_id = VarInt(id.index().0 as i32);
-
     let pose = event.pose;
 
-    let pkt = play::EntitySpawnS2c {
-        entity_id,
-        object_uuid: uuid.0,
-        kind: VarInt(EntityType::Zombie as i32),
-        position: pose.position.as_dvec3(),
-        pitch: ByteAngle::from_degrees(pose.pitch),
-        yaw: ByteAngle::from_degrees(pose.yaw),
-        head_yaw: ByteAngle(0),
-        data: VarInt::default(),
-        velocity: Velocity([0; 3]),
-    };
+    let pkt = spawn_packet(id, uuid, &pose);
 
-    encoder
-        .0
-        .append_round_robin(&pkt, PacketMetadata::REQUIRED)
-        .unwrap();
+    broadcast.get_round_robin().append_packet(&pkt).unwrap();
 }
 
 fn generate_running_speed() -> RunningSpeed {

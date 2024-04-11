@@ -5,9 +5,13 @@
 // https://nikolaivazquez.com/blog/divan/#measure-allocations
 
 #![feature(lint_reasons)]
+#![allow(clippy::missing_docs_in_private_items, missing_docs, reason = "bench")]
 
+use std::net::SocketAddr;
+
+use bvh::aabb::Aabb;
 use divan::Bencher;
-use server::{bounding_box::BoundingBox, FullEntityPose, Game, InitEntity, Targetable};
+use server::{FullEntityPose, Game, InitEntity, Targetable};
 use valence_protocol::math::Vec3;
 
 fn main() {
@@ -33,7 +37,8 @@ fn world_bench(bencher: Bencher, thread_count: usize) {
         .build()
         .unwrap();
 
-    let mut game = Game::init().unwrap();
+    let addr = SocketAddr::from(([127, 0, 0, 1], 25565));
+    let mut game = Game::init(addr).unwrap();
 
     let count: u32 = 100_000;
 
@@ -55,7 +60,7 @@ fn world_bench(bencher: Bencher, thread_count: usize) {
                 position: Vec3::new(x, y, z),
                 yaw: 0.0,
                 pitch: 0.0,
-                bounding: BoundingBox::create(Vec3::new(x, y, z), 0.6, 1.8),
+                bounding: Aabb::create(Vec3::new(x, y, z), 0.6, 1.8),
             },
         });
     }
@@ -68,7 +73,7 @@ fn world_bench(bencher: Bencher, thread_count: usize) {
 
     world.insert(id, FullEntityPose {
         position: Vec3::new(0.0, 2.0, 0.0),
-        bounding: BoundingBox::create(Vec3::new(0.0, 2.0, 0.0), 0.6, 1.8),
+        bounding: Aabb::create(Vec3::new(0.0, 2.0, 0.0), 0.6, 1.8),
         yaw: 0.0,
         pitch: 0.0,
     });

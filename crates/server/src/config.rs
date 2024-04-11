@@ -1,11 +1,18 @@
-use std::{fs::File, io::Read, path::Path};
+//! Configuration for the server.
+
+use std::{fmt::Debug, fs::File, io::Read, path::Path};
 
 use serde::{Deserialize, Serialize};
 use spin::lazy::Lazy;
-use tracing::{info, instrument};
+use tracing::{info, instrument, warn};
 
+/// The configuration for the server.
+///
+/// todo: remove static and make this an `Arc` to prevent weird behavior with multiple `Game`s
 pub static CONFIG: Lazy<Config> = Lazy::new(|| Config::load("run/config.toml").unwrap());
 
+/// The configuration for the server representing a `toml` file.
+#[allow(clippy::missing_docs_in_private_items, reason = "self-explanatory")]
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Config {
     pub border_diameter: Option<f64>,
@@ -22,14 +29,14 @@ impl Default for Config {
             max_players: 10_000,
             view_distance: 32,
             simulation_distance: 10,
-            server_desc: "10k babyyyy".to_owned(),
+            server_desc: "Hyperion Test Server".to_owned(),
         }
     }
 }
 
 impl Config {
-    #[instrument(skip_all)]
-    pub fn load<P: AsRef<Path>>(path: P) -> anyhow::Result<Self> {
+    #[instrument]
+    pub fn load<P: AsRef<Path> + Debug>(path: P) -> anyhow::Result<Self> {
         info!("loading configuration file");
         if path.as_ref().exists() {
             let mut file = File::open(path)?;
@@ -39,6 +46,27 @@ impl Config {
             Ok(config)
         } else {
             info!("configuration file not found, using defaults");
+
+            // make required folders
+            if let Some(parent) = path.as_ref().parent() {
+                if let Err(e) = std::fs::create_dir_all(parent) {
+                    // this might happen on a read-only filesystem (i.e.,
+                    // when running on a CI, profiling in Instruments, etc.)
+                    warn!(
+                        "failed to create parent directories for {:?}: {}, using defaults",
+                        path.as_ref(),
+                        e
+                    );
+                    return Ok(Self::default());
+                }
+            };
+
+            // write default config to file
+            let default_config = Self::default();
+            std::fs::write(&path, toml::to_string(&default_config)?.as_bytes())?;
+
+            info!("wrote default configuration to {:?}", path.as_ref());
+
             Ok(Self::default())
         }
     }

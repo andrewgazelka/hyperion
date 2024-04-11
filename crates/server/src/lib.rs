@@ -1,34 +1,36 @@
-#![feature(thread_local)]
+//! Hyperion
+
 #![feature(lint_reasons)]
 #![expect(clippy::type_complexity, reason = "evenio uses a lot of complex types")]
 
-#[global_allocator]
-static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
-
-extern crate core;
 mod chunk;
 mod singleton;
 
 use std::{
-    cell::UnsafeCell,
     collections::VecDeque,
-    sync::atomic::AtomicU32,
+    fmt::Debug,
+    net::ToSocketAddrs,
+    sync::{atomic::AtomicU32, Arc},
     time::{Duration, Instant},
 };
 
 use anyhow::Context;
+use bvh::aabb::Aabb;
 use evenio::prelude::*;
-use jemalloc_ctl::{epoch, stats};
+use libc::{getrlimit, setrlimit, RLIMIT_NOFILE};
 use ndarray::s;
 use signal_hook::iterator::Signals;
+use singleton::bounding_box;
 use spin::Lazy;
-use tracing::{info, instrument, warn};
-use valence_protocol::math::Vec3;
+use tracing::{debug, error, info, instrument, trace, warn};
+use valence_protocol::{math::Vec3, CompressionThreshold, Hand};
 
 use crate::{
-    bounding_box::BoundingBox,
-    net::{server, ClientConnection, Packets, GLOBAL_PACKETS},
-    singleton::{encoder::Encoder, player_lookup::PlayerLookup},
+    net::{init_io_thread, ClientConnection, Connection, Encoder},
+    singleton::{
+        broadcast::BroadcastBuf, player_aabb_lookup::PlayerAabbs,
+        player_uuid_lookup::PlayerUuidLookup,
+    },
     tracker::Tracker,
 };
 
@@ -40,22 +42,25 @@ mod system;
 
 mod bits;
 
-mod quad_tree;
+mod pose;
 mod tracker;
 
-pub mod bounding_box;
 mod config;
 
+/// History size for sliding average.
+const MSPT_HISTORY_SIZE: usize = 100;
+
+/// The absorption effect
 #[derive(Clone, PartialEq, Debug)]
 struct Absorption {
-    /// This effect goes away on the tick with the value end_tick.
+    /// This effect goes away on the tick with the value `end_tick`,
     end_tick: u64,
     bonus_health: f32,
 }
 
 #[derive(Clone, PartialEq, Debug)]
 struct Regeneration {
-    /// This effect goes away on the tick with the value end_tick.
+    /// This effect goes away on the tick with the value `end_tick`.
     end_tick: u64,
 }
 
@@ -96,11 +101,15 @@ impl Default for Tracker<PlayerState> {
     }
 }
 
-// A zero-sized component, often called a "marker" or "tag".
+/// A component that represents a Player. In the future, this should be broken up into multiple components.
+///
+/// Why should it be broken up? The more things are broken up, the more we can take advantage of Rust borrowing rules.
 #[derive(Component)]
-struct Player {
-    packets: Packets,
+pub struct Player {
+    /// The name of the player i.e., `Emerald_Explorer`.
     name: Box<str>,
+
+    /// The last time the player was sent a keep alive packet. TODO: this should be using a tick.
     last_keep_alive_sent: Instant,
 
     /// Set to true if a keep alive has been sent to the client and the client hasn't responded.
@@ -109,13 +118,14 @@ struct Player {
     /// The player's ping. This is likely higher than the player's real ping.
     ping: Duration,
 
+    /// The locale of the player. This could in the future be used to determine the language of the player's chat messages.
     locale: Option<String>,
 
     state: Tracker<PlayerState>,
 }
 
 impl Player {
-    fn heal(&mut self, _tick: Gametick, amount: f32) {
+    fn heal(&mut self, _tick: u64, amount: f32) {
         assert!(amount.is_finite());
         assert!(amount > 0.0);
 
@@ -127,7 +137,7 @@ impl Player {
         });
     }
 
-    fn hurt(&mut self, tick: Gametick, mut amount: f32) {
+    fn hurt(&mut self, tick: u64, mut amount: f32) {
         assert!(amount.is_finite());
         assert!(amount > 0.0);
 
@@ -139,7 +149,7 @@ impl Player {
                 return;
             };
 
-            if tick.number < absorption.end_tick {
+            if tick < absorption.end_tick {
                 if amount > absorption.bonus_health {
                     amount -= absorption.bonus_health;
                     absorption.bonus_health = 0.0;
@@ -152,27 +162,32 @@ impl Player {
 
             if *health <= 0.0 {
                 *state = PlayerState::Dead {
-                    respawn_tick: tick.number + 100,
+                    respawn_tick: tick + 100,
                 };
             }
         });
     }
 }
 
+#[allow(clippy::missing_docs_in_private_items, reason = "self-explanatory")]
 #[derive(Event)]
 struct InitPlayer {
     entity: EntityId,
-    io: Packets,
+    encoder: Encoder,
+    connection: Connection,
     name: Box<str>,
     uuid: uuid::Uuid,
     pos: FullEntityPose,
 }
 
-#[derive(Component, Copy, Clone)]
+/// A UUID component. Generally speaking, this tends to be tied to entities with a [`Player`] component.
+#[derive(Component, Copy, Clone, Debug)]
 struct Uuid(uuid::Uuid);
 
+/// Initialize a Minecraft entity (like a zombie) with a given pose.
 #[derive(Event)]
 pub struct InitEntity {
+    /// The pose of the entity.
     pub pose: FullEntityPose,
 }
 
@@ -180,15 +195,21 @@ pub struct InitEntity {
 #[derive(Component)]
 pub struct Targetable;
 
+/// Sent whenever a player joins the server.
 #[derive(Event)]
 struct PlayerJoinWorld {
+    /// The [`EntityId`] of the player.
     #[event(target)]
     target: EntityId,
 }
 
+/// Any living minecraft entity that is NOT a player.
+///
+/// Example: zombie, skeleton, etc.
 #[derive(Component, Debug)]
 pub struct MinecraftEntity;
 
+/// The running multiplier of the entity. This defaults to 1.0.
 #[derive(Component, Debug, Copy, Clone)]
 pub struct RunningSpeed(f32);
 
@@ -198,101 +219,158 @@ impl Default for RunningSpeed {
     }
 }
 
+/// An event that is sent whenever a player is kicked from the server.
 #[derive(Event)]
 struct KickPlayer {
+    /// The [`EntityId`] of the player.
     #[event(target)] // Works on tuple struct fields as well.
     target: EntityId,
+    /// The reason the player was kicked.
     reason: String,
 }
 
+/// An event that is sent whenever a player swings an arm.
+#[derive(Event)]
+struct SwingArm {
+    /// The [`EntityId`] of the player.
+    #[event(target)]
+    target: EntityId,
+    /// The hand the player is swinging.
+    hand: Hand,
+}
+
+/// An event to kill all minecraft entities (like zombies, skeletons, etc). This will be sent to the equivalent of
+/// `/killall` in the game.
 #[derive(Event)]
 struct KillAllEntities;
 
+/// An event when server stats are updated.
 #[derive(Event, Copy, Clone)]
 struct StatsEvent {
+    /// The number of milliseconds per tick in the last second.
     ms_per_tick_mean_1s: f64,
+    /// The number of milliseconds per tick in the last 5 seconds.
     ms_per_tick_mean_5s: f64,
-    #[expect(dead_code, reason = "not used currently, will in future")]
-    allocated: usize,
-    resident: usize,
-}
-
-#[expect(clippy::cast_precision_loss, reason = "2^52 bytes is over 1000 TB")]
-fn bytes_to_mb(bytes: usize) -> f64 {
-    bytes as f64 / 1024.0 / 1024.0
-}
-
-#[derive(Copy, Clone, Event)]
-struct Gametick {
-    /// The first tick starts at 0 and each tick afterwards increments this value by 1.
-    number: u64,
 }
 
 #[derive(Event)]
-struct BroadcastPackets {
-    tick: Gametick,
+struct Gametick;
+
+/// An event that is sent when it is time to send packets to clients.
+#[derive(Event)]
+struct Egress;
+
+/// on macOS, the soft limit for the number of open file descriptors is often 256. This is far too low
+/// to test 10k players with.
+/// This attempts to the specified `recommended_min` value.
+pub fn adjust_file_limits(recommended_min: u64) -> std::io::Result<()> {
+    let mut limits = libc::rlimit {
+        rlim_cur: 0, // Initialize soft limit to 0
+        rlim_max: 0, // Initialize hard limit to 0
+    };
+
+    if unsafe { getrlimit(RLIMIT_NOFILE, &mut limits) } == 0 {
+        info!("Current file handle soft limit: {}", limits.rlim_cur);
+        info!("Current file handle hard limit: {}", limits.rlim_max);
+    } else {
+        error!("Failed to get the current file handle limits");
+        return Err(std::io::Error::last_os_error());
+    };
+
+    if limits.rlim_max < recommended_min {
+        warn!(
+            "Could only set file handle limit to {}. Recommended minimum is {}",
+            limits.rlim_cur, recommended_min
+        );
+    }
+
+    limits.rlim_cur = limits.rlim_max;
+    info!("Setting soft limit to: {}", limits.rlim_cur);
+
+    if unsafe { setrlimit(RLIMIT_NOFILE, &limits) } != 0 {
+        error!("Failed to set the file handle limits");
+        return Err(std::io::Error::last_os_error());
+    }
+
+    Ok(())
 }
 
-static SHARED: global::Shared = global::Shared {
-    player_count: AtomicU32::new(0),
-};
-
+/// The central [`Game`] struct which owns and manages the entire server.
 pub struct Game {
+    /// The shared state between the ECS framework and the I/O thread.
+    shared: Arc<global::Shared>,
+    /// The manager of the ECS framework.
     world: World,
+    /// Data for what time the last ticks occurred.
     last_ticks: VecDeque<Instant>,
+    /// Data for how many milliseconds previous ticks took.
     last_ms_per_tick: VecDeque<f64>,
+    /// The tick of the game. This is incremented every 50 ms.
     tick_on: u64,
+    /// The event that is sent when it is time to receive packets from clients.
     incoming: flume::Receiver<ClientConnection>,
+    /// The event that is sent when the server is shutting down. This allows shutting down the I/O thread.
+    shutdown_tx: flume::Sender<()>,
 }
 
 impl Game {
+    /// Get the [`World`] which is the core part of the ECS framework.
     pub const fn world(&self) -> &World {
         &self.world
     }
 
+    /// Get all shared data that is shared between the ECS framework and the IO thread.
+    pub const fn shared(&self) -> &Arc<global::Shared> {
+        &self.shared
+    }
+
+    /// See [`Game::world`].
     pub fn world_mut(&mut self) -> &mut World {
         &mut self.world
     }
 
-    #[instrument]
-    pub fn init() -> anyhow::Result<Self> {
-        info!("Starting mc-server");
+    /// # Panics
+    /// This function will panic if the game is already shutdown.
+    pub fn shutdown(&self) {
+        self.shutdown_tx.send(()).unwrap();
+    }
+
+    /// Initialize the server.
+    pub fn init(address: impl ToSocketAddrs + Send + Sync + 'static) -> anyhow::Result<Self> {
+        info!("Starting hyperion");
         Lazy::force(&config::CONFIG);
-
-        // if linux
-        #[cfg(target_os = "linux")]
-        {
-            info!("Running on linux");
-
-            if let Err(e) = try_io_uring() {
-                warn!("io_uring not supported: {e}");
-            } else {
-                info!("io_uring supported");
-            }
-        }
 
         let current_threads = rayon::current_num_threads();
         let max_threads = rayon::max_num_threads();
 
-        info!("rayon\tcurrent threads: {current_threads}, max threads: {max_threads}");
+        info!("rayon: current threads: {current_threads}, max threads: {max_threads}");
 
         let mut signals = Signals::new([signal_hook::consts::SIGINT, signal_hook::consts::SIGTERM])
             .context("failed to create signal handler")?;
 
         let (shutdown_tx, shutdown_rx) = flume::bounded(1);
 
-        std::thread::spawn(move || {
-            for _ in signals.forever() {
-                warn!("Shutting down...");
-                SHUTDOWN.store(true, std::sync::atomic::Ordering::Relaxed);
-                let _ = shutdown_tx.send(());
+        std::thread::spawn({
+            let shutdown_tx = shutdown_tx.clone();
+            move || {
+                for _ in signals.forever() {
+                    warn!("Shutting down...");
+                    SHUTDOWN.store(true, std::sync::atomic::Ordering::Relaxed);
+                    let _ = shutdown_tx.send(());
+                }
             }
         });
 
-        let incoming = server(shutdown_rx)?;
+        let shared = Arc::new(global::Shared {
+            player_count: AtomicU32::new(0),
+            compression_level: CompressionThreshold(64),
+        });
+
+        let incoming = init_io_thread(shutdown_rx, address, shared.clone())?;
 
         let mut world = World::new();
 
+        world.add_handler(system::ingress);
         world.add_handler(system::init_player);
         world.add_handler(system::player_join_world);
         world.add_handler(system::player_kick);
@@ -302,32 +380,43 @@ impl Game {
         world.add_handler(system::reset_bounding_boxes);
         world.add_handler(system::update_time);
         world.add_handler(system::update_health);
-
-        world.add_handler(system::broadcast_packets);
-        world.add_handler(system::keep_alive);
-        world.add_handler(process_packets);
-        world.add_handler(system::tps_message);
-        world.add_handler(system::kill_all);
         world.add_handler(system::sync_players);
+        world.add_handler(system::rebuild_player_location);
+        world.add_handler(system::clean_up_io);
+
+        world.add_handler(system::pkt_hand_swing);
+        world.add_handler(system::egress_broadcast);
+        world.add_handler(system::egress_local);
+        world.add_handler(system::keep_alive);
+        world.add_handler(system::stats_message);
+        world.add_handler(system::kill_all);
 
         let global = world.spawn();
-        world.insert(global, global::Global::default());
+        world.insert(global, global::Global {
+            tick: 0,
+            shared: shared.clone(),
+        });
 
         let bounding_boxes = world.spawn();
         world.insert(bounding_boxes, bounding_box::EntityBoundingBoxes::default());
 
-        let lookup = world.spawn();
-        world.insert(lookup, PlayerLookup::default());
+        let uuid_lookup = world.spawn();
+        world.insert(uuid_lookup, PlayerUuidLookup::default());
+
+        let player_location_lookup = world.spawn();
+        world.insert(player_location_lookup, PlayerAabbs::default());
 
         let encoder = world.spawn();
-        world.insert(encoder, Encoder::default());
+        world.insert(encoder, BroadcastBuf::new(shared.compression_level));
 
         let mut game = Self {
+            shared,
             world,
             last_ticks: VecDeque::default(),
             last_ms_per_tick: VecDeque::default(),
             tick_on: 0,
             incoming,
+            shutdown_tx,
         };
 
         game.last_ticks.push_back(Instant::now());
@@ -335,6 +424,7 @@ impl Game {
         Ok(game)
     }
 
+    /// The duration to wait between ticks.
     fn wait_duration(&self) -> Option<Duration> {
         let &first_tick = self.last_ticks.front()?;
 
@@ -347,56 +437,76 @@ impl Game {
         let now = Instant::now();
 
         if time_for_20_tps < now {
+            warn!("tick took full 50ms; skipping sleep");
             return None;
         }
 
         let duration = time_for_20_tps - now;
+        let duration = duration.mul_f64(0.8);
+
+        if duration.as_millis() > 47 {
+            trace!("duration is long");
+            return Some(Duration::from_millis(47));
+        }
 
         // this is a bit of a hack to be conservative when sleeping
-        Some(duration.mul_f64(0.8))
+        Some(duration)
     }
 
-    #[instrument(skip_all)]
+    /// Run the main game loop at 20 ticks per second.
     pub fn game_loop(&mut self) {
         while !SHUTDOWN.load(std::sync::atomic::Ordering::Relaxed) {
             self.tick();
 
             if let Some(wait_duration) = self.wait_duration() {
-                std::thread::sleep(wait_duration);
+                spin_sleep::sleep(wait_duration);
             }
         }
     }
 
-    #[instrument(skip_all)]
+    /// Run one tick of the game loop.
+    #[instrument(skip(self), fields(tick_on = self.tick_on))]
     pub fn tick(&mut self) {
+        /// The length of history to keep in the moving average.
         const LAST_TICK_HISTORY_SIZE: usize = 100;
-        const MSPT_HISTORY_SIZE: usize = 100;
 
         let now = Instant::now();
-        self.last_ticks.push_back(now);
 
         // let mut tps = None;
         if self.last_ticks.len() > LAST_TICK_HISTORY_SIZE {
-            self.last_ticks.pop_front();
+            let last = self.last_ticks.back().unwrap();
+
+            let ms = last.elapsed().as_nanos() as f64 / 1_000_000.0;
+            if ms > 60.0 {
+                warn!("tick took too long: {ms}ms");
+            }
+
+            self.last_ticks.pop_front().unwrap();
         }
+
+        self.last_ticks.push_back(now);
 
         while let Ok(connection) = self.incoming.try_recv() {
             let ClientConnection {
-                packets,
+                encoder,
                 name,
                 uuid,
+                tx,
             } = connection;
 
             let player = self.world.spawn();
 
+            let connection = Connection::new(tx);
+
             let event = InitPlayer {
                 entity: player,
-                io: packets,
+                encoder,
+                connection,
                 name,
                 uuid,
                 pos: FullEntityPose {
                     position: Vec3::new(0.0, 2.0, 0.0),
-                    bounding: BoundingBox::create(Vec3::new(0.0, 2.0, 0.0), 0.6, 1.8),
+                    bounding: Aabb::create(Vec3::new(0.0, 2.0, 0.0), 0.6, 1.8),
                     yaw: 0.0,
                     pitch: 0.0,
                 },
@@ -405,11 +515,8 @@ impl Game {
             self.world.send(event);
         }
 
-        let tick = Gametick {
-            number: self.tick_on,
-        };
-        self.world.send(tick);
-        self.world.send(BroadcastPackets { tick });
+        self.world.send(Gametick);
+        self.world.send(Egress);
 
         #[expect(
             clippy::cast_precision_loss,
@@ -417,6 +524,12 @@ impl Game {
                       (~52 days)"
         )]
         let ms = now.elapsed().as_nanos() as f64 / 1_000_000.0;
+        self.update_tick_stats(ms);
+        // info!("Tick took: {:02.8}ms", ms);
+    }
+
+    #[instrument(skip(self))]
+    fn update_tick_stats(&mut self, ms: f64) {
         self.last_ms_per_tick.push_back(ms);
 
         if self.last_ms_per_tick.len() > MSPT_HISTORY_SIZE {
@@ -427,136 +540,68 @@ impl Game {
             let mean_1_second = arr.slice(s![..20]).mean().unwrap();
             let mean_5_seconds = arr.slice(s![..100]).mean().unwrap();
 
-            let allocated = stats::allocated::mib().unwrap();
-            let resident = stats::resident::mib().unwrap();
-
-            let e = epoch::mib().unwrap();
-
-            // todo: profile; does this need to be done in a separate thread?
-            // if self.tick_on % 100 == 0 {
-            e.advance().unwrap();
-            // }
-
-            let allocated = allocated.read().unwrap();
-            let resident = resident.read().unwrap();
+            debug!("ms / tick: {mean_1_second:.2}ms");
 
             self.world.send(StatsEvent {
                 ms_per_tick_mean_1s: mean_1_second,
                 ms_per_tick_mean_5s: mean_5_seconds,
-                allocated,
-                resident,
             });
 
             self.last_ms_per_tick.pop_front();
         }
 
         self.tick_on += 1;
-
-        // info!("Tick took: {:02.8}ms", ms);
     }
 }
 
-// The `Receiver<Tick>` parameter tells our handler to listen for the `Tick` event.
-#[instrument(skip_all)]
-fn process_packets(
-    tick: Receiver<Gametick>,
-    mut fetcher: Fetcher<(EntityId, &mut Player, &mut FullEntityPose)>,
-    lookup: Single<&PlayerLookup>,
-    mut sender: Sender<(KickPlayer, InitEntity, KillAllEntities)>,
-) {
-    // uuid to entity id map
-
-    let packets: Vec<_> = core::mem::take(&mut *GLOBAL_PACKETS.lock());
-
-    let lookup = lookup.0;
-
-    for packet in packets {
-        let id = packet.user;
-        let Some(&user) = lookup.get(&id) else { return };
-
-        let Ok((_, player, position)) = fetcher.get_mut(user) else {
-            return;
-        };
-
-        let packet = packet.packet;
-
-        if let Err(e) = packets::switch(*tick.event, packet, player, position, &mut sender) {
-            let reason = format!("error: {e}");
-
-            // todo: handle error
-            let _ = player.packets.writer.send_chat_message(&reason);
-
-            warn!("invalid packet: {reason}");
-        }
-    }
-}
-
+// todo: remove static and make this an `Arc` to prevent weird behavior with multiple `Game`s
+/// A shutdown atomic which is used to shut down the [`Game`] gracefully.
 static SHUTDOWN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
+/// The full pose of an entity. This is used for both [`Player`] and [`MinecraftEntity`].
 #[derive(Component, Copy, Clone, Debug)]
 pub struct FullEntityPose {
+    /// The (x, y, z) position of the entity.
+    /// Note we are using [`Vec3`] instead of [`glam::DVec3`] because *cache locality* is important.
+    /// However, the Notchian server uses double precision floating point numbers for the position.
     pub position: Vec3,
+
+    /// The yaw of the entity. (todo: probably need a separate component for head yaw, perhaps separate this out)
     pub yaw: f32,
+
+    /// The pitch of the entity.
     pub pitch: f32,
-    pub bounding: BoundingBox,
+
+    /// The bounding box of the entity.
+    pub bounding: Aabb,
 }
 
 impl FullEntityPose {
-    fn move_by(&mut self, vec: Vec3) {
+    /// Move the pose by the given vector.
+    pub fn move_by(&mut self, vec: Vec3) {
         self.position += vec;
         self.bounding = self.bounding.move_by(vec);
     }
+
+    /// Teleport the pose to the given position.
+    pub fn move_to(&mut self, pos: Vec3) {
+        self.bounding = self.bounding.move_to(pos);
+        self.position = pos;
+    }
 }
 
-#[derive(Debug, Default)]
-pub struct EntityReactionInner {
+/// The reaction of an entity, in particular to collisions as calculated in `entity_detect_collisions`.
+///
+/// Why is this useful?
+///
+/// - We want to be able to detect collisions in parallel.
+/// - Since we are accessing bounding boxes in parallel,
+/// we need to be able to make sure the bounding boxes are immutable (unless we have something like a
+/// [`Arc`] or [`std::sync::RwLock`], but this is not efficient).
+/// - Therefore, we have an [`EntityReaction`] component which is used to store the reaction of an entity to collisions.
+/// - Later we can apply the reaction to the entity's [`FullEntityPose`] to move the entity.
+#[derive(Component, Default, Debug)]
+pub struct EntityReaction {
+    /// The velocity of the entity.
     velocity: Vec3,
-}
-
-#[derive(Component, Debug, Default)]
-pub struct EntityReaction(UnsafeCell<EntityReactionInner>);
-
-impl EntityReaction {
-    fn get_mut(&mut self) -> &mut EntityReactionInner {
-        self.0.get_mut()
-    }
-}
-
-unsafe impl Send for EntityReaction {}
-
-unsafe impl Sync for EntityReaction {}
-
-#[cfg(target_os = "linux")]
-fn try_io_uring() -> anyhow::Result<()> {
-    use std::{fs, os::unix::io::AsRawFd};
-
-    use io_uring::{opcode, types, IoUring};
-
-    let mut ring = IoUring::new(8)?;
-
-    let fd = fs::File::open("/dev/urandom")?;
-    let mut buf = vec![0; 1024];
-
-    let read_e = opcode::Read::new(
-        types::Fd(fd.as_raw_fd()),
-        buf.as_mut_ptr(),
-        buf.len().try_into()?,
-    )
-    .build()
-    .user_data(0x42);
-
-    unsafe {
-        ring.submission()
-            .push(&read_e)
-            .expect("submission queue is full");
-    }
-
-    ring.submit_and_wait(1)?;
-
-    let cqe = ring.completion().next().expect("completion queue is empty");
-
-    assert_eq!(cqe.user_data(), 0x42);
-    assert!(cqe.result() >= 0, "read error: {}", cqe.result());
-
-    Ok(())
 }

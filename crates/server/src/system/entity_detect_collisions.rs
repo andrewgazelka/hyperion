@@ -7,30 +7,37 @@ use evenio::{
 use tracing::instrument;
 
 use crate::{
-    bounding_box::{CollisionContext, EntityBoundingBoxes},
-    EntityReaction, FullEntityPose, Gametick,
+    singleton::bounding_box::EntityBoundingBoxes, EntityReaction, FullEntityPose, Gametick,
 };
 
-#[instrument(skip_all, name = "entity_detect_collisions")]
+#[instrument(skip_all, level = "trace")]
 pub fn entity_detect_collisions(
     _: Receiver<Gametick>,
     entity_bounding_boxes: Single<&EntityBoundingBoxes>,
-    poses_fetcher: Fetcher<(EntityId, &FullEntityPose, &EntityReaction)>,
+    mut poses_fetcher: Fetcher<(EntityId, &FullEntityPose, &mut EntityReaction)>,
 ) {
-    let entity_bounding_boxes = entity_bounding_boxes.0;
+    const MAX_COLLISIONS: usize = 4;
 
-    poses_fetcher.par_iter().for_each(|(id, pose, reaction)| {
-        let context = CollisionContext {
-            bounding: pose.bounding,
-            id,
-        };
+    poses_fetcher
+        .par_iter_mut()
+        .for_each(|(id, pose, reaction)| {
+            let mut collisions = 0;
+            entity_bounding_boxes.get_collisions(pose.bounding, |collision| {
+                // do not include self
+                if collision.id == id {
+                    return true;
+                }
 
-        let collisions = entity_bounding_boxes.get_collisions(&context, &poses_fetcher);
+                collisions += 1;
 
-        for (_, other_pose) in collisions {
-            // safety: this is safe because we are doing this to one entity at a time so there
-            // is never a case where we are borrowing the same entity twice
-            unsafe { pose.apply_entity_collision(&other_pose, reaction) }
-        }
-    });
+                // short circuit if we have too many collisions
+                if collisions >= MAX_COLLISIONS {
+                    return false;
+                }
+
+                pose.apply_entity_collision(&collision.aabb, reaction);
+
+                true
+            });
+        });
 }

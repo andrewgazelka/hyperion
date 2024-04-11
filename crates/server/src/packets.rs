@@ -2,18 +2,24 @@
     unused_variables,
     reason = "there are still many changes that need to be made to this file"
 )]
+#![allow(
+    clippy::missing_docs_in_private_items,
+    reason = "most of this is self-explanatory"
+)]
+
 //! <https://wiki.vg/index.php?title=Protocol&oldid=18375>
 
 use std::str::FromStr;
 
 use anyhow::{bail, ensure};
-use evenio::event::Sender;
-use tracing::warn;
+use bvh::aabb::Aabb;
+use evenio::{entity::EntityId, event::Sender};
+use tracing::debug;
 use valence_protocol::{decode::PacketFrame, math::Vec3, packets::play, Decode, Packet};
 
 use crate::{
-    bounding_box::BoundingBox, Absorption, FullEntityPose, Gametick, InitEntity, KickPlayer,
-    KillAllEntities, Player, PlayerState, Regeneration,
+    global::Global, system::IngressSender, Absorption, FullEntityPose, InitEntity, KickPlayer,
+    KillAllEntities, Player, PlayerState, Regeneration, SwingArm,
 };
 
 const fn confirm_teleport(_pkt: &[u8]) {
@@ -46,13 +52,13 @@ fn full(mut data: &[u8], full_entity_pose: &mut FullEntityPose) -> anyhow::Resul
     // if they are, ignore the packet
 
     let position = position.as_vec3();
-    if position.distance_squared(full_entity_pose.position) > MAX_SPEED.powi(2) {
+    let d_pos = position - full_entity_pose.position;
+    if d_pos.length_squared() > MAX_SPEED.powi(2) {
         bail!("Player is moving too fast max speed: {MAX_SPEED}");
     }
 
     // todo: analyze clustering
-
-    full_entity_pose.position = position;
+    full_entity_pose.move_to(position);
     full_entity_pose.yaw = yaw;
     full_entity_pose.pitch = pitch;
 
@@ -91,7 +97,8 @@ fn position_and_on_ground(
 
     let play::PositionAndOnGroundC2s { position, .. } = pkt;
 
-    full_entity_pose.position = position.as_vec3();
+    // todo: handle like full
+    full_entity_pose.move_to(position.as_vec3());
 
     Ok(())
 }
@@ -152,10 +159,10 @@ impl FromStr for HybridPos {
 
 fn chat_command(
     mut data: &[u8],
-    tick: Gametick,
+    global: &Global,
     player: &mut Player,
     full_entity_pose: &FullEntityPose,
-    sender: &mut Sender<(KickPlayer, InitEntity, KillAllEntities)>,
+    sender: &mut IngressSender,
 ) -> anyhow::Result<()> {
     const BASE_RADIUS: f32 = 4.0;
     let pkt = play::CommandExecutionC2s::decode(&mut data)?;
@@ -163,6 +170,7 @@ fn chat_command(
     let mut cmd = pkt.command.0.split(' ');
 
     let first = cmd.next();
+    let tick = global.tick.unsigned_abs();
 
     if first == Some("ka") {
         sender.send(KillAllEntities);
@@ -177,11 +185,11 @@ fn chat_command(
                 return;
             };
             *absorption = Absorption {
-                end_tick: tick.number + 2400,
+                end_tick: tick + 2400,
                 bonus_health: 4.0,
             };
             *regeneration = Regeneration {
-                end_tick: tick.number + 100,
+                end_tick: tick + 100,
             };
         });
     } else if first == Some("heal") {
@@ -221,7 +229,7 @@ fn chat_command(
                             position: Vec3::new(x, y, z),
                             yaw: 0.0,
                             pitch: 0.0,
-                            bounding: BoundingBox::create(Vec3::new(x, y, z), 0.6, 1.8),
+                            bounding: Aabb::create(Vec3::new(x, y, z), 0.6, 1.8),
                         },
                     });
                 }
@@ -247,17 +255,12 @@ fn chat_command(
             HybridPos::Relative(z) => loc.z + z,
         };
 
-        player
-            .packets
-            .writer
-            .send_chat_message(&format!("Spawning zombie at {x}, {y}, {z}"))?;
-
         sender.send(InitEntity {
             pose: FullEntityPose {
                 position: Vec3::new(x, y, z),
                 yaw: 0.0,
                 pitch: 0.0,
-                bounding: BoundingBox::create(Vec3::new(x, y, z), 0.6, 1.8),
+                bounding: Aabb::create(Vec3::new(x, y, z), 0.6, 1.8),
             },
         });
     }
@@ -265,18 +268,35 @@ fn chat_command(
     Ok(())
 }
 
+fn hand_swing(mut data: &[u8], id: EntityId, sender: &mut IngressSender) -> anyhow::Result<()> {
+    let packet = play::HandSwingC2s::decode(&mut data)?;
+
+    let packet = packet.hand;
+
+    let event = SwingArm {
+        target: id,
+        hand: packet,
+    };
+
+    sender.send(event);
+
+    Ok(())
+}
+
 pub fn switch(
-    tick: Gametick,
     raw: PacketFrame,
+    global: &Global,
+    id: EntityId,
     player: &mut Player,
     full_entity_pose: &mut FullEntityPose,
-    sender: &mut Sender<(KickPlayer, InitEntity, KillAllEntities)>,
+    sender: &mut Sender<(KickPlayer, InitEntity, KillAllEntities, SwingArm)>,
 ) -> anyhow::Result<()> {
-    let id = raw.id;
+    let packet_id = raw.id;
     let data = raw.body;
     let data = &*data;
 
-    match id {
+    match packet_id {
+        play::HandSwingC2s::ID => hand_swing(data, id, sender)?,
         play::TeleportConfirmC2s::ID => confirm_teleport(data),
         play::ClientSettingsC2s::ID => client_settings(data, player)?,
         play::CustomPayloadC2s::ID => custom_payload(data),
@@ -288,9 +308,9 @@ pub fn switch(
         play::UpdateSelectedSlotC2s::ID => update_selected_slot(data)?,
         play::KeepAliveC2s::ID => keep_alive(player)?,
         play::CommandExecutionC2s::ID => {
-            chat_command(data, tick, player, full_entity_pose, sender)?
+            chat_command(data, global, player, full_entity_pose, sender)?;
         }
-        _ => warn!("unknown packet id: 0x{:02X}", id),
+        _ => debug!("unknown packet id: 0x{:02X}", packet_id),
     }
 
     Ok(())

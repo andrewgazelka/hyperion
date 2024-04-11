@@ -1,0 +1,54 @@
+[package]
+name = "bvh"
+version = "0.1.0"
+edition = "2021"
+authors = ["Andrew Gazelka <andrew.gazelka@gmail.com>"]
+readme = "README.md"
+publish = false
+
+[features]
+plot = ["dep:plotters", "dep:plotters-bitmap"]
+default = []
+
+[dependencies]
+fastrand = "2.0.2"
+glam.workspace = true
+rayon = "1.10.0"
+arrayvec = "0.7.4"
+ordered-float = "4.2.0"
+itertools = "0.12.1"
+plotters = { version = "0.3.5", default-features = false, features = ["plotters-bitmap", "image"], optional = true}
+plotters-bitmap = { version = "0.3.3" , optional = true }
+
+[dev-dependencies]
+divan = "0.1.14"
+rand = "0.8.5"
+ordered-float = "4.2.0"
+fastrand = "2.0.2"
+tango-bench = "0.4.0"
+tracing-subscriber = "0.3.18"
+criterion = { version = "0.5.1", features = ["html_reports"] }
+
+[[bench]]
+name = "sort"
+harness = false
+
+[[bench]]
+name = "bvh"
+harness = false
+
+[[bench]]
+name = "side_by_side"
+harness = false
+
+[lints.clippy]
+complexity = "deny"
+
+
+nursery = { level = "deny", priority = -1 }
+redundant_pub_crate = "allow"
+
+#pedantic = "deny"
+perf = "deny"
+style = "deny"
+suspicious = "deny"

@@ -2,6 +2,8 @@ use evenio::prelude::*;
 use tracing::instrument;
 
 use crate::{
+    net::{Connection, Encoder},
+    tracker::Tracker,
     EntityReaction, FullEntityPose, InitPlayer, Player, PlayerJoinWorld, Targetable, Uuid,
 };
 
@@ -14,6 +16,8 @@ pub fn init_player(
         Insert<EntityReaction>,
         Insert<Uuid>,
         Insert<Targetable>,
+        Insert<Encoder>,
+        Insert<Connection>,
         PlayerJoinWorld,
     )>,
 ) {
@@ -22,7 +26,8 @@ pub fn init_player(
 
     let InitPlayer {
         entity,
-        io,
+        encoder,
+        connection,
         name,
         uuid,
         pos,
@@ -31,14 +36,15 @@ pub fn init_player(
     s.insert(entity, pos);
     s.insert(entity, Targetable);
     s.insert(entity, Player {
-        packets: io,
         last_keep_alive_sent: std::time::Instant::now(),
         unresponded_keep_alive: false,
         ping: std::time::Duration::from_secs(1),
         name,
         locale: None,
-        state: Default::default(),
+        state: Tracker::default(),
     });
+    s.insert(entity, encoder);
+    s.insert(entity, connection);
     s.insert(entity, Uuid(uuid));
 
     s.insert(entity, EntityReaction::default());
