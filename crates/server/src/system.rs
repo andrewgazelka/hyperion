@@ -19,6 +19,8 @@ mod player_kick;
 mod rebuild_player_location;
 mod reset_bounding_boxes;
 mod stats_message;
+mod sync_players;
+mod update_health;
 mod update_time;
 
 pub use clean_up_io::clean_up_io;
@@ -39,6 +41,8 @@ pub use player_kick::player_kick;
 pub use rebuild_player_location::rebuild_player_location;
 pub use reset_bounding_boxes::reset_bounding_boxes;
 pub use stats_message::stats_message;
+pub use sync_players::sync_players;
+pub use update_health::update_health;
 pub use update_time::update_time;
 
 use crate::{InitEntity, KickPlayer, KillAllEntities, SwingArm};

@@ -31,6 +31,7 @@ use crate::{
         broadcast::BroadcastBuf, player_aabb_lookup::PlayerAabbs,
         player_uuid_lookup::PlayerUuidLookup,
     },
+    tracker::Tracker,
 };
 
 mod global;
@@ -42,11 +43,69 @@ mod system;
 mod bits;
 
 mod pose;
+mod tracker;
 
 mod config;
 
 /// History size for sliding average.
 const MSPT_HISTORY_SIZE: usize = 100;
+
+/// The absorption effect
+#[derive(Clone, PartialEq, Debug)]
+struct Absorption {
+    /// This effect goes away on the tick with the value `end_tick`,
+    end_tick: u64,
+    /// The amount of health that is allocated to the absorption effect
+    bonus_health: f32,
+}
+
+#[derive(Clone, PartialEq, Debug)]
+struct Regeneration {
+    /// This effect goes away on the tick with the value `end_tick`.
+    end_tick: u64,
+}
+
+#[derive(Clone, PartialEq, Debug)]
+enum PlayerState {
+    /// If the player is alive
+    Alive {
+        /// Measured in half hearts
+        health: f32,
+        /// The absorption effect
+        absorption: Absorption,
+        /// The regeneration effect
+        regeneration: Regeneration,
+    },
+    /// If the player is dead
+    Dead {
+        /// The tick the player will be respawned
+        respawn_tick: u64,
+    },
+}
+
+impl Default for Tracker<PlayerState> {
+    fn default() -> Self {
+        let mut value = Self::new(PlayerState::Alive {
+            health: 0.0,
+            absorption: Absorption {
+                end_tick: 0,
+                bonus_health: 0.0,
+            },
+            regeneration: Regeneration { end_tick: 0 },
+        });
+        // This update is needed so that a s2c packet updating the client's health is sent. If
+        // this isn't sent, the client won't show the first time it takes damage as actual damage
+        // because it believes that the server is simply updating its health to the amount of
+        // health the player had when it left.
+        value.update(|state| {
+            let PlayerState::Alive { health, .. } = state else {
+                unreachable!()
+            };
+            *health = 20.0;
+        });
+        value
+    }
+}
 
 /// A component that represents a Player. In the future, this should be broken up into multiple components.
 ///
@@ -67,6 +126,56 @@ pub struct Player {
 
     /// The locale of the player. This could in the future be used to determine the language of the player's chat messages.
     locale: Option<String>,
+
+    /// The state of the player.
+    state: Tracker<PlayerState>,
+}
+
+impl Player {
+    /// Heal the player by a given amount.
+    fn heal(&mut self, amount: f32) {
+        assert!(amount.is_finite());
+        assert!(amount > 0.0);
+
+        self.state.update(|state| {
+            let PlayerState::Alive { health, .. } = state else {
+                return;
+            };
+            *health = (*health + amount).min(20.0);
+        });
+    }
+
+    /// Hurt the player by a given amount.
+    fn hurt(&mut self, tick: u64, mut amount: f32) {
+        assert!(amount.is_finite());
+        assert!(amount > 0.0);
+
+        self.state.update(|state| {
+            let PlayerState::Alive {
+                health, absorption, ..
+            } = state
+            else {
+                return;
+            };
+
+            if tick < absorption.end_tick {
+                if amount > absorption.bonus_health {
+                    amount -= absorption.bonus_health;
+                    absorption.bonus_health = 0.0;
+                } else {
+                    absorption.bonus_health -= amount;
+                    return;
+                }
+            }
+            *health -= amount;
+
+            if *health <= 0.0 {
+                *state = PlayerState::Dead {
+                    respawn_tick: tick + 100,
+                };
+            }
+        });
+    }
 }
 
 #[allow(clippy::missing_docs_in_private_items, reason = "self-explanatory")]
@@ -280,6 +389,8 @@ impl Game {
         world.add_handler(system::sync_entity_position);
         world.add_handler(system::reset_bounding_boxes);
         world.add_handler(system::update_time);
+        world.add_handler(system::update_health);
+        world.add_handler(system::sync_players);
         world.add_handler(system::rebuild_player_location);
         world.add_handler(system::clean_up_io);
 

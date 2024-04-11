@@ -18,8 +18,8 @@ use tracing::debug;
 use valence_protocol::{decode::PacketFrame, math::Vec3, packets::play, Decode, Packet};
 
 use crate::{
-    system::IngressSender, FullEntityPose, InitEntity, KickPlayer, KillAllEntities, Player,
-    SwingArm,
+    global::Global, system::IngressSender, Absorption, FullEntityPose, InitEntity, KickPlayer,
+    KillAllEntities, Player, PlayerState, Regeneration, SwingArm,
 };
 
 const fn confirm_teleport(_pkt: &[u8]) {
@@ -159,7 +159,8 @@ impl FromStr for HybridPos {
 
 fn chat_command(
     mut data: &[u8],
-    player: &Player,
+    global: &Global,
+    player: &mut Player,
     full_entity_pose: &FullEntityPose,
     sender: &mut IngressSender,
 ) -> anyhow::Result<()> {
@@ -169,12 +170,41 @@ fn chat_command(
     let mut cmd = pkt.command.0.split(' ');
 
     let first = cmd.next();
+    let tick = global.tick.unsigned_abs();
 
     if first == Some("ka") {
         sender.send(KillAllEntities);
-    }
-
-    if first == Some("spawn") {
+    } else if first == Some("golden_apple") {
+        player.state.update(|state| {
+            let PlayerState::Alive {
+                absorption,
+                regeneration,
+                ..
+            } = state
+            else {
+                return;
+            };
+            *absorption = Absorption {
+                end_tick: tick + 2400,
+                bonus_health: 4.0,
+            };
+            *regeneration = Regeneration {
+                end_tick: tick + 100,
+            };
+        });
+    } else if first == Some("heal") {
+        let args: Vec<_> = cmd.collect();
+        let [amount] = args.as_slice() else {
+            anyhow::bail!("expected 1 number");
+        };
+        player.heal(amount.parse()?);
+    } else if first == Some("hurt") {
+        let args: Vec<_> = cmd.collect();
+        let [amount] = args.as_slice() else {
+            anyhow::bail!("expected 1 number");
+        };
+        player.hurt(tick, amount.parse()?);
+    } else if first == Some("spawn") {
         let args: Vec<_> = cmd.collect();
 
         let loc = full_entity_pose.position;
@@ -255,6 +285,7 @@ fn hand_swing(mut data: &[u8], id: EntityId, sender: &mut IngressSender) -> anyh
 
 pub fn switch(
     raw: PacketFrame,
+    global: &Global,
     id: EntityId,
     player: &mut Player,
     full_entity_pose: &mut FullEntityPose,
@@ -276,7 +307,9 @@ pub fn switch(
         play::UpdatePlayerAbilitiesC2s::ID => update_player_abilities(data)?,
         play::UpdateSelectedSlotC2s::ID => update_selected_slot(data)?,
         play::KeepAliveC2s::ID => keep_alive(player)?,
-        play::CommandExecutionC2s::ID => chat_command(data, player, full_entity_pose, sender)?,
+        play::CommandExecutionC2s::ID => {
+            chat_command(data, global, player, full_entity_pose, sender)?;
+        }
         _ => debug!("unknown packet id: 0x{:02X}", packet_id),
     }
 

@@ -4,6 +4,7 @@ use tracing::instrument;
 use crate::{
     net::{Connection, Encoder},
     system::entity_position::PositionSyncMetadata,
+    tracker::Tracker,
     EntityReaction, FullEntityPose, InitPlayer, Player, PlayerJoinWorld, Targetable, Uuid,
 };
 
@@ -42,6 +43,7 @@ pub fn init_player(
         ping: std::time::Duration::from_secs(1),
         name,
         locale: None,
+        state: Tracker::default(),
     });
     s.insert(entity, encoder);
     s.insert(entity, connection);

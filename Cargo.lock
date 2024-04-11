@@ -2293,6 +2293,7 @@ dependencies = [
  "uuid",
  "valence_protocol",
  "valence_registry",
+ "valence_text",
 ]
 
 [[package]]
