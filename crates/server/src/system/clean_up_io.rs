@@ -5,7 +5,7 @@ use tracing::instrument;
 use valence_protocol::{packets::play, VarInt};
 
 use crate::{
-    global::Global, net::Connection, singleton::broadcast::Broadcast, Gametick, Player, Uuid,
+    global::Global, net::Connection, singleton::broadcast::BroadcastBuf, Gametick, Player, Uuid,
 };
 
 #[instrument(skip_all, level = "trace")]
@@ -13,7 +13,7 @@ pub fn clean_up_io(
     _r: Receiver<Gametick>,
     io_entities: Fetcher<(EntityId, &mut Player, &Uuid, &Connection)>,
     global: Single<&Global>,
-    mut broadcast: Single<&mut Broadcast>,
+    mut broadcast: Single<&mut BroadcastBuf>,
 
     mut s: Sender<Despawn>,
 ) {

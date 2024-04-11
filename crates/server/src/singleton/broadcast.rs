@@ -46,7 +46,7 @@ pub struct PacketMetadata {
     /// The player to exclude from the packet.
     /// For instance, if a player is broadcasting their own position,
     /// they should not be included in the broadcast of that packet.
-    /// 
+    ///
     /// todo: implement `exclude_player` and use a more efficient option (perhaps a global packet bitmask)
     pub exclude_player: Option<Uuid>,
 }
@@ -59,7 +59,6 @@ impl PacketMetadata {
         },
         exclude_player: None,
     };
-    
     /// The packet is required.
     #[expect(
         dead_code,
@@ -71,39 +70,16 @@ impl PacketMetadata {
     };
 }
 
-/// Packet which should not be dropped
-#[expect(
-    dead_code,
-    reason = "this is not used, but we plan to use it in the future"
-)]
-pub struct NecessaryPacket {
-    pub exclude_player: Option<Uuid>,
-    pub offset: usize,
-    pub len: usize,
-}
-
-/// Packet which may be dropped
-#[expect(
-    dead_code,
-    reason = "this is not used, but we plan to use it in the future"
-)]
-pub struct DroppablePacket {
-    pub prioritize_location: Vec2,
-    pub exclude_player: Option<Uuid>,
-    pub offset: usize,
-    pub len: usize,
-}
-
 /// See [`crate::singleton::broadcast`].
 #[derive(Component)]
-pub struct Broadcast {
+pub struct BroadcastBuf {
     /// We want to be able to write to a [`PacketEncoder`] from multiple threads without locking.
     /// In order to do this, we use a [`RayonLocal`] to store a reference to the [`PacketEncoder`]
     /// for each thread.
     rayon_local: RayonLocal<Cell<PacketEncoder>>,
 }
 
-impl Broadcast {
+impl BroadcastBuf {
     /// Creates a new [`Self`] with the given compression level.
     pub fn new(compression_level: CompressionThreshold) -> Self {
         Self {
@@ -116,12 +92,14 @@ impl Broadcast {
     }
 }
 
-impl Broadcast {
+impl BroadcastBuf {
     #[expect(
         unused_variables,
         reason = "`metadata` is planned to be used in the future to allow droppable packets with \
                   a priority"
     )]
+
+    /// Appends a packet to the buffer to be broadcast to all players.
     pub fn append<P: Packet + Encode>(
         &self,
         packet: &P,
@@ -137,11 +115,15 @@ impl Broadcast {
         result
     }
 
+    /// Returns a reference to the [`PacketEncoder`] usually local to a rayon thread based on a
+    /// round robin policy.
+    /// This is so that packets can evenly be spread out across threads.
     pub fn get_round_robin(&mut self) -> &mut PacketEncoder {
         let local = self.rayon_local.get_local_round_robin();
         local.get_mut()
     }
 
+    /// Drain all buffers in parallel. This is useful for sending the buffers to the actual players.
     pub fn par_drain<F>(&mut self, f: F)
     where
         F: Fn(bytes::Bytes) + Sync,

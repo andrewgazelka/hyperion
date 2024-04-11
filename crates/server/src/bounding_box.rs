@@ -66,19 +66,14 @@ impl BoundingBox {
     }
 }
 
-pub struct CollisionContext {
-    pub bounding: BoundingBox,
-    pub id: EntityId,
-}
-
 impl EntityBoundingBoxes {
     // todo: is there a better way to do this
     pub fn clear(&mut self) {
         self.query.clear();
     }
 
-    pub fn get_collisions(&self, current: &CollisionContext, process: impl FnMut(&Stored) -> bool) {
-        let bounding = current.bounding.into();
+    pub fn get_collisions(&self, bounding: BoundingBox, process: impl FnMut(&Stored) -> bool) {
+        let bounding = bounding.into();
 
         self.query.get_collisions(bounding, process);
     }

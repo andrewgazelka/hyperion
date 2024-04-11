@@ -2,10 +2,10 @@ use evenio::prelude::*;
 use tracing::instrument;
 use valence_protocol::text::IntoText;
 
-use crate::{singleton::broadcast::Broadcast, StatsEvent};
+use crate::{singleton::broadcast::BroadcastBuf, StatsEvent};
 
 #[instrument(skip_all, level = "trace")]
-pub fn stats_message(r: Receiver<StatsEvent>, mut broadcast: Single<&mut Broadcast>) {
+pub fn stats_message(r: Receiver<StatsEvent>, mut broadcast: Single<&mut BroadcastBuf>) {
     let StatsEvent {
         ms_per_tick_mean_1s,
         ms_per_tick_mean_5s,

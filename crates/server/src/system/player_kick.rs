@@ -8,7 +8,7 @@ use valence_protocol::{
 };
 
 use crate::{
-    global::Global, net::Encoder, singleton::player_lookup::PlayerUuidLookup, KickPlayer, Uuid,
+    global::Global, net::Encoder, singleton::player_uuid_lookup::PlayerUuidLookup, KickPlayer, Uuid,
 };
 
 #[instrument(skip_all)]

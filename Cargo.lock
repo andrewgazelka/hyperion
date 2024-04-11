@@ -1752,7 +1752,7 @@ dependencies = [
  "cfg-if",
  "libc",
  "redox_syscall",
- "smallvec 1.13.2",
+ "smallvec",
  "windows-targets 0.48.5",
 ]
 
@@ -1894,7 +1894,7 @@ dependencies = [
  "nix",
  "once_cell",
  "parking_lot",
- "smallvec 1.13.2",
+ "smallvec",
  "symbolic-demangle",
  "tempfile",
  "thiserror",
@@ -2282,7 +2282,6 @@ dependencies = [
  "serde_json",
  "sha2",
  "signal-hook",
- "smallvec 2.0.0-alpha.5",
  "spin",
  "spin_sleep",
  "tango-bench",
@@ -2366,11 +2365,6 @@ name = "smallvec"
 version = "1.13.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3c5e1a9a646d36c3599cd173a41282daf47c44583ad367b8e6837255952e5c67"
-
-[[package]]
-name = "smallvec"
-version = "2.0.0-alpha.5"
-source = "git+https://github.com/servo/rust-smallvec#b079a9b4f873ea25912e221ad1bf54135354a1d3"
 
 [[package]]
 name = "socket2"
@@ -2715,7 +2709,7 @@ dependencies = [
  "once_cell",
  "regex",
  "sharded-slab",
- "smallvec 1.13.2",
+ "smallvec",
  "thread_local",
  "tracing",
  "tracing-core",

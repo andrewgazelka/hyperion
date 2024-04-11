@@ -4,13 +4,13 @@ use evenio::{
 };
 use tracing::{instrument, trace};
 
-use crate::{net::Connection, singleton::broadcast::Broadcast, Egress};
+use crate::{net::Connection, singleton::broadcast::BroadcastBuf, Egress};
 
 #[instrument(skip_all, level = "trace")]
 pub fn egress_broadcast(
     _: Receiver<Egress>,
     connections: Fetcher<&Connection>,
-    mut broadcast: Single<&mut Broadcast>,
+    mut broadcast: Single<&mut BroadcastBuf>,
 ) {
     broadcast.par_drain(|buf| {
         for connection in &connections {

@@ -33,7 +33,7 @@ use crate::{
     config,
     global::Global,
     net::Encoder,
-    singleton::{broadcast::Broadcast, player_lookup::PlayerUuidLookup},
+    singleton::{broadcast::BroadcastBuf, player_uuid_lookup::PlayerUuidLookup},
     system::init_entity::spawn_packet,
     FullEntityPose, MinecraftEntity, Player, PlayerJoinWorld, Uuid,
 };
@@ -55,7 +55,7 @@ pub fn player_join_world(
     global: Single<&Global>,
     players: Fetcher<(EntityId, &Player, &Uuid, &FullEntityPose)>,
     lookup: Single<&mut PlayerUuidLookup>,
-    mut broadcast: Single<&mut Broadcast>,
+    mut broadcast: Single<&mut BroadcastBuf>,
 ) {
     static CACHED_DATA: once_cell::sync::OnceCell<bytes::Bytes> = once_cell::sync::OnceCell::new();
 

@@ -1,4 +1,5 @@
-#![doc = include_str!("../../../README.md")]
+//! Hyperion
+
 #![feature(thread_local)]
 #![feature(lint_reasons)]
 #![expect(clippy::type_complexity, reason = "evenio uses a lot of complex types")]
@@ -7,8 +8,8 @@ mod chunk;
 mod singleton;
 
 use std::{
-    cell::UnsafeCell,
     collections::VecDeque,
+    fmt::Debug,
     net::ToSocketAddrs,
     sync::{atomic::AtomicU32, Arc},
     time::{Duration, Instant},
@@ -28,8 +29,8 @@ use crate::{
     bounding_box::BoundingBox,
     net::{init_io_thread, ClientConnection, Connection, Encoder},
     singleton::{
-        broadcast::Broadcast, player_location_lookup::PlayerLocationLookup,
-        player_lookup::PlayerUuidLookup,
+        broadcast::BroadcastBuf, player_aabb_lookup::PlayerAabbs,
+        player_uuid_lookup::PlayerUuidLookup,
     },
 };
 
@@ -37,20 +38,20 @@ mod global;
 mod net;
 
 mod packets;
-mod system;
+pub(crate) mod system;
 
 mod bits;
 
 mod quad_tree;
 
-mod bounding_box;
+pub mod bounding_box;
 mod config;
 
 const MSPT_HISTORY_SIZE: usize = 100;
 
 // A zero-sized component, often called a "marker" or "tag".
 #[derive(Component)]
-struct Player {
+pub struct Player {
     name: Box<str>,
     last_keep_alive_sent: Instant,
 
@@ -77,8 +78,8 @@ struct InitPlayer {
 struct Uuid(uuid::Uuid);
 
 #[derive(Event)]
-struct InitEntity {
-    pose: FullEntityPose,
+pub struct InitEntity {
+    pub pose: FullEntityPose,
 }
 
 /// If the entity can be targeted by non-player entities.
@@ -136,6 +137,9 @@ struct Gametick;
 #[derive(Event)]
 struct Egress;
 
+/// on macOS the soft limit for number of open file descriptors is often 256. This is far too low
+/// to test 10k players with.
+/// This attempts to the specified `recommended_min` value.
 pub fn adjust_file_limits(recommended_min: u64) -> std::io::Result<()> {
     let mut limits = libc::rlimit {
         rlim_cur: 0, // Initialize soft limit to 0
@@ -168,6 +172,7 @@ pub fn adjust_file_limits(recommended_min: u64) -> std::io::Result<()> {
     Ok(())
 }
 
+/// The central [`Game`] struct which owns and manages the entire server.
 pub struct Game {
     shared: Arc<global::Shared>,
     world: World,
@@ -179,14 +184,17 @@ pub struct Game {
 }
 
 impl Game {
+    /// Get the [`World`] which is the core part of the ECS framework.
     pub const fn world(&self) -> &World {
         &self.world
     }
 
+    /// Get all shared data that is shared between the ECS framework and the IO thread.
     pub const fn shared(&self) -> &Arc<global::Shared> {
         &self.shared
     }
 
+    /// See [`Game::world`].
     pub fn world_mut(&mut self) -> &mut World {
         &mut self.world
     }
@@ -197,6 +205,7 @@ impl Game {
         self.shutdown_tx.send(()).unwrap();
     }
 
+    /// Initialize the server.
     pub fn init(address: impl ToSocketAddrs + Send + Sync + 'static) -> anyhow::Result<Self> {
         info!("Starting hyperion");
         Lazy::force(&config::CONFIG);
@@ -263,10 +272,10 @@ impl Game {
         world.insert(uuid_lookup, PlayerUuidLookup::default());
 
         let player_location_lookup = world.spawn();
-        world.insert(player_location_lookup, PlayerLocationLookup::default());
+        world.insert(player_location_lookup, PlayerAabbs::default());
 
         let encoder = world.spawn();
-        world.insert(encoder, Broadcast::new(shared.compression_level));
+        world.insert(encoder, BroadcastBuf::new(shared.compression_level));
 
         let mut game = Self {
             shared,
@@ -311,6 +320,7 @@ impl Game {
         Some(duration)
     }
 
+    /// Run the main game loop at 20 ticks per second.
     pub fn game_loop(&mut self) {
         while !SHUTDOWN.load(std::sync::atomic::Ordering::Relaxed) {
             self.tick();
@@ -321,6 +331,7 @@ impl Game {
         }
     }
 
+    /// Run one tick of the game loop.
     #[instrument(skip(self), fields(tick_on = self.tick_on))]
     pub fn tick(&mut self) {
         const LAST_TICK_HISTORY_SIZE: usize = 100;
@@ -409,42 +420,52 @@ impl Game {
     }
 }
 
+// todo: remove static and make this an `Arc` to prevent weird behavior with multiple `Game`s
 static SHUTDOWN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
+/// The full pose of an entity. This is used for both [`Player`] and [`MinecraftEntity`].
 #[derive(Component, Copy, Clone, Debug)]
 pub struct FullEntityPose {
+    /// The (x, y, z) position of the entity.
+    /// Note we are using [`Vec3`] instead of [`glam::DVec3`] because *cache locality* is important.
+    /// However, the Notchian server uses double precision floating point numbers for the position.
     pub position: Vec3,
+
+    /// The yaw of the entity. (todo: probably need a separate component for head yaw, perhaps separate this out)
     pub yaw: f32,
+
+    /// The pitch of the entity.
     pub pitch: f32,
+
+    /// The bounding box of the entity.
     pub bounding: BoundingBox,
 }
 
 impl FullEntityPose {
+    /// Move the pose by the given vector.
     pub fn move_by(&mut self, vec: Vec3) {
         self.position += vec;
         self.bounding = self.bounding.move_by(vec);
     }
 
+    /// Teleport the pose to the given position.
     pub fn move_to(&mut self, pos: Vec3) {
         self.bounding = self.bounding.move_to(pos);
         self.position = pos;
     }
 }
 
-#[derive(Debug, Default)]
-pub struct EntityReactionInner {
+/// The reaction of an entity, in particular to collisions as calculated in `entity_detect_collisions`.
+///
+/// Why is this useful?
+///
+/// - We want to be able to detect collisions in parallel.
+/// - Since we are accessing bounding boxes in parallel,
+/// we need to be able to make sure the bounding boxes are immutable (unless we have something like a
+/// [`Arc`] or [`std::sync::RwLock`], but this is not efficient).
+/// - Therefore, we have an [`EntityReaction`] component which is used to store the reaction of an entity to collisions.
+/// - Later we can apply the reaction to the entity's [`FullEntityPose`] to move the entity.
+#[derive(Component, Default, Debug)]
+pub struct EntityReaction {
     velocity: Vec3,
 }
-
-#[derive(Component, Debug, Default)]
-pub struct EntityReaction(UnsafeCell<EntityReactionInner>);
-
-impl EntityReaction {
-    fn get_mut(&mut self) -> &mut EntityReactionInner {
-        self.0.get_mut()
-    }
-}
-
-unsafe impl Send for EntityReaction {}
-
-unsafe impl Sync for EntityReaction {}
