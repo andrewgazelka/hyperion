@@ -55,6 +55,7 @@ const MSPT_HISTORY_SIZE: usize = 100;
 struct Absorption {
     /// This effect goes away on the tick with the value `end_tick`,
     end_tick: u64,
+    /// The amount of health that is allocated to the absorption effect
     bonus_health: f32,
 }
 
@@ -66,13 +67,18 @@ struct Regeneration {
 
 #[derive(Clone, PartialEq, Debug)]
 enum PlayerState {
+    /// If the player is alive
     Alive {
         /// Measured in half hearts
         health: f32,
+        /// The absorption effect
         absorption: Absorption,
+        /// The regeneration effect
         regeneration: Regeneration,
     },
+    /// If the player is dead
     Dead {
+        /// The tick the player will be respawned
         respawn_tick: u64,
     },
 }
@@ -121,11 +127,13 @@ pub struct Player {
     /// The locale of the player. This could in the future be used to determine the language of the player's chat messages.
     locale: Option<String>,
 
+    /// The state of the player.
     state: Tracker<PlayerState>,
 }
 
 impl Player {
-    fn heal(&mut self, _tick: u64, amount: f32) {
+    /// Heal the player by a given amount.
+    fn heal(&mut self, amount: f32) {
         assert!(amount.is_finite());
         assert!(amount > 0.0);
 
@@ -137,6 +145,7 @@ impl Player {
         });
     }
 
+    /// Hurt the player by a given amount.
     fn hurt(&mut self, tick: u64, mut amount: f32) {
         assert!(amount.is_finite());
         assert!(amount > 0.0);
@@ -377,6 +386,7 @@ impl Game {
         world.add_handler(system::entity_spawn);
         world.add_handler(system::entity_move_logic);
         world.add_handler(system::entity_detect_collisions);
+        world.add_handler(system::sync_entity_position);
         world.add_handler(system::reset_bounding_boxes);
         world.add_handler(system::update_time);
         world.add_handler(system::update_health);
@@ -498,6 +508,9 @@ impl Game {
 
             let connection = Connection::new(tx);
 
+            let dx = fastrand::f32().mul_add(10.0, -5.0);
+            let dz = fastrand::f32().mul_add(10.0, -5.0);
+
             let event = InitPlayer {
                 entity: player,
                 encoder,
@@ -505,7 +518,7 @@ impl Game {
                 name,
                 uuid,
                 pos: FullEntityPose {
-                    position: Vec3::new(0.0, 2.0, 0.0),
+                    position: Vec3::new(dx, 30.0, dz),
                     bounding: Aabb::create(Vec3::new(0.0, 2.0, 0.0), 0.6, 1.8),
                     yaw: 0.0,
                     pitch: 0.0,

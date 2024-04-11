@@ -29,11 +29,11 @@ pub fn update_health(
                 ..
             } => {
                 if hunger {
-                    player.heal(tick, 1.0);
+                    player.heal(1.0);
                 }
 
                 if regeneration && tick < regeneration_effect.end_tick {
-                    player.heal(tick, 1.0);
+                    player.heal(1.0);
                 }
             }
             PlayerState::Dead { respawn_tick } => {

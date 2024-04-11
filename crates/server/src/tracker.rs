@@ -1,4 +1,4 @@
-//! See [Tracker](crate::Tracker) for more information.
+//! See [Tracker] for more information.
 
 /// Tracks changes in a value
 pub struct Tracker<T> {

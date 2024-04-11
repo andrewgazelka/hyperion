@@ -197,7 +197,7 @@ fn chat_command(
         let [amount] = args.as_slice() else {
             anyhow::bail!("expected 1 number");
         };
-        player.heal(tick, amount.parse()?);
+        player.heal(amount.parse()?);
     } else if first == Some("hurt") {
         let args: Vec<_> = cmd.collect();
         let [amount] = args.as_slice() else {

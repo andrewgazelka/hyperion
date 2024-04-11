@@ -53,6 +53,10 @@ pub struct PacketMetadata {
 
 impl PacketMetadata {
     /// The server can drop the packet (with no prioritization of location).
+    #[expect(
+        dead_code,
+        reason = "this is not used, but we plan to use it in the future"
+    )]
     pub const DROPPABLE: Self = Self {
         necessity: PacketNecessity::Droppable {
             prioritize_location: Vec2::new(0.0, 0.0),

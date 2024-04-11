@@ -3,6 +3,7 @@ use tracing::instrument;
 
 use crate::{
     net::{Connection, Encoder},
+    system::entity_position::PositionSyncMetadata,
     tracker::Tracker,
     EntityReaction, FullEntityPose, InitPlayer, Player, PlayerJoinWorld, Targetable, Uuid,
 };
@@ -12,6 +13,7 @@ pub fn init_player(
     r: ReceiverMut<InitPlayer>,
     mut s: Sender<(
         Insert<FullEntityPose>,
+        Insert<PositionSyncMetadata>,
         Insert<Player>,
         Insert<EntityReaction>,
         Insert<Uuid>,
@@ -46,6 +48,7 @@ pub fn init_player(
     s.insert(entity, encoder);
     s.insert(entity, connection);
     s.insert(entity, Uuid(uuid));
+    s.insert(entity, PositionSyncMetadata::default());
 
     s.insert(entity, EntityReaction::default());
 
