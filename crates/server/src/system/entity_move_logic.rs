@@ -1,27 +1,19 @@
 use evenio::{
-    entity::EntityId,
     event::Receiver,
     fetch::{Fetcher, Single},
     query::{Query, With},
     rayon::prelude::*,
 };
 use tracing::instrument;
-use valence_protocol::{
-    math::{Vec2, Vec3},
-    ByteAngle, VarInt,
-};
+use valence_protocol::math::{Vec2, Vec3};
 
 use crate::{
-    singleton::{
-        broadcast::{BroadcastBuf, PacketMetadata, PacketNecessity},
-        player_aabb_lookup::PlayerAabbs,
-    },
-    EntityReaction, FullEntityPose, Gametick, MinecraftEntity, RunningSpeed,
+    singleton::player_aabb_lookup::PlayerAabbs, EntityReaction, FullEntityPose, Gametick,
+    MinecraftEntity, RunningSpeed,
 };
 
 #[derive(Query, Debug)]
 pub struct EntityQuery<'a> {
-    id: EntityId,
     running_speed: Option<&'a RunningSpeed>,
     reaction: &'a mut EntityReaction,
     pose: &'a mut FullEntityPose,
@@ -32,14 +24,10 @@ pub struct EntityQuery<'a> {
 pub fn entity_move_logic(
     _: Receiver<Gametick>,
     mut entities: Fetcher<EntityQuery>,
-    broadcast: Single<&BroadcastBuf>,
     lookup: Single<&PlayerAabbs>,
 ) {
-    use valence_protocol::packets::play;
-
     entities.par_iter_mut().for_each(|query| {
         let EntityQuery {
-            id,
             running_speed,
             pose,
             reaction,
@@ -80,36 +68,9 @@ pub fn entity_move_logic(
             pose.move_by(vec);
         }
 
+        pose.pitch = pitch;
+        pose.yaw = yaw;
+
         reaction.velocity = Vec3::ZERO;
-
-        #[expect(
-            clippy::cast_possible_wrap,
-            reason = "wrapping is okay in this scenario"
-        )]
-        let entity_id = VarInt(id.index().0 as i32);
-
-        let pos = play::EntityPositionS2c {
-            entity_id,
-            position: pose.position.as_dvec3(),
-            yaw: ByteAngle::from_degrees(yaw),
-            pitch: ByteAngle::from_degrees(pitch),
-            on_ground: false,
-        };
-
-        let look = play::EntitySetHeadYawS2c {
-            entity_id,
-            head_yaw: ByteAngle::from_degrees(yaw),
-        };
-
-        let metadata = PacketMetadata {
-            necessity: PacketNecessity::Droppable {
-                prioritize_location: Vec2::new(pose.position.x, pose.position.y),
-            },
-            exclude_player: None,
-        };
-
-        // todo: remove unwrap
-        broadcast.append(&pos, metadata).unwrap();
-        broadcast.append(&look, metadata).unwrap();
     });
 }

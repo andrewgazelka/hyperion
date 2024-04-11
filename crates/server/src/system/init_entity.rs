@@ -9,8 +9,8 @@ use tracing::instrument;
 use valence_protocol::{ByteAngle, VarInt, Velocity};
 
 use crate::{
-    singleton::broadcast::BroadcastBuf, EntityReaction, FullEntityPose, InitEntity,
-    MinecraftEntity, RunningSpeed, Uuid,
+    singleton::broadcast::BroadcastBuf, system::entity_position::PositionSyncMetadata,
+    EntityReaction, FullEntityPose, InitEntity, MinecraftEntity, RunningSpeed, Uuid,
 };
 
 pub fn spawn_packet(
@@ -39,6 +39,7 @@ pub fn init_entity(
     r: Receiver<InitEntity>,
     mut s: Sender<(
         Insert<FullEntityPose>,
+        Insert<PositionSyncMetadata>,
         Insert<MinecraftEntity>,
         Insert<Uuid>,
         Insert<RunningSpeed>,
@@ -58,6 +59,7 @@ pub fn init_entity(
     s.insert(id, uuid);
     s.insert(id, EntityReaction::default());
     s.insert(id, generate_running_speed());
+    s.insert(id, PositionSyncMetadata::default());
 
     let pose = event.pose;
 

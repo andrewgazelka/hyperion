@@ -277,6 +277,7 @@ impl Game {
         world.add_handler(system::entity_spawn);
         world.add_handler(system::entity_move_logic);
         world.add_handler(system::entity_detect_collisions);
+        world.add_handler(system::sync_entity_position);
         world.add_handler(system::reset_bounding_boxes);
         world.add_handler(system::update_time);
         world.add_handler(system::rebuild_player_location);
@@ -396,6 +397,9 @@ impl Game {
 
             let connection = Connection::new(tx);
 
+            let dx = fastrand::f32().mul_add(10.0, -5.0);
+            let dz = fastrand::f32().mul_add(10.0, -5.0);
+
             let event = InitPlayer {
                 entity: player,
                 encoder,
@@ -403,7 +407,7 @@ impl Game {
                 name,
                 uuid,
                 pos: FullEntityPose {
-                    position: Vec3::new(0.0, 2.0, 0.0),
+                    position: Vec3::new(dx, 30.0, dz),
                     bounding: Aabb::create(Vec3::new(0.0, 2.0, 0.0), 0.6, 1.8),
                     yaw: 0.0,
                     pitch: 0.0,

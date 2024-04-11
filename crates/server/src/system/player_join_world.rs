@@ -11,7 +11,6 @@ use tracing::{debug, info, instrument};
 use valence_protocol::{
     game_mode::OptGameMode,
     ident,
-    math::DVec3,
     nbt::{compound, Compound, List},
     packets::{
         play,
@@ -51,7 +50,7 @@ pub(crate) struct EntityQuery<'a> {
 #[instrument(skip_all)]
 pub fn player_join_world(
     // todo: I doubt &mut Player will work here due to aliasing
-    r: Receiver<PlayerJoinWorld, (EntityId, &Player, &Uuid, &mut Encoder)>,
+    r: Receiver<PlayerJoinWorld, (EntityId, &Player, &Uuid, &FullEntityPose, &mut Encoder)>,
     entities: Fetcher<EntityQuery>,
     global: Single<&Global>,
     players: Fetcher<(EntityId, &Player, &Uuid, &FullEntityPose)>,
@@ -75,7 +74,7 @@ pub fn player_join_world(
 
     let buf = broadcast.get_round_robin();
 
-    let (id, current_player, uuid, encoder) = r.query;
+    let (id, current_player, uuid, pose, encoder) = r.query;
 
     lookup.0.insert(uuid.0, id);
 
@@ -191,16 +190,23 @@ pub fn player_join_world(
 
     let entity_id = VarInt(id.index().0 as i32);
 
-    let dx = fastrand::f64().mul_add(10.0, -5.0);
-    let dz = fastrand::f64().mul_add(10.0, -5.0);
-
     let spawn_player = play::PlayerSpawnS2c {
         entity_id,
         player_uuid: uuid.0,
-        position: DVec3::new(dx, 30.0, dz),
-        yaw: ByteAngle(0),
-        pitch: ByteAngle(0),
+        position: pose.position.as_dvec3(),
+        yaw: ByteAngle::from_degrees(pose.yaw),
+        pitch: ByteAngle::from_degrees(pose.pitch),
     };
+
+    encoder
+        .encode(&play::PlayerPositionLookS2c {
+            position: pose.position.as_dvec3(),
+            yaw: pose.yaw,
+            pitch: pose.pitch,
+            flags: PlayerPositionLookFlags::default(),
+            teleport_id: 1.into(),
+        })
+        .unwrap();
 
     buf.append_packet(&spawn_player).unwrap();
 
@@ -493,6 +499,7 @@ fn ground_section() -> Vec<u8> {
 fn inner(encoder: &mut PacketEncoder) -> anyhow::Result<()> {
     send_game_join_packet(encoder)?;
 
+    // TODO: Do we need to send this else where?
     encoder.append_packet(&play::ChunkRenderDistanceCenterS2c {
         chunk_x: 0.into(),
         chunk_z: 0.into(),
@@ -558,17 +565,6 @@ fn inner(encoder: &mut PacketEncoder) -> anyhow::Result<()> {
     encoder.append_packet(&play::PlayerSpawnPositionS2c {
         position: BlockPos::default(),
         angle: 3.0,
-    })?;
-
-    let dx = fastrand::f64().mul_add(10.0, -5.0);
-    let dz = fastrand::f64().mul_add(10.0, -5.0);
-
-    encoder.append_packet(&play::PlayerPositionLookS2c {
-        position: DVec3::new(dx, 30.0, dz),
-        yaw: 0.0,
-        pitch: 0.0,
-        flags: PlayerPositionLookFlags::default(),
-        teleport_id: 1.into(),
     })?;
 
     encoder.append_packet(&play::TeamS2c {
