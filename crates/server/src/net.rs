@@ -22,7 +22,9 @@ use base64::Engine;
 use bytes::BytesMut;
 use derive_build::Build;
 use evenio::prelude::Component;
+use libc::iovec;
 use monoio::{
+    buf::IoVecBuf,
     io::{
         AsyncReadRent, AsyncWriteRent, AsyncWriteRentExt, OwnedReadHalf, OwnedWriteHalf, Splitable,
     },
@@ -34,7 +36,6 @@ use sha2::Digest;
 use tracing::{debug, error, info, instrument, trace, warn};
 use valence_protocol::{
     decode::PacketFrame,
-    nbt::{compound, Compound, List},
     packets::{
         handshaking::{handshake_c2s::HandshakeNextState, HandshakeC2s},
         login,
@@ -44,7 +45,6 @@ use valence_protocol::{
     uuid::Uuid,
     Bounded, CompressionThreshold, Decode, Encode, PacketDecoder, PacketEncoder, VarInt,
 };
-use valence_registry::RegistryCodec;
 
 use crate::{config, global};
 
@@ -81,42 +81,63 @@ fn offline_uuid(username: &str) -> anyhow::Result<Uuid> {
     Uuid::from_slice(slice).context("failed to create uuid")
 }
 
+/// Sent from the I/O thread when it has established a connection with the player through a handshake
 pub struct ClientConnection {
+    /// The local encoder used by that player
     pub encoder: Encoder,
+    /// Send channel to send bytes to the player.
     pub tx: flume::Sender<bytes::Bytes>,
+    /// The name of the player.
     pub name: Box<str>,
+    /// The UUID of the player.
     pub uuid: Uuid,
 }
 
+/// Used during handshake to communicate with the client.
 pub struct Io {
+    /// The stream of bytes from the client.
     stream: TcpStream,
+    /// The decoding buffer and logic
     dec: PacketDecoder,
+    /// The encoding buffer and logic
     enc: PacketEncoder,
+    /// The latest frame received from the client.
     frame: PacketFrame,
+    /// The shared state between the ECS framework and the I/O thread.
     shared: Arc<global::Shared>,
 }
 
+/// The writer for the connection once handshake is complete.
 pub struct IoWrite {
+    /// The stream of bytes to the client.
     write: OwnedWriteHalf<TcpStream>,
+    /// The raw file descriptor of the stream.
     raw_fd: RawFd,
 }
 
+/// The reader for the connection once handshake is complete.
 pub struct IoRead {
+    /// The stream of bytes from the client.
     stream: OwnedReadHalf<TcpStream>,
+    /// The decoding buffer and logic
     dec: PacketDecoder,
 }
 
+/// The connection to the client that allows for sending packets.
 #[derive(Component, Build)]
 pub struct Connection {
+    /// The tx channel that send bytes to be received by the client.
     #[required]
     tx: flume::Sender<bytes::Bytes>,
 }
 
 impl Connection {
+    /// Returns true if the connection is closed.
     pub fn is_closed(&self) -> bool {
         self.tx.is_disconnected()
     }
 
+    /// Sends a bunch of bytes to the client.
     pub fn send(&self, bytes: bytes::Bytes) -> anyhow::Result<()> {
         trace!("send raw bytes");
         self.tx.send(bytes)?;
@@ -126,29 +147,22 @@ impl Connection {
 
 #[derive(Component)]
 pub struct Encoder {
+    /// The encoding buffer and logic
     enc: PacketEncoder,
 
-    // if we should clear the allocation when clearing
+    /// If we should clear the `enc` allocation once we are done sending it off.
+    ///
+    /// In the future, perhaps we will have a global buffer if it is performant enough.
     deallocate_on_process: bool,
-
-    /// Approximate speed that the other side can receive the data that this sends.
-    /// Measured in bytes/second.
-    speed_mib_per_second: Arc<AtomicU32>,
 }
 
 impl Encoder {
-    #[expect(
-        dead_code,
-        reason = "not used, but we plan it to be used in the future"
-    )]
-    pub fn speed_mib_per_second(&self) -> u32 {
-        self.speed_mib_per_second.load(Ordering::Relaxed)
-    }
-
+    /// The [`Encoder`] will deallocate its allocation when it is done sending it off.
     pub fn deallocate_on_process(&mut self) {
         self.deallocate_on_process = true;
     }
 
+    /// Takes all bytes from the encoding buffer and returns them.
     pub fn take(&mut self, compression: CompressionThreshold) -> bytes::Bytes {
         let result = self.enc.take().freeze();
 
@@ -162,10 +176,12 @@ impl Encoder {
         result
     }
 
+    /// A mutable reference to the raw encoder
     pub fn inner_mut(&mut self) -> &mut PacketEncoder {
         &mut self.enc
     }
 
+    /// Encode a packet.
     pub fn encode<P>(&mut self, pkt: &P) -> anyhow::Result<()>
     where
         P: valence_protocol::Packet + Encode,
@@ -184,12 +200,17 @@ impl Encoder {
     }
 }
 
+/// An incoming packet that is tied to a user.
 pub struct UserPacketFrame {
+    /// The raw packet
     pub packet: PacketFrame,
+    /// The UUID of the user
+    /// todo: user is 128 bits, could we get away with fewer?
     pub user: Uuid,
 }
 
 impl IoRead {
+    /// Receives a packet from the connection.
     pub async fn recv_packet_raw(&mut self) -> anyhow::Result<PacketFrame> {
         loop {
             if let Some(frame) = self.dec.try_next_packet()? {
@@ -214,12 +235,14 @@ impl IoRead {
     }
 }
 
-use libc::iovec;
-use monoio::buf::IoVecBuf;
+/// A buffer which can be used with `writev`.
 struct Buf {
+    /// The [`iovec`]s to write
     iovecs: ArrayVec<iovec, MAX_VECTORED_WRITE_BUFS>,
-    #[expect(dead_code, reason = "this is so that allocations are not freed")]
-    bytes: ArrayVec<bytes::Bytes, MAX_VECTORED_WRITE_BUFS>,
+    /// Reference to the original [`bytes::Bytes`] used to create the [`iovec`]s. This is important so they do
+    /// not get freed.
+    _ref: ArrayVec<bytes::Bytes, MAX_VECTORED_WRITE_BUFS>,
+    /// The index of the [`iovec`] that is currently being written to.
     idx: usize,
 }
 
@@ -235,6 +258,9 @@ unsafe impl IoVecBuf for Buf {
 }
 
 impl Buf {
+    /// Given a result of `writev`, this will allow for progressing the buffer by the number of bytes written.
+    ///
+    /// If the number of bytes is the entire buffer, then `None` is returned.
     fn progress(mut self, mut len: usize) -> Option<Self> {
         loop {
             let vec = self.iovecs.get_mut(self.idx)?;
@@ -259,6 +285,7 @@ impl Buf {
 }
 
 impl IoWrite {
+    /// Given a vector of bytes, this will send them to the connection using `writev`.
     async fn send_data(
         &mut self,
         bytes: ArrayVec<bytes::Bytes, MAX_VECTORED_WRITE_BUFS>,
@@ -274,7 +301,7 @@ impl IoWrite {
 
         let mut buf_on = Some(Buf {
             iovecs,
-            bytes,
+            _ref: bytes,
             idx: 0,
         });
 
@@ -349,6 +376,7 @@ impl IoWrite {
 }
 
 impl Io {
+    /// Receives a packet from the connection.
     pub async fn recv_packet<'a, P>(&'a mut self) -> anyhow::Result<P>
     where
         P: valence_protocol::Packet + Decode<'a>,
@@ -382,6 +410,7 @@ impl Io {
         }
     }
 
+    /// Creates a new [`Io`] with the given stream.
     fn new(stream: TcpStream, shared: Arc<global::Shared>) -> Self {
         // TCP_NODELAY is enabled because the code already has a WRITE_DELAY
         if let Err(e) = stream.set_nodelay(true) {
@@ -403,6 +432,7 @@ impl Io {
         }
     }
 
+    /// Send a packet to the connection.
     pub(crate) async fn send_packet<P>(&mut self, pkt: &P) -> anyhow::Result<()>
     where
         P: valence_protocol::Packet + Encode,
@@ -427,7 +457,6 @@ impl Io {
 
         let (result, _) = self.stream.write_all(bytes).await;
         result?;
-        // self.stream.flush().await?; // todo: remove
 
         Ok(())
     }
@@ -522,7 +551,6 @@ impl Io {
         let encoder = Encoder {
             enc: self.enc,
             deallocate_on_process: false,
-            speed_mib_per_second: Arc::clone(&speed),
         };
 
         let mut io_write = IoWrite { write, raw_fd };
@@ -687,12 +715,24 @@ impl Io {
     }
 }
 
+/// logs all errors that occur when writing to the connection.
+///
+/// this is far better than panicking because it allows us to log the error and continue handling other
+/// clients/connections
 async fn print_errors(future: impl core::future::Future<Output = anyhow::Result<()>>) {
     if let Err(err) = future.await {
         error!("{:?}", err);
     }
 }
 
+/// All incoming packets.
+///
+/// todo: `GLOBAL_CTS_PACKETS` there is a lot of room for improvement and experimentation here.
+/// Perhaps could implement some type of `MultiMap` such that a certain player can have their packets queried
+/// easier.
+/// This would be especially useful when we are processing packets in parallel.
+///
+/// Also, this should not be a static ideally but instead an `Arc` probably in [`global::Shared`].
 pub static GLOBAL_C2S_PACKETS: spin::Mutex<Vec<UserPacketFrame>> = spin::Mutex::new(Vec::new());
 
 #[instrument(skip_all)]
@@ -732,6 +772,7 @@ async fn main_loop(
     }
 }
 
+/// Initializes the I/O thread.
 pub fn init_io_thread(
     shutdown: flume::Receiver<()>,
     address: impl ToSocketAddrs + Send + Sync + 'static,
@@ -770,32 +811,4 @@ pub fn init_io_thread(
         .context("failed to spawn io thread")?;
 
     Ok(connection_rx)
-}
-
-pub fn registry_codec_raw(codec: &RegistryCodec) -> anyhow::Result<Compound> {
-    // codec.cached_codec.clear();
-
-    let mut compound = Compound::default();
-
-    for (reg_name, reg) in &codec.registries {
-        let mut value = vec![];
-
-        for (id, v) in reg.iter().enumerate() {
-            let id = i32::try_from(id).context("id too large")?;
-            value.push(compound! {
-                "id" => id,
-                "name" => v.name.as_str(),
-                "element" => v.element.clone(),
-            });
-        }
-
-        let registry = compound! {
-            "type" => reg_name.as_str(),
-            "value" => List::Compound(value),
-        };
-
-        compound.insert(reg_name.as_str(), registry);
-    }
-
-    Ok(compound)
 }
