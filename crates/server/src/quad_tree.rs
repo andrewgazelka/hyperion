@@ -6,7 +6,7 @@ impl FullEntityPose {
     /// # Safety
     /// This is only safe is this is not done in tandem with another `EntityReaction`
     // #[instrument(skip_all)]
-    pub unsafe fn apply_entity_collision(&self, other: &Aabb, reaction: &EntityReaction) {
+    pub unsafe fn apply_entity_collision(&self, other: &Aabb, reaction: &mut EntityReaction) {
         /// the multiplication factor comparatively to vanilla.
         /// This is useful for <https://github.com/andrewgazelka/hyperion/pull/111#issuecomment-2039030028>
         const MULT_FACTOR: f32 = 1.0;
@@ -29,8 +29,6 @@ impl FullEntityPose {
                 vx /= largest_distance;
                 vz /= largest_distance;
             }
-
-            let reaction = &mut *reaction.0.get();
 
             reaction.velocity.x -= vx * MULT_FACTOR;
             reaction.velocity.z -= vz * MULT_FACTOR;

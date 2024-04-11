@@ -1,3 +1,3 @@
 # https://doc.rust-lang.org/nightly/clippy/lint_configuration.html
-cognitive-complexity-threshold = 12
+#cognitive-complexity-threshold = 12
 excessive-nesting-threshold = 7

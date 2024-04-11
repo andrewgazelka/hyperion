@@ -13,18 +13,11 @@ use valence_protocol::{
 
 use crate::{
     singleton::{
-        encoder::{Broadcast, PacketMetadata, PacketNecessity},
-        player_location_lookup::PlayerLocationLookup,
+        broadcast::{BroadcastBuf, PacketMetadata, PacketNecessity},
+        player_aabb_lookup::PlayerAabbs,
     },
     EntityReaction, FullEntityPose, Gametick, MinecraftEntity, RunningSpeed,
 };
-
-// 0 &mut FullEntityPose
-// 1 &'static MinecraftEntity
-
-// 2 &Targetable
-
-// 3 &Player
 
 #[derive(Query, Debug)]
 pub struct EntityQuery<'a> {
@@ -39,8 +32,8 @@ pub struct EntityQuery<'a> {
 pub fn entity_move_logic(
     _: Receiver<Gametick>,
     mut entities: Fetcher<EntityQuery>,
-    broadcast: Single<&Broadcast>,
-    lookup: Single<&PlayerLocationLookup>,
+    broadcast: Single<&BroadcastBuf>,
+    lookup: Single<&PlayerAabbs>,
 ) {
     use valence_protocol::packets::play;
 
@@ -71,8 +64,6 @@ pub fn entity_move_logic(
 
         // let pitch = -dif_height.atan2(dif2d.length()).to_degrees();
         let pitch = 0.0;
-
-        let reaction = reaction.get_mut();
 
         if dif2d.length_squared() < 0.01 {
             // info!("Moving entity {:?} by {:?}", id, reaction.velocity);

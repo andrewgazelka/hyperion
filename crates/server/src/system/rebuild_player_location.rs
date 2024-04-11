@@ -8,7 +8,7 @@ use evenio::{
 use tracing::instrument;
 
 use crate::{
-    singleton::player_location_lookup::{LookupData, PlayerLocationLookup},
+    singleton::player_aabb_lookup::{LookupData, PlayerAabbs},
     FullEntityPose, Gametick, Player,
 };
 
@@ -22,7 +22,7 @@ pub(crate) struct EntityQuery<'a> {
 #[instrument(skip_all, level = "trace")]
 pub fn rebuild_player_location(
     _: Receiver<Gametick>,
-    mut lookup: Single<&mut PlayerLocationLookup>,
+    mut lookup: Single<&mut PlayerAabbs>,
     entities: Fetcher<EntityQuery>,
 ) {
     let elements: Vec<_> = entities

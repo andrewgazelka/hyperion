@@ -2,13 +2,13 @@ use evenio::prelude::*;
 use tracing::instrument;
 use valence_protocol::VarInt;
 
-use crate::{singleton::encoder::Broadcast, KillAllEntities, MinecraftEntity, Player};
+use crate::{singleton::broadcast::BroadcastBuf, KillAllEntities, MinecraftEntity, Player};
 
 #[instrument(skip_all)]
 pub fn kill_all(
     _r: ReceiverMut<KillAllEntities>,
     entities: Fetcher<(EntityId, &MinecraftEntity, Not<&Player>)>,
-    broadcast: Single<&mut Broadcast>,
+    broadcast: Single<&mut BroadcastBuf>,
     mut s: Sender<Despawn>,
 ) {
     let ids = entities.iter().map(|(id, ..)| id).collect::<Vec<_>>();

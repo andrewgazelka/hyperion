@@ -1,3 +1,5 @@
+//! All the networking related code.
+
 #![expect(clippy::future_not_send, reason = "monoio is not Send")]
 
 use std::{
@@ -46,25 +48,30 @@ use valence_registry::RegistryCodec;
 
 use crate::{config, global};
 
+/// Default MiB/s threshold before we start to limit the sending of some packets.
 const DEFAULT_SPEED: u32 = 1024 * 1024;
+
+/// The maximum number of buffers a vectored write can have.
 const MAX_VECTORED_WRITE_BUFS: usize = 16;
+
+/// How long we wait from when we get the first buffer to when we start sending all of the ones we have collected.
+/// This is closely related to [`MAX_VECTORED_WRITE_BUFS`].
 const WRITE_DELAY: Duration = Duration::from_millis(1);
 
+/// How much we expand our read buffer each time a packet is too large.
 const READ_BUF_SIZE: usize = 4096;
 
 /// The Minecraft protocol version this library currently targets.
 pub const PROTOCOL_VERSION: i32 = 763;
 
-pub const MAX_JAVA_PACKET_SIZE: usize = 0x001F_FFFF;
-// pub const MAX_BEDROCK_PACKET_SIZE: usize = 0x0010_0000;
-
-// max
-pub const MAX_PACKET_SIZE: usize = MAX_JAVA_PACKET_SIZE;
+/// The maximum number of bytes that can be sent in a single packet.
+pub const MAX_PACKET_SIZE: usize = 0x001F_FFFF;
 
 /// The stringified name of the Minecraft version this library currently
 /// targets.
 pub const MINECRAFT_VERSION: &str = "1.20.1";
 
+/// Get a [`Uuid`] based on the given user's name.
 fn offline_uuid(username: &str) -> anyhow::Result<Uuid> {
     let digest = sha2::Sha256::digest(username);
 

@@ -1,12 +1,12 @@
 use evenio::prelude::*;
 use tracing::instrument;
 
-use crate::{global::Global, singleton::encoder::Broadcast, Gametick};
+use crate::{global::Global, singleton::broadcast::BroadcastBuf, Gametick};
 
 #[instrument(skip_all, level = "trace")]
 pub fn update_time(
     _: ReceiverMut<Gametick>,
-    mut broadcast: Single<&mut Broadcast>,
+    mut broadcast: Single<&mut BroadcastBuf>,
     mut global: Single<&mut Global>,
 ) {
     let tick = global.tick;

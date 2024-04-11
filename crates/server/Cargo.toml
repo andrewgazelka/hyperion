@@ -48,7 +48,6 @@ signal-hook = "0.3.17"
 base64 = "0.22.0"
 uuid = { version = "1.8.0", features = ["v3"] }
 rand_distr = "0.4.3"
-smallvec.workspace = true
 rayon = "1.10.0"
 tracing-subscriber = { version = "0.3.18", features = ["chrono", "env-filter"], optional = true }
 tracing-flame = "0.2.0"
@@ -86,6 +85,9 @@ harness = false
 name = "players"
 harness = false
 
+[lints.rust]
+#missing_docs= "warn"
+
 [lints.clippy]
 complexity = "deny"
 
@@ -97,6 +99,7 @@ cast_possible_truncation = "allow"
 cast_possible_wrap = "allow"
 cast_precision_loss = "allow"
 missing_errors_doc = "allow"
+module_name_repetitions = "allow"
 
 perf = "deny"
 style = "deny"
@@ -105,3 +108,6 @@ suspicious = "deny"
 # restriction
 allow_attributes = "deny"
 allow_attributes_without_reason = "deny"
+#missing_docs_in_private_items = "warn"
+
+

@@ -11,8 +11,8 @@ use crate::{
     net::GLOBAL_C2S_PACKETS,
     packets,
     singleton::{
-        encoder::{Broadcast, PacketMetadata},
-        player_lookup::PlayerUuidLookup,
+        broadcast::{BroadcastBuf, PacketMetadata},
+        player_uuid_lookup::PlayerUuidLookup,
     },
     system::IngressSender,
     FullEntityPose, Gametick, Player,
@@ -25,7 +25,7 @@ pub fn ingress(
     mut fetcher: Fetcher<(EntityId, &mut Player, &mut FullEntityPose)>,
     lookup: Single<&PlayerUuidLookup>,
     mut sender: IngressSender,
-    broadcast: Single<&Broadcast>,
+    broadcast: Single<&BroadcastBuf>,
 ) {
     // uuid to entity id map
 
