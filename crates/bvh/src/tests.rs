@@ -5,7 +5,6 @@ use itertools::Itertools;
 use super::*;
 use crate::aabb::CheckableAabb;
 
-// todo: consider duplicate
 fn collisions_naive(
     elements: &[Aabb],
     target: Aabb,

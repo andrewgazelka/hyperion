@@ -311,11 +311,11 @@ impl IoWrite {
             // SAFETY: raw_fd is valid since the TcpStream is still alive, and value is valid to
             // write to
             unsafe {
-                // TODO: Handle ioctl error properly
-                assert_ne!(
-                    libc::ioctl(self.raw_fd, libc::TIOCOUTQ, addr_of_mut!(value)),
-                    -1
-                );
+                let result = libc::ioctl(self.raw_fd, libc::TIOCOUTQ, addr_of_mut!(value));
+                if result == -1 {
+                    let err = io::Error::last_os_error();
+                    panic!("getsockopt failed: {err}");
+                }
             }
             value
         }
@@ -328,7 +328,6 @@ impl IoWrite {
             // SAFETY: raw_fd is valid since the TcpStream is still alive, value and len are valid
             // to write to, and value and len do not alias
             unsafe {
-                // TODO: Handle getsockopt error properly
                 let result = libc::getsockopt(
                     self.raw_fd,
                     libc::SOL_SOCKET,
@@ -488,7 +487,7 @@ impl Io {
             fastrand::alphanumeric()
         );
 
-        let uuid = offline_uuid(&username)?; // todo: random
+        let uuid = offline_uuid(&username)?;
 
         let compression_level = self.shared.compression_level;
         if compression_level.0 > 0 {

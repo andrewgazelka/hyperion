@@ -9,12 +9,6 @@ use server::Game;
 const PLAYER_COUNT: u32 = 100;
 
 fn spawn_bots(port: u16) -> Child {
-    // todo: [bot test/bench] process stdout to make sure there are no errors
-    // todo: [bot test/bench] process stderr to make sure there are no errors
-    // todo: [bot test/bench] do not run rust-mc-bot as a process... instead, run it as a library
-    // todo: [bot test/bench] recode rust-mc-bot to run as fast as possible (so we do not need to delay) no stdio
-    // todo: [bot test/bench] convert test into a benchmark
-    // todo [bot test/bench] (low priority) try to avoid using TcpSockets because `uname -Sn` on macOS is 256 by default which is way too small to have reliable tests for 10k players
     let child = Command::new("rust-mc-bot")
         .arg(format!("127.0.0.1:{port}"))
         .arg(PLAYER_COUNT.to_string())

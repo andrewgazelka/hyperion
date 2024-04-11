@@ -1,5 +1,4 @@
 #![feature(lint_reasons)]
-#![feature(allocator_api)]
 #![feature(portable_simd)]
 
 // https://www.haroldserrano.com/blog/visualizing-the-boundary-volume-hierarchy-collision-algorithm
@@ -28,7 +27,6 @@ struct BvhNode {
     aabb: Aabb, // f32 * 6 = 24 bytes
 
     // if positive then it is an internal node; if negative then it is a leaf node
-    // TODO: REMOVE REMOVE REMOVE OPTION IT CAN PANIC AND GET MAX PROBS
     left: i32,
     right: i32,
 }
