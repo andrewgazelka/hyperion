@@ -2,6 +2,11 @@
     unused_variables,
     reason = "there are still many changes that need to be made to this file"
 )]
+#![allow(
+    clippy::missing_docs_in_private_items,
+    reason = "most of this is self-explanatory"
+)]
+
 //! <https://wiki.vg/index.php?title=Protocol&oldid=18375>
 
 use std::str::FromStr;

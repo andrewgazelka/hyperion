@@ -86,7 +86,7 @@ name = "players"
 harness = false
 
 [lints.rust]
-#missing_docs= "warn"
+missing_docs= "warn"
 
 [lints.clippy]
 complexity = "deny"
@@ -106,8 +106,8 @@ style = "deny"
 suspicious = "deny"
 
 # restriction
-allow_attributes = "deny"
+#allow_attributes = "deny"
 allow_attributes_without_reason = "deny"
-#missing_docs_in_private_items = "warn"
+missing_docs_in_private_items = "warn"
 
 

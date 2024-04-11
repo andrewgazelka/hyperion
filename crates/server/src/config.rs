@@ -1,11 +1,18 @@
+//! Configuration for the server.
+
 use std::{fmt::Debug, fs::File, io::Read, path::Path};
 
 use serde::{Deserialize, Serialize};
 use spin::lazy::Lazy;
 use tracing::{info, instrument, warn};
 
+/// The configuration for the server.
+///
+/// todo: remove static and make this an `Arc` to prevent weird behavior with multiple `Game`s
 pub static CONFIG: Lazy<Config> = Lazy::new(|| Config::load("run/config.toml").unwrap());
 
+/// The configuration for the server representing a `toml` file.
+#[allow(clippy::missing_docs_in_private_items, reason = "self-explanatory")]
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Config {
     pub border_diameter: Option<f64>,

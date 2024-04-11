@@ -1,3 +1,6 @@
+//! Utilities for adding tracing to the server.
+
+/// Adds tracing to the server with `flamegraphs`.
 #[cfg(all(
     feature = "trace",
     not(feature = "trace-simple"),
@@ -25,6 +28,7 @@ fn setup_global_subscriber() -> impl Drop {
     guard
 }
 
+/// Simple [`tracing_subscriber`] setup that does not use flamegraphs.
 #[cfg(all(
     feature = "trace-simple",
     not(feature = "trace"),
@@ -48,6 +52,7 @@ fn setup_simple_trace() {
         .unwrap();
 }
 
+/// Adds tracing to the server with `tracy`.
 #[cfg(all(
     feature = "tracy",
     not(feature = "trace"),
@@ -62,6 +67,7 @@ fn setup_tracy() {
     .expect("setup tracy layer");
 }
 
+/// Adds tracing to the server.
 pub fn with_tracing<T>(f: impl FnOnce() -> T) -> T {
     #[cfg(all(
         feature = "trace-simple",
