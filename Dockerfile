@@ -2,7 +2,7 @@
 # https://nnethercote.github.io/perf-book/build-configuration.html#minimizing-compile-times
 
 # Define an argument for the Rust nightly version
-ARG RUST_NIGHTLY_VERSION=nightly-2024-04-02
+ARG RUST_NIGHTLY_VERSION=nightly-2024-04-10
 
 # Use Alpine as base image
 FROM alpine:3.19 as packages
