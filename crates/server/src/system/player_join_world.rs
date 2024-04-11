@@ -1,5 +1,6 @@
 use std::{borrow::Cow, collections::BTreeSet, io::Write};
 
+use anyhow::Context;
 use chunk::{
     bit_width,
     chunk::{BiomeContainer, BlockStateContainer, SECTION_BLOCK_COUNT},
@@ -11,7 +12,7 @@ use valence_protocol::{
     game_mode::OptGameMode,
     ident,
     math::DVec3,
-    nbt::{compound, List},
+    nbt::{compound, Compound, List},
     packets::{
         play,
         play::{
@@ -264,12 +265,40 @@ pub fn send_keep_alive(encoder: &mut PacketEncoder) -> anyhow::Result<()> {
     Ok(())
 }
 
+fn registry_codec_raw(codec: &RegistryCodec) -> anyhow::Result<Compound> {
+    // codec.cached_codec.clear();
+
+    let mut compound = Compound::default();
+
+    for (reg_name, reg) in &codec.registries {
+        let mut value = vec![];
+
+        for (id, v) in reg.iter().enumerate() {
+            let id = i32::try_from(id).context("id too large")?;
+            value.push(compound! {
+                "id" => id,
+                "name" => v.name.as_str(),
+                "element" => v.element.clone(),
+            });
+        }
+
+        let registry = compound! {
+            "type" => reg_name.as_str(),
+            "value" => List::Compound(value),
+        };
+
+        compound.insert(reg_name.as_str(), registry);
+    }
+
+    Ok(compound)
+}
+
 pub fn send_game_join_packet(encoder: &mut PacketEncoder) -> anyhow::Result<()> {
     // recv ack
 
     let codec = RegistryCodec::default();
 
-    let registry_codec = crate::net::registry_codec_raw(&codec)?;
+    let registry_codec = registry_codec_raw(&codec)?;
 
     let dimension_names: BTreeSet<Ident<Cow<str>>> = codec
         .registry(BiomeRegistry::KEY)

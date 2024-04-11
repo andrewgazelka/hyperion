@@ -19,7 +19,6 @@ use bvh::aabb::Aabb;
 use evenio::prelude::*;
 use libc::{getrlimit, setrlimit, RLIMIT_NOFILE};
 use ndarray::s;
-pub use rayon::iter::ParallelIterator;
 use signal_hook::iterator::Signals;
 use singleton::bounding_box;
 use spin::Lazy;
@@ -38,20 +37,26 @@ mod global;
 mod net;
 
 mod packets;
-pub(crate) mod system;
+mod system;
 
 mod bits;
 
-mod quad_tree;
+mod pose;
 
 mod config;
 
+/// History size for sliding average.
 const MSPT_HISTORY_SIZE: usize = 100;
 
-// A zero-sized component, often called a "marker" or "tag".
+/// A component that represents a Player. In the future, this should be broken up into multiple components.
+///
+/// Why should it be broken up? The more things are broken up, the more we can take advantage of Rust borrowing rules.
 #[derive(Component)]
 pub struct Player {
+    /// The name of the player i.e., `Emerald_Explorer`.
     name: Box<str>,
+
+    /// The last time the player was sent a keep alive packet. TODO: this should be using a tick.
     last_keep_alive_sent: Instant,
 
     /// Set to true if a keep alive has been sent to the client and the client hasn't responded.
@@ -60,9 +65,11 @@ pub struct Player {
     /// The player's ping. This is likely higher than the player's real ping.
     ping: Duration,
 
+    /// The locale of the player. This could in the future be used to determine the language of the player's chat messages.
     locale: Option<String>,
 }
 
+#[allow(clippy::missing_docs_in_private_items, reason = "self-explanatory")]
 #[derive(Event)]
 struct InitPlayer {
     entity: EntityId,
@@ -73,11 +80,14 @@ struct InitPlayer {
     pos: FullEntityPose,
 }
 
+/// A UUID component. Generally speaking, this tends to be tied to entities with a [`Player`] component.
 #[derive(Component, Copy, Clone, Debug)]
 struct Uuid(uuid::Uuid);
 
+/// Initialize a Minecraft entity (like a zombie) with a given pose.
 #[derive(Event)]
 pub struct InitEntity {
+    /// The pose of the entity.
     pub pose: FullEntityPose,
 }
 
@@ -85,8 +95,10 @@ pub struct InitEntity {
 #[derive(Component)]
 pub struct Targetable;
 
+/// Sent whenever a player joins the server.
 #[derive(Event)]
 struct PlayerJoinWorld {
+    /// The [`EntityId`] of the player.
     #[event(target)]
     target: EntityId,
 }
@@ -107,36 +119,48 @@ impl Default for RunningSpeed {
     }
 }
 
+/// An event that is sent whenever a player is kicked from the server.
 #[derive(Event)]
 struct KickPlayer {
+    /// The [`EntityId`] of the player.
     #[event(target)] // Works on tuple struct fields as well.
     target: EntityId,
+    /// The reason the player was kicked.
     reason: String,
 }
 
+/// An event that is sent whenever a player swings an arm.
 #[derive(Event)]
 struct SwingArm {
+    /// The [`EntityId`] of the player.
     #[event(target)]
     target: EntityId,
+    /// The hand the player is swinging.
     hand: Hand,
 }
 
+/// An event to kill all minecraft entities (like zombies, skeletons, etc). This will be sent to the equivalent of
+/// `/killall` in the game.
 #[derive(Event)]
 struct KillAllEntities;
 
+/// An event when server stats are updated.
 #[derive(Event, Copy, Clone)]
 struct StatsEvent {
+    /// The number of milliseconds per tick in the last second.
     ms_per_tick_mean_1s: f64,
+    /// The number of milliseconds per tick in the last 5 seconds.
     ms_per_tick_mean_5s: f64,
 }
 
 #[derive(Event)]
 struct Gametick;
 
+/// An event that is sent when it is time to send packets to clients.
 #[derive(Event)]
 struct Egress;
 
-/// on macOS the soft limit for number of open file descriptors is often 256. This is far too low
+/// on macOS, the soft limit for the number of open file descriptors is often 256. This is far too low
 /// to test 10k players with.
 /// This attempts to the specified `recommended_min` value.
 pub fn adjust_file_limits(recommended_min: u64) -> std::io::Result<()> {
@@ -173,12 +197,19 @@ pub fn adjust_file_limits(recommended_min: u64) -> std::io::Result<()> {
 
 /// The central [`Game`] struct which owns and manages the entire server.
 pub struct Game {
+    /// The shared state between the ECS framework and the I/O thread.
     shared: Arc<global::Shared>,
+    /// The manager of the ECS framework.
     world: World,
+    /// Data for what time the last ticks occurred.
     last_ticks: VecDeque<Instant>,
+    /// Data for how many milliseconds previous ticks took.
     last_ms_per_tick: VecDeque<f64>,
+    /// The tick of the game. This is incremented every 50 ms.
     tick_on: u64,
+    /// The event that is sent when it is time to receive packets from clients.
     incoming: flume::Receiver<ClientConnection>,
+    /// The event that is sent when the server is shutting down. This allows shutting down the I/O thread.
     shutdown_tx: flume::Sender<()>,
 }
 
@@ -291,6 +322,7 @@ impl Game {
         Ok(game)
     }
 
+    /// The duration to wait between ticks.
     fn wait_duration(&self) -> Option<Duration> {
         let &first_tick = self.last_ticks.front()?;
 
@@ -333,6 +365,7 @@ impl Game {
     /// Run one tick of the game loop.
     #[instrument(skip(self), fields(tick_on = self.tick_on))]
     pub fn tick(&mut self) {
+        /// The length of history to keep in the moving average.
         const LAST_TICK_HISTORY_SIZE: usize = 100;
 
         let now = Instant::now();
@@ -420,6 +453,7 @@ impl Game {
 }
 
 // todo: remove static and make this an `Arc` to prevent weird behavior with multiple `Game`s
+/// A shutdown atomic which is used to shut down the [`Game`] gracefully.
 static SHUTDOWN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 /// The full pose of an entity. This is used for both [`Player`] and [`MinecraftEntity`].
@@ -466,5 +500,6 @@ impl FullEntityPose {
 /// - Later we can apply the reaction to the entity's [`FullEntityPose`] to move the entity.
 #[derive(Component, Default, Debug)]
 pub struct EntityReaction {
+    /// The velocity of the entity.
     velocity: Vec3,
 }

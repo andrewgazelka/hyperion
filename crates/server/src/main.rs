@@ -1,3 +1,5 @@
+//! The main entry point for the server.
+
 use anyhow::Context;
 use server::{adjust_file_limits, Game};
 
@@ -7,6 +9,7 @@ fn main() -> anyhow::Result<()> {
     tracing_utils::with_tracing(init)
 }
 
+/// Initializes the server.
 fn init() -> anyhow::Result<()> {
     // 10k players, we want at least 2^14 = 16,384 file handles
     adjust_file_limits(16_384)?;

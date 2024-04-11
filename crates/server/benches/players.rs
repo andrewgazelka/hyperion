@@ -1,3 +1,6 @@
+#![feature(lint_reasons)]
+#![allow(clippy::missing_docs_in_private_items, missing_docs, reason = "bench")]
+
 use std::{
     net::SocketAddr,
     sync::{
