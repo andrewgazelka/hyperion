@@ -14,7 +14,6 @@ const REGENERATION: VarInt = VarInt(10);
 const ABSORPTION: VarInt = VarInt(22);
 const SURVIVAL: f32 = 0.0;
 const SPECTATOR: f32 = 3.0;
-const UPDATE_RESPAWN_TIMER_INTERVAL: u64 = 5;
 
 #[instrument(skip_all)]
 pub fn sync_players(
@@ -105,11 +104,11 @@ pub fn sync_players(
                         kind: play::game_state_change_s2c::GameEventKind::ChangeGameMode,
                         value: SPECTATOR,
                     });
-                    // TitleS2c is needed to stop the title from fading away after a few seconds
-                    // TODO: Stop this from flickering
+                    // The title is repeatedly sent so it doesn't fade away after a few seconds
                     let _ = encoder.encode(&play::TitleS2c {
                         title_text: "YOU DIED!".into_text().color(Color::RED).into(),
                     });
+
                     let seconds_remaining = (respawn_tick - tick) as f32 / 20.0;
                     let _ = encoder.encode(&play::SubtitleS2c {
                         subtitle_text: ("Respawning in ".into_text()
@@ -117,6 +116,17 @@ pub fn sync_players(
                             + " seconds")
                             .into(),
                     });
+
+                    encoder
+                        .encode(&play::PlaySoundS2c {
+                            id: SoundId::Reference { id: HURT_SOUND },
+                            category: SoundCategory::Player,
+                            position: (pose.position * 8.00).as_ivec3(),
+                            volume: 1.0,
+                            pitch: 1.0,
+                            seed: 0,
+                        })
+                        .unwrap();
                 }
                 (PlayerState::Dead { .. }, PlayerState::Alive { health, .. }) => {
                     let _ = encoder.encode(&play::ClearTitleS2c { reset: true });
@@ -132,20 +142,13 @@ pub fn sync_players(
                     // TODO: Update absorption and regeneration
                 }
                 (PlayerState::Dead { .. }, PlayerState::Dead { respawn_tick }) => {
-                    let ticks_remaining = respawn_tick - tick;
-                    if ticks_remaining % UPDATE_RESPAWN_TIMER_INTERVAL == 0 {
-                        let seconds_remaining = (respawn_tick - tick) as f32 / 20.0;
-                        // The title is repeatedly sent so it doesn't fade away after a few seconds
-                        let _ = encoder.encode(&play::TitleS2c {
-                            title_text: "YOU DIED!".into_text().color(Color::RED).into(),
-                        });
-                        let _ = encoder.encode(&play::SubtitleS2c {
-                            subtitle_text: ("Respawning in ".into_text()
-                                + format!("{seconds_remaining:.2}").color(Color::RED)
-                                + " seconds")
-                                .into(),
-                        });
-                    }
+                    let seconds_remaining = (respawn_tick - tick) as f32 / 20.0;
+                    let _ = encoder.encode(&play::SubtitleS2c {
+                        subtitle_text: ("Respawning in ".into_text()
+                            + format!("{seconds_remaining:.2}").color(Color::RED)
+                            + " seconds")
+                            .into(),
+                    });
                 }
             }
 
