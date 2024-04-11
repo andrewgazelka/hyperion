@@ -33,7 +33,7 @@ pub fn entity_detect_collisions(
                     return false;
                 }
 
-                unsafe { pose.apply_entity_collision(&collision.aabb, reaction) };
+                pose.apply_entity_collision(&collision.aabb, reaction);
 
                 true
             });
