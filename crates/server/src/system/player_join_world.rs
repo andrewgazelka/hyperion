@@ -33,7 +33,7 @@ use crate::{
     config,
     global::Global,
     net::Encoder,
-    singleton::{encoder::Broadcast, player_lookup::PlayerUuidLookup},
+    singleton::{broadcast::Broadcast, player_lookup::PlayerUuidLookup},
     system::init_entity::spawn_packet,
     FullEntityPose, MinecraftEntity, Player, PlayerJoinWorld, Uuid,
 };

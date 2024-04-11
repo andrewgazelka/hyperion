@@ -2,7 +2,7 @@ use evenio::prelude::*;
 use tracing::instrument;
 use valence_protocol::VarInt;
 
-use crate::{singleton::encoder::Broadcast, KillAllEntities, MinecraftEntity, Player};
+use crate::{singleton::broadcast::Broadcast, KillAllEntities, MinecraftEntity, Player};
 
 #[instrument(skip_all)]
 pub fn kill_all(

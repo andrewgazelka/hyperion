@@ -4,7 +4,7 @@ use evenio::{
 };
 use tracing::{instrument, trace};
 
-use crate::{net::Connection, singleton::encoder::Broadcast, Egress};
+use crate::{net::Connection, singleton::broadcast::Broadcast, Egress};
 
 #[instrument(skip_all, level = "trace")]
 pub fn egress_broadcast(

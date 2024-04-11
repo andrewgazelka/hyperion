@@ -2,7 +2,7 @@ use evenio::prelude::*;
 use tracing::instrument;
 use valence_protocol::text::IntoText;
 
-use crate::{singleton::encoder::Broadcast, StatsEvent};
+use crate::{singleton::broadcast::Broadcast, StatsEvent};
 
 #[instrument(skip_all, level = "trace")]
 pub fn stats_message(r: Receiver<StatsEvent>, mut broadcast: Single<&mut Broadcast>) {

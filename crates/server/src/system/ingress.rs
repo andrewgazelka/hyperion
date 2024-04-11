@@ -11,7 +11,7 @@ use crate::{
     net::GLOBAL_C2S_PACKETS,
     packets,
     singleton::{
-        encoder::{Broadcast, PacketMetadata},
+        broadcast::{Broadcast, PacketMetadata},
         player_lookup::PlayerUuidLookup,
     },
     system::IngressSender,

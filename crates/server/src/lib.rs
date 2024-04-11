@@ -1,3 +1,4 @@
+#![doc = include_str!("../../../README.md")]
 #![feature(thread_local)]
 #![feature(lint_reasons)]
 #![expect(clippy::type_complexity, reason = "evenio uses a lot of complex types")]
@@ -27,7 +28,7 @@ use crate::{
     bounding_box::BoundingBox,
     net::{init_io_thread, ClientConnection, Connection, Encoder},
     singleton::{
-        encoder::Broadcast, player_location_lookup::PlayerLocationLookup,
+        broadcast::Broadcast, player_location_lookup::PlayerLocationLookup,
         player_lookup::PlayerUuidLookup,
     },
 };
@@ -42,7 +43,7 @@ mod bits;
 
 mod quad_tree;
 
-pub mod bounding_box;
+mod bounding_box;
 mod config;
 
 const MSPT_HISTORY_SIZE: usize = 100;
@@ -76,8 +77,8 @@ struct InitPlayer {
 struct Uuid(uuid::Uuid);
 
 #[derive(Event)]
-pub struct InitEntity {
-    pub pose: FullEntityPose,
+struct InitEntity {
+    pose: FullEntityPose,
 }
 
 /// If the entity can be targeted by non-player entities.
@@ -90,9 +91,13 @@ struct PlayerJoinWorld {
     target: EntityId,
 }
 
+/// Any living minecraft entity that is NOT a player.
+///
+/// Example: zombie, skeleton, etc.
 #[derive(Component, Debug)]
 pub struct MinecraftEntity;
 
+/// The running multiplier of the entity. This defaults to 1.0.
 #[derive(Component, Debug, Copy, Clone)]
 pub struct RunningSpeed(f32);
 

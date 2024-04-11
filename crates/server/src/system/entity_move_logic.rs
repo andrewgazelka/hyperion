@@ -13,18 +13,11 @@ use valence_protocol::{
 
 use crate::{
     singleton::{
-        encoder::{Broadcast, PacketMetadata, PacketNecessity},
+        broadcast::{Broadcast, PacketMetadata, PacketNecessity},
         player_location_lookup::PlayerLocationLookup,
     },
     EntityReaction, FullEntityPose, Gametick, MinecraftEntity, RunningSpeed,
 };
-
-// 0 &mut FullEntityPose
-// 1 &'static MinecraftEntity
-
-// 2 &Targetable
-
-// 3 &Player
 
 #[derive(Query, Debug)]
 pub struct EntityQuery<'a> {

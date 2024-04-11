@@ -1,11 +1,6 @@
-use std::iter::Zip;
-
 use bvh::{aabb::Aabb, HasAabb};
 use evenio::{component::Component, entity::EntityId};
-use smallvec::SmallVec;
 use valence_protocol::math::Vec3;
-
-use crate::FullEntityPose;
 
 #[derive(Copy, Clone, Debug)]
 pub struct Stored {
@@ -68,20 +63,6 @@ impl BoundingBox {
             min: self.min + offset,
             max: self.max + offset,
         }
-    }
-}
-
-pub struct Collisions {
-    pub ids: SmallVec<EntityId, 4>,
-    pub poses: SmallVec<FullEntityPose, 4>,
-}
-
-impl IntoIterator for Collisions {
-    type IntoIter = Zip<smallvec::IntoIter<EntityId, 4>, smallvec::IntoIter<FullEntityPose, 4>>;
-    type Item = (EntityId, FullEntityPose);
-
-    fn into_iter(self) -> Self::IntoIter {
-        self.ids.into_iter().zip(self.poses)
     }
 }
 

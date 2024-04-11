@@ -9,7 +9,7 @@ use tracing::instrument;
 use valence_protocol::{ByteAngle, VarInt, Velocity};
 
 use crate::{
-    singleton::encoder::Broadcast, EntityReaction, FullEntityPose, InitEntity, MinecraftEntity,
+    singleton::broadcast::Broadcast, EntityReaction, FullEntityPose, InitEntity, MinecraftEntity,
     RunningSpeed, Uuid,
 };
 

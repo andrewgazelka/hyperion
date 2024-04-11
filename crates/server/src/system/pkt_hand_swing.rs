@@ -2,7 +2,7 @@ use evenio::prelude::*;
 use tracing::instrument;
 use valence_protocol::{packets::play, Hand, VarInt};
 
-use crate::{singleton::encoder::Broadcast, SwingArm};
+use crate::{singleton::broadcast::Broadcast, SwingArm};
 
 #[instrument(skip_all, level = "trace")]
 pub fn pkt_hand_swing(

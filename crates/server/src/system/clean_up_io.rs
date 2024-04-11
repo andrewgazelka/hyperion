@@ -5,7 +5,7 @@ use tracing::instrument;
 use valence_protocol::{packets::play, VarInt};
 
 use crate::{
-    global::Global, net::Connection, singleton::encoder::Broadcast, Gametick, Player, Uuid,
+    global::Global, net::Connection, singleton::broadcast::Broadcast, Gametick, Player, Uuid,
 };
 
 #[instrument(skip_all, level = "trace")]
