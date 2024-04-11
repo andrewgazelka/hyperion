@@ -7,7 +7,7 @@ mod egress_broadcast;
 mod egress_local;
 mod entity_detect_collisions;
 mod entity_move_logic;
-pub mod entity_position;
+mod entity_position;
 mod ingress;
 mod init_entity;
 mod init_player;
