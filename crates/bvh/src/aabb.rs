@@ -1,17 +1,13 @@
 use std::fmt::Display;
 
-use crate::HasAabb;
+use glam::Vec3;
 
-pub struct Vec3 {
-    pub x: f32,
-    pub y: f32,
-    pub z: f32,
-}
+use crate::HasAabb;
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct Aabb {
-    pub min: glam::Vec3,
-    pub max: glam::Vec3,
+    pub min: Vec3,
+    pub max: Vec3,
 }
 
 impl Display for Aabb {
@@ -58,19 +54,48 @@ impl Default for Aabb {
 
 impl Aabb {
     pub const EVERYTHING: Self = Self {
-        min: glam::Vec3::new(f32::NEG_INFINITY, f32::NEG_INFINITY, f32::NEG_INFINITY),
-        max: glam::Vec3::new(f32::INFINITY, f32::INFINITY, f32::INFINITY),
+        min: Vec3::new(f32::NEG_INFINITY, f32::NEG_INFINITY, f32::NEG_INFINITY),
+        max: Vec3::new(f32::INFINITY, f32::INFINITY, f32::INFINITY),
     };
     pub const NULL: Self = Self {
-        min: glam::Vec3::new(f32::INFINITY, f32::INFINITY, f32::INFINITY),
-        max: glam::Vec3::new(f32::NEG_INFINITY, f32::NEG_INFINITY, f32::NEG_INFINITY),
+        min: Vec3::new(f32::INFINITY, f32::INFINITY, f32::INFINITY),
+        max: Vec3::new(f32::NEG_INFINITY, f32::NEG_INFINITY, f32::NEG_INFINITY),
     };
 
     #[must_use]
-    pub fn new(min: impl Into<glam::Vec3>, max: impl Into<glam::Vec3>) -> Self {
+    pub fn new(min: impl Into<Vec3>, max: impl Into<Vec3>) -> Self {
         let min = min.into();
         let max = max.into();
         Self { min, max }
+    }
+
+    #[must_use]
+    pub fn move_to(&self, feet: Vec3) -> Self {
+        let half_width = (self.max.x - self.min.x) / 2.0;
+        let height = self.max.y - self.min.y;
+
+        let min = Vec3::new(feet.x - half_width, feet.y, feet.z - half_width);
+        let max = Vec3::new(feet.x + half_width, feet.y + height, feet.z + half_width);
+
+        Self { min, max }
+    }
+
+    #[must_use]
+    pub fn create(feet: Vec3, width: f32, height: f32) -> Self {
+        let half_width = width / 2.0;
+
+        let min = Vec3::new(feet.x - half_width, feet.y, feet.z - half_width);
+        let max = Vec3::new(feet.x + half_width, feet.y + height, feet.z + half_width);
+
+        Self { min, max }
+    }
+
+    #[must_use]
+    pub fn move_by(&self, offset: Vec3) -> Self {
+        Self {
+            min: self.min + offset,
+            max: self.max + offset,
+        }
     }
 
     #[must_use]
@@ -86,8 +111,8 @@ impl Aabb {
         // Check if there is an overlap. If any dimension does not overlap, return None.
         if min_x < max_x && min_y < max_y && min_z < max_z {
             Some(Self {
-                min: glam::Vec3::new(min_x, min_y, 0.0),
-                max: glam::Vec3::new(max_x, max_y, 0.0),
+                min: Vec3::new(min_x, min_y, 0.0),
+                max: Vec3::new(max_x, max_y, 0.0),
             })
         } else {
             None
@@ -103,7 +128,7 @@ impl Aabb {
             && self.max.z >= other.min.z
     }
 
-    pub fn collides_point(&self, point: glam::Vec3) -> bool {
+    pub fn collides_point(&self, point: Vec3) -> bool {
         let point = point.as_ref();
         let self_min = self.min.as_ref();
         let self_max = self.max.as_ref();
@@ -118,7 +143,7 @@ impl Aabb {
         collide == 1
     }
 
-    pub fn dist2(&self, point: glam::Vec3) -> f32 {
+    pub fn dist2(&self, point: Vec3) -> f32 {
         let point = point.as_ref();
         let self_min = self.min.as_ref();
         let self_max = self.max.as_ref();
@@ -158,8 +183,8 @@ impl Aabb {
     }
 
     pub fn expand(mut self, amount: f32) -> Self {
-        self.min -= glam::Vec3::splat(amount);
-        self.max += glam::Vec3::splat(amount);
+        self.min -= Vec3::splat(amount);
+        self.max += Vec3::splat(amount);
         self
     }
 
@@ -169,7 +194,7 @@ impl Aabb {
     }
 
     #[must_use]
-    pub fn mid(&self) -> glam::Vec3 {
+    pub fn mid(&self) -> Vec3 {
         (self.min + self.max) / 2.0
     }
 
@@ -189,13 +214,13 @@ impl Aabb {
     }
 
     #[must_use]
-    pub fn lens(&self) -> glam::Vec3 {
+    pub fn lens(&self) -> Vec3 {
         self.max - self.min
     }
 
     pub fn containing<T: HasAabb>(input: &[T]) -> Self {
-        let mut current_min = glam::Vec3::splat(f32::INFINITY);
-        let mut current_max = glam::Vec3::splat(f32::NEG_INFINITY);
+        let mut current_min = Vec3::splat(f32::INFINITY);
+        let mut current_max = Vec3::splat(f32::NEG_INFINITY);
 
         for elem in input {
             let elem = elem.aabb();
@@ -218,60 +243,62 @@ impl<T: HasAabb> From<&[T]> for Aabb {
 
 #[cfg(test)]
 mod tests {
+    use glam::Vec3;
+
     use crate::aabb::Aabb;
 
     #[test]
     fn test_expand_to_fit() {
         let mut aabb = Aabb {
-            min: glam::Vec3::new(0.0, 0.0, 0.0),
-            max: glam::Vec3::new(1.0, 1.0, 1.0),
+            min: Vec3::new(0.0, 0.0, 0.0),
+            max: Vec3::new(1.0, 1.0, 1.0),
         };
 
         let other = Aabb {
-            min: glam::Vec3::new(-1.0, -1.0, -1.0),
-            max: glam::Vec3::new(2.0, 2.0, 2.0),
+            min: Vec3::new(-1.0, -1.0, -1.0),
+            max: Vec3::new(2.0, 2.0, 2.0),
         };
 
         aabb.expand_to_fit(&other);
 
-        assert_eq!(aabb.min, glam::Vec3::new(-1.0, -1.0, -1.0));
-        assert_eq!(aabb.max, glam::Vec3::new(2.0, 2.0, 2.0));
+        assert_eq!(aabb.min, Vec3::new(-1.0, -1.0, -1.0));
+        assert_eq!(aabb.max, Vec3::new(2.0, 2.0, 2.0));
     }
 
     #[test]
     fn containing_returns_correct_aabb_for_multiple_aabbs() {
         let aabbs = vec![
             Aabb {
-                min: glam::Vec3::new(0.0, 0.0, 0.0),
-                max: glam::Vec3::new(1.0, 1.0, 1.0),
+                min: Vec3::new(0.0, 0.0, 0.0),
+                max: Vec3::new(1.0, 1.0, 1.0),
             },
             Aabb {
-                min: glam::Vec3::new(-1.0, -1.0, -1.0),
-                max: glam::Vec3::new(2.0, 2.0, 2.0),
+                min: Vec3::new(-1.0, -1.0, -1.0),
+                max: Vec3::new(2.0, 2.0, 2.0),
             },
             Aabb {
-                min: glam::Vec3::new(0.5, 0.5, 0.5),
-                max: glam::Vec3::new(1.5, 1.5, 1.5),
+                min: Vec3::new(0.5, 0.5, 0.5),
+                max: Vec3::new(1.5, 1.5, 1.5),
             },
         ];
 
         let containing_aabb = Aabb::containing(&aabbs);
 
-        assert_eq!(containing_aabb.min, glam::Vec3::new(-1.0, -1.0, -1.0));
-        assert_eq!(containing_aabb.max, glam::Vec3::new(2.0, 2.0, 2.0));
+        assert_eq!(containing_aabb.min, Vec3::new(-1.0, -1.0, -1.0));
+        assert_eq!(containing_aabb.max, Vec3::new(2.0, 2.0, 2.0));
     }
 
     #[test]
     fn containing_returns_correct_aabb_for_single_aabb() {
         let aabbs = vec![Aabb {
-            min: glam::Vec3::new(0.0, 0.0, 0.0),
-            max: glam::Vec3::new(1.0, 1.0, 1.0),
+            min: Vec3::new(0.0, 0.0, 0.0),
+            max: Vec3::new(1.0, 1.0, 1.0),
         }];
 
         let containing_aabb = Aabb::containing(&aabbs);
 
-        assert_eq!(containing_aabb.min, glam::Vec3::new(0.0, 0.0, 0.0));
-        assert_eq!(containing_aabb.max, glam::Vec3::new(1.0, 1.0, 1.0));
+        assert_eq!(containing_aabb.min, Vec3::new(0.0, 0.0, 0.0));
+        assert_eq!(containing_aabb.max, Vec3::new(1.0, 1.0, 1.0));
     }
 
     #[test]
@@ -282,11 +309,11 @@ mod tests {
 
         assert_eq!(
             containing_aabb.min,
-            glam::Vec3::new(f32::INFINITY, f32::INFINITY, f32::INFINITY)
+            Vec3::new(f32::INFINITY, f32::INFINITY, f32::INFINITY)
         );
         assert_eq!(
             containing_aabb.max,
-            glam::Vec3::new(f32::NEG_INFINITY, f32::NEG_INFINITY, f32::NEG_INFINITY)
+            Vec3::new(f32::NEG_INFINITY, f32::NEG_INFINITY, f32::NEG_INFINITY)
         );
     }
 }

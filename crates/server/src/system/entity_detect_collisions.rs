@@ -6,7 +6,9 @@ use evenio::{
 };
 use tracing::instrument;
 
-use crate::{bounding_box::EntityBoundingBoxes, EntityReaction, FullEntityPose, Gametick};
+use crate::{
+    singleton::bounding_box::EntityBoundingBoxes, EntityReaction, FullEntityPose, Gametick,
+};
 
 #[instrument(skip_all, level = "trace")]
 pub fn entity_detect_collisions(

@@ -29,7 +29,7 @@ pub fn rebuild_player_location(
         .iter()
         .map(|query| LookupData {
             id: query.id,
-            aabb: query.pose.bounding.into(),
+            aabb: query.pose.bounding,
         })
         .collect();
 

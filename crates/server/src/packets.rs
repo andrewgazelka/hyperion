@@ -7,13 +7,14 @@
 use std::str::FromStr;
 
 use anyhow::{bail, ensure};
+use bvh::aabb::Aabb;
 use evenio::{entity::EntityId, event::Sender};
 use tracing::debug;
 use valence_protocol::{decode::PacketFrame, math::Vec3, packets::play, Decode, Packet};
 
 use crate::{
-    bounding_box::BoundingBox, system::IngressSender, FullEntityPose, InitEntity, KickPlayer,
-    KillAllEntities, Player, SwingArm,
+    system::IngressSender, FullEntityPose, InitEntity, KickPlayer, KillAllEntities, Player,
+    SwingArm,
 };
 
 const fn confirm_teleport(_pkt: &[u8]) {
@@ -193,7 +194,7 @@ fn chat_command(
                             position: Vec3::new(x, y, z),
                             yaw: 0.0,
                             pitch: 0.0,
-                            bounding: BoundingBox::create(Vec3::new(x, y, z), 0.6, 1.8),
+                            bounding: Aabb::create(Vec3::new(x, y, z), 0.6, 1.8),
                         },
                     });
                 }
@@ -219,17 +220,12 @@ fn chat_command(
             HybridPos::Relative(z) => loc.z + z,
         };
 
-        // player
-        //     .packets
-        //     .writer
-        //     .send_chat_message(&format!("Spawning zombie at {x}, {y}, {z}"))?;
-
         sender.send(InitEntity {
             pose: FullEntityPose {
                 position: Vec3::new(x, y, z),
                 yaw: 0.0,
                 pitch: 0.0,
-                bounding: BoundingBox::create(Vec3::new(x, y, z), 0.6, 1.8),
+                bounding: Aabb::create(Vec3::new(x, y, z), 0.6, 1.8),
             },
         });
     }
