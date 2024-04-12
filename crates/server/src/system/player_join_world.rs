@@ -91,11 +91,16 @@ pub fn player_join_world(
         listed: true,
         ping: 0,
         game_mode: GameMode::Survival,
-        display_name: Some("SomeBot".into_cow_text()),
+        display_name: Some(current_player.name.to_string().into_cow_text()),
     }];
 
+    let actions = PlayerListActions::default()
+        .with_add_player(true)
+        .with_update_listed(true)
+        .with_update_display_name(true);
+
     let info = play::PlayerListS2c {
-        actions: PlayerListActions::default().with_add_player(true),
+        actions,
         entries: Cow::Borrowed(entries),
     };
 
@@ -125,9 +130,9 @@ pub fn player_join_world(
                 properties: Cow::Borrowed(&[]),
                 chat_data: None,
                 listed: true,
-                ping: 0,
+                ping: 20,
                 game_mode: GameMode::Survival,
-                display_name: Some("SomeBot".into_cow_text()),
+                display_name: Some(player.name.to_string().into_cow_text()),
             },
         )
         .collect::<Vec<_>>();
@@ -158,7 +163,7 @@ pub fn player_join_world(
 
     encoder
         .encode(&play::PlayerListS2c {
-            actions: PlayerListActions::default().with_add_player(true),
+            actions,
             entries: Cow::Owned(entries),
         })
         .unwrap();
