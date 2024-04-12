@@ -209,7 +209,7 @@ fn chat_command(
         let [amount] = args.as_slice() else {
             anyhow::bail!("expected 1 number");
         };
-        player.hurt(tick, amount.parse()?);
+        player.hurt(global, amount.parse()?);
     } else if first == Some("spawn") {
         let args: Vec<_> = cmd.collect();
 

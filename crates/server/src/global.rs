@@ -17,6 +17,12 @@ pub struct Shared {
 pub struct Global {
     /// The current tick of the game. This is incremented every 50 ms.
     pub tick: i64,
+
+    /// The maximum amount of time a player is resistant to being hurt. This is weird as this is 20 in vanilla
+    /// Minecraft.
+    /// However, the check to determine if a player can be hurt actually looks at this value divided by 2
+    pub max_hurt_resistant_time: u16,
+
     /// Data shared between the IO thread and the ECS framework.
     pub shared: Arc<Shared>,
 }

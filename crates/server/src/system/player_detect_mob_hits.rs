@@ -12,7 +12,7 @@ use crate::{
 };
 
 #[instrument(skip_all, level = "trace")]
-pub fn player_detect_collisions(
+pub fn player_detect_mob_hits(
     _: Receiver<Gametick>,
     entity_bounding_boxes: Single<&EntityBoundingBoxes>,
     global: Single<&Global>,
@@ -23,6 +23,7 @@ pub fn player_detect_collisions(
         .for_each(|(id, pose, reaction, player)| {
             // todo: remove mid just use loc directly
             let this = pose.bounding.mid();
+
             entity_bounding_boxes
                 .query
                 .get_collisions(pose.bounding, |collision| {
@@ -55,7 +56,7 @@ pub fn player_detect_collisions(
                         reaction.velocity.y = 0.4;
                     }
 
-                    player.hurt(global.tick.unsigned_abs(), 1.0);
+                    player.hurt(&global, 1.0);
 
                     true
                 });
