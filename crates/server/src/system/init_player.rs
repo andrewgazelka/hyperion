@@ -44,6 +44,7 @@ pub fn init_player(
         name,
         locale: None,
         state: Tracker::default(),
+        immune_until: 0,
     });
     s.insert(entity, encoder);
     s.insert(entity, connection);

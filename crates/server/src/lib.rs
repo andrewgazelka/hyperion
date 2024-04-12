@@ -26,6 +26,7 @@ use tracing::{debug, error, info, instrument, trace, warn};
 use valence_protocol::{math::Vec3, CompressionThreshold, Hand};
 
 use crate::{
+    global::Global,
     net::{init_io_thread, ClientConnection, Connection, Encoder},
     singleton::{
         broadcast::BroadcastBuf, player_aabb_lookup::PlayerBoundingBoxes,
@@ -52,6 +53,7 @@ const MSPT_HISTORY_SIZE: usize = 100;
 
 /// The absorption effect
 #[derive(Clone, PartialEq, Debug)]
+#[repr(packed)]
 struct Absorption {
     /// This effect goes away on the tick with the value `end_tick`,
     end_tick: u64,
@@ -71,6 +73,7 @@ enum PlayerState {
     Alive {
         /// Measured in half hearts
         health: f32,
+
         /// The absorption effect
         absorption: Absorption,
         /// The regeneration effect
@@ -129,6 +132,9 @@ pub struct Player {
 
     /// The state of the player.
     state: Tracker<PlayerState>,
+
+    /// The time until the player is immune to being hurt in ticks.
+    immune_until: u64,
 }
 
 impl Player {
@@ -145,10 +151,31 @@ impl Player {
         });
     }
 
+    /// If the player is immune to being hurt, this returns false.
+    const fn is_invincible(&self, global: &Global) -> bool {
+        let tick = global.tick.unsigned_abs();
+
+        if tick < self.immune_until {
+            return true;
+        }
+
+        false
+    }
+
     /// Hurt the player by a given amount.
-    fn hurt(&mut self, tick: u64, mut amount: f32) {
-        assert!(amount.is_finite());
-        assert!(amount > 0.0);
+    fn hurt(&mut self, global: &Global, mut amount: f32) {
+        debug_assert!(amount.is_finite());
+        debug_assert!(amount > 0.0);
+
+        if self.is_invincible(global) {
+            return;
+        }
+
+        let tick = global.tick.unsigned_abs();
+
+        let max_hurt_resistant_time = global.max_hurt_resistant_time;
+
+        self.immune_until = tick + u64::from(max_hurt_resistant_time) / 2;
 
         self.state.update(|state| {
             let PlayerState::Alive {
@@ -401,7 +428,7 @@ impl Game {
         world.add_handler(system::update_health);
         world.add_handler(system::sync_players);
         world.add_handler(system::rebuild_player_location);
-        world.add_handler(system::player_detect_collisions);
+        world.add_handler(system::player_detect_mob_hits);
         world.add_handler(system::clean_up_io);
 
         world.add_handler(system::pkt_attack);
@@ -415,8 +442,9 @@ impl Game {
         world.add_handler(system::kill_all);
 
         let global = world.spawn();
-        world.insert(global, global::Global {
+        world.insert(global, Global {
             tick: 0,
+            max_hurt_resistant_time: 20, // actually kinda like 10 vanilla mc is weird
             shared: shared.clone(),
         });
 

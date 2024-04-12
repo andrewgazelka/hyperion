@@ -22,8 +22,13 @@ pub fn pkt_attack(
     >,
     mut broadcast: Single<&mut BroadcastBuf>,
 ) {
-    let event = attack.event;
     let (entity_id, pose, reaction, encoder, player) = attack.query;
+
+    if player.is_invincible(&global) {
+        return;
+    }
+
+    let event = attack.event;
 
     // todo
     let mut damage_broadcast = play::EntityDamageS2c {
@@ -68,5 +73,5 @@ pub fn pkt_attack(
         reaction.velocity.y = 0.4;
     }
 
-    player.hurt(global.tick.unsigned_abs(), 1.0);
+    player.hurt(&global, 1.0);
 }
