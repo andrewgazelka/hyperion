@@ -28,7 +28,7 @@ use valence_protocol::{math::Vec3, CompressionThreshold, Hand};
 use crate::{
     net::{init_io_thread, ClientConnection, Connection, Encoder},
     singleton::{
-        broadcast::BroadcastBuf, player_aabb_lookup::PlayerAabbs,
+        broadcast::BroadcastBuf, player_aabb_lookup::PlayerBoundingBoxes,
         player_uuid_lookup::PlayerUuidLookup,
     },
     tracker::Tracker,
@@ -392,9 +392,12 @@ impl Game {
         world.add_handler(system::update_health);
         world.add_handler(system::sync_players);
         world.add_handler(system::rebuild_player_location);
+        world.add_handler(system::player_detect_collisions);
         world.add_handler(system::clean_up_io);
 
         world.add_handler(system::pkt_hand_swing);
+
+        world.add_handler(system::generate_egress_packets);
         world.add_handler(system::egress_broadcast);
         world.add_handler(system::egress_local);
         world.add_handler(system::keep_alive);
@@ -414,7 +417,7 @@ impl Game {
         world.insert(uuid_lookup, PlayerUuidLookup::default());
 
         let player_location_lookup = world.spawn();
-        world.insert(player_location_lookup, PlayerAabbs::default());
+        world.insert(player_location_lookup, PlayerBoundingBoxes::default());
 
         let encoder = world.spawn();
         world.insert(encoder, BroadcastBuf::new(shared.compression_level));

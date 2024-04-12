@@ -22,22 +22,24 @@ pub fn entity_detect_collisions(
         .par_iter_mut()
         .for_each(|(id, pose, reaction)| {
             let mut collisions = 0;
-            entity_bounding_boxes.get_collisions(pose.bounding, |collision| {
-                // do not include self
-                if collision.id == id {
-                    return true;
-                }
+            entity_bounding_boxes
+                .query
+                .get_collisions(pose.bounding, |collision| {
+                    // do not include self
+                    if collision.id == id {
+                        return true;
+                    }
 
-                collisions += 1;
+                    collisions += 1;
 
-                // short circuit if we have too many collisions
-                if collisions >= MAX_COLLISIONS {
-                    return false;
-                }
+                    // short circuit if we have too many collisions
+                    if collisions >= MAX_COLLISIONS {
+                        return false;
+                    }
 
-                pose.apply_entity_collision(&collision.aabb, reaction);
+                    pose.apply_entity_collision(&collision.aabb, reaction);
 
-                true
-            });
+                    true
+                });
         });
 }

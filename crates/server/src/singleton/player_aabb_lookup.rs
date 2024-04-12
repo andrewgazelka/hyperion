@@ -20,15 +20,15 @@ impl HasAabb for LookupData {
 
 /// See [`crate::singleton::player_aabb_lookup`].
 #[derive(Component, Debug, Default)]
-pub struct PlayerAabbs {
+pub struct PlayerBoundingBoxes {
     /// The bounding boxes of all players
-    pub inner: bvh::Bvh<LookupData>,
+    pub query: bvh::Bvh<LookupData>,
 }
 
-impl PlayerAabbs {
+impl PlayerBoundingBoxes {
     /// Get the closest player to the given position.
     pub fn closest_to(&self, point: glam::Vec3) -> Option<&LookupData> {
-        let (target, _) = self.inner.get_closest(point)?;
+        let (target, _) = self.query.get_closest(point)?;
         Some(target)
     }
 }
