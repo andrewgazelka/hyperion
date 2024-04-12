@@ -9,6 +9,8 @@
 
 //! <https://wiki.vg/index.php?title=Protocol&oldid=18375>
 
+pub mod def;
+
 use std::str::FromStr;
 
 use anyhow::{bail, ensure};

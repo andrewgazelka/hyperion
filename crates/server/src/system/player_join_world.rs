@@ -15,6 +15,7 @@ use valence_protocol::{
     packets::{
         play,
         play::{
+            entity_equipment_update_s2c::EquipmentEntry,
             player_list_s2c::PlayerListActions,
             player_position_look_s2c::PlayerPositionLookFlags,
             team_s2c::{CollisionRule, Mode, NameTagVisibility, TeamColor, TeamFlags},
@@ -22,8 +23,8 @@ use valence_protocol::{
         },
     },
     text::IntoText,
-    BlockPos, BlockState, ByteAngle, ChunkPos, Encode, FixedArray, GameMode, Ident, PacketEncoder,
-    VarInt,
+    BlockPos, BlockState, ByteAngle, ChunkPos, Encode, FixedArray, GameMode, Ident, ItemKind,
+    ItemStack, PacketEncoder, VarInt,
 };
 use valence_registry::{biome::BiomeId, BiomeRegistry, RegistryCodec, RegistryIdx};
 
@@ -76,12 +77,48 @@ pub fn player_join_world(
         bytes.freeze()
     });
 
-    let buf = broadcast.get_round_robin();
+    let broadcast = broadcast.get_round_robin();
 
-    let (id, current_player, uuid, pose, encoder) = r.query;
+    let (current_id, current_player, uuid, pose, encoder) = r.query;
 
-    uuid_lookup.insert(uuid.0, id);
-    id_lookup.inner.insert(id.index().0 as i32, id);
+    uuid_lookup.insert(uuid.0, current_id);
+    id_lookup
+        .inner
+        .insert(current_id.index().0 as i32, current_id);
+
+    let boots = ItemStack::new(ItemKind::NetheriteBoots, 1, None);
+    let leggings = ItemStack::new(ItemKind::NetheriteLeggings, 1, None);
+    let chestplate = ItemStack::new(ItemKind::NetheriteChestplate, 1, None);
+    let helmet = ItemStack::new(ItemKind::NetheriteHelmet, 1, None);
+    let sword = ItemStack::new(ItemKind::NetheriteSword, 1, None);
+
+    // 0: Mainhand
+    // 2: Boots
+    // 3: Leggings
+    // 4: Chestplate
+    // 5: Helmet
+    let mainhand = EquipmentEntry {
+        slot: 0,
+        item: sword,
+    };
+    let boots = EquipmentEntry {
+        slot: 2,
+        item: boots,
+    };
+    let leggings = EquipmentEntry {
+        slot: 3,
+        item: leggings,
+    };
+    let chestplate = EquipmentEntry {
+        slot: 4,
+        item: chestplate,
+    };
+    let helmet = EquipmentEntry {
+        slot: 5,
+        item: helmet,
+    };
+
+    let equipment = vec![mainhand, boots, leggings, chestplate, helmet];
 
     let entries = &[play::player_list_s2c::PlayerListEntry {
         player_uuid: uuid.0,
@@ -94,6 +131,24 @@ pub fn player_join_world(
         display_name: Some(current_player.name.to_string().into_cow_text()),
     }];
 
+    let current_entity_id = VarInt(current_id.index().0 as i32);
+
+    let text = play::GameMessageS2c {
+        chat: format!("{} joined the world", current_player.name).into_cow_text(),
+        overlay: false,
+    };
+
+    broadcast.append_packet(&text).unwrap();
+
+    encoder.append(cached_data);
+
+    encoder
+        .encode(&crate::packets::def::EntityEquipmentUpdateS2c {
+            entity_id: VarInt(0),
+            equipment: Cow::Borrowed(&equipment),
+        })
+        .unwrap();
+
     let actions = PlayerListActions::default()
         .with_add_player(true)
         .with_update_listed(true)
@@ -104,16 +159,7 @@ pub fn player_join_world(
         entries: Cow::Borrowed(entries),
     };
 
-    buf.append_packet(&info).unwrap();
-
-    let text = valence_protocol::packets::play::GameMessageS2c {
-        chat: format!("{} joined the world", current_player.name).into_cow_text(),
-        overlay: false,
-    };
-
-    buf.append_packet(&text).unwrap();
-
-    encoder.append(cached_data);
+    broadcast.append_packet(&info).unwrap();
 
     for entity in entities {
         let pkt = spawn_packet(entity.id, *entity.uuid, entity.pose);
@@ -153,13 +199,14 @@ pub fn player_join_world(
 
     let current_name = &*current_player.name;
 
-    buf.append_packet(&play::TeamS2c {
-        team_name: "no_tag",
-        mode: Mode::AddEntities {
-            entities: vec![current_name],
-        },
-    })
-    .unwrap();
+    broadcast
+        .append_packet(&play::TeamS2c {
+            team_name: "no_tag",
+            mode: Mode::AddEntities {
+                entities: vec![current_name],
+            },
+        })
+        .unwrap();
 
     encoder
         .encode(&play::PlayerListS2c {
@@ -190,6 +237,12 @@ pub fn player_join_world(
             pitch: ByteAngle::from_degrees(pose.pitch),
         };
         encoder.encode(&pkt).unwrap();
+
+        let pkt = crate::packets::def::EntityEquipmentUpdateS2c {
+            entity_id,
+            equipment: Cow::Borrowed(&equipment),
+        };
+        encoder.encode(&pkt).unwrap();
     }
 
     global
@@ -198,10 +251,8 @@ pub fn player_join_world(
         .player_count
         .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 
-    let entity_id = VarInt(id.index().0 as i32);
-
     let spawn_player = play::PlayerSpawnS2c {
-        entity_id,
+        entity_id: current_entity_id,
         player_uuid: uuid.0,
         position: pose.position.as_dvec3(),
         yaw: ByteAngle::from_degrees(pose.yaw),
@@ -218,7 +269,14 @@ pub fn player_join_world(
         })
         .unwrap();
 
-    buf.append_packet(&spawn_player).unwrap();
+    broadcast.append_packet(&spawn_player).unwrap();
+
+    broadcast
+        .append_packet(&crate::packets::def::EntityEquipmentUpdateS2c {
+            entity_id: current_entity_id,
+            equipment: Cow::Borrowed(&equipment),
+        })
+        .unwrap();
 
     encoder.deallocate_on_process();
 
