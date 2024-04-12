@@ -33,7 +33,10 @@ use crate::{
     config,
     global::Global,
     net::Encoder,
-    singleton::{broadcast::BroadcastBuf, player_uuid_lookup::PlayerUuidLookup},
+    singleton::{
+        broadcast::BroadcastBuf, player_id_lookup::PlayerIdLookup,
+        player_uuid_lookup::PlayerUuidLookup,
+    },
     system::init_entity::spawn_packet,
     FullEntityPose, MinecraftEntity, Player, PlayerJoinWorld, Uuid,
 };
@@ -54,7 +57,8 @@ pub fn player_join_world(
     entities: Fetcher<EntityQuery>,
     global: Single<&Global>,
     players: Fetcher<(EntityId, &Player, &Uuid, &FullEntityPose)>,
-    lookup: Single<&mut PlayerUuidLookup>,
+    mut uuid_lookup: Single<&mut PlayerUuidLookup>,
+    mut id_lookup: Single<&mut PlayerIdLookup>,
     mut broadcast: Single<&mut BroadcastBuf>,
 ) {
     static CACHED_DATA: once_cell::sync::OnceCell<bytes::Bytes> = once_cell::sync::OnceCell::new();
@@ -76,7 +80,8 @@ pub fn player_join_world(
 
     let (id, current_player, uuid, pose, encoder) = r.query;
 
-    lookup.0.insert(uuid.0, id);
+    uuid_lookup.insert(uuid.0, id);
+    id_lookup.inner.insert(id.index().0 as i32, id);
 
     let entries = &[play::player_list_s2c::PlayerListEntry {
         player_uuid: uuid.0,

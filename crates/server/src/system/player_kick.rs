@@ -8,19 +8,25 @@ use valence_protocol::{
 };
 
 use crate::{
-    global::Global, net::Encoder, singleton::player_uuid_lookup::PlayerUuidLookup, KickPlayer, Uuid,
+    global::Global,
+    net::Encoder,
+    singleton::{player_id_lookup::PlayerIdLookup, player_uuid_lookup::PlayerUuidLookup},
+    KickPlayer, Uuid,
 };
 
 #[instrument(skip_all)]
 pub fn player_kick(
     r: Receiver<KickPlayer, (EntityId, &Uuid, &mut Encoder)>,
     global: Single<&Global>,
-    mut lookup: Single<&mut PlayerUuidLookup>,
+    mut uuid_lookup: Single<&mut PlayerUuidLookup>,
+    mut id_lookup: Single<&mut PlayerIdLookup>,
     mut s: Sender<Despawn>,
 ) {
     let (id, uuid, encoder) = r.query;
 
-    lookup.remove(&uuid.0);
+    uuid_lookup.remove(&uuid.0);
+    // todo: also remove on socket close
+    id_lookup.inner.remove(&(id.index().0 as i32));
 
     let reason = &r.event.reason;
 

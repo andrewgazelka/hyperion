@@ -13,13 +13,19 @@ use std::str::FromStr;
 
 use anyhow::{bail, ensure};
 use bvh::aabb::Aabb;
-use evenio::{entity::EntityId, event::Sender};
+use evenio::entity::EntityId;
 use tracing::debug;
-use valence_protocol::{decode::PacketFrame, math::Vec3, packets::play, Decode, Packet};
+use valence_protocol::{
+    decode::PacketFrame,
+    math::Vec3,
+    packets::{play, play::player_interact_entity_c2s::EntityInteraction},
+    Decode, Packet,
+};
 
 use crate::{
-    global::Global, system::IngressSender, Absorption, FullEntityPose, InitEntity, KickPlayer,
-    KillAllEntities, Player, PlayerState, Regeneration, SwingArm,
+    global::Global, singleton::player_id_lookup::PlayerIdLookup, system::IngressSender, Absorption,
+    AttackEntity, FullEntityPose, InitEntity, KillAllEntities, Player, PlayerState, Regeneration,
+    SwingArm,
 };
 
 const fn confirm_teleport(_pkt: &[u8]) {
@@ -283,13 +289,36 @@ fn hand_swing(mut data: &[u8], id: EntityId, sender: &mut IngressSender) -> anyh
     Ok(())
 }
 
+fn player_interact_entity(
+    mut data: &[u8],
+    id_lookup: &PlayerIdLookup,
+    from_pos: Vec3,
+    sender: &mut IngressSender,
+) -> anyhow::Result<()> {
+    let packet = play::PlayerInteractEntityC2s::decode(&mut data)?;
+
+    // attack
+    if packet.interact != EntityInteraction::Attack {
+        return Ok(());
+    }
+
+    let target = packet.entity_id.0;
+
+    if let Some(&target) = id_lookup.inner.get(&target) {
+        sender.send(AttackEntity { target, from_pos });
+    }
+
+    Ok(())
+}
+
 pub fn switch(
     raw: PacketFrame,
     global: &Global,
     id: EntityId,
     player: &mut Player,
     full_entity_pose: &mut FullEntityPose,
-    sender: &mut Sender<(KickPlayer, InitEntity, KillAllEntities, SwingArm)>,
+    id_lookup: &PlayerIdLookup,
+    sender: &mut IngressSender,
 ) -> anyhow::Result<()> {
     let packet_id = raw.id;
     let data = raw.body;
@@ -306,6 +335,9 @@ pub fn switch(
         play::ClientCommandC2s::ID => player_command(data),
         play::UpdatePlayerAbilitiesC2s::ID => update_player_abilities(data)?,
         play::UpdateSelectedSlotC2s::ID => update_selected_slot(data)?,
+        play::PlayerInteractEntityC2s::ID => {
+            player_interact_entity(data, id_lookup, full_entity_pose.position, sender)?;
+        }
         play::KeepAliveC2s::ID => keep_alive(player)?,
         play::CommandExecutionC2s::ID => {
             chat_command(data, global, player, full_entity_pose, sender)?;
