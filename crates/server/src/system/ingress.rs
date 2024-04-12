@@ -6,9 +6,12 @@ use evenio::{
 use tracing::{instrument, warn};
 
 use crate::{
-    global::Global, net::GLOBAL_C2S_PACKETS, packets,
-    singleton::player_uuid_lookup::PlayerUuidLookup, system::IngressSender, FullEntityPose,
-    Gametick, Player,
+    global::Global,
+    net::GLOBAL_C2S_PACKETS,
+    packets,
+    singleton::{player_id_lookup::PlayerIdLookup, player_uuid_lookup::PlayerUuidLookup},
+    system::IngressSender,
+    FullEntityPose, Gametick, Player,
 };
 
 // The `Receiver<Tick>` parameter tells our handler to listen for the `Tick` event.
@@ -16,6 +19,7 @@ use crate::{
 pub fn ingress(
     _: Receiver<Gametick>,
     global: Single<&Global>,
+    id_lookup: Single<&PlayerIdLookup>,
     mut fetcher: Fetcher<(EntityId, &mut Player, &mut FullEntityPose)>,
     lookup: Single<&PlayerUuidLookup>,
     mut sender: IngressSender,
@@ -36,7 +40,15 @@ pub fn ingress(
 
         let packet = packet.packet;
 
-        if let Err(e) = packets::switch(packet, &global, player_id, player, position, &mut sender) {
+        if let Err(e) = packets::switch(
+            packet,
+            &global,
+            player_id,
+            player,
+            position,
+            &id_lookup,
+            &mut sender,
+        ) {
             let reason = format!("error: {e}");
 
             // todo: handle error

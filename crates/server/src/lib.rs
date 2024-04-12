@@ -29,7 +29,7 @@ use crate::{
     net::{init_io_thread, ClientConnection, Connection, Encoder},
     singleton::{
         broadcast::BroadcastBuf, player_aabb_lookup::PlayerBoundingBoxes,
-        player_uuid_lookup::PlayerUuidLookup,
+        player_id_lookup::PlayerIdLookup, player_uuid_lookup::PlayerUuidLookup,
     },
     tracker::Tracker,
 };
@@ -248,6 +248,15 @@ struct SwingArm {
     hand: Hand,
 }
 
+#[derive(Event)]
+struct AttackEntity {
+    /// The [`EntityId`] of the player.
+    #[event(target)]
+    target: EntityId,
+    /// The location of the player that is hitting.
+    from_pos: Vec3,
+}
+
 /// An event to kill all minecraft entities (like zombies, skeletons, etc). This will be sent to the equivalent of
 /// `/killall` in the game.
 #[derive(Event)]
@@ -395,6 +404,7 @@ impl Game {
         world.add_handler(system::player_detect_collisions);
         world.add_handler(system::clean_up_io);
 
+        world.add_handler(system::pkt_attack);
         world.add_handler(system::pkt_hand_swing);
 
         world.add_handler(system::generate_egress_packets);
@@ -415,6 +425,9 @@ impl Game {
 
         let uuid_lookup = world.spawn();
         world.insert(uuid_lookup, PlayerUuidLookup::default());
+
+        let player_id_lookup = world.spawn();
+        world.insert(player_id_lookup, PlayerIdLookup::default());
 
         let player_location_lookup = world.spawn();
         world.insert(player_location_lookup, PlayerBoundingBoxes::default());
