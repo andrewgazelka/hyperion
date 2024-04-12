@@ -2,29 +2,25 @@ use evenio::{
     entity::EntityId,
     event::Receiver,
     fetch::{Fetcher, Single},
-    query::With,
     rayon::prelude::*,
 };
 use tracing::instrument;
 
 use crate::{
-    singleton::bounding_box::EntityBoundingBoxes, EntityReaction, FullEntityPose, Gametick, Player,
+    global::Global, singleton::bounding_box::EntityBoundingBoxes, EntityReaction, FullEntityPose,
+    Gametick, Player,
 };
 
 #[instrument(skip_all, level = "trace")]
 pub fn player_detect_collisions(
     _: Receiver<Gametick>,
     entity_bounding_boxes: Single<&EntityBoundingBoxes>,
-    mut poses_fetcher: Fetcher<(
-        EntityId,
-        &FullEntityPose,
-        &mut EntityReaction,
-        With<&Player>,
-    )>,
+    global: Single<&Global>,
+    mut poses_fetcher: Fetcher<(EntityId, &FullEntityPose, &mut EntityReaction, &mut Player)>,
 ) {
     poses_fetcher
         .par_iter_mut()
-        .for_each(|(id, pose, reaction, _)| {
+        .for_each(|(id, pose, reaction, player)| {
             // todo: remove mid just use loc directly
             let this = pose.bounding.mid();
             entity_bounding_boxes
@@ -58,6 +54,8 @@ pub fn player_detect_collisions(
                     if reaction.velocity.y > 0.4 {
                         reaction.velocity.y = 0.4;
                     }
+
+                    player.hurt(global.tick.unsigned_abs(), 1.0);
 
                     true
                 });
