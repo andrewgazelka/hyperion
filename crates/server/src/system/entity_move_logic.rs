@@ -8,7 +8,7 @@ use tracing::instrument;
 use valence_protocol::math::{Vec2, Vec3};
 
 use crate::{
-    singleton::player_aabb_lookup::PlayerAabbs, EntityReaction, FullEntityPose, Gametick,
+    singleton::player_aabb_lookup::PlayerBoundingBoxes, EntityReaction, FullEntityPose, Gametick,
     MinecraftEntity, RunningSpeed,
 };
 
@@ -24,7 +24,7 @@ pub struct EntityQuery<'a> {
 pub fn entity_move_logic(
     _: Receiver<Gametick>,
     mut entities: Fetcher<EntityQuery>,
-    lookup: Single<&PlayerAabbs>,
+    lookup: Single<&PlayerBoundingBoxes>,
 ) {
     entities.par_iter_mut().for_each(|query| {
         let EntityQuery {

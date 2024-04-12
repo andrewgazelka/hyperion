@@ -30,12 +30,4 @@ impl EntityBoundingBoxes {
     pub fn clear(&mut self) {
         self.query.clear();
     }
-
-    /// Returns all collisions between the given bounding box and all entities.
-    ///
-    /// - If the process returns `true`, more collisions are queried.
-    /// - If the process returns `false`, `get_collisions` short circuits and stops querying.
-    pub fn get_collisions(&self, bounding: Aabb, process: impl FnMut(&Stored) -> bool) {
-        self.query.get_collisions(bounding, process);
-    }
 }
