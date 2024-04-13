@@ -66,7 +66,7 @@ const BUFS_IN_GROUP: usize = 1024;
 const LISTENER_FIXED_FD: Fixed = Fixed(0);
 const C2S_BUFFER_GROUP_ID: u16 = 0;
 
-const IORING_CQE_F_MORE: u32 = 1;
+const IORING_CQE_F_MORE: u32 = 1 << 1;
 
 
 /// How long we wait from when we get the first buffer to when we start sending all of the ones we have collected.
