@@ -5,6 +5,7 @@
 
 mod chunk;
 mod singleton;
+mod blocks;
 
 use std::{
     collections::VecDeque,
