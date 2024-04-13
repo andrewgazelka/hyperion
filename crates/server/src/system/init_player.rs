@@ -2,7 +2,7 @@ use evenio::prelude::*;
 use tracing::instrument;
 
 use crate::{
-    net::{Connection, Encoder},
+    net::Encoder,
     system::entity_position::PositionSyncMetadata,
     tracker::Tracker,
     EntityReaction, FullEntityPose, InitPlayer, Player, PlayerJoinWorld, Targetable, Uuid,
@@ -19,7 +19,6 @@ pub fn init_player(
         Insert<Uuid>,
         Insert<Targetable>,
         Insert<Encoder>,
-        Insert<Connection>,
         PlayerJoinWorld,
     )>,
 ) {
@@ -29,7 +28,6 @@ pub fn init_player(
     let InitPlayer {
         entity,
         encoder,
-        connection,
         name,
         uuid,
         pos,
@@ -47,7 +45,6 @@ pub fn init_player(
         immune_until: 0,
     });
     s.insert(entity, encoder);
-    s.insert(entity, connection);
     s.insert(entity, Uuid(uuid));
     s.insert(entity, PositionSyncMetadata::default());
 
