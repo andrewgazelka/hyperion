@@ -7,7 +7,6 @@ use tracing::{instrument, warn};
 
 use crate::{
     global::Global,
-    net::GLOBAL_C2S_PACKETS,
     packets,
     singleton::{player_id_lookup::PlayerIdLookup, player_uuid_lookup::PlayerUuidLookup},
     system::IngressSender,
@@ -26,7 +25,8 @@ pub fn ingress(
 ) {
     // uuid to entity id map
 
-    let packets: Vec<_> = core::mem::take(&mut *GLOBAL_C2S_PACKETS.lock());
+    // TODO:
+    let packets: Vec<_> = vec![];
 
     for packet in packets {
         let id = packet.user;
