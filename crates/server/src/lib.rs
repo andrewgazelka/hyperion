@@ -38,8 +38,8 @@ use crate::{
 mod global;
 mod net;
 
-// mod packets;
-// mod system;
+mod packets;
+mod system;
 
 mod bits;
 
@@ -408,31 +408,31 @@ impl Game {
 
         let mut world = World::new();
 
-//        world.add_handler(system::ingress);
-//        world.add_handler(system::init_player);
-//        world.add_handler(system::player_join_world);
-//        world.add_handler(system::player_kick);
-//        world.add_handler(system::entity_spawn);
-//        world.add_handler(system::entity_move_logic);
-//        world.add_handler(system::entity_detect_collisions);
-//        world.add_handler(system::sync_entity_position);
-//        world.add_handler(system::reset_bounding_boxes);
-//        world.add_handler(system::update_time);
-//        world.add_handler(system::update_health);
-//        world.add_handler(system::sync_players);
-//        world.add_handler(system::rebuild_player_location);
-//        world.add_handler(system::player_detect_mob_hits);
-//        world.add_handler(system::clean_up_io);
-//
-//        world.add_handler(system::pkt_attack);
-//        world.add_handler(system::pkt_hand_swing);
-//
-//        world.add_handler(system::generate_egress_packets);
-//        world.add_handler(system::egress_broadcast);
-//        world.add_handler(system::egress_local);
-//        world.add_handler(system::keep_alive);
-//        world.add_handler(system::stats_message);
-//        world.add_handler(system::kill_all);
+        world.add_handler(system::ingress);
+        world.add_handler(system::init_player);
+        world.add_handler(system::player_join_world);
+        world.add_handler(system::player_kick);
+        world.add_handler(system::entity_spawn);
+        world.add_handler(system::entity_move_logic);
+        world.add_handler(system::entity_detect_collisions);
+        world.add_handler(system::sync_entity_position);
+        world.add_handler(system::reset_bounding_boxes);
+        world.add_handler(system::update_time);
+        world.add_handler(system::update_health);
+        world.add_handler(system::sync_players);
+        world.add_handler(system::rebuild_player_location);
+        world.add_handler(system::player_detect_mob_hits);
+        world.add_handler(system::clean_up_io);
+
+        world.add_handler(system::pkt_attack);
+        world.add_handler(system::pkt_hand_swing);
+
+        world.add_handler(system::generate_egress_packets);
+        world.add_handler(system::egress_broadcast);
+        world.add_handler(system::egress_local);
+        world.add_handler(system::keep_alive);
+        world.add_handler(system::stats_message);
+        world.add_handler(system::kill_all);
 
         let global = world.spawn();
         world.insert(global, Global {

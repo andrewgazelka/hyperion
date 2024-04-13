@@ -3,6 +3,7 @@
 #![expect(clippy::future_not_send, reason = "monoio is not Send")]
 
 use std::{
+    alloc::{alloc, Layout},
     borrow::Cow,
     cell::Cell,
     io,
@@ -60,10 +61,13 @@ const MAX_VECTORED_WRITE_BUFS: usize = 16;
 const COMPLETION_QUEUE_SIZE: u32 = 32768;
 const SUBMISSION_QUEUE_SIZE: u32 = 32768;
 const IO_URING_FILE_COUNT: u32 = 32768;
+const BUFS_IN_GROUP: usize = 1024;
 
 const LISTENER_FIXED_FD: Fixed = Fixed(0);
+const C2S_BUFFER_GROUP_ID: u16 = 0;
 
 const IORING_CQE_F_MORE: u32 = 1;
+
 
 /// How long we wait from when we get the first buffer to when we start sending all of the ones we have collected.
 /// This is closely related to [`MAX_VECTORED_WRITE_BUFS`].
@@ -719,6 +723,22 @@ async fn print_errors(future: impl core::future::Future<Output = anyhow::Result<
 //    Ok(connection_rx)
 //}
 
+fn page_size() -> usize {
+    // SAFETY: This is valid
+    unsafe {
+        libc::sysconf(libc::_SC_PAGESIZE) as usize
+    }
+}
+
+fn alloc_page_aligned(len: usize) -> *mut u8 {
+    assert!(len > 0);
+
+    // SAFETY: len is nonzero
+    unsafe {
+        alloc(Layout::from_size_align(len, page_size()).unwrap())
+    }
+}
+
 pub enum ServerEvent {
     AddPlayer {
         fd: Fixed
@@ -737,11 +757,22 @@ pub struct Server {
 impl Server {
     pub fn new(address: impl ToSocketAddrs) -> anyhow::Result<Self> {
         let listener = TcpListener::bind(address)?;
+        // TODO: Try to use defer taskrun
         let mut uring = IoUring::builder().setup_cqsize(COMPLETION_QUEUE_SIZE).setup_submit_all().setup_coop_taskrun().setup_single_issuer().build(SUBMISSION_QUEUE_SIZE).unwrap();
 
         let mut submitter = uring.submitter();
         submitter.register_files_sparse(IO_URING_FILE_COUNT)?;
         assert_eq!(submitter.register_files_update(LISTENER_FIXED_FD.0, &[listener.as_raw_fd()])?, 1);
+
+        let buffer_ring = alloc_page_aligned(BUFS_IN_GROUP * std::mem::size_of::<io_uring::types::BufRingEntry>());
+        // SAFETY: buffer_ring is valid to write to for BUFS_IN_GROUP io_uring_buf structs
+        unsafe {
+            submitter.register_buf_ring(
+                buffer_ring as u64,
+                BUFS_IN_GROUP as u16,
+                C2S_BUFFER_GROUP_ID
+            )?;
+        }
 
         let mut this = Self {
             listener,
@@ -750,6 +781,8 @@ impl Server {
         };
 
         this.request_accept();
+
+        // this.push_entry(&io_uring::opcode::ProvideBuffers::new().build.user_data(1));
 
         Ok(this)
     }
@@ -785,7 +818,9 @@ impl Server {
     }
 
     fn request_recv(&mut self, fd: Fixed) {
-        // self.push_entry(io_uring::opcode::RecvMulti::new(LISTENER_FIXED_FD).allocate_file_index().build().user_data(0));
+        unsafe {
+            self.push_entry(&io_uring::opcode::RecvMulti::new(fd, C2S_BUFFER_GROUP_ID).build().user_data((fd.0 + 2) as u64));
+        }
     }
 
     pub fn fetch_new_events(&mut self) {
@@ -805,6 +840,7 @@ impl Server {
     pub fn next_event(&mut self) -> Option<ServerEvent> {
         let mut event = None;
         let mut request_accept = false;
+        let mut request_recv = vec![];
         for mut completion in self.uring.completion() {
             match completion.user_data() {
                 0 => {
@@ -822,14 +858,29 @@ impl Server {
                         break;
                     }
                 },
-                _ => {
-                    error!("io_uring returned completion event with invalid user data");
+                1 => {
+                    warn!("got provide buffers response");
+                },
+                fd_plus_2 => {
+                    let fd = Fixed((fd_plus_2 - 2) as u32);
+
+                    if completion.flags() & IORING_CQE_F_MORE == 0 {
+                        request_recv.push(fd);
+                        warn!("socket recv rerequested");
+                    }
+
+                    println!("got socket receive");
+                    dbg!(completion.result());
                 }
             }
         }
 
         if request_accept {
             self.request_accept();
+        }
+
+        for fd in request_recv {
+            self.request_recv(fd);
         }
 
         event
