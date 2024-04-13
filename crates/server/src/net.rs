@@ -3,7 +3,7 @@
 #![expect(clippy::future_not_send, reason = "monoio is not Send")]
 
 use std::{
-    alloc::{alloc_zeroed, Layout},
+    alloc::{alloc_zeroed, handle_alloc_error, Layout},
     borrow::Cow,
     cell::{Cell, UnsafeCell},
     io,
@@ -12,7 +12,7 @@ use std::{
     os::fd::{AsRawFd, RawFd},
     ptr::addr_of_mut,
     sync::{
-        atomic::{AtomicU32, Ordering},
+        atomic::{AtomicU16, AtomicU32, Ordering},
         Arc,
     },
     net::{TcpListener, TcpStream},
@@ -61,8 +61,8 @@ const MAX_VECTORED_WRITE_BUFS: usize = 16;
 const COMPLETION_QUEUE_SIZE: u32 = 32768;
 const SUBMISSION_QUEUE_SIZE: u32 = 32768;
 const IO_URING_FILE_COUNT: u32 = 32768;
-const C2S_RING_ENTRY_COUNT: usize = 4096;
-const C2S_RING_BUFFER_COUNT: usize = 4096;
+const C2S_RING_ENTRY_COUNT: usize = 4;
+const C2S_RING_BUFFER_COUNT: usize = 4;
 
 /// Size of each buffer in bytes
 const C2S_RING_BUFFER_LEN: usize = 4096;
@@ -740,10 +740,16 @@ fn alloc_zeroed_page_aligned<T>(len: usize) -> *mut T {
     assert!(type_layout.align() <= page_size);
     assert!(type_layout.size() > 0);
 
+    let layout = Layout::from_size_align(len * type_layout.size(), page_size).unwrap();
+
     // SAFETY: len is nonzero and T is not zero sized
-    unsafe {
-        alloc_zeroed(Layout::from_size_align(len * type_layout.size(), page_size).unwrap()).cast()
+    let data = unsafe { alloc_zeroed(layout) };
+
+    if data.is_null() {
+        handle_alloc_error(layout);
     }
+
+    data.cast()
 }
 
 pub enum ServerEvent {
@@ -760,6 +766,8 @@ pub struct Server {
     uring: IoUring,
 
     c2s_buffer: *mut [UnsafeCell<u8>; C2S_RING_BUFFER_LEN],
+    c2s_local_tail: u16,
+    c2s_shared_tail: *const AtomicU16,
 
     /// Make Listener !Send and !Sync to let io_uring assume that it'll only be accessed by 1
     /// thread
@@ -795,15 +803,19 @@ impl Server {
             }
         }
 
+        let tail = C2S_RING_BUFFER_COUNT as u16;
+
         // Update the tail
         // SAFETY: This is the first entry of the buffer ring
         let tail_addr = unsafe { BufRingEntry::tail(buffer_ring) };
 
-        // SAFETY: tail_addr should be valid for writing since it hasn't been passed to the kernel
+        // SAFETY: tail_addr doesn't need to be atomic since it hasn't been passed to the kernel
         // yet
         unsafe {
-            *(tail_addr as *mut u16) = C2S_RING_BUFFER_COUNT as u16;
+            *tail_addr.cast_mut() = tail;
         }
+
+        let tail_addr: *const AtomicU16 = tail_addr.cast();
 
         // Register the buffer ring
         // SAFETY: buffer_ring is valid to write to for C2S_RING_ENTRY_COUNT BufRingEntry structs
@@ -819,6 +831,8 @@ impl Server {
             listener,
             uring,
             c2s_buffer,
+            c2s_local_tail: tail,
+            c2s_shared_tail: tail_addr,
             phantom: PhantomData
         };
 
@@ -878,26 +892,23 @@ impl Server {
     }
 
     pub fn next_event(&mut self) -> Option<ServerEvent> {
-        let mut event = None;
-        let mut request_accept = false;
-        let mut request_recv = vec![];
-        for mut completion in self.uring.completion() {
+        loop {
+            let mut completion = self.uring.completion().next()?;
             match completion.user_data() {
                 0 => {
                     if completion.flags() & IORING_CQE_F_MORE == 0 {
-                        request_accept = true;
                         warn!("multishot accept rerequested");
+                        self.request_accept();
                     }
 
                     if completion.result() < 0 {
                         error!("there was an error in accept: {}", completion.result());
                     } else {
                         let fd = Fixed(completion.result() as u32);
-                        request_recv.push(fd);
-                        event = Some(ServerEvent::AddPlayer {
+                        self.request_recv(fd);
+                        return Some(ServerEvent::AddPlayer {
                             fd
                         });
-                        break;
                     }
                 },
                 1 => {
@@ -908,13 +919,12 @@ impl Server {
                     let disconnected = completion.result() == 0;
 
                     if completion.flags() & IORING_CQE_F_MORE == 0 && !disconnected {
-                        request_recv.push(fd);
                         warn!("socket recv rerequested");
+                        self.request_recv(fd);
                     }
 
                     if disconnected {
-                        event = Some(ServerEvent::RemovePlayer { fd });
-                        break;
+                        return Some(ServerEvent::RemovePlayer { fd });
                     } else if completion.result() < 0 {
                         error!("there was an error in recv: {}", completion.result());
                     } else {
@@ -926,19 +936,17 @@ impl Server {
                         let buffer = unsafe { *(self.c2s_buffer.add(buffer_id as usize) as *const [u8; C2S_RING_BUFFER_LEN]) };
                         let buffer = &buffer[..bytes_received];
                         dbg!(buffer);
+
+                        self.c2s_local_tail = self.c2s_local_tail.wrapping_add(1);
+
+                        // TODO: sync less often
+                        // SAFETY: c2s_shared_tail is valid
+                        unsafe {
+                            (*self.c2s_shared_tail).store(self.c2s_local_tail, Ordering::Relaxed);
+                        }
                     }
                 }
             }
         }
-
-        if request_accept {
-            self.request_accept();
-        }
-
-        for fd in request_recv {
-            self.request_recv(fd);
-        }
-
-        event
     }
 }
