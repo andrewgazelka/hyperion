@@ -737,7 +737,7 @@ pub struct Server {
 impl Server {
     pub fn new(address: impl ToSocketAddrs) -> anyhow::Result<Self> {
         let listener = TcpListener::bind(address)?;
-        let mut uring = IoUring::builder().setup_cqsize(COMPLETION_QUEUE_SIZE).setup_submit_all().setup_coop_taskrun().setup_defer_taskrun().setup_single_issuer().build(SUBMISSION_QUEUE_SIZE).unwrap();
+        let mut uring = IoUring::builder().setup_cqsize(COMPLETION_QUEUE_SIZE).setup_submit_all().setup_coop_taskrun().setup_single_issuer().build(SUBMISSION_QUEUE_SIZE).unwrap();
 
         let mut submitter = uring.submitter();
         submitter.register_files_sparse(IO_URING_FILE_COUNT)?;
@@ -796,13 +796,19 @@ impl Server {
         }
     }
 
+    pub fn submit_events(&mut self) {
+        if let Err(err) = self.uring.submit() {
+            error!("unexpected io_uring error during submit: {err}");
+        }
+    }
+
     pub fn next_event(&mut self) -> Option<ServerEvent> {
         let mut event = None;
         let mut request_accept = false;
         for mut completion in self.uring.completion() {
             match completion.user_data() {
                 0 => {
-                    if completion.flags() & IORING_CQE_F_MORE != 0 {
+                    if completion.flags() & IORING_CQE_F_MORE == 0 {
                         request_accept = true;
                         warn!("multishot accept rerequested");
                     }

@@ -577,6 +577,7 @@ impl Game {
 
         self.world.send(Gametick);
         self.world.send(Egress);
+        self.server.submit_events();
 
         #[expect(
             clippy::cast_precision_loss,
