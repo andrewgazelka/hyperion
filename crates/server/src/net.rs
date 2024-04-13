@@ -3,9 +3,9 @@
 #![expect(clippy::future_not_send, reason = "monoio is not Send")]
 
 use std::{
-    alloc::{alloc, Layout},
+    alloc::{alloc_zeroed, Layout},
     borrow::Cow,
-    cell::Cell,
+    cell::{Cell, UnsafeCell},
     io,
     io::ErrorKind,
     net::ToSocketAddrs,
@@ -48,7 +48,7 @@ use valence_protocol::{
     uuid::Uuid,
     Bounded, CompressionThreshold, Decode, Encode, PacketDecoder, PacketEncoder, VarInt,
 };
-use io_uring::{squeue::SubmissionQueue, types::Fixed, IoUring};
+use io_uring::{cqueue::buffer_select, squeue::SubmissionQueue, types::{BufRingEntry, Fixed}, IoUring};
 
 use crate::{config, global};
 
@@ -61,13 +61,16 @@ const MAX_VECTORED_WRITE_BUFS: usize = 16;
 const COMPLETION_QUEUE_SIZE: u32 = 32768;
 const SUBMISSION_QUEUE_SIZE: u32 = 32768;
 const IO_URING_FILE_COUNT: u32 = 32768;
-const BUFS_IN_GROUP: usize = 1024;
+const C2S_RING_ENTRY_COUNT: usize = 4096;
+const C2S_RING_BUFFER_COUNT: usize = 4096;
+
+/// Size of each buffer in bytes
+const C2S_RING_BUFFER_LEN: usize = 4096;
 
 const LISTENER_FIXED_FD: Fixed = Fixed(0);
 const C2S_BUFFER_GROUP_ID: u16 = 0;
 
 const IORING_CQE_F_MORE: u32 = 1 << 1;
-
 
 /// How long we wait from when we get the first buffer to when we start sending all of the ones we have collected.
 /// This is closely related to [`MAX_VECTORED_WRITE_BUFS`].
@@ -730,12 +733,16 @@ fn page_size() -> usize {
     }
 }
 
-fn alloc_page_aligned(len: usize) -> *mut u8 {
+fn alloc_zeroed_page_aligned<T>(len: usize) -> *mut T {
     assert!(len > 0);
+    let page_size = page_size();
+    let type_layout = Layout::new::<T>();
+    assert!(type_layout.align() <= page_size);
+    assert!(type_layout.size() > 0);
 
-    // SAFETY: len is nonzero
+    // SAFETY: len is nonzero and T is not zero sized
     unsafe {
-        alloc(Layout::from_size_align(len, page_size()).unwrap())
+        alloc_zeroed(Layout::from_size_align(len * type_layout.size(), page_size).unwrap()).cast()
     }
 }
 
@@ -743,11 +750,16 @@ pub enum ServerEvent {
     AddPlayer {
         fd: Fixed
     },
+    RemovePlayer {
+        fd: Fixed
+    }
 }
 
 pub struct Server {
     listener: TcpListener,
     uring: IoUring,
+
+    c2s_buffer: *mut [UnsafeCell<u8>; C2S_RING_BUFFER_LEN],
 
     /// Make Listener !Send and !Sync to let io_uring assume that it'll only be accessed by 1
     /// thread
@@ -764,12 +776,41 @@ impl Server {
         submitter.register_files_sparse(IO_URING_FILE_COUNT)?;
         assert_eq!(submitter.register_files_update(LISTENER_FIXED_FD.0, &[listener.as_raw_fd()])?, 1);
 
-        let buffer_ring = alloc_page_aligned(BUFS_IN_GROUP * std::mem::size_of::<io_uring::types::BufRingEntry>());
-        // SAFETY: buffer_ring is valid to write to for BUFS_IN_GROUP io_uring_buf structs
+        // Create the c2s buffer
+        let c2s_buffer = alloc_zeroed_page_aligned::<[UnsafeCell<u8>; C2S_RING_BUFFER_LEN]>(C2S_RING_BUFFER_COUNT);
+        let buffer_ring = alloc_zeroed_page_aligned::<BufRingEntry>(C2S_RING_ENTRY_COUNT);
+        {
+            let c2s_buffer = unsafe { std::slice::from_raw_parts(c2s_buffer, C2S_RING_BUFFER_COUNT) };
+
+            assert!(C2S_RING_BUFFER_COUNT <= C2S_RING_ENTRY_COUNT);
+            // SAFETY: Buffer count is smaller than the entry count, BufRingEntry is initialized with
+            // zero, and the underlying will not be mutated during the loop
+            let buffer_ring = unsafe { std::slice::from_raw_parts_mut(buffer_ring, C2S_RING_BUFFER_COUNT) };
+
+            for (buffer_id, buffer) in buffer_ring.into_iter().enumerate() {
+                let underlying_data = &c2s_buffer[buffer_id];
+                buffer.set_addr(underlying_data.as_ptr() as u64);
+                buffer.set_len(underlying_data.len() as u32);
+                buffer.set_bid(buffer_id as u16);
+            }
+        }
+
+        // Update the tail
+        // SAFETY: This is the first entry of the buffer ring
+        let tail_addr = unsafe { BufRingEntry::tail(buffer_ring) };
+
+        // SAFETY: tail_addr should be valid for writing since it hasn't been passed to the kernel
+        // yet
+        unsafe {
+            *(tail_addr as *mut u16) = C2S_RING_BUFFER_COUNT as u16;
+        }
+
+        // Register the buffer ring
+        // SAFETY: buffer_ring is valid to write to for C2S_RING_ENTRY_COUNT BufRingEntry structs
         unsafe {
             submitter.register_buf_ring(
                 buffer_ring as u64,
-                BUFS_IN_GROUP as u16,
+                C2S_RING_ENTRY_COUNT as u16,
                 C2S_BUFFER_GROUP_ID
             )?;
         }
@@ -777,12 +818,11 @@ impl Server {
         let mut this = Self {
             listener,
             uring,
+            c2s_buffer,
             phantom: PhantomData
         };
 
         this.request_accept();
-
-        // this.push_entry(&io_uring::opcode::ProvideBuffers::new().build.user_data(1));
 
         Ok(this)
     }
@@ -852,8 +892,10 @@ impl Server {
                     if completion.result() < 0 {
                         error!("there was an error in accept: {}", completion.result());
                     } else {
+                        let fd = Fixed(completion.result() as u32);
+                        request_recv.push(fd);
                         event = Some(ServerEvent::AddPlayer {
-                            fd: Fixed(completion.result() as u32)
+                            fd
                         });
                         break;
                     }
@@ -863,14 +905,28 @@ impl Server {
                 },
                 fd_plus_2 => {
                     let fd = Fixed((fd_plus_2 - 2) as u32);
+                    let disconnected = completion.result() == 0;
 
-                    if completion.flags() & IORING_CQE_F_MORE == 0 {
+                    if completion.flags() & IORING_CQE_F_MORE == 0 && !disconnected {
                         request_recv.push(fd);
                         warn!("socket recv rerequested");
                     }
 
-                    println!("got socket receive");
-                    dbg!(completion.result());
+                    if disconnected {
+                        event = Some(ServerEvent::RemovePlayer { fd });
+                        break;
+                    } else if completion.result() < 0 {
+                        error!("there was an error in recv: {}", completion.result());
+                    } else {
+                        println!("got socket receive");
+                        let bytes_received = completion.result() as usize;
+                        let buffer_id = buffer_select(completion.flags()).expect("there should be a buffer");
+                        assert!((buffer_id as usize) < C2S_RING_BUFFER_COUNT);
+                        // TODO: this is probably very unsafe
+                        let buffer = unsafe { *(self.c2s_buffer.add(buffer_id as usize) as *const [u8; C2S_RING_BUFFER_LEN]) };
+                        let buffer = &buffer[..bytes_received];
+                        dbg!(buffer);
+                    }
                 }
             }
         }

@@ -571,6 +571,11 @@ impl Game {
                     fd
                 } => {
                     info!("got a player with fd {}", fd.0);
+                },
+                ServerEvent::RemovePlayer {
+                    fd
+                } => {
+                    info!("removed a player with fd {}", fd.0);
                 }
             }
         }
