@@ -27,7 +27,7 @@ use valence_protocol::{math::Vec3, CompressionThreshold, Hand};
 
 use crate::{
     global::Global,
-    net::{init_io_thread, ClientConnection, Connection, Encoder},
+    net::{Encoder, ServerEvent, Server},
     singleton::{
         broadcast::BroadcastBuf, player_aabb_lookup::PlayerBoundingBoxes,
         player_id_lookup::PlayerIdLookup, player_uuid_lookup::PlayerUuidLookup,
@@ -38,8 +38,8 @@ use crate::{
 mod global;
 mod net;
 
-mod packets;
-mod system;
+// mod packets;
+// mod system;
 
 mod bits;
 
@@ -210,7 +210,6 @@ impl Player {
 struct InitPlayer {
     entity: EntityId,
     encoder: Encoder,
-    connection: Connection,
     name: Box<str>,
     uuid: uuid::Uuid,
     pos: FullEntityPose,
@@ -352,10 +351,7 @@ pub struct Game {
     last_ms_per_tick: VecDeque<f64>,
     /// The tick of the game. This is incremented every 50 ms.
     tick_on: u64,
-    /// The event that is sent when it is time to receive packets from clients.
-    incoming: flume::Receiver<ClientConnection>,
-    /// The event that is sent when the server is shutting down. This allows shutting down the I/O thread.
-    shutdown_tx: flume::Sender<()>,
+    server: Server
 }
 
 impl Game {
@@ -377,7 +373,7 @@ impl Game {
     /// # Panics
     /// This function will panic if the game is already shutdown.
     pub fn shutdown(&self) {
-        self.shutdown_tx.send(()).unwrap();
+        // TODO
     }
 
     /// Initialize the server.
@@ -393,15 +389,12 @@ impl Game {
         let mut signals = Signals::new([signal_hook::consts::SIGINT, signal_hook::consts::SIGTERM])
             .context("failed to create signal handler")?;
 
-        let (shutdown_tx, shutdown_rx) = flume::bounded(1);
-
         std::thread::spawn({
-            let shutdown_tx = shutdown_tx.clone();
             move || {
                 for _ in signals.forever() {
                     warn!("Shutting down...");
                     SHUTDOWN.store(true, std::sync::atomic::Ordering::Relaxed);
-                    let _ = shutdown_tx.send(());
+                    // TODO:
                 }
             }
         });
@@ -411,35 +404,35 @@ impl Game {
             compression_level: CompressionThreshold(64),
         });
 
-        let incoming = init_io_thread(shutdown_rx, address, shared.clone())?;
+        let server = Server::new(address)?;
 
         let mut world = World::new();
 
-        world.add_handler(system::ingress);
-        world.add_handler(system::init_player);
-        world.add_handler(system::player_join_world);
-        world.add_handler(system::player_kick);
-        world.add_handler(system::entity_spawn);
-        world.add_handler(system::entity_move_logic);
-        world.add_handler(system::entity_detect_collisions);
-        world.add_handler(system::sync_entity_position);
-        world.add_handler(system::reset_bounding_boxes);
-        world.add_handler(system::update_time);
-        world.add_handler(system::update_health);
-        world.add_handler(system::sync_players);
-        world.add_handler(system::rebuild_player_location);
-        world.add_handler(system::player_detect_mob_hits);
-        world.add_handler(system::clean_up_io);
-
-        world.add_handler(system::pkt_attack);
-        world.add_handler(system::pkt_hand_swing);
-
-        world.add_handler(system::generate_egress_packets);
-        world.add_handler(system::egress_broadcast);
-        world.add_handler(system::egress_local);
-        world.add_handler(system::keep_alive);
-        world.add_handler(system::stats_message);
-        world.add_handler(system::kill_all);
+//        world.add_handler(system::ingress);
+//        world.add_handler(system::init_player);
+//        world.add_handler(system::player_join_world);
+//        world.add_handler(system::player_kick);
+//        world.add_handler(system::entity_spawn);
+//        world.add_handler(system::entity_move_logic);
+//        world.add_handler(system::entity_detect_collisions);
+//        world.add_handler(system::sync_entity_position);
+//        world.add_handler(system::reset_bounding_boxes);
+//        world.add_handler(system::update_time);
+//        world.add_handler(system::update_health);
+//        world.add_handler(system::sync_players);
+//        world.add_handler(system::rebuild_player_location);
+//        world.add_handler(system::player_detect_mob_hits);
+//        world.add_handler(system::clean_up_io);
+//
+//        world.add_handler(system::pkt_attack);
+//        world.add_handler(system::pkt_hand_swing);
+//
+//        world.add_handler(system::generate_egress_packets);
+//        world.add_handler(system::egress_broadcast);
+//        world.add_handler(system::egress_local);
+//        world.add_handler(system::keep_alive);
+//        world.add_handler(system::stats_message);
+//        world.add_handler(system::kill_all);
 
         let global = world.spawn();
         world.insert(global, Global {
@@ -469,8 +462,7 @@ impl Game {
             last_ticks: VecDeque::default(),
             last_ms_per_tick: VecDeque::default(),
             tick_on: 0,
-            incoming,
-            shutdown_tx,
+            server
         };
 
         game.last_ticks.push_back(Instant::now());
@@ -540,36 +532,47 @@ impl Game {
 
         self.last_ticks.push_back(now);
 
-        while let Ok(connection) = self.incoming.try_recv() {
-            let ClientConnection {
-                encoder,
-                name,
-                uuid,
-                tx,
-            } = connection;
+//        while let Ok(connection) = self.incoming.try_recv() {
+//            let ClientConnection {
+//                encoder,
+//                name,
+//                uuid,
+//                tx,
+//            } = connection;
+//
+//            let player = self.world.spawn();
+//
+//            let connection = Connection::new(tx);
+//
+//            let dx = fastrand::f32().mul_add(10.0, -5.0);
+//            let dz = fastrand::f32().mul_add(10.0, -5.0);
+//
+//            let event = InitPlayer {
+//                entity: player,
+//                encoder,
+//                connection,
+//                name,
+//                uuid,
+//                pos: FullEntityPose {
+//                    position: Vec3::new(dx, 30.0, dz),
+//                    bounding: Aabb::create(Vec3::new(0.0, 2.0, 0.0), 0.6, 1.8),
+//                    yaw: 0.0,
+//                    pitch: 0.0,
+//                },
+//            };
+//
+//            self.world.send(event);
+//        }
 
-            let player = self.world.spawn();
-
-            let connection = Connection::new(tx);
-
-            let dx = fastrand::f32().mul_add(10.0, -5.0);
-            let dz = fastrand::f32().mul_add(10.0, -5.0);
-
-            let event = InitPlayer {
-                entity: player,
-                encoder,
-                connection,
-                name,
-                uuid,
-                pos: FullEntityPose {
-                    position: Vec3::new(dx, 30.0, dz),
-                    bounding: Aabb::create(Vec3::new(0.0, 2.0, 0.0), 0.6, 1.8),
-                    yaw: 0.0,
-                    pitch: 0.0,
-                },
-            };
-
-            self.world.send(event);
+        self.server.fetch_new_events();
+        while let Some(event) = self.server.next_event() {
+            match event {
+                ServerEvent::AddPlayer {
+                    fd
+                } => {
+                    info!("got a player with fd {}", fd.0);
+                }
+            }
         }
 
         self.world.send(Gametick);
