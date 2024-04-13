@@ -7,3 +7,5 @@ profiling
 .idea
 run
 hyperion
+.cargo
+perf.data
