@@ -62,8 +62,7 @@ const MAX_VECTORED_WRITE_BUFS: usize = 16;
 const COMPLETION_QUEUE_SIZE: u32 = 32768;
 const SUBMISSION_QUEUE_SIZE: u32 = 32768;
 const IO_URING_FILE_COUNT: u32 = 32768;
-const C2S_RING_ENTRY_COUNT: usize = 4;
-const C2S_RING_BUFFER_COUNT: usize = 4;
+const C2S_RING_BUFFER_COUNT: usize = 16384;
 
 /// Size of each buffer in bytes
 const C2S_RING_BUFFER_LEN: usize = 4096;
@@ -767,12 +766,16 @@ impl MaybeRegisteredBuffer {
     }
 }
 
-pub enum ServerEvent {
+pub enum ServerEvent<'a> {
     AddPlayer {
         fd: Fixed
     },
     RemovePlayer {
         fd: Fixed
+    },
+    RecvData {
+        fd: Fixed,
+        data: &'a [u8]
     }
 }
 
@@ -801,11 +804,10 @@ impl Server {
 
         // Create the c2s buffer
         let c2s_buffer = alloc_zeroed_page_aligned::<[UnsafeCell<u8>; C2S_RING_BUFFER_LEN]>(C2S_RING_BUFFER_COUNT);
-        let buffer_ring = alloc_zeroed_page_aligned::<BufRingEntry>(C2S_RING_ENTRY_COUNT);
+        let buffer_ring = alloc_zeroed_page_aligned::<BufRingEntry>(C2S_RING_BUFFER_COUNT);
         {
             let c2s_buffer = unsafe { std::slice::from_raw_parts(c2s_buffer, C2S_RING_BUFFER_COUNT) };
 
-            assert!(C2S_RING_BUFFER_COUNT <= C2S_RING_ENTRY_COUNT);
             // SAFETY: Buffer count is smaller than the entry count, BufRingEntry is initialized with
             // zero, and the underlying will not be mutated during the loop
             let buffer_ring = unsafe { std::slice::from_raw_parts_mut(buffer_ring, C2S_RING_BUFFER_COUNT) };
@@ -833,14 +835,16 @@ impl Server {
         let tail_addr: *const AtomicU16 = tail_addr.cast();
 
         // Register the buffer ring
-        // SAFETY: buffer_ring is valid to write to for C2S_RING_ENTRY_COUNT BufRingEntry structs
+        // SAFETY: buffer_ring is valid to write to for C2S_RING_BUFFER_COUNT BufRingEntry structs
         unsafe {
             submitter.register_buf_ring(
                 buffer_ring as u64,
-                C2S_RING_ENTRY_COUNT as u16,
+                C2S_RING_BUFFER_COUNT as u16,
                 C2S_BUFFER_GROUP_ID
             )?;
         }
+
+        Self::request_accept(&mut uring.submission());
 
         let mut this = Self {
             listener,
@@ -851,15 +855,12 @@ impl Server {
             phantom: PhantomData
         };
 
-        this.request_accept();
-
         Ok(this)
     }
 
     /// # Safety
-    /// Parameters of the entry must be valid for the duration of the operation
-    unsafe fn push_entry<'a>(&mut self, entry: &io_uring::squeue::Entry) {
-        let mut submission = self.uring.submission();
+    /// The entry must be valid for the duration of the operation
+    unsafe fn push_entry(submission: &mut SubmissionQueue, entry: &io_uring::squeue::Entry) {
         loop {
             if submission.push(entry).is_ok() {
                 return;
@@ -879,29 +880,21 @@ impl Server {
         }
     }
 
-    fn request_accept(&mut self) {
+    fn request_accept(submission: &mut SubmissionQueue) {
         unsafe {
-            self.push_entry(&io_uring::opcode::AcceptMulti::new(LISTENER_FIXED_FD).allocate_file_index(true).build().user_data(0));
+            Self::push_entry(submission, &io_uring::opcode::AcceptMulti::new(LISTENER_FIXED_FD).allocate_file_index(true).build().user_data(0));
         }
     }
 
-    fn request_recv(&mut self, fd: Fixed) {
+    fn request_recv(submission: &mut SubmissionQueue, fd: Fixed) {
         unsafe {
-            self.push_entry(&io_uring::opcode::RecvMulti::new(fd, C2S_BUFFER_GROUP_ID).build().user_data((fd.0 + 2) as u64));
+            Self::push_entry(submission, &io_uring::opcode::RecvMulti::new(fd, C2S_BUFFER_GROUP_ID).build().user_data((fd.0 + 2) as u64));
         }
     }
 
     pub fn write(&mut self, fd: Fixed, buf: *const u8, len: u32, buf_index: u16) {
         unsafe {
-            self.push_entry(&io_uring::opcode::WriteFixed::new(fd, buf, len, buf_index).build().user_data(1));
-        }
-    }
-
-    pub fn fetch_new_events(&mut self) {
-        let mut completion = self.uring.completion();
-        completion.sync();
-        if completion.overflow() > 0 {
-            error!("the io_uring completion queue overflowed, and some connection errors are likely to occur; consider increasing COMPLETION_QUEUE_SIZE to avoid this");
+            Self::push_entry(&mut self.uring.submission(), &io_uring::opcode::WriteFixed::new(fd, buf, len, buf_index).build().user_data(1));
         }
     }
 
@@ -911,118 +904,74 @@ impl Server {
         }
     }
 
-//    pub fn next_event<F: FnMut(ServerEvent)>(&mut self, mut f: F) {
-//        loop {
-//            let mut completion = self.uring.completion().next()?;
-//            match completion.user_data() {
-//                0 => {
-//                    if completion.flags() & IORING_CQE_F_MORE == 0 {
-//                        warn!("multishot accept rerequested");
-//                        self.request_accept();
-//                    }
-//
-//                    if completion.result() < 0 {
-//                        error!("there was an error in accept: {}", completion.result());
-//                    } else {
-//                        let fd = Fixed(completion.result() as u32);
-//                        self.request_recv(fd);
-//                        f(ServerEvent::AddPlayer {
-//                            fd
-//                        });
-//                    }
-//                },
-//                1 => {
-//                    warn!("got provide buffers response");
-//                },
-//                fd_plus_2 => {
-//                    let fd = Fixed((fd_plus_2 - 2) as u32);
-//                    let disconnected = completion.result() == 0;
-//
-//                    if completion.flags() & IORING_CQE_F_MORE == 0 && !disconnected {
-//                        warn!("socket recv rerequested");
-//                        self.request_recv(fd);
-//                    }
-//
-//                    if disconnected {
-//                        f(ServerEvent::RemovePlayer { fd });
-//                    } else if completion.result() < 0 {
-//                        error!("there was an error in recv: {}", completion.result());
-//                    } else {
-//                        let bytes_received = completion.result() as usize;
-//                        let buffer_id = buffer_select(completion.flags()).expect("there should be a buffer");
-//                        assert!((buffer_id as usize) < C2S_RING_BUFFER_COUNT);
-//                        // TODO: this is probably very unsafe
-//                        let buffer = unsafe { *(self.c2s_buffer.add(buffer_id as usize) as *const [u8; C2S_RING_BUFFER_LEN]) };
-//                        let buffer = &buffer[..bytes_received];
-//                        // dbg!(buffer);
-//
-//                        self.c2s_local_tail = self.c2s_local_tail.wrapping_add(1);
-//
-//                        // TODO: sync less often
-//                        // SAFETY: c2s_shared_tail is valid
-//                        unsafe {
-//                            (*self.c2s_shared_tail).store(self.c2s_local_tail, Ordering::Relaxed);
-//                        }
-//                    }
-//                }
-//            }
-//        }
-//    }
-    pub fn next_event(&mut self) -> Option<ServerEvent> {
-        loop {
-            let mut completion = self.uring.completion().next()?;
-            match completion.user_data() {
+    pub fn drain<F: FnMut(ServerEvent)>(&mut self, mut f: F) {
+        let (_, mut submission, mut completion) = self.uring.split();
+        completion.sync();
+        if completion.overflow() > 0 {
+            error!("the io_uring completion queue overflowed, and some connection errors are likely to occur; consider increasing COMPLETION_QUEUE_SIZE to avoid this");
+        }
+
+        for event in completion {
+            match event.user_data() {
                 0 => {
-                    if completion.flags() & IORING_CQE_F_MORE == 0 {
+                    if event.flags() & IORING_CQE_F_MORE == 0 {
                         warn!("multishot accept rerequested");
-                        self.request_accept();
+                        Self::request_accept(&mut submission);
                     }
 
-                    if completion.result() < 0 {
-                        error!("there was an error in accept: {}", completion.result());
+                    if event.result() < 0 {
+                        error!("there was an error in accept: {}", event.result());
                     } else {
-                        let fd = Fixed(completion.result() as u32);
-                        self.request_recv(fd);
-                        return Some(ServerEvent::AddPlayer {
+                        let fd = Fixed(event.result() as u32);
+                        Self::request_recv(&mut submission, fd);
+                        f(ServerEvent::AddPlayer {
                             fd
                         });
                     }
                 },
                 1 => {
+                    // TODO: check for errors and, if not all bytes were written or the request was
+                    // cancelled, close the client socket
                     warn!("got write response");
                 },
                 fd_plus_2 => {
                     let fd = Fixed((fd_plus_2 - 2) as u32);
-                    let disconnected = completion.result() == 0;
+                    let disconnected = event.result() == 0;
 
-                    if completion.flags() & IORING_CQE_F_MORE == 0 && !disconnected {
+                    if event.flags() & IORING_CQE_F_MORE == 0 && !disconnected {
                         warn!("socket recv rerequested");
-                        self.request_recv(fd);
+                        Self::request_recv(&mut submission, fd);
                     }
 
                     if disconnected {
-                        return Some(ServerEvent::RemovePlayer { fd });
-                    } else if completion.result() < 0 {
-                        error!("there was an error in recv: {}", completion.result());
+                        f(ServerEvent::RemovePlayer { fd });
+                    } else if event.result() < 0 {
+                        error!("there was an error in recv: {}", event.result());
                     } else {
-                        let bytes_received = completion.result() as usize;
-                        let buffer_id = buffer_select(completion.flags()).expect("there should be a buffer");
+                        let bytes_received = event.result() as usize;
+                        let buffer_id = buffer_select(event.flags()).expect("there should be a buffer");
                         assert!((buffer_id as usize) < C2S_RING_BUFFER_COUNT);
                         // TODO: this is probably very unsafe
                         let buffer = unsafe { *(self.c2s_buffer.add(buffer_id as usize) as *const [u8; C2S_RING_BUFFER_LEN]) };
                         let buffer = &buffer[..bytes_received];
-
                         self.c2s_local_tail = self.c2s_local_tail.wrapping_add(1);
-
-                        // TODO: sync less often
-                        // SAFETY: c2s_shared_tail is valid
-                        unsafe {
-                            (*self.c2s_shared_tail).store(self.c2s_local_tail, Ordering::Relaxed);
-                        }
+                        f(ServerEvent::RecvData {
+                            fd,
+                            data: buffer
+                        });
                     }
                 }
             }
         }
+
+        // SAFETY: c2s_shared_tail is valid
+        unsafe {
+            (*self.c2s_shared_tail).store(self.c2s_local_tail, Ordering::Relaxed);
+        }
+    }
+
+    pub fn cancel(&mut self, cancel_builder: io_uring::types::CancelBuilder) {
+        self.uring.submitter().register_sync_cancel(None, cancel_builder).unwrap();
     }
 
     /// To register new buffers, unregister must be called first
@@ -1032,6 +981,8 @@ impl Server {
         self.uring.submitter().register_buffers(buffers).unwrap();
     }
 
+    /// All requests in the submission queue must be finished or cancelled, or else this function
+    /// will hang indefinetely.
     pub fn unregister_buffers(&mut self) {
         self.uring.submitter().unregister_buffers().unwrap();
     }

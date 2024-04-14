@@ -571,31 +571,27 @@ impl Game {
 //            self.world.send(event);
 //        }
 
-        self.server.fetch_new_events();
         let start = std::time::Instant::now();
-
-        self.server.unregister_buffers();
-        unsafe {
-            self.server.register_buffers(&[libc::iovec {
-                iov_base: AAAA.as_ptr() as _,
-                iov_len: AAAA.len() as _
-            }]);
-        }
-        while let Some(event) = self.server.next_event() {
+        self.server.drain(|event| {
             match event {
                 ServerEvent::AddPlayer {
                     fd
                 } => {
-                    unsafe { self.server.write(fd, AAAA.as_ptr(), AAAA.len() as u32, 0); }
-                    // info!("got a player with fd {}", fd.0);
+                    info!("got a player with fd {}", fd.0);
                 },
                 ServerEvent::RemovePlayer {
                     fd
                 } => {
                     info!("removed a player with fd {}", fd.0);
                 }
+                ServerEvent::RecvData {
+                    fd,
+                    data
+                } => {
+                    info!("got data from player with fd {}: {data:?}", fd.0);
+                }
             }
-        }
+        });
         info!("it took {:?} to finish next_event", start.elapsed());
 
         self.world.send(Gametick);
