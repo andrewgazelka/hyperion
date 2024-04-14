@@ -2257,6 +2257,7 @@ dependencies = [
  "bvh",
  "bytes",
  "chunk",
+ "clap",
  "derive-build",
  "divan",
  "evenio",

@@ -2,10 +2,8 @@ use evenio::prelude::*;
 use tracing::instrument;
 
 use crate::{
-    net::Encoder,
-    system::entity_position::PositionSyncMetadata,
-    tracker::Tracker,
-    EntityReaction, FullEntityPose, InitPlayer, Player, PlayerJoinWorld, Targetable, Uuid,
+    net::Encoder, system::entity_position::PositionSyncMetadata, tracker::Tracker, EntityReaction,
+    FullEntityPose, InitPlayer, Player, PlayerJoinWorld, Targetable, Uuid,
 };
 
 #[instrument(skip_all)]
