@@ -6,8 +6,9 @@ use std::{
     alloc::{alloc_zeroed, handle_alloc_error, Layout},
     borrow::Cow,
     cell::{Cell, UnsafeCell},
+    ffi::c_void,
     io,
-    io::ErrorKind,
+    io::{ErrorKind, Write},
     marker::PhantomData,
     mem::ManuallyDrop,
     net::{TcpListener, TcpStream, ToSocketAddrs},
@@ -55,7 +56,7 @@ use valence_protocol::{
     Bounded, CompressionThreshold, Decode, Encode, PacketDecoder, PacketEncoder, VarInt,
 };
 
-use crate::{config, global};
+use crate::{config, global, global::Global};
 
 /// Default MiB/s threshold before we start to limit the sending of some packets.
 const DEFAULT_SPEED: u32 = 1024 * 1024;
@@ -113,10 +114,12 @@ pub struct ClientConnection {
     pub uuid: Uuid,
 }
 
+mod encoder;
+
 #[derive(Component)]
 pub struct Encoder {
     /// The encoding buffer and logic
-    enc: PacketEncoder,
+    enc: encoder::PacketEncoder,
 
     /// If we should clear the `enc` allocation once we are done sending it off.
     ///
@@ -125,38 +128,37 @@ pub struct Encoder {
 }
 
 impl Encoder {
-    /// The [`Encoder`] will deallocate its allocation when it is done sending it off.
-    pub fn deallocate_on_process(&mut self) {
-        self.deallocate_on_process = true;
-    }
-
-    /// Takes all bytes from the encoding buffer and returns them.
-    pub fn take(&mut self, compression: CompressionThreshold) -> bytes::Bytes {
-        let result = self.enc.take().freeze();
-
-        if self.deallocate_on_process {
-            // to clear the allocation, we need to create a new encoder
-            self.enc = PacketEncoder::new();
-            self.enc.set_compression(compression);
-            self.deallocate_on_process = false;
-        }
-
-        result
-    }
-
-    /// A mutable reference to the raw encoder
-    pub fn inner_mut(&mut self) -> &mut PacketEncoder {
-        &mut self.enc
-    }
-
     /// Encode a packet.
-    pub fn encode<P>(&mut self, pkt: &P) -> anyhow::Result<()>
+    ///
+    /// Returns if the buffer re-allocated
+    fn encode_impl_allocates<P>(&mut self, pkt: &P) -> anyhow::Result<bool>
     where
         P: valence_protocol::Packet + Encode,
     {
+        let capacity_before = self.enc.buf().capacity();
         self.enc.append_packet(pkt)?;
+        let capacity_after = self.enc.buf().capacity();
 
+        if capacity_before != capacity_after {
+            return Ok(true);
+        }
+
+        Ok(false)
+    }
+
+    fn encode<P>(&mut self, pkt: &P, global: &Global) -> anyhow::Result<()> {
+        if self.encode_impl_allocates(pkt)? {
+            // todo: use thread-local instead of an atomic and then combine at the end
+            global.set_needs_realloc()
+        }
         Ok(())
+    }
+
+    unsafe fn as_iovec(&self) -> iovec {
+        iovec {
+            iov_base: self.enc.buf().as_ptr() as *mut c_void,
+            iov_len: self.enc.buf().len(),
+        }
     }
 
     /// This sends the bytes to the connection.
@@ -193,16 +195,69 @@ fn alloc_zeroed_page_aligned<T>(len: usize) -> *mut T {
 }
 
 pub struct MaybeRegisteredBuffer {
-    registered_buffer: Option<ManuallyDrop<Vec<u8>>>,
+    registered_buffer: Vec<u8>,
     new_buffer: Option<Vec<u8>>,
+}
+
+impl Write for MaybeRegisteredBuffer {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        self.push(buf);
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
 }
 
 impl MaybeRegisteredBuffer {
     fn with_capacity(len: usize) -> Self {
         Self {
-            registered_buffer: None,
+            registered_buffer: Vec::new(), // no allocation
             new_buffer: Some(Vec::with_capacity(len)),
         }
+    }
+
+    fn register(&mut self) -> iovec {
+        if let Some(buffer) = self.new_buffer.take() {
+            self.registered_buffer = buffer;
+        }
+
+        iovec {
+            iov_base: self.registered_buffer.as_ptr() as *mut c_void,
+            iov_len: self.registered_buffer.capacity(),
+        }
+    }
+
+    fn get_iovec(&self) -> iovec {
+        iovec {
+            iov_base: self.registered_buffer.as_ptr() as *mut c_void,
+            iov_len: self.registered_buffer.len(),
+        }
+    }
+
+    fn push(&mut self, bytes: &[u8]) {
+        // todo: could be made more efficient with custom Vec that does not instantly deallocate on grow
+        if let Some(buffer) = &mut self.new_buffer {
+            buffer.extend_from_slice(bytes);
+            return;
+        }
+
+        let Some(buffer) = self.registered_buffer else {
+            unreachable!("this should never happen");
+        };
+
+        let cap = buffer.capacity();
+        if cap < buffer.len() + bytes.len() {
+            // copy buffer to new buffer
+            let mut new_buffer = Vec::with_capacity(buffer.len() + bytes.len());
+            new_buffer.extend_from_slice(&buffer);
+            new_buffer.extend_from_slice(bytes);
+            self.new_buffer = Some(new_buffer);
+            return;
+        }
+
+        buffer.extend_from_slice(bytes);
     }
 }
 
@@ -459,6 +514,22 @@ impl Server {
             .submitter()
             .register_sync_cancel(None, cancel_builder)
             .unwrap();
+    }
+
+    pub fn refresh_buffers(
+        &mut self,
+        global: &Global,
+        encoders: impl Iterator<Item = &mut Encoder>,
+    ) {
+        if !global.get_needs_realloc() {
+            return;
+        }
+
+        self.unregister_buffers();
+
+        let encoders: Vec<_> = encoders.map(|encoder| encoder.enc.buf.register()).collect();
+
+        unsafe { self.register_buffers(&encoders) };
     }
 
     /// To register new buffers, unregister must be called first
