@@ -9,7 +9,8 @@
 
 //! <https://wiki.vg/index.php?title=Protocol&oldid=18375>
 
-pub mod def;
+pub mod vanilla;
+pub mod voicechat;
 
 use std::str::FromStr;
 

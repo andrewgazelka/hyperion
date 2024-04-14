@@ -43,7 +43,7 @@ use valence_protocol::{
         status,
     },
     uuid::Uuid,
-    Bounded, CompressionThreshold, Decode, Encode, PacketDecoder, PacketEncoder, VarInt,
+    Bounded, CompressionThreshold, Decode, Encode, Ident, PacketDecoder, PacketEncoder, VarInt,
 };
 
 use crate::{config, global};
@@ -531,6 +531,15 @@ impl Io {
 
             debug!("compression level set to {}", compression_level.0);
         }
+
+        let packet = login::LoginQueryRequestS2c {
+            message_id: VarInt(42), // todo
+            channel: Ident::new("voicechat").unwrap(),
+            data: Bounded::default(),
+        };
+
+        // todo: is this corerct?
+        self.send_packet(&packet).await?;
 
         let packet = LoginSuccessS2c {
             uuid,

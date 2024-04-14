@@ -21,8 +21,8 @@ use valence_protocol::{
         },
     },
     text::IntoText,
-    BlockPos, BlockState, ByteAngle, ChunkPos, Encode, FixedArray, GameMode, Ident, ItemKind,
-    ItemStack, PacketEncoder, VarInt,
+    BlockPos, BlockState, Bounded, ByteAngle, ChunkPos, Encode, FixedArray, GameMode, Ident,
+    ItemKind, ItemStack, PacketEncoder, RawBytes, VarInt,
 };
 use valence_registry::{
     biome::{Biome, BiomeEffects},
@@ -39,6 +39,7 @@ use crate::{
     config,
     global::Global,
     net::Encoder,
+    packets::{voicechat, voicechat::Codec},
     singleton::{
         broadcast::BroadcastBuf, player_id_lookup::PlayerIdLookup,
         player_uuid_lookup::PlayerUuidLookup,
@@ -148,7 +149,7 @@ pub fn player_join_world(
     encoder.append(cached_data);
 
     encoder
-        .encode(&crate::packets::def::EntityEquipmentUpdateS2c {
+        .encode(&crate::packets::vanilla::EntityEquipmentUpdateS2c {
             entity_id: VarInt(0),
             equipment: Cow::Borrowed(&equipment),
         })
@@ -243,7 +244,7 @@ pub fn player_join_world(
         };
         encoder.encode(&pkt).unwrap();
 
-        let pkt = crate::packets::def::EntityEquipmentUpdateS2c {
+        let pkt = crate::packets::vanilla::EntityEquipmentUpdateS2c {
             entity_id,
             equipment: Cow::Borrowed(&equipment),
         };
@@ -277,7 +278,7 @@ pub fn player_join_world(
     broadcast.append_packet(&spawn_player).unwrap();
 
     broadcast
-        .append_packet(&crate::packets::def::EntityEquipmentUpdateS2c {
+        .append_packet(&crate::packets::vanilla::EntityEquipmentUpdateS2c {
             entity_id: current_entity_id,
             equipment: Cow::Borrowed(&equipment),
         })
@@ -376,6 +377,33 @@ fn registry_codec_raw_old(codec: &RegistryCodec) -> anyhow::Result<Compound> {
     }
 
     Ok(compound)
+}
+
+pub fn send_secret_voice_chat(encoder: &mut PacketEncoder) -> anyhow::Result<()> {
+    let msg = voicechat::SecretVoiceChatS2c {
+        secret: uuid::Uuid::new_v4(),
+        server_port: 22569,
+        player_uuid: Default::default(),
+        codec: Codec::VoIp,
+        mtu_size: 0,
+        voice_chat_distance: 0.0,
+        keep_alive: 0,
+        groups_enabled: false,
+        voice_host: "",
+        allow_recording: false,
+    };
+
+    let mut bytes = Vec::new();
+    msg.encode(&mut bytes)?;
+
+    let pkt = play::CustomPayloadS2c {
+        channel: Ident::new("voicechat:secret").unwrap(),
+        data: Bounded(RawBytes(&*bytes)),
+    };
+
+    encoder.append_packet(&pkt)?;
+
+    Ok(())
 }
 
 pub fn send_game_join_packet(encoder: &mut PacketEncoder) -> anyhow::Result<BiomeRegistry> {
@@ -664,6 +692,8 @@ fn send_sync_tags(encoder: &mut PacketEncoder) -> anyhow::Result<()> {
 fn inner(encoder: &mut PacketEncoder) -> anyhow::Result<()> {
     let biome_registry = send_game_join_packet(encoder)?;
     send_sync_tags(encoder)?;
+
+    send_secret_voice_chat(encoder)?;
 
     // TODO: Do we need to send this else where?
     encoder.append_packet(&play::ChunkRenderDistanceCenterS2c {
