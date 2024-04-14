@@ -539,7 +539,7 @@ impl Game {
 
         self.last_ticks.push_back(now);
 
-        let start = std::time::Instant::now();
+        let start = Instant::now();
         self.server.drain(|event| match event {
             ServerEvent::AddPlayer { fd } => {
                 info!("got a player with fd {}", fd.0);
