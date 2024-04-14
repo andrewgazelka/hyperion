@@ -149,7 +149,7 @@ pub fn player_join_world(
     encoder.append(cached_data);
 
     encoder
-        .encode(&crate::packets::vanilla::EntityEquipmentUpdateS2c {
+        .append_packet(&crate::packets::vanilla::EntityEquipmentUpdateS2c {
             entity_id: VarInt(0),
             equipment: Cow::Borrowed(&equipment),
         })
@@ -169,7 +169,7 @@ pub fn player_join_world(
 
     for entity in entities {
         let pkt = spawn_packet(entity.id, *entity.uuid, entity.pose);
-        encoder.encode(&pkt).unwrap();
+        encoder.append_packet(&pkt).unwrap();
     }
 
     // todo: cache
@@ -195,7 +195,7 @@ pub fn player_join_world(
         .collect::<Vec<_>>();
 
     encoder
-        .encode(&play::TeamS2c {
+        .append_packet(&play::TeamS2c {
             team_name: "no_tag",
             mode: Mode::AddEntities {
                 entities: player_names,
@@ -215,7 +215,7 @@ pub fn player_join_world(
         .unwrap();
 
     encoder
-        .encode(&play::PlayerListS2c {
+        .append_packet(&play::PlayerListS2c {
             actions,
             entries: Cow::Owned(entries),
         })
@@ -225,7 +225,7 @@ pub fn player_join_world(
     let time_of_day = tick % 24000;
 
     encoder
-        .encode(&play::WorldTimeUpdateS2c {
+        .append_packet(&play::WorldTimeUpdateS2c {
             world_age: tick,
             time_of_day,
         })
@@ -242,13 +242,13 @@ pub fn player_join_world(
             yaw: ByteAngle::from_degrees(pose.yaw),
             pitch: ByteAngle::from_degrees(pose.pitch),
         };
-        encoder.encode(&pkt).unwrap();
+        encoder.append_packet(&pkt).unwrap();
 
         let pkt = crate::packets::vanilla::EntityEquipmentUpdateS2c {
             entity_id,
             equipment: Cow::Borrowed(&equipment),
         };
-        encoder.encode(&pkt).unwrap();
+        encoder.append_packet(&pkt).unwrap();
     }
 
     global
@@ -266,7 +266,7 @@ pub fn player_join_world(
     };
 
     encoder
-        .encode(&play::PlayerPositionLookS2c {
+        .append_packet(&play::PlayerPositionLookS2c {
             position: pose.position.as_dvec3(),
             yaw: pose.yaw,
             pitch: pose.pitch,
@@ -377,33 +377,6 @@ fn registry_codec_raw_old(codec: &RegistryCodec) -> anyhow::Result<Compound> {
     }
 
     Ok(compound)
-}
-
-pub fn send_secret_voice_chat(encoder: &mut PacketEncoder) -> anyhow::Result<()> {
-    let msg = voicechat::SecretVoiceChatS2c {
-        secret: uuid::Uuid::new_v4(),
-        server_port: 22569,
-        player_uuid: Default::default(),
-        codec: Codec::VoIp,
-        mtu_size: 0,
-        voice_chat_distance: 0.0,
-        keep_alive: 0,
-        groups_enabled: false,
-        voice_host: "",
-        allow_recording: false,
-    };
-
-    let mut bytes = Vec::new();
-    msg.encode(&mut bytes)?;
-
-    let pkt = play::CustomPayloadS2c {
-        channel: Ident::new("voicechat:secret").unwrap(),
-        data: Bounded(RawBytes(&*bytes)),
-    };
-
-    encoder.append_packet(&pkt)?;
-
-    Ok(())
 }
 
 pub fn send_game_join_packet(encoder: &mut PacketEncoder) -> anyhow::Result<BiomeRegistry> {

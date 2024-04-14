@@ -25,9 +25,11 @@ mod stats_message;
 mod sync_players;
 mod update_health;
 mod update_time;
+mod voice_chat;
 
 pub use clean_up_io::clean_up_io;
 pub use egress_broadcast::egress_broadcast;
+pub use voice_chat::voice_chat;
 pub use egress_local::egress_local;
 pub use entity_detect_collisions::entity_detect_collisions;
 pub use entity_move_logic::entity_move_logic;

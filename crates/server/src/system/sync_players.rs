@@ -43,7 +43,7 @@ pub fn sync_players(
                     if (previous_health - current_health).abs() > f32::EPSILON {
                         // TODO: Sync absorption hearts
 
-                        let _ = encoder.encode(&play::HealthUpdateS2c {
+                        let _ = encoder.append_packet(&play::HealthUpdateS2c {
                             health: *current_health,
                             food: VarInt(20),
                             food_saturation: 5.0,
@@ -51,7 +51,7 @@ pub fn sync_players(
 
                         if current_health < previous_health {
                             encoder
-                                .encode(&play::PlaySoundS2c {
+                                .append_packet(&play::PlaySoundS2c {
                                     id: SoundId::Reference { id: HURT_SOUND },
                                     category: SoundCategory::Player,
                                     position: (pose.position * 8.00).as_ivec3(),
@@ -76,7 +76,7 @@ pub fn sync_players(
 
                     // TODO: Adding these effects don't work for some reason
                     if previous_absorption.end_tick != current_absorption.end_tick {
-                        let _ = encoder.encode(&play::EntityStatusEffectS2c {
+                        let _ = encoder.append_packet(&play::EntityStatusEffectS2c {
                             entity_id,
                             effect_id: ABSORPTION,
                             amplifier: 0,
@@ -88,7 +88,7 @@ pub fn sync_players(
                     }
 
                     if previous_regeneration.end_tick != current_regeneration.end_tick {
-                        let _ = encoder.encode(&play::EntityStatusEffectS2c {
+                        let _ = encoder.append_packet(&play::EntityStatusEffectS2c {
                             entity_id,
                             effect_id: REGENERATION,
                             amplifier: 1,
@@ -100,17 +100,17 @@ pub fn sync_players(
                     }
                 }
                 (PlayerState::Alive { .. }, PlayerState::Dead { respawn_tick }) => {
-                    let _ = encoder.encode(&play::GameStateChangeS2c {
+                    let _ = encoder.append_packet(&play::GameStateChangeS2c {
                         kind: play::game_state_change_s2c::GameEventKind::ChangeGameMode,
                         value: SPECTATOR,
                     });
                     // The title is repeatedly sent so it doesn't fade away after a few seconds
-                    let _ = encoder.encode(&play::TitleS2c {
+                    let _ = encoder.append_packet(&play::TitleS2c {
                         title_text: "YOU DIED!".into_text().color(Color::RED).into(),
                     });
 
                     let seconds_remaining = (respawn_tick - tick) as f32 / 20.0;
-                    let _ = encoder.encode(&play::SubtitleS2c {
+                    let _ = encoder.append_packet(&play::SubtitleS2c {
                         subtitle_text: ("Respawning in ".into_text()
                             + format!("{seconds_remaining:.2}").color(Color::RED)
                             + " seconds")
@@ -118,7 +118,7 @@ pub fn sync_players(
                     });
 
                     encoder
-                        .encode(&play::PlaySoundS2c {
+                        .append_packet(&play::PlaySoundS2c {
                             id: SoundId::Reference { id: HURT_SOUND },
                             category: SoundCategory::Player,
                             position: (pose.position * 8.00).as_ivec3(),
@@ -129,12 +129,12 @@ pub fn sync_players(
                         .unwrap();
                 }
                 (PlayerState::Dead { .. }, PlayerState::Alive { health, .. }) => {
-                    let _ = encoder.encode(&play::ClearTitleS2c { reset: true });
-                    let _ = encoder.encode(&play::GameStateChangeS2c {
+                    let _ = encoder.append_packet(&play::ClearTitleS2c { reset: true });
+                    let _ = encoder.append_packet(&play::GameStateChangeS2c {
                         kind: play::game_state_change_s2c::GameEventKind::ChangeGameMode,
                         value: SURVIVAL,
                     });
-                    let _ = encoder.encode(&play::HealthUpdateS2c {
+                    let _ = encoder.append_packet(&play::HealthUpdateS2c {
                         health: *health,
                         food: VarInt(20),
                         food_saturation: 5.0,
@@ -143,7 +143,7 @@ pub fn sync_players(
                 }
                 (PlayerState::Dead { .. }, PlayerState::Dead { respawn_tick }) => {
                     let seconds_remaining = (respawn_tick - tick) as f32 / 20.0;
-                    let _ = encoder.encode(&play::SubtitleS2c {
+                    let _ = encoder.append_packet(&play::SubtitleS2c {
                         subtitle_text: ("Respawning in ".into_text()
                             + format!("{seconds_remaining:.2}").color(Color::RED)
                             + " seconds")

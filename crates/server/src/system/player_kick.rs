@@ -33,7 +33,7 @@ pub fn player_kick(
     let reason = reason.into_text().color(Color::RED);
 
     encoder
-        .encode(&play::DisconnectS2c {
+        .append_packet(&play::DisconnectS2c {
             reason: reason.into(),
         })
         .unwrap();

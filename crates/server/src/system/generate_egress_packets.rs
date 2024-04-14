@@ -23,7 +23,7 @@ pub fn generate_egress_packets(
             let velocity = vel_m_per_tick(vel);
 
             encoder
-                .encode(&play::EntityVelocityUpdateS2c {
+                .append_packet(&play::EntityVelocityUpdateS2c {
                     entity_id: VarInt(0), // 0 is always self as the join packet we are giving 0
                     velocity,
                 })

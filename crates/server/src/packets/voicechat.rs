@@ -1,15 +1,16 @@
-//     private UUID secret;
-//     private int serverPort;
-//     private UUID playerUUID;
-//     private ServerConfig.Codec codec;
-//     private int mtuSize;
-//     private double voiceChatDistance;
-//     private int keepAlive;
-//     private boolean groupsEnabled;
-//     private String voiceHost;
-//     private boolean allowRecording;
+use valence_protocol::{packets::play::CustomPayloadS2c, Encode};
+use valence_server::Ident;
 
-use valence_protocol::Encode;
+pub trait Msg: Encode {
+    const KEY: Ident<&'static str>;
+
+    fn to_plugin_message(&self) -> CustomPayloadS2c<'static> {
+        CustomPayloadS2c {
+            channel: Self::KEY.into(),
+            data: Default::default(),
+        }
+    }
+}
 
 #[derive(Encode)]
 pub struct SecretVoiceChatS2c<'a> {
@@ -23,6 +24,10 @@ pub struct SecretVoiceChatS2c<'a> {
     pub groups_enabled: bool,
     pub voice_host: &'a str,
     pub allow_recording: bool,
+}
+
+impl<'a> Msg for SecretVoiceChatS2c<'a> {
+    const KEY: Ident<&'static str> = Ident::new_unchecked("voicechat:secret");
 }
 
 #[derive(Copy, Clone, Debug)]

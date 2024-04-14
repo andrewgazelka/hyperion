@@ -82,6 +82,8 @@ fn offline_uuid(username: &str) -> anyhow::Result<Uuid> {
     Uuid::from_slice(slice).context("failed to create uuid")
 }
 
+mod secret_voice_chat;
+
 /// Sent from the I/O thread when it has established a connection with the player through a handshake
 pub struct ClientConnection {
     /// The local encoder used by that player
@@ -183,7 +185,7 @@ impl Encoder {
     }
 
     /// Encode a packet.
-    pub fn encode<P>(&mut self, pkt: &P) -> anyhow::Result<()>
+    pub fn append_packet<P>(&mut self, pkt: &P) -> anyhow::Result<()>
     where
         P: valence_protocol::Packet + Encode,
     {
