@@ -354,6 +354,7 @@ pub struct Game {
     server: Server
 }
 
+static mut AAAA: [u8; 3] = [b'h', b'i', b'\n'];
 impl Game {
     /// Get the [`World`] which is the core part of the ECS framework.
     pub const fn world(&self) -> &World {
@@ -404,7 +405,13 @@ impl Game {
             compression_level: CompressionThreshold(64),
         });
 
-        let server = Server::new(address)?;
+        let mut server = Server::new(address)?;
+        unsafe {
+            server.register_buffers(&[libc::iovec {
+                iov_base: AAAA.as_ptr() as _,
+                iov_len: AAAA.len() as _
+            }]);
+        }
 
         let mut world = World::new();
 
@@ -565,12 +572,22 @@ impl Game {
 //        }
 
         self.server.fetch_new_events();
+        let start = std::time::Instant::now();
+
+        self.server.unregister_buffers();
+        unsafe {
+            self.server.register_buffers(&[libc::iovec {
+                iov_base: AAAA.as_ptr() as _,
+                iov_len: AAAA.len() as _
+            }]);
+        }
         while let Some(event) = self.server.next_event() {
             match event {
                 ServerEvent::AddPlayer {
                     fd
                 } => {
-                    info!("got a player with fd {}", fd.0);
+                    unsafe { self.server.write(fd, AAAA.as_ptr(), AAAA.len() as u32, 0); }
+                    // info!("got a player with fd {}", fd.0);
                 },
                 ServerEvent::RemovePlayer {
                     fd
@@ -579,6 +596,7 @@ impl Game {
                 }
             }
         }
+        info!("it took {:?} to finish next_event", start.elapsed());
 
         self.world.send(Gametick);
         self.world.send(Egress);
