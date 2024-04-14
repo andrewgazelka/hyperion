@@ -23,22 +23,12 @@ _From the creator of [SwarmBot](https://github.com/SwarmBotMC/SwarmBot):_
 
 # Running
 
-## Manual
+Hyperion requires Linux 6.0 or above and io_uring support.
+
 ```bash
 git clone https://github.com/andrewgazelka/hyperion
 cd hyperion
 cargo run --release
-```
-
-## Docker
-Note: this is no longer recommended as [Docker blocks io_uring](https://github.com/moby/moby/commit/891241e7e74d4aae6de5f6125574eb994f25e169).
-```bash
-git clone https://github.com/andrewgazelka/hyperion
-cd hyperion
-docker compose up --build release
-
-# if you want to run in debug
-# docker compose up --build debug
 ```
 
 # FAQ
