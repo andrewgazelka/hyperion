@@ -3,9 +3,9 @@
 #![feature(lint_reasons)]
 #![expect(clippy::type_complexity, reason = "evenio uses a lot of complex types")]
 
+mod blocks;
 mod chunk;
 mod singleton;
-mod blocks;
 
 use std::{
     collections::VecDeque,

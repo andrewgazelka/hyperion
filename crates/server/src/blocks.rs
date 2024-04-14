@@ -50,16 +50,14 @@ fn get_latest_save() -> PathBuf {
 }
 
 impl AnvilFolder {
-    pub fn new() -> Self {
+    pub fn new(biomes: &BiomeRegistry) -> Self {
         let latest_save = get_latest_save();
-        let registry = BiomeRegistry::default();
 
         // todo: probs not true
-        let mut dim = DimensionFolder::new(latest_save, &registry);
+        let mut dim = DimensionFolder::new(latest_save, biomes);
 
         Self { dim }
     }
-
 }
 
 #[cfg(test)]

@@ -32,6 +32,7 @@ valence_protocol = { git = "https://github.com/andrewgazelka/valence", features 
 valence_registry = { git = "https://github.com/andrewgazelka/valence", branch = "feat-open" }
 valence_anvil = { git = "https://github.com/andrewgazelka/valence", features = ["parsing"], branch = "feat-open" }
 valence_server = { git = "https://github.com/andrewgazelka/valence", branch = "feat-open" }
+valence_nbt = { git = "https://github.com/andrewgazelka/valence", features = ["serde"], branch = "feat-open" }
 
 generator.workspace = true
 

@@ -58,6 +58,7 @@ const MAX_VECTORED_WRITE_BUFS: usize = 16;
 /// This is closely related to [`MAX_VECTORED_WRITE_BUFS`].
 const WRITE_DELAY: Duration = Duration::from_millis(1);
 
+// todo: make sure this is the safe as page size. (I think this is usually 4096)
 /// How much we expand our read buffer each time a packet is too large.
 const READ_BUF_SIZE: usize = 4096;
 

@@ -1,9 +1,11 @@
 use std::{borrow::Cow, collections::BTreeSet, io::Write};
 
-use anyhow::Context;
+use anyhow::{bail, Context};
 use evenio::prelude::*;
 use itertools::Itertools;
+use serde::Deserialize;
 use tracing::{debug, info, instrument};
+use valence_nbt::{value::ValueRef, Value};
 use valence_protocol::{
     game_mode::OptGameMode,
     ident,
@@ -22,7 +24,10 @@ use valence_protocol::{
     BlockPos, BlockState, ByteAngle, ChunkPos, Encode, FixedArray, GameMode, Ident, ItemKind,
     ItemStack, PacketEncoder, VarInt,
 };
-use valence_registry::{biome::BiomeId, BiomeRegistry, RegistryCodec, RegistryIdx};
+use valence_registry::{
+    biome::{Biome, BiomeEffects},
+    BiomeRegistry, RegistryCodec, RegistryIdx,
+};
 use valence_server::layer::chunk::{
     bit_width, BiomeContainer, BlockStateContainer, SECTION_BLOCK_COUNT,
 };
@@ -339,7 +344,13 @@ pub fn send_keep_alive(encoder: &mut PacketEncoder) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn registry_codec_raw(codec: &RegistryCodec) -> anyhow::Result<Compound> {
+fn registry_codec_raw() -> anyhow::Result<Compound> {
+    let bytes = include_bytes!("paper-registry.json");
+    let compound = serde_json::from_slice::<Compound>(bytes)?;
+    Ok(compound)
+}
+
+fn registry_codec_raw_old(codec: &RegistryCodec) -> anyhow::Result<Compound> {
     // codec.cached_codec.clear();
 
     let mut compound = Compound::default();
@@ -367,12 +378,106 @@ fn registry_codec_raw(codec: &RegistryCodec) -> anyhow::Result<Compound> {
     Ok(compound)
 }
 
-pub fn send_game_join_packet(encoder: &mut PacketEncoder) -> anyhow::Result<()> {
+pub fn send_game_join_packet(encoder: &mut PacketEncoder) -> anyhow::Result<BiomeRegistry> {
     // recv ack
 
     let codec = RegistryCodec::default();
 
-    let registry_codec = registry_codec_raw(&codec)?;
+    let registry_codec = registry_codec_raw()?;
+
+    // minecraft:worldgen/biome
+    let biomes = registry_codec.get("minecraft:worldgen/biome").unwrap();
+
+    let Value::Compound(biomes) = biomes else {
+        bail!("expected biome to be compound");
+    };
+
+    let biomes = biomes
+        .get("value")
+        .context("expected biome to have value")?;
+
+    let Value::List(biomes) = biomes else {
+        bail!("expected biomes to be list");
+    };
+
+    let mut biome_registry = BiomeRegistry::default();
+
+    for biome in biomes {
+        let ValueRef::Compound(biome) = biome else {
+            bail!("expected biome to be compound");
+        };
+
+        // let id = biome.get("id").context("expected biome to have id")?;
+        // let Value::Int(id) = id else {
+        //     bail!("expected biome id to be int");
+        // };
+
+        // let id = BiomeId::from_index(*id as usize);
+
+        let name = biome.get("name").context("expected biome to have name")?;
+        let Value::String(name) = name else {
+            bail!("expected biome name to be string");
+        };
+
+        let biome = biome
+            .get("element")
+            .context("expected biome to have element")?;
+
+        let Value::Compound(biome) = biome else {
+            bail!("expected biome to be compound");
+        };
+
+        let biome = biome.clone();
+
+        println!("{biome:#?}");
+
+        // pub downfall: f32,
+        // pub effects: BiomeEffects,
+        // pub has_precipitation: bool,
+        // pub temperature: f32,
+
+        let downfall = biome
+            .get("downfall")
+            .context("expected biome to have downfall")?;
+        let Value::Double(downfall) = downfall else {
+            bail!("expected biome downfall to be float but is {downfall:?}");
+        };
+
+        let effects = biome
+            .get("effects")
+            .context("expected biome to have effects")?;
+        let Value::Compound(effects) = effects else {
+            bail!("expected biome effects to be compound but is {effects:?}");
+        };
+
+        let has_precipitation = biome.get("has_precipitation").with_context(|| {
+            format!("expected biome biome for {name} to have has_precipitation")
+        })?;
+        let Value::Long(has_precipitation) = has_precipitation else {
+            bail!("expected biome biome has_precipitation to be int but is {has_precipitation:?}");
+        };
+        let has_precipitation = *has_precipitation == 1;
+
+        let temperature = biome
+            .get("temperature")
+            .context("expected biome to have temperature")?;
+        let Value::Double(temperature) = temperature else {
+            bail!("expected biome temperature to be doule but is {temperature:?}");
+        };
+
+        let effects = BiomeEffects::deserialize(effects.clone())?;
+
+        let biome = Biome {
+            downfall: *downfall as f32,
+            effects,
+            has_precipitation,
+            temperature: *temperature as f32,
+        };
+
+        let ident = Ident::new(name.as_str()).unwrap();
+
+        biome_registry.insert(ident, biome);
+    }
 
     let dimension_names: BTreeSet<Ident<Cow<str>>> = codec
         .registry(BiomeRegistry::KEY)
@@ -406,7 +511,7 @@ pub fn send_game_join_packet(encoder: &mut PacketEncoder) -> anyhow::Result<()> 
 
     encoder.append_packet(&pkt)?;
 
-    Ok(())
+    Ok(biome_registry)
 }
 
 fn send_commands(encoder: &mut PacketEncoder) -> anyhow::Result<()> {
@@ -473,119 +578,13 @@ fn send_commands(encoder: &mut PacketEncoder) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn stone_section() -> Vec<u8> {
-    let mut section_bytes = Vec::new();
-    let section_block_count = SECTION_BLOCK_COUNT as u16;
-    section_block_count.encode(&mut section_bytes).unwrap();
-
-    let blocks = [BlockState::STONE; { SECTION_BLOCK_COUNT }];
-    let block_states = BlockStateContainer::Direct(Box::new(blocks));
-    write_block_states(&block_states, &mut section_bytes).unwrap();
-    // let biomes = BiomeContainer::Single(BiomeId::DEFAULT);
-    // write_biomes(&biomes, &mut section_bytes).unwrap();
-
-    section_bytes
-}
-// fn air_section() -> Vec<u8> {
-//     let mut section_bytes = Vec::new();
-//     0_u16.encode(&mut section_bytes).unwrap();
-//
-//     let block_states = BlockStateContainer::Single(BlockState::AIR);
-//     write_block_states(&block_states, &mut section_bytes).unwrap();
-//
-//     let biomes = BiomeContainer::Single(BiomeId::DEFAULT);
-//     write_biomes(&biomes, &mut section_bytes).unwrap();
-//
-//     section_bytes
-// }
-//
-// fn stone_section() -> Vec<u8> {
-//     let mut section_bytes = Vec::new();
-//
-//     let section_block_count = SECTION_BLOCK_COUNT as u16;
-//     section_block_count.encode(&mut section_bytes).unwrap();
-//
-//     let blocks = [BlockState::STONE; SECTION_BLOCK_COUNT];
-//     let block_states = BlockStateContainer::Direct(Box::new(blocks));
-//     write_block_states(&block_states, &mut section_bytes).unwrap();
-//
-//     let biomes = BiomeContainer::Single(BiomeId::DEFAULT);
-//     write_biomes(&biomes, &mut section_bytes).unwrap();
-//
-//     section_bytes
-// }
-//
-// fn ground_section() -> Vec<u8> {
-//     let mut section_bytes = Vec::new();
-//
-//     let number_blocks: u16 = 16 * 16;
-//     number_blocks.encode(&mut section_bytes).unwrap();
-//
-//     let mut blocks = [BlockState::AIR; SECTION_BLOCK_COUNT];
-//
-//     let surface_blocks = [
-//         BlockState::END_STONE,
-//         BlockState::SAND,
-//         BlockState::GRAVEL,
-//         BlockState::END_STONE,
-//         BlockState::END_STONE,
-//         BlockState::END_STONE,
-//         BlockState::END_STONE,
-//         BlockState::END_STONE,
-//         BlockState::END_STONE,
-//         BlockState::END_STONE,
-//         BlockState::END_STONE,
-//         BlockState::END_STONE,
-//         BlockState::END_STONE,
-//         BlockState::END_STONE,
-//         BlockState::END_STONE,
-//         BlockState::END_STONE,
-//         BlockState::END_STONE,
-//         BlockState::END_STONE,
-//         BlockState::END_STONE,
-//         BlockState::END_STONE,
-//         BlockState::END_STONE,
-//         BlockState::END_STONE,
-//         BlockState::END_STONE,
-//         BlockState::END_STONE,
-//     ];
-//
-//     let mut rnd = rand::thread_rng();
-//
-//     for x in 0..16 {
-//         for z in 0..16 {
-//             // let dist_from_center = (x as f64 - 8.0).hypot(z as f64 - 8.0);
-//
-//             // based on x and z
-//             // should be highest at center of chunk
-//             // let height = (16.0 - dist_from_center) * 0.5 + 3.0;
-//             let height = 5;
-//             let height = height.min(16);
-//             for y in 0..height {
-//                 use rand::seq::SliceRandom;
-//                 let block = surface_blocks.choose(&mut rnd).unwrap();
-//                 *blocks.get3_mut(x, y, z) = *block;
-//             }
-//         }
-//     }
-//
-//     let block_states = BlockStateContainer::Direct(Box::new(blocks));
-//
-//     write_block_states(&block_states, &mut section_bytes).unwrap();
-//
-//     let biomes = BiomeContainer::Single(BiomeId::DEFAULT);
-//     write_biomes(&biomes, &mut section_bytes).unwrap();
-//
-//     section_bytes
-// }
-
-fn encode_packet(
+fn encode_chunk_packet(
     anvil_folder: &mut AnvilFolder,
     location: ChunkPos,
     encoder: &mut PacketEncoder,
 ) -> anyhow::Result<()> {
     let chunk = anvil_folder.dim.get_chunk(location).unwrap();
-    
+
     let Some(chunk) = chunk else {
         return Ok(());
     };
@@ -619,7 +618,7 @@ fn encode_packet(
     for section in chunk.sections {
         let non_air_blocks: u16 = 42;
         non_air_blocks.encode(&mut section_bytes).unwrap();
-        
+
         write_block_states(&section.block_states, &mut section_bytes).unwrap();
         write_biomes(&section.biomes, &mut section_bytes).unwrap();
 
@@ -650,8 +649,21 @@ fn encode_packet(
     Ok(())
 }
 
+fn send_sync_tags(encoder: &mut PacketEncoder) -> anyhow::Result<()> {
+    let bytes = include_bytes!("tags.json");
+
+    let groups = serde_json::from_slice(bytes)?;
+
+    let pkt = play::SynchronizeTagsS2c { groups };
+
+    encoder.append_packet(&pkt)?;
+
+    Ok(())
+}
+
 fn inner(encoder: &mut PacketEncoder) -> anyhow::Result<()> {
-    send_game_join_packet(encoder)?;
+    let biome_registry = send_game_join_packet(encoder)?;
+    send_sync_tags(encoder)?;
 
     // TODO: Do we need to send this else where?
     encoder.append_packet(&play::ChunkRenderDistanceCenterS2c {
@@ -659,12 +671,12 @@ fn inner(encoder: &mut PacketEncoder) -> anyhow::Result<()> {
         chunk_z: 0.into(),
     })?;
 
-    let mut anvil = AnvilFolder::new();
+    let mut anvil = AnvilFolder::new(&biome_registry);
 
     for x in -16..=16 {
         for z in -16..=16 {
             let pos = ChunkPos::new(x, z);
-            encode_packet(&mut anvil, pos, encoder)?;
+            encode_chunk_packet(&mut anvil, pos, encoder)?;
         }
     }
 
