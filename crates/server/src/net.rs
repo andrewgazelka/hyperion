@@ -540,6 +540,10 @@ impl Io {
 
         // todo: is this corerct?
         self.send_packet(&packet).await?;
+        
+        let response: login::LoginQueryResponseC2s = self.recv_packet().await?;
+        
+        println!("{response:?}");
 
         let packet = LoginSuccessS2c {
             uuid,

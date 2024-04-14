@@ -457,13 +457,6 @@ pub fn send_game_join_packet(encoder: &mut PacketEncoder) -> anyhow::Result<Biom
 
         let biome = biome.clone();
 
-        println!("{biome:#?}");
-
-        // pub downfall: f32,
-        // pub effects: BiomeEffects,
-        // pub has_precipitation: bool,
-        // pub temperature: f32,
-
         let downfall = biome
             .get("downfall")
             .context("expected biome to have downfall")?;
@@ -618,14 +611,8 @@ fn encode_chunk_packet(
     };
 
     let section_count = 384 / 16_usize;
-    let mut chunk = chunk.chunk;
+    let chunk = chunk.chunk;
     let dimension_height = 384;
-
-    // for x in &mut chunk.sections {
-    //     x.block_states.fill(BlockState::STONE);
-    // }
-
-    println!("appending chunk at {location:?}");
 
     let map = heightmap(dimension_height, dimension_height - 3);
     let map: Vec<_> = map.into_iter().map(i64::try_from).try_collect()?;
@@ -649,12 +636,7 @@ fn encode_chunk_packet(
 
         write_block_states(&section.block_states, &mut section_bytes).unwrap();
         write_biomes(&section.biomes, &mut section_bytes).unwrap();
-
-        // let biomes = BiomeContainer::Single(BiomeId::DEFAULT);
-        // write_biomes(&biomes, &mut section_bytes).unwrap();
     }
-    // let biomes = BiomeContainer::Single(BiomeId::DEFAULT);
-    // write_biomes(&biomes, &mut bytes).unwrap();
 
     let pkt = play::ChunkDataS2c {
         pos: location,

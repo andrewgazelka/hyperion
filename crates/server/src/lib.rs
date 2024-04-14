@@ -563,7 +563,7 @@ impl Game {
                 name,
                 uuid,
                 pos: FullEntityPose {
-                    position: Vec3::new(dx, 30.0, dz),
+                    position: Vec3::new(dx, 70.0, dz),
                     bounding: Aabb::create(Vec3::new(0.0, 2.0, 0.0), 0.6, 1.8),
                     yaw: 0.0,
                     pitch: 0.0,

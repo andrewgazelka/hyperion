@@ -13,8 +13,6 @@ members = [
     "crates/rayon-local",
     "crates/server",
 ]
-
-[profile.dev]
 #opt-level = 1
 
 [profile.dev.package."*"]
