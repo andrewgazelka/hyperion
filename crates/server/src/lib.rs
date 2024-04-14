@@ -27,7 +27,7 @@ use valence_protocol::{math::Vec3, CompressionThreshold, Hand};
 
 use crate::{
     global::Global,
-    net::{Encoder, ServerEvent, Server},
+    net::{Encoder, Server, ServerEvent},
     singleton::{
         broadcast::BroadcastBuf, player_aabb_lookup::PlayerBoundingBoxes,
         player_id_lookup::PlayerIdLookup, player_uuid_lookup::PlayerUuidLookup,
@@ -351,7 +351,7 @@ pub struct Game {
     last_ms_per_tick: VecDeque<f64>,
     /// The tick of the game. This is incremented every 50 ms.
     tick_on: u64,
-    server: Server
+    server: Server,
 }
 
 static mut AAAA: [u8; 3] = [b'h', b'i', b'\n'];
@@ -409,7 +409,7 @@ impl Game {
         unsafe {
             server.register_buffers(&[libc::iovec {
                 iov_base: AAAA.as_ptr() as _,
-                iov_len: AAAA.len() as _
+                iov_len: AAAA.len() as _,
             }]);
         }
 
@@ -469,7 +469,7 @@ impl Game {
             last_ticks: VecDeque::default(),
             last_ms_per_tick: VecDeque::default(),
             tick_on: 0,
-            server
+            server,
         };
 
         game.last_ticks.push_back(Instant::now());
@@ -539,60 +539,19 @@ impl Game {
 
         self.last_ticks.push_back(now);
 
-//        while let Ok(connection) = self.incoming.try_recv() {
-//            let ClientConnection {
-//                encoder,
-//                name,
-//                uuid,
-//                tx,
-//            } = connection;
-//
-//            let player = self.world.spawn();
-//
-//            let connection = Connection::new(tx);
-//
-//            let dx = fastrand::f32().mul_add(10.0, -5.0);
-//            let dz = fastrand::f32().mul_add(10.0, -5.0);
-//
-//            let event = InitPlayer {
-//                entity: player,
-//                encoder,
-//                connection,
-//                name,
-//                uuid,
-//                pos: FullEntityPose {
-//                    position: Vec3::new(dx, 30.0, dz),
-//                    bounding: Aabb::create(Vec3::new(0.0, 2.0, 0.0), 0.6, 1.8),
-//                    yaw: 0.0,
-//                    pitch: 0.0,
-//                },
-//            };
-//
-//            self.world.send(event);
-//        }
-
         let start = std::time::Instant::now();
-        self.server.drain(|event| {
-            match event {
-                ServerEvent::AddPlayer {
-                    fd
-                } => {
-                    info!("got a player with fd {}", fd.0);
-                },
-                ServerEvent::RemovePlayer {
-                    fd
-                } => {
-                    info!("removed a player with fd {}", fd.0);
-                }
-                ServerEvent::RecvData {
-                    fd,
-                    data
-                } => {
-                    info!("got data from player with fd {}: {data:?}", fd.0);
-                }
+        self.server.drain(|event| match event {
+            ServerEvent::AddPlayer { fd } => {
+                info!("got a player with fd {}", fd.0);
+            }
+            ServerEvent::RemovePlayer { fd } => {
+                info!("removed a player with fd {}", fd.0);
+            }
+            ServerEvent::RecvData { fd, data } => {
+                info!("got data from player with fd {}: {data:?}", fd.0);
             }
         });
-        info!("it took {:?} to finish next_event", start.elapsed());
+        trace!("it took {:?} to finish next_event", start.elapsed());
 
         self.world.send(Gametick);
         self.world.send(Egress);

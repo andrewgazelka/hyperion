@@ -8,17 +8,16 @@ use std::{
     cell::{Cell, UnsafeCell},
     io,
     io::ErrorKind,
+    marker::PhantomData,
     mem::ManuallyDrop,
-    net::ToSocketAddrs,
+    net::{TcpListener, TcpStream, ToSocketAddrs},
     os::fd::{AsRawFd, RawFd},
     ptr::addr_of_mut,
     sync::{
         atomic::{AtomicU16, AtomicU32, Ordering},
         Arc,
     },
-    net::{TcpListener, TcpStream},
     time::{Duration, Instant},
-    marker::PhantomData
 };
 
 use anyhow::{ensure, Context};
@@ -27,6 +26,12 @@ use base64::Engine;
 use bytes::BytesMut;
 use derive_build::Build;
 use evenio::prelude::Component;
+use io_uring::{
+    cqueue::buffer_select,
+    squeue::SubmissionQueue,
+    types::{BufRingEntry, Fixed},
+    IoUring,
+};
 use libc::iovec;
 use monoio::{
     buf::IoVecBuf,
@@ -49,7 +54,6 @@ use valence_protocol::{
     uuid::Uuid,
     Bounded, CompressionThreshold, Decode, Encode, PacketDecoder, PacketEncoder, VarInt,
 };
-use io_uring::{cqueue::buffer_select, squeue::SubmissionQueue, types::{BufRingEntry, Fixed}, IoUring};
 
 use crate::{config, global};
 
@@ -110,7 +114,7 @@ pub struct ClientConnection {
 }
 
 /// Used during handshake to communicate with the client.
-//pub struct Io {
+// pub struct Io {
 //    /// The stream of bytes from the client.
 //    stream: TcpStream,
 //    /// The decoding buffer and logic
@@ -236,7 +240,7 @@ impl Buf {
     }
 }
 
-//impl IoWrite {
+// impl IoWrite {
 //    /// This function returns the number of bytes in the TCP send queue that have
 //    /// been sent but have not been acknowledged by the client.
 //    ///
@@ -288,7 +292,7 @@ impl Buf {
 //    }
 //}
 
-//impl Io {
+// impl Io {
 //    /// Receives a packet from the connection.
 //    pub async fn recv_packet<'a, P>(&'a mut self) -> anyhow::Result<P>
 //    where
@@ -646,10 +650,10 @@ async fn print_errors(future: impl core::future::Future<Output = anyhow::Result<
 /// This would be especially useful when we are processing packets in parallel.
 ///
 /// Also, this should not be a static ideally but instead an `Arc` probably in [`global::Shared`].
-//pub static GLOBAL_C2S_PACKETS: spin::Mutex<Vec<UserPacketFrame>> = spin::Mutex::new(Vec::new());
+// pub static GLOBAL_C2S_PACKETS: spin::Mutex<Vec<UserPacketFrame>> = spin::Mutex::new(Vec::new());
 //
 //#[instrument(skip_all)]
-//async fn main_loop(
+// async fn main_loop(
 //    tx: flume::Sender<ClientConnection>,
 //    address: impl ToSocketAddrs,
 //    shared: Arc<global::Shared>,
@@ -686,7 +690,7 @@ async fn print_errors(future: impl core::future::Future<Output = anyhow::Result<
 //}
 //
 ///// Initializes the I/O thread.
-//pub fn init_io_thread(
+// pub fn init_io_thread(
 //    shutdown: flume::Receiver<()>,
 //    address: impl ToSocketAddrs + Send + Sync + 'static,
 //    shared: Arc<global::Shared>,
@@ -728,9 +732,7 @@ async fn print_errors(future: impl core::future::Future<Output = anyhow::Result<
 
 fn page_size() -> usize {
     // SAFETY: This is valid
-    unsafe {
-        libc::sysconf(libc::_SC_PAGESIZE) as usize
-    }
+    unsafe { libc::sysconf(libc::_SC_PAGESIZE) as usize }
 }
 
 fn alloc_zeroed_page_aligned<T>(len: usize) -> *mut T {
@@ -754,29 +756,22 @@ fn alloc_zeroed_page_aligned<T>(len: usize) -> *mut T {
 
 pub struct MaybeRegisteredBuffer {
     registered_buffer: Option<ManuallyDrop<Vec<u8>>>,
-    new_buffer: Option<Vec<u8>>
+    new_buffer: Option<Vec<u8>>,
 }
 
 impl MaybeRegisteredBuffer {
     fn with_capacity(len: usize) -> Self {
         Self {
             registered_buffer: None,
-            new_buffer: Some(Vec::with_capacity(len))
+            new_buffer: Some(Vec::with_capacity(len)),
         }
     }
 }
 
 pub enum ServerEvent<'a> {
-    AddPlayer {
-        fd: Fixed
-    },
-    RemovePlayer {
-        fd: Fixed
-    },
-    RecvData {
-        fd: Fixed,
-        data: &'a [u8]
-    }
+    AddPlayer { fd: Fixed },
+    RemovePlayer { fd: Fixed },
+    RecvData { fd: Fixed, data: &'a [u8] },
 }
 
 pub struct Server {
@@ -789,28 +784,41 @@ pub struct Server {
 
     /// Make Listener !Send and !Sync to let io_uring assume that it'll only be accessed by 1
     /// thread
-    phantom: PhantomData<*const ()>
+    phantom: PhantomData<*const ()>,
 }
 
 impl Server {
     pub fn new(address: impl ToSocketAddrs) -> anyhow::Result<Self> {
         let listener = TcpListener::bind(address)?;
         // TODO: Try to use defer taskrun
-        let mut uring = IoUring::builder().setup_cqsize(COMPLETION_QUEUE_SIZE).setup_submit_all().setup_coop_taskrun().setup_single_issuer().build(SUBMISSION_QUEUE_SIZE).unwrap();
+        let mut uring = IoUring::builder()
+            .setup_cqsize(COMPLETION_QUEUE_SIZE)
+            .setup_submit_all()
+            .setup_coop_taskrun()
+            .setup_single_issuer()
+            .build(SUBMISSION_QUEUE_SIZE)
+            .unwrap();
 
         let mut submitter = uring.submitter();
         submitter.register_files_sparse(IO_URING_FILE_COUNT)?;
-        assert_eq!(submitter.register_files_update(LISTENER_FIXED_FD.0, &[listener.as_raw_fd()])?, 1);
+        assert_eq!(
+            submitter.register_files_update(LISTENER_FIXED_FD.0, &[listener.as_raw_fd()])?,
+            1
+        );
 
         // Create the c2s buffer
-        let c2s_buffer = alloc_zeroed_page_aligned::<[UnsafeCell<u8>; C2S_RING_BUFFER_LEN]>(C2S_RING_BUFFER_COUNT);
+        let c2s_buffer = alloc_zeroed_page_aligned::<[UnsafeCell<u8>; C2S_RING_BUFFER_LEN]>(
+            C2S_RING_BUFFER_COUNT,
+        );
         let buffer_ring = alloc_zeroed_page_aligned::<BufRingEntry>(C2S_RING_BUFFER_COUNT);
         {
-            let c2s_buffer = unsafe { std::slice::from_raw_parts(c2s_buffer, C2S_RING_BUFFER_COUNT) };
+            let c2s_buffer =
+                unsafe { std::slice::from_raw_parts(c2s_buffer, C2S_RING_BUFFER_COUNT) };
 
             // SAFETY: Buffer count is smaller than the entry count, BufRingEntry is initialized with
             // zero, and the underlying will not be mutated during the loop
-            let buffer_ring = unsafe { std::slice::from_raw_parts_mut(buffer_ring, C2S_RING_BUFFER_COUNT) };
+            let buffer_ring =
+                unsafe { std::slice::from_raw_parts_mut(buffer_ring, C2S_RING_BUFFER_COUNT) };
 
             for (buffer_id, buffer) in buffer_ring.into_iter().enumerate() {
                 let underlying_data = &c2s_buffer[buffer_id];
@@ -840,22 +848,20 @@ impl Server {
             submitter.register_buf_ring(
                 buffer_ring as u64,
                 C2S_RING_BUFFER_COUNT as u16,
-                C2S_BUFFER_GROUP_ID
+                C2S_BUFFER_GROUP_ID,
             )?;
         }
 
         Self::request_accept(&mut uring.submission());
 
-        let mut this = Self {
+        Ok(Self {
             listener,
             uring,
             c2s_buffer,
             c2s_local_tail: tail,
             c2s_shared_tail: tail_addr,
-            phantom: PhantomData
-        };
-
-        Ok(this)
+            phantom: PhantomData,
+        })
     }
 
     /// # Safety
@@ -875,26 +881,45 @@ impl Server {
 
             // The submission queue really is full. The submission queue should be large enough so that
             // this code is never reached.
-            warn!("io_uring submission queue is full and this will lead to performance issues; consider increasing SUBMISSION_QUEUE_SIZE to avoid this");
+            warn!(
+                "io_uring submission queue is full and this will lead to performance issues; \
+                 consider increasing SUBMISSION_QUEUE_SIZE to avoid this"
+            );
             std::hint::spin_loop();
         }
     }
 
     fn request_accept(submission: &mut SubmissionQueue) {
         unsafe {
-            Self::push_entry(submission, &io_uring::opcode::AcceptMulti::new(LISTENER_FIXED_FD).allocate_file_index(true).build().user_data(0));
+            Self::push_entry(
+                submission,
+                &io_uring::opcode::AcceptMulti::new(LISTENER_FIXED_FD)
+                    .allocate_file_index(true)
+                    .build()
+                    .user_data(0),
+            );
         }
     }
 
     fn request_recv(submission: &mut SubmissionQueue, fd: Fixed) {
         unsafe {
-            Self::push_entry(submission, &io_uring::opcode::RecvMulti::new(fd, C2S_BUFFER_GROUP_ID).build().user_data((fd.0 + 2) as u64));
+            Self::push_entry(
+                submission,
+                &io_uring::opcode::RecvMulti::new(fd, C2S_BUFFER_GROUP_ID)
+                    .build()
+                    .user_data((fd.0 + 2) as u64),
+            );
         }
     }
 
     pub fn write(&mut self, fd: Fixed, buf: *const u8, len: u32, buf_index: u16) {
         unsafe {
-            Self::push_entry(&mut self.uring.submission(), &io_uring::opcode::WriteFixed::new(fd, buf, len, buf_index).build().user_data(1));
+            Self::push_entry(
+                &mut self.uring.submission(),
+                &io_uring::opcode::WriteFixed::new(fd, buf, len, buf_index)
+                    .build()
+                    .user_data(1),
+            );
         }
     }
 
@@ -908,7 +933,10 @@ impl Server {
         let (_, mut submission, mut completion) = self.uring.split();
         completion.sync();
         if completion.overflow() > 0 {
-            error!("the io_uring completion queue overflowed, and some connection errors are likely to occur; consider increasing COMPLETION_QUEUE_SIZE to avoid this");
+            error!(
+                "the io_uring completion queue overflowed, and some connection errors are likely \
+                 to occur; consider increasing COMPLETION_QUEUE_SIZE to avoid this"
+            );
         }
 
         for event in completion {
@@ -924,16 +952,14 @@ impl Server {
                     } else {
                         let fd = Fixed(event.result() as u32);
                         Self::request_recv(&mut submission, fd);
-                        f(ServerEvent::AddPlayer {
-                            fd
-                        });
+                        f(ServerEvent::AddPlayer { fd });
                     }
-                },
+                }
                 1 => {
                     // TODO: check for errors and, if not all bytes were written or the request was
                     // cancelled, close the client socket
                     warn!("got write response");
-                },
+                }
                 fd_plus_2 => {
                     let fd = Fixed((fd_plus_2 - 2) as u32);
                     let disconnected = event.result() == 0;
@@ -949,16 +975,17 @@ impl Server {
                         error!("there was an error in recv: {}", event.result());
                     } else {
                         let bytes_received = event.result() as usize;
-                        let buffer_id = buffer_select(event.flags()).expect("there should be a buffer");
+                        let buffer_id =
+                            buffer_select(event.flags()).expect("there should be a buffer");
                         assert!((buffer_id as usize) < C2S_RING_BUFFER_COUNT);
                         // TODO: this is probably very unsafe
-                        let buffer = unsafe { *(self.c2s_buffer.add(buffer_id as usize) as *const [u8; C2S_RING_BUFFER_LEN]) };
+                        let buffer = unsafe {
+                            *(self.c2s_buffer.add(buffer_id as usize)
+                                as *const [u8; C2S_RING_BUFFER_LEN])
+                        };
                         let buffer = &buffer[..bytes_received];
                         self.c2s_local_tail = self.c2s_local_tail.wrapping_add(1);
-                        f(ServerEvent::RecvData {
-                            fd,
-                            data: buffer
-                        });
+                        f(ServerEvent::RecvData { fd, data: buffer });
                     }
                 }
             }
@@ -971,7 +998,10 @@ impl Server {
     }
 
     pub fn cancel(&mut self, cancel_builder: io_uring::types::CancelBuilder) {
-        self.uring.submitter().register_sync_cancel(None, cancel_builder).unwrap();
+        self.uring
+            .submitter()
+            .register_sync_cancel(None, cancel_builder)
+            .unwrap();
     }
 
     /// To register new buffers, unregister must be called first
