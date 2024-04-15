@@ -2,7 +2,7 @@
 # https://nnethercote.github.io/perf-book/build-configuration.html#minimizing-compile-times
 
 # Define an argument for the Rust nightly version
-ARG RUST_NIGHTLY_VERSION=nightly-2024-04-10
+#ARG RUST_NIGHTLY_VERSION=nightly-2024-04-10
 
 # Use Debian bookworm
 FROM debian:bookworm-slim as packages
@@ -29,7 +29,7 @@ FROM packages as builder
 
 ARG RUST_NIGHTLY_VERSION
 RUN curl https://sh.rustup.rs -sSf | sh -s -- -y && \
-   $HOME/.cargo/bin/rustup default ${RUST_NIGHTLY_VERSION}
+   $HOME/.cargo/bin/rustup default nightly
 
 ENV CARGO_HOME=/root/.cargo
 

@@ -31,6 +31,8 @@ pub struct Global {
     pub shared: Arc<Shared>,
 
     needs_realloc: RayonLocal<Cell<bool>>,
+    
+    pub has_registered_buffers_before: bool,
 }
 
 impl Global {
@@ -40,6 +42,7 @@ impl Global {
             max_hurt_resistant_time: 20, // actually kinda like 10 vanilla mc is weird
             shared,
             needs_realloc: RayonLocal::init_with(|| Cell::new(false)),
+            has_registered_buffers_before: false,
         }
     }
 

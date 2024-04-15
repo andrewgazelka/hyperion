@@ -269,17 +269,42 @@ impl ServerDef for LinuxServer {
     fn refresh_buffers<'a>(
         &mut self,
         global: &mut Global,
-        encoders: impl Iterator<Item = &'a mut Encoder>,
+        encoders: impl ExactSizeIterator<Item = (&'a mut Encoder, &'a Fd)> + Clone,
     ) {
+        if encoders.len() == 0 {
+            return;
+        }
+
         if !global.get_needs_realloc() {
             return;
         }
 
-        self.unregister_buffers();
+        let encoders_with_alloc: Vec<_> = encoders.clone()
+            .filter_map(|(encoder, _)| encoder.enc.buf.as_iovec())
+            .collect();
 
-        let encoders: Vec<_> = encoders.map(|encoder| encoder.enc.buf.register()).collect();
+        if encoders_with_alloc.is_empty() {
+            return;
+        }
 
-        unsafe { self.register_buffers(&encoders) };
+        if global.has_registered_buffers_before {
+            self.unregister_buffers();
+        }
+
+        unsafe { self.register_buffers(&encoders_with_alloc) };
+        
+        // todo: clone
+        // now write each one
+        for (encoder, fd) in encoders {
+            let enc = &mut encoder.enc;
+            if enc.buf.len() == 0 {
+                continue;
+            }
+            let fd = fd.0;
+            self.write_raw(fd, enc.buf.as_ptr(), enc.buf.len(), enc.buf_index);
+        }
+
+        global.has_registered_buffers_before = true;
     }
 
     fn submit_events(&mut self) {
@@ -360,6 +385,7 @@ impl LinuxServer {
     /// # Safety
     /// buffers must be valid
     pub unsafe fn register_buffers(&mut self, buffers: &[iovec]) {
+        println!("registering buffers {:?}", buffers);
         self.uring.submitter().register_buffers(buffers).unwrap();
     }
 

@@ -90,15 +90,22 @@ impl MaybeRegisteredBuffer {
     }
 
     #[allow(clippy::as_ptr_cast_mut, reason = "pretty sure nursery error")]
-    pub fn register(&mut self) -> iovec {
+    pub fn as_iovec(&mut self) -> Option<iovec> {
         if let Some(buffer) = self.new_buffer.take() {
             self.registered_buffer = buffer;
         }
 
-        iovec {
+        let capacity = self.registered_buffer.capacity();
+
+        // if capacity is 0, there is no allocation
+        if capacity == 0 {
+            return None;
+        }
+
+        Some(iovec {
             iov_base: self.registered_buffer.as_ptr() as *mut c_void,
             iov_len: self.registered_buffer.capacity(),
-        }
+        })
     }
 
     #[allow(clippy::as_ptr_cast_mut, reason = "pretty sure nursery error")]

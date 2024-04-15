@@ -100,7 +100,7 @@ impl ServerDef for Server {
     fn refresh_buffers<'a>(
         &mut self,
         global: &mut Global,
-        encoders: impl Iterator<Item = &'a mut Encoder>,
+        encoders: impl ExactSizeIterator<Item = &'a mut Encoder>,
     ) {
         self.server.refresh_buffers(global, encoders);
     }
@@ -118,7 +118,7 @@ pub trait ServerDef {
     fn refresh_buffers<'a>(
         &mut self,
         global: &mut Global,
-        encoders: impl Iterator<Item = &'a mut Encoder>,
+        encoders: impl ExactSizeIterator<Item = &'a mut Encoder>,
     );
 
     fn submit_events(&mut self);
