@@ -100,10 +100,6 @@ impl PacketEncoder {
         Ok(())
     }
 
-    pub fn clear(&mut self) {
-        self.buf.clear();
-    }
-
     pub fn set_compression(&mut self, threshold: CompressionThreshold) {
         self.threshold = threshold;
     }

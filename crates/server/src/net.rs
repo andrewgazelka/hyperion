@@ -4,7 +4,6 @@
 
 use std::{
     alloc::{alloc_zeroed, handle_alloc_error, Layout},
-    borrow::Cow,
     cell::{Cell, UnsafeCell},
     ffi::c_void,
     io::{self, ErrorKind, Write},
@@ -20,12 +19,11 @@ use std::{
     },
     time::{Duration, Instant},
 };
+use std::ops::{IndexMut, RangeBounds};
+use std::slice::SliceIndex;
 
-use anyhow::{ensure, Context};
-use arrayvec::ArrayVec;
-use base64::Engine;
-use bytes::{BufMut, BytesMut};
-use derive_build::Build;
+use anyhow::{Context};
+use bytes::{BufMut};
 use evenio::prelude::Component;
 use io_uring::{
     cqueue::buffer_select,
@@ -35,17 +33,14 @@ use io_uring::{
 };
 use libc::iovec;
 use monoio::{
-    buf::IoVecBuf,
     io::{
         AsyncReadRent, AsyncWriteRent, AsyncWriteRentExt, OwnedReadHalf, OwnedWriteHalf, Splitable,
     },
     FusionRuntime,
 };
-use serde_json::json;
 use sha2::Digest;
-use tracing::{debug, error, info, instrument, trace, warn};
+use tracing::{error, info, instrument, trace, warn};
 use valence_protocol::{
-    decode::PacketFrame,
     packets::{
         handshaking::{handshake_c2s::HandshakeNextState, HandshakeC2s},
         login,
@@ -129,7 +124,7 @@ pub struct Encoder {
 
 impl Encoder {
     /// Encode a packet.
-    fn encode<P>(&mut self, pkt: &P, global: &Global) -> anyhow::Result<()>
+    pub fn append<P>(&mut self, pkt: &P, global: &Global) -> anyhow::Result<()>
     where
         P: valence_protocol::Packet + Encode,
     {
@@ -175,6 +170,20 @@ pub struct MaybeRegisteredBuffer {
     new_buffer: Option<Vec<u8>>,
 }
 
+impl <T: SliceIndex<[u8]>> Index<T> for MaybeRegisteredBuffer {
+    type Output = T::Output;
+
+    fn index(&self, index: T) -> &Self::Output {
+        &self.current_buffer()[index]
+    }
+}
+
+impl <T: SliceIndex<[u8]>> IndexMut<T> for MaybeRegisteredBuffer {
+    fn index_mut(&mut self, index: T) -> &mut Self::Output {
+        &mut self.current_buffer_mut()[index]
+    }
+}
+
 impl MaybeRegisteredBuffer {
     fn current_buffer(&self) -> &Vec<u8> {
         if let Some(buffer) = &self.new_buffer {
@@ -184,11 +193,29 @@ impl MaybeRegisteredBuffer {
         }
     }
 
-    pub fn put_bytes(&mut self, byte: u8, amount: usize) {
-        if let Some(buffer) = &mut self.new_buffer {
-            buffer.put_bytes(bytes, amount);
-            return;
+    pub fn copy_within(&mut self, range: impl RangeBounds<usize>, offset: usize) {
+        let buffer = self.current_buffer_mut();
+        buffer.copy_within(range, offset);
+    }
+
+    fn add_capacity(&mut self, add: usize) -> &mut Vec<u8> {
+        if self.new_buffer.is_some() {
+            return self.new_buffer.as_mut().unwrap();
         }
+
+        if self.registered_buffer.capacity() < self.registered_buffer.len() + add {
+            return &mut self.registered_buffer;
+        }
+
+        let mut new_buffer = Vec::with_capacity(self.registered_buffer.len() + add);
+        new_buffer.extend_from_slice(&self.registered_buffer);
+        self.new_buffer = Some(new_buffer);
+
+        self.new_buffer.as_mut().unwrap()
+    }
+
+    pub fn put_bytes(&mut self, byte: u8, amount: usize) {
+        self.add_capacity(amount).put_bytes(byte, amount);
     }
 
     fn current_buffer_mut(&mut self) -> &mut Vec<u8> {
@@ -265,38 +292,6 @@ impl Default for MaybeRegisteredBuffer {
             registered_buffer: Vec::new(),
             new_buffer: Some(Vec::new()),
         }
-    }
-}
-
-impl Index<Range<usize>> for MaybeRegisteredBuffer {
-    type Output = [u8];
-
-    fn index(&self, index: Range<usize>) -> &Self::Output {
-        &self.current_buffer()[index]
-    }
-}
-
-impl Index<usize> for MaybeRegisteredBuffer {
-    type Output = u8;
-
-    fn index(&self, index: usize) -> &Self::Output {
-        &self.current_buffer()[index]
-    }
-}
-
-impl Index<RangeFrom<usize>> for MaybeRegisteredBuffer {
-    type Output = [u8];
-
-    fn index(&self, index: RangeFrom<usize>) -> &Self::Output {
-        &self.current_buffer()[index]
-    }
-}
-
-impl Index<RangeTo<usize>> for MaybeRegisteredBuffer {
-    type Output = [u8];
-
-    fn index(&self, index: RangeTo<usize>) -> &Self::Output {
-        &self.current_buffer()[index]
     }
 }
 

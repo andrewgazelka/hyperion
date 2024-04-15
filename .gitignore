@@ -9,3 +9,4 @@ run
 hyperion
 .cargo
 perf.data
+**/*.zip

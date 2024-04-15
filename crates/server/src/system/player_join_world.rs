@@ -328,7 +328,7 @@ impl<T, const N: usize> Array3d for [T; N] {
     }
 }
 
-pub fn send_keep_alive(encoder: &mut PacketEncoder) -> anyhow::Result<()> {
+pub fn send_keep_alive(encoder: &mut Encoder) -> anyhow::Result<()> {
     let pkt = valence_protocol::packets::play::KeepAliveS2c {
         // The ID can be set to zero because it doesn't matter
         id: 0,

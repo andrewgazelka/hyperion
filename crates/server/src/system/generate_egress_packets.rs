@@ -1,9 +1,11 @@
 use evenio::{event::Receiver, fetch::Fetcher};
+use evenio::fetch::Single;
 use rayon::prelude::*;
 use tracing::instrument;
 use valence_protocol::{packets::play, VarInt, Velocity};
 
 use crate::{net::Encoder, EntityReaction, Gametick};
+use crate::global::Global;
 
 fn vel_m_per_tick(input: glam::Vec3) -> Velocity {
     let input = input * 8000.0;
@@ -14,6 +16,7 @@ fn vel_m_per_tick(input: glam::Vec3) -> Velocity {
 #[instrument(skip_all, level = "trace")]
 pub fn generate_egress_packets(
     _: Receiver<Gametick>,
+    global: Single<&Global>,
     mut connections: Fetcher<(&mut Encoder, &mut EntityReaction)>,
 ) {
     connections.par_iter_mut().for_each(|(encoder, reaction)| {
@@ -23,10 +26,12 @@ pub fn generate_egress_packets(
             let velocity = vel_m_per_tick(vel);
 
             encoder
-                .encode(&play::EntityVelocityUpdateS2c {
+                .append(&play::EntityVelocityUpdateS2c {
                     entity_id: VarInt(0), // 0 is always self as the join packet we are giving 0
                     velocity,
-                })
+                },
+                &global,
+                )
                 .unwrap();
         }
 
