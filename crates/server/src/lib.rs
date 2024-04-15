@@ -1,7 +1,10 @@
 //! Hyperion
 
+#![feature(split_at_checked)]
 #![feature(lint_reasons)]
 #![expect(clippy::type_complexity, reason = "evenio uses a lot of complex types")]
+
+extern crate core;
 
 mod chunk;
 mod singleton;
@@ -139,10 +142,13 @@ pub struct Player {
     immune_until: u64,
 }
 
-#[derive(Component, Debug)]
+#[derive(Component, Debug, Eq, PartialEq)]
+#[repr(u8)]
 enum LoginState {
     Handshake,
+    Status,
     Login,
+    Play,
 }
 
 #[derive(Component)]

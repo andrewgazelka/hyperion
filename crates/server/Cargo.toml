@@ -70,6 +70,7 @@ flate2 = { version = "1.0.28", features = ["zlib-ng"], default-features = false 
 arrayvec = "0.7.4"
 clap = { version = "4.5.4", features = ["derive"] }
 fxhash = "0.2.1"
+derive_more = "0.99.17"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 io-uring = "0.6.3"
