@@ -46,7 +46,7 @@ pub fn pkt_attack(
 
     // local is id 0
     damage_broadcast.entity_id = VarInt(0);
-    encoder.encode(&damage_broadcast).unwrap();
+    encoder.append(&damage_broadcast, &global).unwrap();
 
     let this = pose.position;
     let other = event.from_pos;

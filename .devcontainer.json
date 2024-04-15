@@ -3,5 +3,6 @@
   "image": "mcr.microsoft.com/devcontainers/base:bookworm",
   "mounts": [
     "type=volume,target=${containerWorkspaceFolder}/target"
-  ]
+  ],
+  "forwardPorts": [25565]
 }

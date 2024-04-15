@@ -33,9 +33,12 @@ pub fn player_kick(
     let reason = reason.into_text().color(Color::RED);
 
     encoder
-        .encode(&play::DisconnectS2c {
-            reason: reason.into(),
-        })
+        .append(
+            &play::DisconnectS2c {
+                reason: reason.into(),
+            },
+            &global,
+        )
         .unwrap();
 
     // todo: also handle disconnecting without kicking, io socket being closed, etc

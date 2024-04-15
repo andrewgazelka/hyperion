@@ -20,6 +20,11 @@ impl PacketEncoder {
         }
     }
 
+    pub fn append_raw(&mut self, data: &[u8]) -> anyhow::Result<()> {
+        self.buf.extend_from_slice(data);
+        Ok(())
+    }
+
     pub fn append_packet<P>(&mut self, pkt: &P) -> anyhow::Result<()>
     where
         P: Packet + Encode,

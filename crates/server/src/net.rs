@@ -10,20 +10,19 @@ use std::{
     marker::PhantomData,
     mem::ManuallyDrop,
     net::{TcpListener, TcpStream, ToSocketAddrs},
-    ops::{Index, Range, RangeFrom, RangeTo},
+    ops::{Index, IndexMut, Range, RangeBounds, RangeFrom, RangeTo},
     os::fd::{AsRawFd, RawFd},
     ptr::addr_of_mut,
+    slice::SliceIndex,
     sync::{
         atomic::{AtomicU16, AtomicU32, Ordering},
         Arc,
     },
     time::{Duration, Instant},
 };
-use std::ops::{IndexMut, RangeBounds};
-use std::slice::SliceIndex;
 
-use anyhow::{Context};
-use bytes::{BufMut};
+use anyhow::Context;
+use bytes::BufMut;
 use evenio::prelude::Component;
 use io_uring::{
     cqueue::buffer_select,
@@ -132,6 +131,11 @@ impl Encoder {
         Ok(())
     }
 
+    pub fn append_raw(&mut self, bytes: &[u8], global: &Global) -> anyhow::Result<()> {
+        self.enc.buf.extend_from_slice(bytes);
+        Ok(())
+    }
+
     // /// This sends the bytes to the connection.
     // /// [`PacketEncoder`] can have compression enabled.
     // /// One must make sure the bytes are pre-compressed if compression is enabled.
@@ -170,7 +174,7 @@ pub struct MaybeRegisteredBuffer {
     new_buffer: Option<Vec<u8>>,
 }
 
-impl <T: SliceIndex<[u8]>> Index<T> for MaybeRegisteredBuffer {
+impl<T: SliceIndex<[u8]>> Index<T> for MaybeRegisteredBuffer {
     type Output = T::Output;
 
     fn index(&self, index: T) -> &Self::Output {
@@ -178,7 +182,7 @@ impl <T: SliceIndex<[u8]>> Index<T> for MaybeRegisteredBuffer {
     }
 }
 
-impl <T: SliceIndex<[u8]>> IndexMut<T> for MaybeRegisteredBuffer {
+impl<T: SliceIndex<[u8]>> IndexMut<T> for MaybeRegisteredBuffer {
     fn index_mut(&mut self, index: T) -> &mut Self::Output {
         &mut self.current_buffer_mut()[index]
     }

@@ -140,13 +140,16 @@ pub fn player_join_world(
 
     broadcast.append_packet(&text).unwrap();
 
-    encoder.append(cached_data);
+    encoder.append_raw(cached_data, &global);
 
     encoder
-        .encode(&crate::packets::def::EntityEquipmentUpdateS2c {
-            entity_id: VarInt(0),
-            equipment: Cow::Borrowed(&equipment),
-        })
+        .append(
+            &crate::packets::def::EntityEquipmentUpdateS2c {
+                entity_id: VarInt(0),
+                equipment: Cow::Borrowed(&equipment),
+            },
+            &global,
+        )
         .unwrap();
 
     let actions = PlayerListActions::default()
@@ -163,7 +166,7 @@ pub fn player_join_world(
 
     for entity in entities {
         let pkt = spawn_packet(entity.id, *entity.uuid, entity.pose);
-        encoder.encode(&pkt).unwrap();
+        encoder.append(&pkt, &global).unwrap();
     }
 
     // todo: cache
@@ -189,12 +192,15 @@ pub fn player_join_world(
         .collect::<Vec<_>>();
 
     encoder
-        .encode(&play::TeamS2c {
-            team_name: "no_tag",
-            mode: Mode::AddEntities {
-                entities: player_names,
+        .append(
+            &play::TeamS2c {
+                team_name: "no_tag",
+                mode: Mode::AddEntities {
+                    entities: player_names,
+                },
             },
-        })
+            &global,
+        )
         .unwrap();
 
     let current_name = &*current_player.name;
@@ -209,20 +215,26 @@ pub fn player_join_world(
         .unwrap();
 
     encoder
-        .encode(&play::PlayerListS2c {
-            actions,
-            entries: Cow::Owned(entries),
-        })
+        .append(
+            &play::PlayerListS2c {
+                actions,
+                entries: Cow::Owned(entries),
+            },
+            &global,
+        )
         .unwrap();
 
     let tick = global.tick;
     let time_of_day = tick % 24000;
 
     encoder
-        .encode(&play::WorldTimeUpdateS2c {
-            world_age: tick,
-            time_of_day,
-        })
+        .append(
+            &play::WorldTimeUpdateS2c {
+                world_age: tick,
+                time_of_day,
+            },
+            &global,
+        )
         .unwrap();
 
     // todo: cache
@@ -236,13 +248,13 @@ pub fn player_join_world(
             yaw: ByteAngle::from_degrees(pose.yaw),
             pitch: ByteAngle::from_degrees(pose.pitch),
         };
-        encoder.encode(&pkt).unwrap();
+        encoder.append(&pkt, &global).unwrap();
 
         let pkt = crate::packets::def::EntityEquipmentUpdateS2c {
             entity_id,
             equipment: Cow::Borrowed(&equipment),
         };
-        encoder.encode(&pkt).unwrap();
+        encoder.append(&pkt, &global).unwrap();
     }
 
     global
@@ -260,13 +272,16 @@ pub fn player_join_world(
     };
 
     encoder
-        .encode(&play::PlayerPositionLookS2c {
-            position: pose.position.as_dvec3(),
-            yaw: pose.yaw,
-            pitch: pose.pitch,
-            flags: PlayerPositionLookFlags::default(),
-            teleport_id: 1.into(),
-        })
+        .append(
+            &play::PlayerPositionLookS2c {
+                position: pose.position.as_dvec3(),
+                yaw: pose.yaw,
+                pitch: pose.pitch,
+                flags: PlayerPositionLookFlags::default(),
+                teleport_id: 1.into(),
+            },
+            &global,
+        )
         .unwrap();
 
     broadcast.append_packet(&spawn_player).unwrap();
@@ -277,8 +292,6 @@ pub fn player_join_world(
             equipment: Cow::Borrowed(&equipment),
         })
         .unwrap();
-
-    encoder.deallocate_on_process();
 
     info!("Player {} joined the world", current_player.name);
 }
@@ -328,13 +341,13 @@ impl<T, const N: usize> Array3d for [T; N] {
     }
 }
 
-pub fn send_keep_alive(encoder: &mut Encoder) -> anyhow::Result<()> {
-    let pkt = valence_protocol::packets::play::KeepAliveS2c {
+pub fn send_keep_alive(encoder: &mut Encoder, global: &Global) -> anyhow::Result<()> {
+    let pkt = play::KeepAliveS2c {
         // The ID can be set to zero because it doesn't matter
         id: 0,
     };
 
-    encoder.append_packet(&pkt)?;
+    encoder.append(&pkt, &global)?;
 
     Ok(())
 }

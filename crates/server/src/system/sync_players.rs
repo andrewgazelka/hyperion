@@ -43,112 +43,136 @@ pub fn sync_players(
                     if (previous_health - current_health).abs() > f32::EPSILON {
                         // TODO: Sync absorption hearts
 
-                        let _ = encoder.encode(&play::HealthUpdateS2c {
-                            health: *current_health,
-                            food: VarInt(20),
-                            food_saturation: 5.0,
-                        });
+                        let _ = encoder.append(
+                            &play::HealthUpdateS2c {
+                                health: *current_health,
+                                food: VarInt(20),
+                                food_saturation: 5.0,
+                            },
+                            &global,
+                        );
 
                         if current_health < previous_health {
                             encoder
-                                .encode(&play::PlaySoundS2c {
-                                    id: SoundId::Reference { id: HURT_SOUND },
-                                    category: SoundCategory::Player,
-                                    position: (pose.position * 8.00).as_ivec3(),
-                                    volume: 1.0,
-                                    pitch: 1.0,
-                                    seed: 0,
-                                })
+                                .append(
+                                    &play::PlaySoundS2c {
+                                        id: SoundId::Reference { id: HURT_SOUND },
+                                        category: SoundCategory::Player,
+                                        position: (pose.position * 8.00).as_ivec3(),
+                                        volume: 1.0,
+                                        pitch: 1.0,
+                                        seed: 0,
+                                    },
+                                    &global,
+                                )
                                 .unwrap();
-                            // encoder
-                            //     .encode(&play::PlaySoundFromEntityS2c {
-                            //         id: HURT_SOUND,
-                            //         // TODO: Check if these hurt sound settings are correct
-                            //         category: SoundCategory::Player,
-                            //         entity_id,
-                            //         volume: 1.0,
-                            //         pitch: 1.0,
-                            //         seed: 1,
-                            //     })
-                            //     .unwrap();
                         }
                     }
 
                     // TODO: Adding these effects don't work for some reason
                     if previous_absorption.end_tick != current_absorption.end_tick {
-                        let _ = encoder.encode(&play::EntityStatusEffectS2c {
-                            entity_id,
-                            effect_id: ABSORPTION,
-                            amplifier: 0,
-                            duration: dbg!(VarInt((current_absorption.end_tick - tick) as i32)),
-                            flags: play::entity_status_effect_s2c::Flags::new()
-                                .with_show_icon(true),
-                            factor_codec: None,
-                        });
+                        let _ = encoder.append(
+                            &play::EntityStatusEffectS2c {
+                                entity_id,
+                                effect_id: ABSORPTION,
+                                amplifier: 0,
+                                duration: dbg!(VarInt((current_absorption.end_tick - tick) as i32)),
+                                flags: play::entity_status_effect_s2c::Flags::new()
+                                    .with_show_icon(true),
+                                factor_codec: None,
+                            },
+                            &global,
+                        );
                     }
 
                     if previous_regeneration.end_tick != current_regeneration.end_tick {
-                        let _ = encoder.encode(&play::EntityStatusEffectS2c {
-                            entity_id,
-                            effect_id: REGENERATION,
-                            amplifier: 1,
-                            duration: dbg!(VarInt((current_regeneration.end_tick - tick) as i32)),
-                            flags: play::entity_status_effect_s2c::Flags::new()
-                                .with_show_icon(true),
-                            factor_codec: None,
-                        });
+                        let _ = encoder.append(
+                            &play::EntityStatusEffectS2c {
+                                entity_id,
+                                effect_id: REGENERATION,
+                                amplifier: 1,
+                                duration: dbg!(VarInt(
+                                    (current_regeneration.end_tick - tick) as i32
+                                )),
+                                flags: play::entity_status_effect_s2c::Flags::new()
+                                    .with_show_icon(true),
+                                factor_codec: None,
+                            },
+                            &global,
+                        );
                     }
                 }
                 (PlayerState::Alive { .. }, PlayerState::Dead { respawn_tick }) => {
-                    let _ = encoder.encode(&play::GameStateChangeS2c {
-                        kind: play::game_state_change_s2c::GameEventKind::ChangeGameMode,
-                        value: SPECTATOR,
-                    });
+                    let _ = encoder.append(
+                        &play::GameStateChangeS2c {
+                            kind: play::game_state_change_s2c::GameEventKind::ChangeGameMode,
+                            value: SPECTATOR,
+                        },
+                        &global,
+                    );
                     // The title is repeatedly sent so it doesn't fade away after a few seconds
-                    let _ = encoder.encode(&play::TitleS2c {
-                        title_text: "YOU DIED!".into_text().color(Color::RED).into(),
-                    });
+                    let _ = encoder.append(
+                        &play::TitleS2c {
+                            title_text: "YOU DIED!".into_text().color(Color::RED).into(),
+                        },
+                        &global,
+                    );
 
                     let seconds_remaining = (respawn_tick - tick) as f32 / 20.0;
-                    let _ = encoder.encode(&play::SubtitleS2c {
-                        subtitle_text: ("Respawning in ".into_text()
-                            + format!("{seconds_remaining:.2}").color(Color::RED)
-                            + " seconds")
-                            .into(),
-                    });
+                    let _ = encoder.append(
+                        &play::SubtitleS2c {
+                            subtitle_text: ("Respawning in ".into_text()
+                                + format!("{seconds_remaining:.2}").color(Color::RED)
+                                + " seconds")
+                                .into(),
+                        },
+                        &global,
+                    );
 
                     encoder
-                        .encode(&play::PlaySoundS2c {
-                            id: SoundId::Reference { id: HURT_SOUND },
-                            category: SoundCategory::Player,
-                            position: (pose.position * 8.00).as_ivec3(),
-                            volume: 1.0,
-                            pitch: 1.0,
-                            seed: 0,
-                        })
+                        .append(
+                            &play::PlaySoundS2c {
+                                id: SoundId::Reference { id: HURT_SOUND },
+                                category: SoundCategory::Player,
+                                position: (pose.position * 8.00).as_ivec3(),
+                                volume: 1.0,
+                                pitch: 1.0,
+                                seed: 0,
+                            },
+                            &global,
+                        )
                         .unwrap();
                 }
                 (PlayerState::Dead { .. }, PlayerState::Alive { health, .. }) => {
-                    let _ = encoder.encode(&play::ClearTitleS2c { reset: true });
-                    let _ = encoder.encode(&play::GameStateChangeS2c {
-                        kind: play::game_state_change_s2c::GameEventKind::ChangeGameMode,
-                        value: SURVIVAL,
-                    });
-                    let _ = encoder.encode(&play::HealthUpdateS2c {
-                        health: *health,
-                        food: VarInt(20),
-                        food_saturation: 5.0,
-                    });
+                    let _ = encoder.append(&play::ClearTitleS2c { reset: true }, &global);
+                    let _ = encoder.append(
+                        &play::GameStateChangeS2c {
+                            kind: play::game_state_change_s2c::GameEventKind::ChangeGameMode,
+                            value: SURVIVAL,
+                        },
+                        &global,
+                    );
+                    let _ = encoder.append(
+                        &play::HealthUpdateS2c {
+                            health: *health,
+                            food: VarInt(20),
+                            food_saturation: 5.0,
+                        },
+                        &global,
+                    );
                     // TODO: Update absorption and regeneration
                 }
                 (PlayerState::Dead { .. }, PlayerState::Dead { respawn_tick }) => {
                     let seconds_remaining = (respawn_tick - tick) as f32 / 20.0;
-                    let _ = encoder.encode(&play::SubtitleS2c {
-                        subtitle_text: ("Respawning in ".into_text()
-                            + format!("{seconds_remaining:.2}").color(Color::RED)
-                            + " seconds")
-                            .into(),
-                    });
+                    let _ = encoder.append(
+                        &play::SubtitleS2c {
+                            subtitle_text: ("Respawning in ".into_text()
+                                + format!("{seconds_remaining:.2}").color(Color::RED)
+                                + " seconds")
+                                .into(),
+                        },
+                        &global,
+                    );
                 }
             }
 
