@@ -5,6 +5,7 @@ use valence_protocol::{CompressionThreshold, Encode, Packet, VarInt};
 
 use crate::net::{MaybeRegisteredBuffer, MAX_PACKET_SIZE};
 
+#[derive(Default)]
 pub struct PacketEncoder {
     pub buf: MaybeRegisteredBuffer,
     compress_buf: Vec<u8>,

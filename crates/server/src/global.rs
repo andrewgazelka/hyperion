@@ -30,10 +30,19 @@ pub struct Global {
     /// Data shared between the IO thread and the ECS framework.
     pub shared: Arc<Shared>,
 
-    pub needs_realloc: RayonLocal<Cell<bool>>,
+    needs_realloc: RayonLocal<Cell<bool>>,
 }
 
 impl Global {
+    pub fn new(shared: Arc<Shared>) -> Self {
+        Self {
+            tick: 0,
+            max_hurt_resistant_time: 20, // actually kinda like 10 vanilla mc is weird
+            shared,
+            needs_realloc: RayonLocal::init_with(|| Cell::new(false)),
+        }
+    }
+
     pub fn set_needs_realloc(&self) {
         self.needs_realloc.get_rayon_local().set(true);
     }

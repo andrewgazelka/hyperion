@@ -454,12 +454,7 @@ impl Game {
         world.add_handler(system::kill_all);
 
         let global = world.spawn();
-        world.insert(global, Global {
-            tick: 0,
-            max_hurt_resistant_time: 20, // actually kinda like 10 vanilla mc is weird
-            shared: shared.clone(),
-            needs_realloc: RayonLocal::init_with(|| Cell::new(false)),
-        });
+        world.insert(global, Global::new(shared.clone()));
 
         let bounding_boxes = world.spawn();
         world.insert(bounding_boxes, bounding_box::EntityBoundingBoxes::default());

@@ -183,7 +183,7 @@ pub struct ClientConnection {
 
 mod encoder;
 
-#[derive(Component)]
+#[derive(Component, Default)]
 pub struct Encoder {
     /// The encoding buffer and logic
     enc: encoder::PacketEncoder,
