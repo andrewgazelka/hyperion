@@ -7,11 +7,11 @@ use std::{
     borrow::Cow,
     cell::{Cell, UnsafeCell},
     ffi::c_void,
-    io,
-    io::{ErrorKind, Write},
+    io::{self, ErrorKind, Write},
     marker::PhantomData,
     mem::ManuallyDrop,
     net::{TcpListener, TcpStream, ToSocketAddrs},
+    ops::{Index, Range, RangeFrom, RangeTo},
     os::fd::{AsRawFd, RawFd},
     ptr::addr_of_mut,
     sync::{
@@ -24,7 +24,7 @@ use std::{
 use anyhow::{ensure, Context};
 use arrayvec::ArrayVec;
 use base64::Engine;
-use bytes::BytesMut;
+use bytes::{BufMut, BytesMut};
 use derive_build::Build;
 use evenio::prelude::Component;
 use io_uring::{
@@ -129,45 +129,21 @@ pub struct Encoder {
 
 impl Encoder {
     /// Encode a packet.
-    ///
-    /// Returns if the buffer re-allocated
-    fn encode_impl_allocates<P>(&mut self, pkt: &P) -> anyhow::Result<bool>
+    fn encode<P>(&mut self, pkt: &P, global: &Global) -> anyhow::Result<()>
     where
         P: valence_protocol::Packet + Encode,
     {
-        let capacity_before = self.enc.buf().capacity();
         self.enc.append_packet(pkt)?;
-        let capacity_after = self.enc.buf().capacity();
-
-        if capacity_before != capacity_after {
-            return Ok(true);
-        }
-
-        Ok(false)
-    }
-
-    fn encode<P>(&mut self, pkt: &P, global: &Global) -> anyhow::Result<()> {
-        if self.encode_impl_allocates(pkt)? {
-            // todo: use thread-local instead of an atomic and then combine at the end
-            global.set_needs_realloc()
-        }
         Ok(())
     }
 
-    unsafe fn as_iovec(&self) -> iovec {
-        iovec {
-            iov_base: self.enc.buf().as_ptr() as *mut c_void,
-            iov_len: self.enc.buf().len(),
-        }
-    }
-
-    /// This sends the bytes to the connection.
-    /// [`PacketEncoder`] can have compression enabled.
-    /// One must make sure the bytes are pre-compressed if compression is enabled.
-    pub fn append(&mut self, bytes: &[u8]) {
-        trace!("send raw bytes");
-        self.enc.append_bytes(bytes);
-    }
+    // /// This sends the bytes to the connection.
+    // /// [`PacketEncoder`] can have compression enabled.
+    // /// One must make sure the bytes are pre-compressed if compression is enabled.
+    // pub fn append(&mut self, bytes: &[u8]) {
+    //     trace!("send raw bytes");
+    //     self.enc.
+    // }
 }
 
 fn page_size() -> usize {
@@ -199,18 +175,42 @@ pub struct MaybeRegisteredBuffer {
     new_buffer: Option<Vec<u8>>,
 }
 
-impl Write for MaybeRegisteredBuffer {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        self.push(buf);
-        Ok(buf.len())
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        Ok(())
-    }
-}
-
 impl MaybeRegisteredBuffer {
+    fn current_buffer(&self) -> &Vec<u8> {
+        if let Some(buffer) = &self.new_buffer {
+            buffer
+        } else {
+            &self.registered_buffer
+        }
+    }
+
+    pub fn put_bytes(&mut self, byte: u8, amount: usize) {
+        if let Some(buffer) = &mut self.new_buffer {
+            buffer.put_bytes(bytes, amount);
+            return;
+        }
+    }
+
+    fn current_buffer_mut(&mut self) -> &mut Vec<u8> {
+        if let Some(buffer) = &mut self.new_buffer {
+            buffer
+        } else {
+            &mut self.registered_buffer
+        }
+    }
+
+    pub fn extend_from_slice(&mut self, slice: &[u8]) {
+        self.current_buffer_mut().extend_from_slice(slice);
+    }
+
+    pub fn truncate(&mut self, len: usize) {
+        self.current_buffer_mut().truncate(len);
+    }
+
+    pub fn len(&self) -> usize {
+        self.current_buffer().len()
+    }
+
     fn with_capacity(len: usize) -> Self {
         Self {
             registered_buffer: Vec::new(), // no allocation
@@ -243,9 +243,7 @@ impl MaybeRegisteredBuffer {
             return;
         }
 
-        let Some(buffer) = self.registered_buffer else {
-            unreachable!("this should never happen");
-        };
+        let buffer = &mut self.registered_buffer;
 
         let cap = buffer.capacity();
         if cap < buffer.len() + bytes.len() {
@@ -258,6 +256,58 @@ impl MaybeRegisteredBuffer {
         }
 
         buffer.extend_from_slice(bytes);
+    }
+}
+
+impl Default for MaybeRegisteredBuffer {
+    fn default() -> Self {
+        Self {
+            registered_buffer: Vec::new(),
+            new_buffer: Some(Vec::new()),
+        }
+    }
+}
+
+impl Index<Range<usize>> for MaybeRegisteredBuffer {
+    type Output = [u8];
+
+    fn index(&self, index: Range<usize>) -> &Self::Output {
+        &self.current_buffer()[index]
+    }
+}
+
+impl Index<usize> for MaybeRegisteredBuffer {
+    type Output = u8;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.current_buffer()[index]
+    }
+}
+
+impl Index<RangeFrom<usize>> for MaybeRegisteredBuffer {
+    type Output = [u8];
+
+    fn index(&self, index: RangeFrom<usize>) -> &Self::Output {
+        &self.current_buffer()[index]
+    }
+}
+
+impl Index<RangeTo<usize>> for MaybeRegisteredBuffer {
+    type Output = [u8];
+
+    fn index(&self, index: RangeTo<usize>) -> &Self::Output {
+        &self.current_buffer()[index]
+    }
+}
+
+impl Write for MaybeRegisteredBuffer {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        self.push(buf);
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
     }
 }
 
@@ -516,10 +566,10 @@ impl Server {
             .unwrap();
     }
 
-    pub fn refresh_buffers(
+    pub fn refresh_buffers<'a>(
         &mut self,
-        global: &Global,
-        encoders: impl Iterator<Item = &mut Encoder>,
+        global: &mut Global,
+        encoders: impl Iterator<Item = &'a mut Encoder>,
     ) {
         if !global.get_needs_realloc() {
             return;

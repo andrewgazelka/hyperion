@@ -1,3 +1,5 @@
+use std::io::Read;
+
 use anyhow::ensure;
 use valence_protocol::{CompressionThreshold, Encode, Packet, VarInt};
 
@@ -10,29 +12,12 @@ pub struct PacketEncoder {
 }
 
 impl PacketEncoder {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    pub fn prepend_packet<P>(&mut self, pkt: &P) -> anyhow::Result<()>
-    where
-        P: Packet + Encode,
-    {
-        let start_len = self.buf.len();
-        self.append_packet(pkt)?;
-
-        let end_len = self.buf.len();
-        let total_packet_len = end_len - start_len;
-
-        // 1) Move everything back by the length of the packet.
-        // 2) Move the packet to the new space at the front.
-        // 3) Truncate the old packet away.
-        self.buf.put_bytes(0, total_packet_len);
-        self.buf.copy_within(..end_len, total_packet_len);
-        self.buf.copy_within(total_packet_len + start_len.., 0);
-        self.buf.truncate(end_len);
-
-        Ok(())
+    pub fn new(threshold: CompressionThreshold) -> Self {
+        Self {
+            buf: MaybeRegisteredBuffer::default(),
+            compress_buf: Vec::new(),
+            threshold,
+        }
     }
 
     pub fn append_packet<P>(&mut self, pkt: &P) -> anyhow::Result<()>
@@ -46,8 +31,6 @@ impl PacketEncoder {
         let data_len = self.buf.len() - start_len;
 
         if self.threshold.0 >= 0 {
-            use std::io::Read;
-
             use flate2::{bufread::ZlibEncoder, Compression};
 
             if data_len > self.threshold.0 as usize {

@@ -1,10 +1,7 @@
 //! Defined the [`Global`] struct which is used to store global data which defines a [`crate::Game`]
 use std::{
     cell::Cell,
-    sync::{
-        atomic::{AtomicBool, AtomicU32},
-        Arc,
-    },
+    sync::{atomic::AtomicU32, Arc},
 };
 
 use evenio::component::Component;
@@ -33,7 +30,7 @@ pub struct Global {
     /// Data shared between the IO thread and the ECS framework.
     pub shared: Arc<Shared>,
 
-    needs_realloc: RayonLocal<Cell<bool>>,
+    pub needs_realloc: RayonLocal<Cell<bool>>,
 }
 
 impl Global {
@@ -41,7 +38,7 @@ impl Global {
         self.needs_realloc.get_rayon_local().set(true);
     }
 
-    pub fn get_needs_realloc(&self) -> bool {
+    pub fn get_needs_realloc(&mut self) -> bool {
         // reduce
         self.needs_realloc.get_all_locals().iter().any(|x| x.get())
     }

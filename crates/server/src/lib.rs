@@ -7,6 +7,7 @@ mod chunk;
 mod singleton;
 
 use std::{
+    cell::Cell,
     collections::VecDeque,
     fmt::Debug,
     net::ToSocketAddrs,
@@ -19,6 +20,7 @@ use bvh::aabb::Aabb;
 use evenio::prelude::*;
 use libc::{getrlimit, setrlimit, RLIMIT_NOFILE};
 use ndarray::s;
+use rayon_local::RayonLocal;
 use signal_hook::iterator::Signals;
 use singleton::bounding_box;
 use spin::Lazy;
@@ -446,6 +448,7 @@ impl Game {
             tick: 0,
             max_hurt_resistant_time: 20, // actually kinda like 10 vanilla mc is weird
             shared: shared.clone(),
+            needs_realloc: RayonLocal::init_with(|| Cell::new(false)),
         });
 
         let bounding_boxes = world.spawn();
