@@ -1,8 +1,10 @@
 {
   "name": "Debian",
-  "image": "mcr.microsoft.com/devcontainers/base:bookworm",
+  "build" : {
+    dockerfile: "Dockerfile-dev"
+  },
   "mounts": [
     "type=volume,target=${containerWorkspaceFolder}/target"
   ],
-  "forwardPorts": [25565]
+  "forwardPorts": [25565],
 }

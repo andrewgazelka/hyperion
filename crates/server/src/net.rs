@@ -3,80 +3,124 @@
 #![expect(clippy::future_not_send, reason = "monoio is not Send")]
 
 use std::{
-    alloc::{alloc_zeroed, handle_alloc_error, Layout},
-    cell::{Cell, UnsafeCell},
-    ffi::c_void,
-    io::{self, ErrorKind, Write},
-    marker::PhantomData,
-    mem::ManuallyDrop,
-    net::{TcpListener, TcpStream, ToSocketAddrs},
-    ops::{Index, IndexMut, Range, RangeBounds, RangeFrom, RangeTo},
-    os::fd::{AsRawFd, RawFd},
-    ptr::addr_of_mut,
+    io::Write,
+    net::ToSocketAddrs,
+    ops::{Index, IndexMut, RangeBounds},
+    os::fd::AsRawFd,
     slice::SliceIndex,
-    sync::{
-        atomic::{AtomicU16, AtomicU32, Ordering},
-        Arc,
-    },
-    time::{Duration, Instant},
 };
 
 use anyhow::Context;
 use bytes::BufMut;
 use evenio::prelude::Component;
-use io_uring::{
-    cqueue::buffer_select,
-    squeue::SubmissionQueue,
-    types::{BufRingEntry, Fixed},
-    IoUring,
-};
-use libc::iovec;
-use monoio::{
-    io::{
-        AsyncReadRent, AsyncWriteRent, AsyncWriteRentExt, OwnedReadHalf, OwnedWriteHalf, Splitable,
-    },
-    FusionRuntime,
-};
+use monoio::io::{AsyncReadRent, AsyncWriteRent, AsyncWriteRentExt, Splitable};
 use sha2::Digest;
-use tracing::{error, info, instrument, trace, warn};
-use valence_protocol::{
-    packets::{
-        handshaking::{handshake_c2s::HandshakeNextState, HandshakeC2s},
-        login,
-        login::{LoginHelloC2s, LoginSuccessS2c},
-        status,
-    },
-    uuid::Uuid,
-    Bounded, CompressionThreshold, Decode, Encode, PacketDecoder, PacketEncoder, VarInt,
-};
+use valence_protocol::{uuid::Uuid, Decode, Encode};
 
-use crate::{config, global, global::Global};
+use crate::global::Global;
 
-/// Default MiB/s threshold before we start to limit the sending of some packets.
-const DEFAULT_SPEED: u32 = 1024 * 1024;
+mod buffer;
 
-/// The maximum number of buffers a vectored write can have.
-const MAX_VECTORED_WRITE_BUFS: usize = 16;
+pub use buffer::*;
 
-const COMPLETION_QUEUE_SIZE: u32 = 32768;
-const SUBMISSION_QUEUE_SIZE: u32 = 32768;
-const IO_URING_FILE_COUNT: u32 = 32768;
-const C2S_RING_BUFFER_COUNT: usize = 16384;
+#[cfg(target_os = "linux")]
+mod linux;
 
-/// Size of each buffer in bytes
-const C2S_RING_BUFFER_LEN: usize = 4096;
+#[derive(Debug)]
+struct Fd(
+    #[cfg(target_os = "linux")] linux::Fixed,
+    #[cfg(target_os = "macos")] (),
+);
 
-const LISTENER_FIXED_FD: Fixed = Fixed(0);
-const C2S_BUFFER_GROUP_ID: u16 = 0;
+pub enum ServerEvent<'a> {
+    AddPlayer { fd: Fd },
+    RemovePlayer { fd: Fd },
+    RecvData { fd: Fd, data: &'a [u8] },
+}
 
-const IORING_CQE_F_MORE: u32 = 1 << 1;
+pub struct Server {
+    #[cfg(target_os = "linux")]
+    server: linux::Server,
+    #[cfg(target_os = "macos")]
+    server: NotImplemented,
+}
 
-/// How long we wait from when we get the first buffer to when we start sending all of the ones we have collected.
-/// This is closely related to [`MAX_VECTORED_WRITE_BUFS`].
-const WRITE_DELAY: Duration = Duration::from_millis(1);
+impl ServerDef for Server {
+    fn new(address: impl ToSocketAddrs) -> anyhow::Result<Self>
+    where
+        Self: Sized,
+    {
+        #[cfg(target_os = "linux")]
+        {
+            Ok(Self {
+                server: linux::Server::new(address)?,
+            })
+        }
+        #[cfg(target_os = "macos")]
+        {
+            Ok(Self {
+                server: NotImplemented,
+            })
+        }
+    }
 
-/// How much we expand our read buffer each time a packet is too large.
-const READ_BUF_SIZE: usize = 4096;
+    fn drain(&mut self, f: impl FnMut(ServerEvent)) {
+        self.server.drain(f)
+    }
+
+    fn refresh_buffers<'a>(
+        &mut self,
+        global: &mut Global,
+        encoders: impl Iterator<Item = &'a mut Encoder>,
+    ) {
+        self.server.refresh_buffers(global, encoders)
+    }
+
+    fn submit_events(&mut self) {
+        self.server.submit_events()
+    }
+}
+
+pub trait ServerDef {
+    fn new(address: impl ToSocketAddrs) -> anyhow::Result<Self>
+    where
+        Self: Sized;
+    fn drain(&mut self, f: impl FnMut(ServerEvent));
+    fn refresh_buffers<'a>(
+        &mut self,
+        global: &mut Global,
+        encoders: impl Iterator<Item = &'a mut Encoder>,
+    );
+    
+    fn submit_events(&mut self);
+}
+
+struct NotImplemented;
+
+impl ServerDef for NotImplemented {
+    fn new(address: impl ToSocketAddrs) -> anyhow::Result<Self>
+    where
+        Self: Sized,
+    {
+        unimplemented!("not implemented for macOS")
+    }
+
+    fn drain(&mut self, _f: impl FnMut(ServerEvent)) {
+        unimplemented!("not implemented for macOS")
+    }
+
+    fn refresh_buffers<'a>(
+        &mut self,
+        _global: &mut Global,
+        _encoders: impl Iterator<Item = &'a mut Encoder>,
+    ) {
+        unimplemented!("not implemented for macOS")
+    }
+
+    fn submit_events(&mut self) {
+        unimplemented!("not implemented for macOS")
+    }
+}
 
 /// The Minecraft protocol version this library currently targets.
 pub const PROTOCOL_VERSION: i32 = 763;
@@ -131,9 +175,8 @@ impl Encoder {
         Ok(())
     }
 
-    pub fn append_raw(&mut self, bytes: &[u8], global: &Global) -> anyhow::Result<()> {
+    pub fn append_raw(&mut self, bytes: &[u8], global: &Global) {
         self.enc.buf.extend_from_slice(bytes);
-        Ok(())
     }
 
     // /// This sends the bytes to the connection.
@@ -143,454 +186,4 @@ impl Encoder {
     //     trace!("send raw bytes");
     //     self.enc.
     // }
-}
-
-fn page_size() -> usize {
-    // SAFETY: This is valid
-    unsafe { libc::sysconf(libc::_SC_PAGESIZE) as usize }
-}
-
-fn alloc_zeroed_page_aligned<T>(len: usize) -> *mut T {
-    assert!(len > 0);
-    let page_size = page_size();
-    let type_layout = Layout::new::<T>();
-    assert!(type_layout.align() <= page_size);
-    assert!(type_layout.size() > 0);
-
-    let layout = Layout::from_size_align(len * type_layout.size(), page_size).unwrap();
-
-    // SAFETY: len is nonzero and T is not zero sized
-    let data = unsafe { alloc_zeroed(layout) };
-
-    if data.is_null() {
-        handle_alloc_error(layout);
-    }
-
-    data.cast()
-}
-
-pub struct MaybeRegisteredBuffer {
-    registered_buffer: Vec<u8>,
-    new_buffer: Option<Vec<u8>>,
-}
-
-impl<T: SliceIndex<[u8]>> Index<T> for MaybeRegisteredBuffer {
-    type Output = T::Output;
-
-    fn index(&self, index: T) -> &Self::Output {
-        &self.current_buffer()[index]
-    }
-}
-
-impl<T: SliceIndex<[u8]>> IndexMut<T> for MaybeRegisteredBuffer {
-    fn index_mut(&mut self, index: T) -> &mut Self::Output {
-        &mut self.current_buffer_mut()[index]
-    }
-}
-
-impl MaybeRegisteredBuffer {
-    fn current_buffer(&self) -> &Vec<u8> {
-        if let Some(buffer) = &self.new_buffer {
-            buffer
-        } else {
-            &self.registered_buffer
-        }
-    }
-
-    pub fn copy_within(&mut self, range: impl RangeBounds<usize>, offset: usize) {
-        let buffer = self.current_buffer_mut();
-        buffer.copy_within(range, offset);
-    }
-
-    fn add_capacity(&mut self, add: usize) -> &mut Vec<u8> {
-        if self.new_buffer.is_some() {
-            return self.new_buffer.as_mut().unwrap();
-        }
-
-        if self.registered_buffer.capacity() < self.registered_buffer.len() + add {
-            return &mut self.registered_buffer;
-        }
-
-        let mut new_buffer = Vec::with_capacity(self.registered_buffer.len() + add);
-        new_buffer.extend_from_slice(&self.registered_buffer);
-        self.new_buffer = Some(new_buffer);
-
-        self.new_buffer.as_mut().unwrap()
-    }
-
-    pub fn put_bytes(&mut self, byte: u8, amount: usize) {
-        self.add_capacity(amount).put_bytes(byte, amount);
-    }
-
-    fn current_buffer_mut(&mut self) -> &mut Vec<u8> {
-        if let Some(buffer) = &mut self.new_buffer {
-            buffer
-        } else {
-            &mut self.registered_buffer
-        }
-    }
-
-    pub fn extend_from_slice(&mut self, slice: &[u8]) {
-        self.current_buffer_mut().extend_from_slice(slice);
-    }
-
-    pub fn truncate(&mut self, len: usize) {
-        self.current_buffer_mut().truncate(len);
-    }
-
-    pub fn len(&self) -> usize {
-        self.current_buffer().len()
-    }
-
-    fn with_capacity(len: usize) -> Self {
-        Self {
-            registered_buffer: Vec::new(), // no allocation
-            new_buffer: Some(Vec::with_capacity(len)),
-        }
-    }
-
-    fn register(&mut self) -> iovec {
-        if let Some(buffer) = self.new_buffer.take() {
-            self.registered_buffer = buffer;
-        }
-
-        iovec {
-            iov_base: self.registered_buffer.as_ptr() as *mut c_void,
-            iov_len: self.registered_buffer.capacity(),
-        }
-    }
-
-    fn get_iovec(&self) -> iovec {
-        iovec {
-            iov_base: self.registered_buffer.as_ptr() as *mut c_void,
-            iov_len: self.registered_buffer.len(),
-        }
-    }
-
-    fn push(&mut self, bytes: &[u8]) {
-        // todo: could be made more efficient with custom Vec that does not instantly deallocate on grow
-        if let Some(buffer) = &mut self.new_buffer {
-            buffer.extend_from_slice(bytes);
-            return;
-        }
-
-        let buffer = &mut self.registered_buffer;
-
-        let cap = buffer.capacity();
-        if cap < buffer.len() + bytes.len() {
-            // copy buffer to new buffer
-            let mut new_buffer = Vec::with_capacity(buffer.len() + bytes.len());
-            new_buffer.extend_from_slice(&buffer);
-            new_buffer.extend_from_slice(bytes);
-            self.new_buffer = Some(new_buffer);
-            return;
-        }
-
-        buffer.extend_from_slice(bytes);
-    }
-}
-
-impl Default for MaybeRegisteredBuffer {
-    fn default() -> Self {
-        Self {
-            registered_buffer: Vec::new(),
-            new_buffer: Some(Vec::new()),
-        }
-    }
-}
-
-impl Write for MaybeRegisteredBuffer {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        self.push(buf);
-        Ok(buf.len())
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        Ok(())
-    }
-}
-
-pub enum ServerEvent<'a> {
-    AddPlayer { fd: Fixed },
-    RemovePlayer { fd: Fixed },
-    RecvData { fd: Fixed, data: &'a [u8] },
-}
-
-pub struct Server {
-    listener: TcpListener,
-    uring: IoUring,
-
-    c2s_buffer: *mut [UnsafeCell<u8>; C2S_RING_BUFFER_LEN],
-    c2s_local_tail: u16,
-    c2s_shared_tail: *const AtomicU16,
-
-    /// Make Listener !Send and !Sync to let io_uring assume that it'll only be accessed by 1
-    /// thread
-    phantom: PhantomData<*const ()>,
-}
-
-impl Server {
-    pub fn new(address: impl ToSocketAddrs) -> anyhow::Result<Self> {
-        let listener = TcpListener::bind(address)?;
-        // TODO: Try to use defer taskrun
-        let mut uring = IoUring::builder()
-            .setup_cqsize(COMPLETION_QUEUE_SIZE)
-            .setup_submit_all()
-            .setup_coop_taskrun()
-            .setup_single_issuer()
-            .build(SUBMISSION_QUEUE_SIZE)
-            .unwrap();
-
-        let mut submitter = uring.submitter();
-        submitter.register_files_sparse(IO_URING_FILE_COUNT)?;
-        assert_eq!(
-            submitter.register_files_update(LISTENER_FIXED_FD.0, &[listener.as_raw_fd()])?,
-            1
-        );
-
-        // Create the c2s buffer
-        let c2s_buffer = alloc_zeroed_page_aligned::<[UnsafeCell<u8>; C2S_RING_BUFFER_LEN]>(
-            C2S_RING_BUFFER_COUNT,
-        );
-        let buffer_ring = alloc_zeroed_page_aligned::<BufRingEntry>(C2S_RING_BUFFER_COUNT);
-        {
-            let c2s_buffer =
-                unsafe { std::slice::from_raw_parts(c2s_buffer, C2S_RING_BUFFER_COUNT) };
-
-            // SAFETY: Buffer count is smaller than the entry count, BufRingEntry is initialized with
-            // zero, and the underlying will not be mutated during the loop
-            let buffer_ring =
-                unsafe { std::slice::from_raw_parts_mut(buffer_ring, C2S_RING_BUFFER_COUNT) };
-
-            for (buffer_id, buffer) in buffer_ring.into_iter().enumerate() {
-                let underlying_data = &c2s_buffer[buffer_id];
-                buffer.set_addr(underlying_data.as_ptr() as u64);
-                buffer.set_len(underlying_data.len() as u32);
-                buffer.set_bid(buffer_id as u16);
-            }
-        }
-
-        let tail = C2S_RING_BUFFER_COUNT as u16;
-
-        // Update the tail
-        // SAFETY: This is the first entry of the buffer ring
-        let tail_addr = unsafe { BufRingEntry::tail(buffer_ring) };
-
-        // SAFETY: tail_addr doesn't need to be atomic since it hasn't been passed to the kernel
-        // yet
-        unsafe {
-            *tail_addr.cast_mut() = tail;
-        }
-
-        let tail_addr: *const AtomicU16 = tail_addr.cast();
-
-        // Register the buffer ring
-        // SAFETY: buffer_ring is valid to write to for C2S_RING_BUFFER_COUNT BufRingEntry structs
-        unsafe {
-            submitter.register_buf_ring(
-                buffer_ring as u64,
-                C2S_RING_BUFFER_COUNT as u16,
-                C2S_BUFFER_GROUP_ID,
-            )?;
-        }
-
-        Self::request_accept(&mut uring.submission());
-
-        Ok(Self {
-            listener,
-            uring,
-            c2s_buffer,
-            c2s_local_tail: tail,
-            c2s_shared_tail: tail_addr,
-            phantom: PhantomData,
-        })
-    }
-
-    /// # Safety
-    /// The entry must be valid for the duration of the operation
-    unsafe fn push_entry(submission: &mut SubmissionQueue, entry: &io_uring::squeue::Entry) {
-        loop {
-            if submission.push(entry).is_ok() {
-                return;
-            }
-
-            // The submission queue is full. Let's try syncing it to see if the size is reduced
-            submission.sync();
-
-            if submission.push(entry).is_ok() {
-                return;
-            }
-
-            // The submission queue really is full. The submission queue should be large enough so that
-            // this code is never reached.
-            warn!(
-                "io_uring submission queue is full and this will lead to performance issues; \
-                 consider increasing SUBMISSION_QUEUE_SIZE to avoid this"
-            );
-            std::hint::spin_loop();
-        }
-    }
-
-    fn request_accept(submission: &mut SubmissionQueue) {
-        unsafe {
-            Self::push_entry(
-                submission,
-                &io_uring::opcode::AcceptMulti::new(LISTENER_FIXED_FD)
-                    .allocate_file_index(true)
-                    .build()
-                    .user_data(0),
-            );
-        }
-    }
-
-    fn request_recv(submission: &mut SubmissionQueue, fd: Fixed) {
-        unsafe {
-            Self::push_entry(
-                submission,
-                &io_uring::opcode::RecvMulti::new(fd, C2S_BUFFER_GROUP_ID)
-                    .build()
-                    .user_data((fd.0 + 2) as u64),
-            );
-        }
-    }
-
-    pub fn write_raw(&mut self, fd: Fixed, buf: *const u8, len: u32, buf_index: u16) {
-        unsafe {
-            Self::push_entry(
-                &mut self.uring.submission(),
-                &io_uring::opcode::WriteFixed::new(fd, buf, len, buf_index)
-                    .build()
-                    .user_data(1),
-            );
-        }
-    }
-
-    pub fn submit_events(&mut self) {
-        if let Err(err) = self.uring.submit() {
-            error!("unexpected io_uring error during submit: {err}");
-        }
-    }
-
-    pub fn drain<F: FnMut(ServerEvent)>(&mut self, mut f: F) {
-        let (_, mut submission, mut completion) = self.uring.split();
-        completion.sync();
-        if completion.overflow() > 0 {
-            error!(
-                "the io_uring completion queue overflowed, and some connection errors are likely \
-                 to occur; consider increasing COMPLETION_QUEUE_SIZE to avoid this"
-            );
-        }
-
-        for event in completion {
-            match event.user_data() {
-                0 => {
-                    // `IORING_CQE_F_MORE` is a flag used in the context of the io_uring asynchronous I/O framework,
-                    // which is a Linux kernel feature.
-                    // This flag is specifically related to completion queue events (CQEs).
-                    // When `IORING_CQE_F_MORE` is set in a CQE,
-                    // it indicates that there are more completion events to be processed after the current one.
-                    // This is particularly useful in scenarios
-                    // where multiple I/O operations are being completed at once,
-                    // allowing for more efficient processing
-                    // by enabling the application
-                    // to handle several completion events in a batch-like manner
-                    // before needing to recheck the completion queue.
-                    //
-                    // The use of `IORING_CQE_F_MORE`
-                    // can enhance performance in high-throughput I/O environments
-                    // by reducing the overhead of accessing the completion queue multiple times.
-                    // Instead, you can gather and process multiple completions in a single sweep.
-                    // This is especially advantageous in systems where minimizing latency
-                    // and maximizing throughput are critical,
-                    // such as in database management systems or high-performance computing applications.
-                    if event.flags() & IORING_CQE_F_MORE == 0 {
-                        warn!("multishot accept rerequested");
-                        Self::request_accept(&mut submission);
-                    }
-
-                    if event.result() < 0 {
-                        error!("there was an error in accept: {}", event.result());
-                    } else {
-                        let fd = Fixed(event.result() as u32);
-                        Self::request_recv(&mut submission, fd);
-                        f(ServerEvent::AddPlayer { fd });
-                    }
-                }
-                1 => {
-                    // TODO: check for errors and, if not all bytes were written or the request was
-                    // cancelled, close the client socket
-                    warn!("got write response");
-                }
-                fd_plus_2 => {
-                    let fd = Fixed((fd_plus_2 - 2) as u32);
-                    let disconnected = event.result() == 0;
-
-                    if event.flags() & IORING_CQE_F_MORE == 0 && !disconnected {
-                        warn!("socket recv rerequested");
-                        Self::request_recv(&mut submission, fd);
-                    }
-
-                    if disconnected {
-                        f(ServerEvent::RemovePlayer { fd });
-                    } else if event.result() < 0 {
-                        error!("there was an error in recv: {}", event.result());
-                    } else {
-                        let bytes_received = event.result() as usize;
-                        let buffer_id =
-                            buffer_select(event.flags()).expect("there should be a buffer");
-                        assert!((buffer_id as usize) < C2S_RING_BUFFER_COUNT);
-                        // TODO: this is probably very unsafe
-                        let buffer = unsafe {
-                            *(self.c2s_buffer.add(buffer_id as usize)
-                                as *const [u8; C2S_RING_BUFFER_LEN])
-                        };
-                        let buffer = &buffer[..bytes_received];
-                        self.c2s_local_tail = self.c2s_local_tail.wrapping_add(1);
-                        f(ServerEvent::RecvData { fd, data: buffer });
-                    }
-                }
-            }
-        }
-
-        // SAFETY: c2s_shared_tail is valid
-        unsafe {
-            (*self.c2s_shared_tail).store(self.c2s_local_tail, Ordering::Relaxed);
-        }
-    }
-
-    pub fn cancel(&mut self, cancel_builder: io_uring::types::CancelBuilder) {
-        self.uring
-            .submitter()
-            .register_sync_cancel(None, cancel_builder)
-            .unwrap();
-    }
-
-    pub fn refresh_buffers<'a>(
-        &mut self,
-        global: &mut Global,
-        encoders: impl Iterator<Item = &'a mut Encoder>,
-    ) {
-        if !global.get_needs_realloc() {
-            return;
-        }
-
-        self.unregister_buffers();
-
-        let encoders: Vec<_> = encoders.map(|encoder| encoder.enc.buf.register()).collect();
-
-        unsafe { self.register_buffers(&encoders) };
-    }
-
-    /// To register new buffers, unregister must be called first
-    /// # Safety
-    /// buffers must be valid
-    pub unsafe fn register_buffers(&mut self, buffers: &[iovec]) {
-        self.uring.submitter().register_buffers(buffers).unwrap();
-    }
-
-    /// All requests in the submission queue must be finished or cancelled, or else this function
-    /// will hang indefinetely.
-    pub fn unregister_buffers(&mut self) {
-        self.uring.submitter().unregister_buffers().unwrap();
-    }
 }

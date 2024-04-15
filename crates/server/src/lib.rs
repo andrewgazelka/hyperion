@@ -36,6 +36,7 @@ use crate::{
     },
     tracker::Tracker,
 };
+use crate::net::ServerDef;
 
 mod global;
 mod net;
@@ -408,12 +409,12 @@ impl Game {
         });
 
         let mut server = Server::new(address)?;
-        unsafe {
-            server.register_buffers(&[libc::iovec {
-                iov_base: AAAA.as_ptr() as _,
-                iov_len: AAAA.len() as _,
-            }]);
-        }
+        // unsafe {
+        //     server.register_buffers(&[libc::iovec {
+        //         iov_base: AAAA.as_ptr() as _,
+        //         iov_len: AAAA.len() as _,
+        //     }]);
+        // }
 
         let mut world = World::new();
 
@@ -545,13 +546,13 @@ impl Game {
         let start = Instant::now();
         self.server.drain(|event| match event {
             ServerEvent::AddPlayer { fd } => {
-                info!("got a player with fd {}", fd.0);
+                info!("got a player with fd {:?}", fd);
             }
             ServerEvent::RemovePlayer { fd } => {
-                info!("removed a player with fd {}", fd.0);
+                info!("removed a player with fd {:?}", fd);
             }
             ServerEvent::RecvData { fd, data } => {
-                info!("got data from player with fd {}: {data:?}", fd.0);
+                info!("got data from player with fd {:?}: {data:?}", fd);
             }
         });
         trace!("it took {:?} to finish next_event", start.elapsed());
