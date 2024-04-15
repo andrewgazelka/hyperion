@@ -44,14 +44,14 @@ pub fn ingress(
 
             println!("data: {data:?}");
 
-            let mut decoder = PacketDecoder::new();
-            // decoder.queue_slice(data);
-            // let handhake = decoder.try_next_packet().unwrap().unwrap();
-            // let handhake: packets::handshaking::HandshakeC2s = handhake.decode().unwrap();
             let data = &mut data;
 
             let frame = to_frame(data).unwrap();
             let handhake: packets::handshaking::HandshakeC2s = frame.decode().unwrap();
+            
+            if data.len() > 0 {
+                println!("data: {data:?}");
+            }
 
             println!("{:?}", handhake);
 
