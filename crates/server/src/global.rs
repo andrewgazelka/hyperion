@@ -40,6 +40,9 @@ impl Global {
 
     pub fn get_needs_realloc(&mut self) -> bool {
         // reduce
-        self.needs_realloc.get_all_locals().iter().any(|x| x.get())
+        self.needs_realloc
+            .get_all_locals()
+            .iter()
+            .any(std::cell::Cell::get)
     }
 }

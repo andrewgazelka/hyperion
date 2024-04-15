@@ -1,21 +1,14 @@
 //! All the networking related code.
 
-#![expect(clippy::future_not_send, reason = "monoio is not Send")]
-
 use std::{
-    io::Write,
+    hash::{Hash, Hasher},
     net::ToSocketAddrs,
-    ops::{Index, IndexMut, RangeBounds},
-    os::fd::AsRawFd,
-    slice::SliceIndex,
 };
 
 use anyhow::Context;
-use bytes::BufMut;
 use evenio::prelude::Component;
-use monoio::io::{AsyncReadRent, AsyncWriteRent, AsyncWriteRentExt, Splitable};
 use sha2::Digest;
-use valence_protocol::{uuid::Uuid, Decode, Encode};
+use valence_protocol::{uuid::Uuid, Encode};
 
 use crate::global::Global;
 
@@ -26,11 +19,45 @@ pub use buffer::*;
 #[cfg(target_os = "linux")]
 mod linux;
 
-#[derive(Debug)]
-struct Fd(
+#[derive(Debug, Copy, Clone)]
+pub struct Fd(
     #[cfg(target_os = "linux")] linux::Fixed,
     #[cfg(target_os = "macos")] (),
 );
+
+#[cfg(target_os = "linux")]
+impl Hash for Fd {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.0 .0.hash(state);
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+impl PartialEq for Fd {
+    fn eq(&self, other: &Self) -> bool {
+        unimplemented!()
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+impl Eq for Fd {}
+
+#[cfg(not(target_os = "linux"))]
+impl Hash for Fd {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        unimplemented!()
+    }
+}
+
+#[cfg(target_os = "linux")]
+impl PartialEq for Fd {
+    fn eq(&self, other: &Self) -> bool {
+        self.0 .0 == other.0 .0
+    }
+}
+
+#[cfg(target_os = "linux")]
+impl Eq for Fd {}
 
 pub enum ServerEvent<'a> {
     AddPlayer { fd: Fd },
@@ -38,14 +65,16 @@ pub enum ServerEvent<'a> {
     RecvData { fd: Fd, data: &'a [u8] },
 }
 
+#[derive(Component)]
 pub struct Server {
     #[cfg(target_os = "linux")]
-    server: linux::Server,
-    #[cfg(target_os = "macos")]
+    server: linux::LinuxServer,
+    #[cfg(not(target_os = "linux"))]
     server: NotImplemented,
 }
 
 impl ServerDef for Server {
+    #[allow(unused, reason = "this has to do with cross-platform code")]
     fn new(address: impl ToSocketAddrs) -> anyhow::Result<Self>
     where
         Self: Sized,
@@ -53,7 +82,7 @@ impl ServerDef for Server {
         #[cfg(target_os = "linux")]
         {
             Ok(Self {
-                server: linux::Server::new(address)?,
+                server: linux::LinuxServer::new(address)?,
             })
         }
         #[cfg(target_os = "macos")]
@@ -65,7 +94,7 @@ impl ServerDef for Server {
     }
 
     fn drain(&mut self, f: impl FnMut(ServerEvent)) {
-        self.server.drain(f)
+        self.server.drain(f);
     }
 
     fn refresh_buffers<'a>(
@@ -73,11 +102,11 @@ impl ServerDef for Server {
         global: &mut Global,
         encoders: impl Iterator<Item = &'a mut Encoder>,
     ) {
-        self.server.refresh_buffers(global, encoders)
+        self.server.refresh_buffers(global, encoders);
     }
 
     fn submit_events(&mut self) {
-        self.server.submit_events()
+        self.server.submit_events();
     }
 }
 
@@ -91,22 +120,22 @@ pub trait ServerDef {
         global: &mut Global,
         encoders: impl Iterator<Item = &'a mut Encoder>,
     );
-    
+
     fn submit_events(&mut self);
 }
 
 struct NotImplemented;
 
 impl ServerDef for NotImplemented {
-    fn new(address: impl ToSocketAddrs) -> anyhow::Result<Self>
+    fn new(_address: impl ToSocketAddrs) -> anyhow::Result<Self>
     where
         Self: Sized,
     {
-        unimplemented!("not implemented for macOS")
+        unimplemented!("not implemented; use Linux")
     }
 
     fn drain(&mut self, _f: impl FnMut(ServerEvent)) {
-        unimplemented!("not implemented for macOS")
+        unimplemented!("not implemented; use Linux")
     }
 
     fn refresh_buffers<'a>(
@@ -114,11 +143,11 @@ impl ServerDef for NotImplemented {
         _global: &mut Global,
         _encoders: impl Iterator<Item = &'a mut Encoder>,
     ) {
-        unimplemented!("not implemented for macOS")
+        unimplemented!("not implemented; use Linux")
     }
 
     fn submit_events(&mut self) {
-        unimplemented!("not implemented for macOS")
+        unimplemented!("not implemented; use Linux")
     }
 }
 

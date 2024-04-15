@@ -2264,6 +2264,7 @@ dependencies = [
  "fastrand 2.0.2",
  "flate2",
  "flume",
+ "fxhash",
  "generator 0.1.0",
  "glam",
  "io-uring",

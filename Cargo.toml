@@ -22,10 +22,12 @@ members = [
 opt-level = 3
 
 [profile.release]
+
 #debug = true
 lto = "fat"
 codegen-units = 1
 panic = "abort"
+
 
 # custom release-debug profile
 [profile.release-debug]

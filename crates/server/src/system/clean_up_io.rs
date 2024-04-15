@@ -1,8 +1,5 @@
-use std::sync::atomic::Ordering;
-
 use evenio::prelude::*;
 use tracing::instrument;
-use valence_protocol::{packets::play, VarInt};
 
 use crate::{global::Global, singleton::broadcast::BroadcastBuf, Gametick, Player, Uuid};
 
@@ -11,9 +8,9 @@ pub fn clean_up_io(
     _r: Receiver<Gametick>,
     io_entities: Fetcher<(EntityId, &mut Player, &Uuid)>,
     global: Single<&Global>,
-    mut broadcast: Single<&mut BroadcastBuf>,
+    broadcast: Single<&mut BroadcastBuf>,
 
-    mut s: Sender<Despawn>,
+    s: Sender<Despawn>,
 ) {
     // todo: this might not be that efficient honestly
     //    let mut despawn_uuids = Vec::new();

@@ -1,8 +1,11 @@
-use std::ffi::c_void;
-use std::io;
-use std::io::Write;
-use std::ops::{Index, IndexMut, RangeBounds};
-use std::slice::SliceIndex;
+use std::{
+    ffi::c_void,
+    io,
+    io::Write,
+    ops::{Index, IndexMut, RangeBounds},
+    slice::SliceIndex,
+};
+
 use bytes::BufMut;
 use libc::iovec;
 
@@ -26,7 +29,7 @@ impl<T: SliceIndex<[u8]>> IndexMut<T> for MaybeRegisteredBuffer {
 }
 
 impl MaybeRegisteredBuffer {
-    fn current_buffer(&self) -> &Vec<u8> {
+    const fn current_buffer(&self) -> &Vec<u8> {
         if let Some(buffer) = &self.new_buffer {
             buffer
         } else {
@@ -86,7 +89,8 @@ impl MaybeRegisteredBuffer {
         }
     }
 
-    fn register(&mut self) -> iovec {
+    #[allow(clippy::as_ptr_cast_mut, reason = "pretty sure nursery error")]
+    pub fn register(&mut self) -> iovec {
         if let Some(buffer) = self.new_buffer.take() {
             self.registered_buffer = buffer;
         }
@@ -97,6 +101,7 @@ impl MaybeRegisteredBuffer {
         }
     }
 
+    #[allow(clippy::as_ptr_cast_mut, reason = "pretty sure nursery error")]
     fn get_iovec(&self) -> iovec {
         iovec {
             iov_base: self.registered_buffer.as_ptr() as *mut c_void,
@@ -117,7 +122,7 @@ impl MaybeRegisteredBuffer {
         if cap < buffer.len() + bytes.len() {
             // copy buffer to new buffer
             let mut new_buffer = Vec::with_capacity(buffer.len() + bytes.len());
-            new_buffer.extend_from_slice(&buffer);
+            new_buffer.extend_from_slice(buffer);
             new_buffer.extend_from_slice(bytes);
             self.new_buffer = Some(new_buffer);
             return;

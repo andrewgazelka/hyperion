@@ -69,6 +69,7 @@ derive-build = "0.1.1"
 flate2 = { version = "1.0.28", features = ["zlib-ng"], default-features = false }
 arrayvec = "0.7.4"
 clap = { version = "4.5.4", features = ["derive"] }
+fxhash = "0.2.1"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 io-uring = "0.6.3"
@@ -87,7 +88,7 @@ name = "players"
 harness = false
 
 [lints.rust]
-missing_docs= "warn"
+#missing_docs= "warn"
 
 [lints.clippy]
 complexity = "deny"
@@ -109,6 +110,6 @@ suspicious = "deny"
 # restriction
 #allow_attributes = "deny"
 allow_attributes_without_reason = "deny"
-missing_docs_in_private_items = "warn"
+#missing_docs_in_private_items = "warn"
 
 

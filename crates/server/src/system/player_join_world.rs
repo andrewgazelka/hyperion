@@ -347,7 +347,7 @@ pub fn send_keep_alive(encoder: &mut Encoder, global: &Global) -> anyhow::Result
         id: 0,
     };
 
-    encoder.append(&pkt, &global)?;
+    encoder.append(&pkt, global)?;
 
     Ok(())
 }

@@ -2,15 +2,14 @@ use evenio::{
     event::Receiver,
     fetch::{Fetcher, Single},
 };
-use rayon::prelude::*;
-use tracing::{instrument, trace};
+use tracing::instrument;
 
 use crate::{global::Global, net::Encoder, Egress};
 
 #[instrument(skip_all, level = "trace")]
 pub fn egress_local(
     _: Receiver<Egress>,
-    mut connections: Fetcher<&mut Encoder>,
+    connections: Fetcher<&mut Encoder>,
     global: Single<&Global>,
 ) {
     //    let compression = global.0.shared.compression_level;

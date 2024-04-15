@@ -29,14 +29,13 @@ use valence_protocol::{math::Vec3, CompressionThreshold, Hand};
 
 use crate::{
     global::Global,
-    net::{Encoder, Server, ServerEvent},
+    net::{Encoder, Fd, Server, ServerDef},
     singleton::{
-        broadcast::BroadcastBuf, player_aabb_lookup::PlayerBoundingBoxes,
+        broadcast::BroadcastBuf, fd_lookup::FdLookup, player_aabb_lookup::PlayerBoundingBoxes,
         player_id_lookup::PlayerIdLookup, player_uuid_lookup::PlayerUuidLookup,
     },
     tracker::Tracker,
 };
-use crate::net::ServerDef;
 
 mod global;
 mod net;
@@ -138,6 +137,17 @@ pub struct Player {
 
     /// The time until the player is immune to being hurt in ticks.
     immune_until: u64,
+}
+
+#[derive(Component, Debug)]
+enum LoginState {
+    Handshake,
+    Login,
+}
+
+#[derive(Component)]
+struct ConnectionRef {
+    fd: Fd,
 }
 
 impl Player {
@@ -354,10 +364,8 @@ pub struct Game {
     last_ms_per_tick: VecDeque<f64>,
     /// The tick of the game. This is incremented every 50 ms.
     tick_on: u64,
-    server: Server,
 }
 
-static mut AAAA: [u8; 3] = [b'h', b'i', b'\n'];
 impl Game {
     /// Get the [`World`] which is the core part of the ECS framework.
     pub const fn world(&self) -> &World {
@@ -376,7 +384,7 @@ impl Game {
 
     /// # Panics
     /// This function will panic if the game is already shutdown.
-    pub fn shutdown(&self) {
+    pub const fn shutdown(&self) {
         // TODO
     }
 
@@ -408,15 +416,10 @@ impl Game {
             compression_level: CompressionThreshold(64),
         });
 
-        let mut server = Server::new(address)?;
-        // unsafe {
-        //     server.register_buffers(&[libc::iovec {
-        //         iov_base: AAAA.as_ptr() as _,
-        //         iov_len: AAAA.len() as _,
-        //     }]);
-        // }
-
         let mut world = World::new();
+
+        let server = world.spawn();
+        world.insert(server, Server::new(address)?);
 
         world.add_handler(system::ingress);
         world.add_handler(system::init_player);
@@ -464,6 +467,9 @@ impl Game {
         let player_location_lookup = world.spawn();
         world.insert(player_location_lookup, PlayerBoundingBoxes::default());
 
+        let fd_lookup = world.spawn();
+        world.insert(fd_lookup, FdLookup::default());
+
         let encoder = world.spawn();
         world.insert(encoder, BroadcastBuf::new(shared.compression_level));
 
@@ -473,7 +479,6 @@ impl Game {
             last_ticks: VecDeque::default(),
             last_ms_per_tick: VecDeque::default(),
             tick_on: 0,
-            server,
         };
 
         game.last_ticks.push_back(Instant::now());
@@ -543,23 +548,8 @@ impl Game {
 
         self.last_ticks.push_back(now);
 
-        let start = Instant::now();
-        self.server.drain(|event| match event {
-            ServerEvent::AddPlayer { fd } => {
-                info!("got a player with fd {:?}", fd);
-            }
-            ServerEvent::RemovePlayer { fd } => {
-                info!("removed a player with fd {:?}", fd);
-            }
-            ServerEvent::RecvData { fd, data } => {
-                info!("got data from player with fd {:?}: {data:?}", fd);
-            }
-        });
-        trace!("it took {:?} to finish next_event", start.elapsed());
-
         self.world.send(Gametick);
         self.world.send(Egress);
-        self.server.submit_events();
 
         #[expect(
             clippy::cast_precision_loss,

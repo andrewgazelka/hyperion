@@ -20,9 +20,8 @@ impl PacketEncoder {
         }
     }
 
-    pub fn append_raw(&mut self, data: &[u8]) -> anyhow::Result<()> {
+    pub fn append_raw(&mut self, data: &[u8]) {
         self.buf.extend_from_slice(data);
-        Ok(())
     }
 
     pub fn append_packet<P>(&mut self, pkt: &P) -> anyhow::Result<()>
@@ -38,7 +37,9 @@ impl PacketEncoder {
         if self.threshold.0 >= 0 {
             use flate2::{bufread::ZlibEncoder, Compression};
 
-            if data_len > self.threshold.0 as usize {
+            let threshold = self.threshold.0.unsigned_abs();
+
+            if data_len > threshold as usize {
                 let mut z = ZlibEncoder::new(&self.buf[start_len..], Compression::new(4));
 
                 self.compress_buf.clear();
@@ -48,7 +49,7 @@ impl PacketEncoder {
                 let packet_len = data_len_size + z.read_to_end(&mut self.compress_buf)?;
 
                 ensure!(
-                    packet_len <= MAX_PACKET_SIZE as usize,
+                    packet_len <= MAX_PACKET_SIZE,
                     "packet exceeds maximum length"
                 );
 
@@ -64,7 +65,7 @@ impl PacketEncoder {
                 let packet_len = data_len_size + data_len;
 
                 ensure!(
-                    packet_len <= MAX_PACKET_SIZE as usize,
+                    packet_len <= MAX_PACKET_SIZE,
                     "packet exceeds maximum length"
                 );
 

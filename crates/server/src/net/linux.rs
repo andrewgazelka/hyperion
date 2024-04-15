@@ -19,13 +19,15 @@ use std::{
     time::{Duration, Instant},
 };
 
-use io_uring::{
-    cqueue::buffer_select,
-    squeue::SubmissionQueue,
-    types::{BufRingEntry, Fixed},
-    IoUring,
-};
+pub use io_uring::types::Fixed;
+use io_uring::{cqueue::buffer_select, squeue::SubmissionQueue, types::BufRingEntry, IoUring};
+use libc::iovec;
+use tracing::{error, warn};
 
+use crate::{
+    global::Global,
+    net::{Encoder, Fd, ServerDef, ServerEvent},
+};
 
 /// Default MiB/s threshold before we start to limit the sending of some packets.
 const DEFAULT_SPEED: u32 = 1024 * 1024;
@@ -77,14 +79,7 @@ fn alloc_zeroed_page_aligned<T>(len: usize) -> *mut T {
     data.cast()
 }
 
-
-// pub enum ServerEvent<'a> {
-//     AddPlayer { fd: Fixed },
-//     RemovePlayer { fd: Fixed },
-//     RecvData { fd: Fixed, data: &'a [u8] },
-// }
-
-pub struct Server {
+pub struct LinuxServer {
     listener: TcpListener,
     uring: IoUring,
 
@@ -97,9 +92,16 @@ pub struct Server {
     phantom: PhantomData<*const ()>,
 }
 
-impl Server {
-    pub fn new(address: impl ToSocketAddrs) -> anyhow::Result<Self> {
+unsafe impl Sync for LinuxServer {}
+unsafe impl Send for LinuxServer {}
+
+impl ServerDef for LinuxServer {
+    fn new(address: impl ToSocketAddrs) -> anyhow::Result<Self> {
         let listener = TcpListener::bind(address)?;
+
+        let addr = listener.local_addr()?;
+        println!("starting on {addr:?}");
+
         // TODO: Try to use defer taskrun
         let mut uring = IoUring::builder()
             .setup_cqsize(COMPLETION_QUEUE_SIZE)
@@ -174,6 +176,120 @@ impl Server {
         })
     }
 
+    fn drain(&mut self, mut f: impl FnMut(ServerEvent)) {
+        let (_, mut submission, mut completion) = self.uring.split();
+        completion.sync();
+        if completion.overflow() > 0 {
+            error!(
+                "the io_uring completion queue overflowed, and some connection errors are likely \
+                 to occur; consider increasing COMPLETION_QUEUE_SIZE to avoid this"
+            );
+        }
+
+        for event in completion {
+            match event.user_data() {
+                0 => {
+                    // `IORING_CQE_F_MORE` is a flag used in the context of the io_uring asynchronous I/O framework,
+                    // which is a Linux kernel feature.
+                    // This flag is specifically related to completion queue events (CQEs).
+                    // When `IORING_CQE_F_MORE` is set in a CQE,
+                    // it indicates that there are more completion events to be processed after the current one.
+                    // This is particularly useful in scenarios
+                    // where multiple I/O operations are being completed at once,
+                    // allowing for more efficient processing
+                    // by enabling the application
+                    // to handle several completion events in a batch-like manner
+                    // before needing to recheck the completion queue.
+                    //
+                    // The use of `IORING_CQE_F_MORE`
+                    // can enhance performance in high-throughput I/O environments
+                    // by reducing the overhead of accessing the completion queue multiple times.
+                    // Instead, you can gather and process multiple completions in a single sweep.
+                    // This is especially advantageous in systems where minimizing latency
+                    // and maximizing throughput are critical,
+                    // such as in database management systems or high-performance computing applications.
+                    if event.flags() & IORING_CQE_F_MORE == 0 {
+                        warn!("multishot accept rerequested");
+                        Self::request_accept(&mut submission);
+                    }
+
+                    if event.result() < 0 {
+                        error!("there was an error in accept: {}", event.result());
+                    } else {
+                        let fd = Fixed(event.result() as u32);
+                        Self::request_recv(&mut submission, fd);
+                        f(ServerEvent::AddPlayer { fd: Fd(fd) });
+                    }
+                }
+                1 => {
+                    // TODO: check for errors and, if not all bytes were written or the request was
+                    // cancelled, close the client socket
+                    warn!("got write response");
+                }
+                fd_plus_2 => {
+                    let fd = Fixed((fd_plus_2 - 2) as u32);
+                    let disconnected = event.result() == 0;
+
+                    if event.flags() & IORING_CQE_F_MORE == 0 && !disconnected {
+                        warn!("socket recv rerequested");
+                        Self::request_recv(&mut submission, fd);
+                    }
+
+                    if disconnected {
+                        f(ServerEvent::RemovePlayer { fd: Fd(fd) });
+                    } else if event.result() < 0 {
+                        error!("there was an error in recv: {}", event.result());
+                    } else {
+                        let bytes_received = event.result() as usize;
+                        let buffer_id =
+                            buffer_select(event.flags()).expect("there should be a buffer");
+                        assert!((buffer_id as usize) < C2S_RING_BUFFER_COUNT);
+                        // TODO: this is probably very unsafe
+                        let buffer = unsafe {
+                            *(self.c2s_buffer.add(buffer_id as usize)
+                                as *const [u8; C2S_RING_BUFFER_LEN])
+                        };
+                        let buffer = &buffer[..bytes_received];
+                        self.c2s_local_tail = self.c2s_local_tail.wrapping_add(1);
+                        f(ServerEvent::RecvData {
+                            fd: Fd(fd),
+                            data: buffer,
+                        });
+                    }
+                }
+            }
+        }
+
+        // SAFETY: c2s_shared_tail is valid
+        unsafe {
+            (*self.c2s_shared_tail).store(self.c2s_local_tail, Ordering::Relaxed);
+        }
+    }
+
+    fn refresh_buffers<'a>(
+        &mut self,
+        global: &mut Global,
+        encoders: impl Iterator<Item = &'a mut Encoder>,
+    ) {
+        if !global.get_needs_realloc() {
+            return;
+        }
+
+        self.unregister_buffers();
+
+        let encoders: Vec<_> = encoders.map(|encoder| encoder.enc.buf.register()).collect();
+
+        unsafe { self.register_buffers(&encoders) };
+    }
+
+    fn submit_events(&mut self) {
+        if let Err(err) = self.uring.submit() {
+            error!("unexpected io_uring error during submit: {err}");
+        }
+    }
+}
+
+impl LinuxServer {
     /// # Safety
     /// The entry must be valid for the duration of the operation
     unsafe fn push_entry(submission: &mut SubmissionQueue, entry: &io_uring::squeue::Entry) {
@@ -233,120 +349,11 @@ impl Server {
         }
     }
 
-    pub fn submit_events(&mut self) {
-        if let Err(err) = self.uring.submit() {
-            error!("unexpected io_uring error during submit: {err}");
-        }
-    }
-
-    pub fn drain<F: FnMut(ServerEvent)>(&mut self, mut f: F) {
-        let (_, mut submission, mut completion) = self.uring.split();
-        completion.sync();
-        if completion.overflow() > 0 {
-            error!(
-                "the io_uring completion queue overflowed, and some connection errors are likely \
-                 to occur; consider increasing COMPLETION_QUEUE_SIZE to avoid this"
-            );
-        }
-
-        for event in completion {
-            match event.user_data() {
-                0 => {
-                    // `IORING_CQE_F_MORE` is a flag used in the context of the io_uring asynchronous I/O framework,
-                    // which is a Linux kernel feature.
-                    // This flag is specifically related to completion queue events (CQEs).
-                    // When `IORING_CQE_F_MORE` is set in a CQE,
-                    // it indicates that there are more completion events to be processed after the current one.
-                    // This is particularly useful in scenarios
-                    // where multiple I/O operations are being completed at once,
-                    // allowing for more efficient processing
-                    // by enabling the application
-                    // to handle several completion events in a batch-like manner
-                    // before needing to recheck the completion queue.
-                    //
-                    // The use of `IORING_CQE_F_MORE`
-                    // can enhance performance in high-throughput I/O environments
-                    // by reducing the overhead of accessing the completion queue multiple times.
-                    // Instead, you can gather and process multiple completions in a single sweep.
-                    // This is especially advantageous in systems where minimizing latency
-                    // and maximizing throughput are critical,
-                    // such as in database management systems or high-performance computing applications.
-                    if event.flags() & IORING_CQE_F_MORE == 0 {
-                        warn!("multishot accept rerequested");
-                        Self::request_accept(&mut submission);
-                    }
-
-                    if event.result() < 0 {
-                        error!("there was an error in accept: {}", event.result());
-                    } else {
-                        let fd = Fixed(event.result() as u32);
-                        Self::request_recv(&mut submission, fd);
-                        f(ServerEvent::AddPlayer { fd });
-                    }
-                }
-                1 => {
-                    // TODO: check for errors and, if not all bytes were written or the request was
-                    // cancelled, close the client socket
-                    warn!("got write response");
-                }
-                fd_plus_2 => {
-                    let fd = Fixed((fd_plus_2 - 2) as u32);
-                    let disconnected = event.result() == 0;
-
-                    if event.flags() & IORING_CQE_F_MORE == 0 && !disconnected {
-                        warn!("socket recv rerequested");
-                        Self::request_recv(&mut submission, fd);
-                    }
-
-                    if disconnected {
-                        f(ServerEvent::RemovePlayer { fd });
-                    } else if event.result() < 0 {
-                        error!("there was an error in recv: {}", event.result());
-                    } else {
-                        let bytes_received = event.result() as usize;
-                        let buffer_id =
-                            buffer_select(event.flags()).expect("there should be a buffer");
-                        assert!((buffer_id as usize) < C2S_RING_BUFFER_COUNT);
-                        // TODO: this is probably very unsafe
-                        let buffer = unsafe {
-                            *(self.c2s_buffer.add(buffer_id as usize)
-                                as *const [u8; C2S_RING_BUFFER_LEN])
-                        };
-                        let buffer = &buffer[..bytes_received];
-                        self.c2s_local_tail = self.c2s_local_tail.wrapping_add(1);
-                        f(ServerEvent::RecvData { fd, data: buffer });
-                    }
-                }
-            }
-        }
-
-        // SAFETY: c2s_shared_tail is valid
-        unsafe {
-            (*self.c2s_shared_tail).store(self.c2s_local_tail, Ordering::Relaxed);
-        }
-    }
-
     pub fn cancel(&mut self, cancel_builder: io_uring::types::CancelBuilder) {
         self.uring
             .submitter()
             .register_sync_cancel(None, cancel_builder)
             .unwrap();
-    }
-
-    pub fn refresh_buffers<'a>(
-        &mut self,
-        global: &mut Global,
-        encoders: impl Iterator<Item = &'a mut Encoder>,
-    ) {
-        if !global.get_needs_realloc() {
-            return;
-        }
-
-        self.unregister_buffers();
-
-        let encoders: Vec<_> = encoders.map(|encoder| encoder.enc.buf.register()).collect();
-
-        unsafe { self.register_buffers(&encoders) };
     }
 
     /// To register new buffers, unregister must be called first

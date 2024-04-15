@@ -2,10 +2,11 @@
 use std::collections::HashMap;
 
 use evenio::{entity::EntityId, prelude::Component};
+use fxhash::FxHashMap;
 
 /// See [`crate::singleton::player_uuid_lookup`].
 #[derive(Component, Default, Debug)]
 pub struct PlayerIdLookup {
     /// The UUID of all players
-    pub inner: HashMap<i32, EntityId>,
+    pub inner: FxHashMap<i32, EntityId>,
 }
