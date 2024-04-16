@@ -2,6 +2,7 @@ use evenio::{
     event::{Insert, Receiver, Sender, Spawn},
     fetch::{Fetcher, Single},
 };
+use evenio::event::Despawn;
 use libc::send;
 use serde_json::json;
 use tracing::{field::debug, info, instrument, trace, warn};
@@ -39,6 +40,7 @@ pub fn ingress(
         Insert<PlayerPacketBuffer>,
         Insert<Encoder>,
         Insert<Fd>,
+        Despawn,
     )>,
 ) {
     println!("...");
@@ -58,6 +60,10 @@ pub fn ingress(
             info!("got a player with fd {:?}", fd);
         }
         ServerEvent::RemovePlayer { fd } => {
+            let id = fd_lookup.remove(&fd).expect("player with fd not found");
+            
+            sender.despawn(id);
+            
             info!("removed a player with fd {:?}", fd);
         }
         ServerEvent::RecvData { fd, data } => {
@@ -119,7 +125,7 @@ fn process_status(
     match packet.id {
         packets::status::QueryRequestC2s::ID => {
             let query_request: packets::status::QueryRequestC2s = packet.decode()?;
-            
+
             println!("query request: {query_request:?}... responding");
 
             // https://wiki.vg/Server_List_Ping#Response

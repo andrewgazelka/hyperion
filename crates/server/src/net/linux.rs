@@ -1,19 +1,11 @@
 //! All the networking related code.
 
-use std::{
-    alloc::{alloc_zeroed, handle_alloc_error, Layout},
-    cell::UnsafeCell,
-    marker::PhantomData,
-    net::{TcpListener, ToSocketAddrs},
-    os::fd::AsRawFd,
-    sync::atomic::{AtomicU16, Ordering},
-    time::Duration,
-};
+use std::{alloc::{alloc_zeroed, handle_alloc_error, Layout}, cell::UnsafeCell, cmp, marker::PhantomData, net::{TcpListener, ToSocketAddrs}, os::fd::AsRawFd, sync::atomic::{AtomicU16, Ordering}, time::Duration};
 
 pub use io_uring::types::Fixed;
 use io_uring::{cqueue::buffer_select, squeue::SubmissionQueue, types::BufRingEntry, IoUring};
 use libc::iovec;
-use tracing::{error, warn};
+use tracing::{error, info, warn};
 
 use super::RefreshItem;
 use crate::{
@@ -213,17 +205,31 @@ impl ServerDef for LinuxServer {
                         f(ServerEvent::AddPlayer { fd: Fd(fd) });
                     }
                 }
-                1 => {
-                    // TODO: check for errors and, if not all bytes were written or the request was
-                    // cancelled, close the client socket
-                    warn!("got write response");
+                write if write & SEND_MARKER != 0 => {
+                    let fd = Fixed((write & !SEND_MARKER) as u32);
+                    let result = event.result();
+                    
+                    match result.cmp(&0) {
+                        cmp::Ordering::Less => {
+                            error!("there was an error in write: {}", result);
+                        }
+                        cmp::Ordering::Equal => {
+                            // A result of 0 indicates that the client closed the connection gracefully
+                            f(ServerEvent::RemovePlayer { fd: Fd(fd) });
+                            // Perform any necessary cleanup for the disconnected client
+                        }
+                        cmp::Ordering::Greater => {
+                            // Write operation completed successfully
+                            info!("successful write response");
+                        }
+                    }
                 }
-                fd_plus_2 => {
-                    let fd = Fixed((fd_plus_2 - 2) as u32);
+                read if read & RECV_MARKER != 0 => {
+                    let fd = Fixed((read & !RECV_MARKER) as u32);
                     let disconnected = event.result() == 0;
 
                     if event.flags() & IORING_CQE_F_MORE == 0 && !disconnected {
-                        warn!("socket recv rerequested");
+                        info!("socket recv rerequested");
                         Self::request_recv(&mut submission, fd);
                     }
 
@@ -248,6 +254,9 @@ impl ServerDef for LinuxServer {
                             data: buffer,
                         });
                     }
+                }
+                _ => {
+                    panic!("unexpected event: {event:?}");
                 }
             }
         }
@@ -274,6 +283,9 @@ impl ServerDef for LinuxServer {
 
             if global.has_registered_buffers_before {
                 println!("unregister...");
+
+                // todo: is this alright?
+                self.cancel(io_uring::types::CancelBuilder::any());
                 self.unregister_buffers();
                 println!("finished unregister...");
             }
@@ -312,6 +324,9 @@ impl ServerDef for LinuxServer {
         }
     }
 }
+
+const RECV_MARKER: u64 = 0b1 << 63;
+const SEND_MARKER: u64 = 0b1 << 62;
 
 impl LinuxServer {
     fn write_all<'a>(&mut self, items: impl Iterator<Item = RefreshItem<'a>>) {
@@ -370,12 +385,13 @@ impl LinuxServer {
     }
 
     fn request_recv(submission: &mut SubmissionQueue, fd: Fixed) {
+
         unsafe {
             Self::push_entry(
                 submission,
                 &io_uring::opcode::RecvMulti::new(fd, C2S_BUFFER_GROUP_ID)
                     .build()
-                    .user_data((fd.0 + 2) as u64),
+                    .user_data((fd.0 as u64) | RECV_MARKER),
             );
         }
     }
@@ -386,7 +402,7 @@ impl LinuxServer {
                 &mut self.uring.submission(),
                 &io_uring::opcode::WriteFixed::new(fd, buf, len, buf_index)
                     .build()
-                    .user_data(1),
+                    .user_data((fd.0 as u64) | SEND_MARKER),
             );
         }
     }
