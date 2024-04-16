@@ -3,6 +3,7 @@
 #![feature(split_at_checked)]
 #![feature(type_alias_impl_trait)]
 #![feature(lint_reasons)]
+#![feature(io_error_more)]
 #![expect(clippy::type_complexity, reason = "evenio uses a lot of complex types")]
 
 extern crate core;

@@ -36,13 +36,17 @@ impl MaybeRegisteredBuffer {
             &self.registered_buffer
         }
     }
-    
+
     pub const fn needs_realloc(&self) -> bool {
         self.new_buffer.is_some()
     }
 
     pub fn as_ptr(&self) -> *const u8 {
         self.current_buffer().as_ptr()
+    }
+
+    pub fn ready_to_write(&self) -> bool {
+        self.registered_buffer.capacity() > 0
     }
 
     pub fn len(&self) -> usize {
@@ -97,12 +101,14 @@ impl MaybeRegisteredBuffer {
         }
     }
 
-    #[allow(clippy::as_ptr_cast_mut, reason = "pretty sure nursery error")]
-    pub fn as_iovec(&mut self) -> Option<iovec> {
+    pub fn prepare_for_register(&mut self) {
         if let Some(buffer) = self.new_buffer.take() {
             self.registered_buffer = buffer;
         }
+    }
 
+    #[allow(clippy::as_ptr_cast_mut, reason = "pretty sure nursery error")]
+    pub fn as_capacity_iovec(&mut self) -> Option<iovec> {
         let capacity = self.registered_buffer.capacity();
 
         // if capacity is 0, there is no allocation
@@ -113,6 +119,20 @@ impl MaybeRegisteredBuffer {
         Some(iovec {
             iov_base: self.registered_buffer.as_ptr() as *mut c_void,
             iov_len: self.registered_buffer.capacity(),
+        })
+    }
+
+    pub fn as_len_iovec(&mut self) -> Option<iovec> {
+        let len = self.registered_buffer.len();
+
+        // if len is 0, let's not register
+        if len == 0 {
+            return None;
+        }
+
+        Some(iovec {
+            iov_base: self.registered_buffer.as_ptr() as *mut c_void,
+            iov_len: len,
         })
     }
 

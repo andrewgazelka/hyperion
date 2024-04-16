@@ -261,63 +261,49 @@ impl ServerDef for LinuxServer {
     fn refresh_buffers<'a>(
         &mut self,
         global: &mut Global,
-        encoders: impl ExactSizeIterator<Item = RefreshItem<'a>>,
+        items: impl ExactSizeIterator<Item = RefreshItem<'a>>,
     ) {
-        if encoders.len() == 0 {
+        if items.len() == 0 {
             return;
         }
 
         println!("encoders len not 0");
 
-        if !global.get_needs_realloc() {
+        if global.get_needs_realloc() {
             println!("does not need realloc .. returning");
+
+            if global.has_registered_buffers_before {
+                println!("unregister...");
+                self.unregister_buffers();
+                println!("finished unregister...");
+            }
+
+            let mut iovecs = Vec::new();
+            let mut write_info = Vec::new();
+
+            for (encoder, fd) in items {
+                encoder.enc.buf.prepare_for_register();
+                let Some(iovec) = encoder.enc.buf.as_len_iovec() else {
+                    continue;
+                };
+                iovecs.push(iovec);
+                write_info.push((encoder, fd));
+            }
+
+            if iovecs.is_empty() {
+                return;
+            }
+
+            unsafe { self.register_buffers(&iovecs) };
+
+            self.write_all(write_info.into_iter());
+
+            global.has_registered_buffers_before = true;
+
             return;
         }
 
-        println!("a");
-
-        let mut encoders_with_alloc = Vec::new();
-        let mut write_info = Vec::new();
-
-        for (encoder, fd) in encoders {
-            let Some(iovec) = encoder.enc.buf.as_iovec() else {
-                continue;
-            };
-            encoders_with_alloc.push(iovec);
-            write_info.push((encoder, fd));
-        }
-
-        println!("b");
-
-        if encoders_with_alloc.is_empty() {
-            println!("empty");
-            return;
-        }
-
-        if global.has_registered_buffers_before {
-            println!("unregister...");
-            self.unregister_buffers();
-            println!("finished unregister...");
-        }
-
-        println!("registering buffers");
-        unsafe { self.register_buffers(&encoders_with_alloc) };
-        println!("finished registering buffers");
-
-        // todo: clone
-        // now write each one
-        for (idx, (encoder, fd)) in write_info.into_iter().enumerate() {
-            let fd = fd.0;
-            let buf = encoder.enc.buf.as_ptr();
-            let len = encoder.enc.buf.len() as u32;
-            let buf_index = idx as u16;
-
-            println!("writing {buf:?} of length {len} to fd {fd:?}");
-
-            self.write_raw(fd, buf, len, buf_index);
-        }
-
-        global.has_registered_buffers_before = true;
+        self.write_all(items);
     }
 
     fn submit_events(&mut self) {
@@ -328,6 +314,24 @@ impl ServerDef for LinuxServer {
 }
 
 impl LinuxServer {
+    fn write_all<'a>(&mut self, items: impl Iterator<Item = RefreshItem<'a>>) {
+        println!("called write_all");
+        items
+            .into_iter()
+            .filter(|item| item.0.enc.buf.ready_to_write())
+            .enumerate()
+            .for_each(|(idx, (encoder, fd))| {
+                let fd = fd.0;
+                let buf = encoder.enc.buf.as_ptr();
+                let len = encoder.enc.buf.len() as u32;
+                let buf_index = idx as u16;
+
+                println!("writing {buf:?} of length {len} to fd {fd:?}");
+
+                self.write_raw(fd, buf, len, buf_index);
+            });
+    }
+
     /// # Safety
     /// The entry must be valid for the duration of the operation
     unsafe fn push_entry(submission: &mut SubmissionQueue, entry: &io_uring::squeue::Entry) {
