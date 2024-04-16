@@ -2,7 +2,6 @@ use evenio::{
     entity::EntityId,
     event::Receiver,
     fetch::{Fetcher, Single},
-    rayon::prelude::*,
 };
 use tracing::instrument;
 
@@ -19,7 +18,7 @@ pub fn entity_detect_collisions(
     const MAX_COLLISIONS: usize = 4;
 
     poses_fetcher
-        .par_iter_mut()
+        .iter_mut()
         .for_each(|(id, pose, reaction)| {
             let mut collisions = 0;
             entity_bounding_boxes

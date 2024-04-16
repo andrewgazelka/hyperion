@@ -38,6 +38,7 @@ use crate::{
     },
     tracker::Tracker,
 };
+use crate::singleton::buffer_allocator::{BufferAllocator};
 
 mod global;
 mod net;
@@ -148,6 +149,7 @@ enum LoginState {
     Status,
     Login,
     Play,
+    Terminate,
 }
 
 #[derive(Component)]
@@ -424,7 +426,11 @@ impl Game {
         let mut world = World::new();
 
         let server = world.spawn();
-        world.insert(server, Server::new(address)?);
+        let mut server_def = Server::new(address)?;
+
+        let buffer_alloc = world.spawn();
+        world.insert(buffer_alloc, BufferAllocator::new(&mut server_def));
+        world.insert(server, server_def);
 
         world.add_handler(system::ingress);
         world.add_handler(system::init_player);

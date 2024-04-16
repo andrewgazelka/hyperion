@@ -2,7 +2,6 @@ use evenio::{
     entity::EntityId,
     event::Receiver,
     fetch::{Fetcher, Single},
-    rayon::prelude::*,
 };
 use tracing::instrument;
 
@@ -19,7 +18,7 @@ pub fn player_detect_mob_hits(
     mut poses_fetcher: Fetcher<(EntityId, &FullEntityPose, &mut EntityReaction, &mut Player)>,
 ) {
     poses_fetcher
-        .par_iter_mut()
+        .iter_mut()
         .for_each(|(id, pose, reaction, player)| {
             // todo: remove mid just use loc directly
             let this = pose.bounding.mid();

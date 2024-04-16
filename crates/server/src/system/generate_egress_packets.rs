@@ -20,7 +20,7 @@ pub fn generate_egress_packets(
     global: Single<&Global>,
     mut connections: Fetcher<(&mut Encoder, &mut EntityReaction)>,
 ) {
-    connections.par_iter_mut().for_each(|(encoder, reaction)| {
+    connections.iter_mut().for_each(|(encoder, reaction)| {
         if reaction.velocity.x.abs() > 0.01 || reaction.velocity.z.abs() > 0.01 {
             let vel = reaction.velocity;
             // vel *= 10.0;

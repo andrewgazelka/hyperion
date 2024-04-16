@@ -2,7 +2,6 @@ use evenio::{
     event::{Despawn, Insert, Receiver, Sender, Spawn},
     fetch::{Fetcher, Single},
 };
-use libc::send;
 use serde_json::json;
 use tracing::{field::debug, info, instrument, trace, warn};
 use valence_protocol::{
@@ -21,9 +20,10 @@ use crate::{
 };
 
 mod player_packet_buffer;
-pub use player_packet_buffer::DecodeBuffer;
 
 use crate::net::{Encoder, Fd, MINECRAFT_VERSION, PROTOCOL_VERSION};
+use crate::singleton::buffer_allocator::BufferAllocator;
+use crate::system::ingress::player_packet_buffer::DecodeBuffer;
 
 // The `Receiver<Tick>` parameter tells our handler to listen for the `Tick` event.
 #[instrument(skip_all, level = "trace")]
@@ -32,6 +32,7 @@ pub fn ingress(
     mut fd_lookup: Single<&mut FdLookup>,
     mut global: Single<&mut Global>,
     mut server: Single<&mut Server>,
+    mut buffers: Single<&mut BufferAllocator>,
     mut players: Fetcher<(&mut LoginState, &mut DecodeBuffer, &mut Encoder, &Fd)>,
     mut sender: Sender<(
         Spawn,
@@ -42,19 +43,22 @@ pub fn ingress(
         Despawn,
     )>,
 ) {
-    // clear all encoders
-    for (_, _, encoder, _) in &mut players {
+    // clear encoders:todo: kinda jank
+    // todo: ADDING THIS MAKES 100ms ping and without it is 0ms??? what
+    for (_, _, encoder, _) in players.iter_mut() {
         encoder.clear();
     }
-
-    println!("...");
+    
     server.drain(|event| match event {
         ServerEvent::AddPlayer { fd } => {
             println!("add player");
             let new_player = sender.spawn();
             sender.insert(new_player, LoginState::Handshake);
             sender.insert(new_player, DecodeBuffer::default());
-            sender.insert(new_player, Encoder::default());
+            
+            let buffer = buffers.obtain().unwrap();
+            
+            sender.insert(new_player, Encoder::new(buffer));
             sender.insert(new_player, fd);
 
             fd_lookup.insert(fd, new_player);
@@ -84,7 +88,7 @@ pub fn ingress(
                     LoginState::Status => {
                         process_status(login_state, &frame, encoder, &global).unwrap();
                     }
-                    LoginState::Login | LoginState::Play => {}
+                    LoginState::Login | LoginState::Play | LoginState::Terminate => {}
                 }
             }
         }
@@ -92,10 +96,12 @@ pub fn ingress(
 
     server.submit_events();
 
-    let encoders = players.iter_mut().map(|(_, _, encoder, fd)| (encoder, *fd));
-    println!("start refreshing buffers");
-    server.refresh_and_write(&mut global, encoders);
-    println!("done refreshing buffers");
+    let encoders = players
+        .iter_mut()
+        .map(|(_, _, encoder, fd)| (encoder.buf(), *fd));
+    
+    server.write(&mut global, encoders);
+
 }
 
 fn process_handshake(login_state: &mut LoginState, packet: &PacketFrame) -> anyhow::Result<()> {
@@ -124,6 +130,7 @@ fn process_status(
     global: &Global,
 ) -> anyhow::Result<()> {
     debug_assert!(*login_state == LoginState::Status);
+
 
     #[allow(clippy::single_match, reason = "todo del")]
     match packet.id {
@@ -167,8 +174,9 @@ fn process_status(
             let send = packets::status::QueryPongS2c { payload };
 
             encoder.append(&send, global)?;
+            *login_state = LoginState::Terminate;
         }
-
+        
         _ => panic!("unexpected packet id: {}", packet.id),
     }
 

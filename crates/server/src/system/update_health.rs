@@ -1,4 +1,4 @@
-use evenio::{prelude::*, rayon::prelude::*};
+use evenio::{prelude::*};
 use tracing::instrument;
 
 use crate::{global::Global, Gametick, Player, PlayerState, Tracker};
@@ -22,7 +22,7 @@ pub fn update_health(
     let regeneration = tick % REGENERATION_INTERVAL == 0;
 
     fetcher
-        .par_iter_mut()
+        .iter_mut()
         .for_each(|player| match player.state.current().clone() {
             PlayerState::Alive {
                 regeneration: regeneration_effect,

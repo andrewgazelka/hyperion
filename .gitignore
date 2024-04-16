@@ -10,3 +10,4 @@ hyperion
 .cargo
 perf.data
 **/*.zip
+.DS_Store

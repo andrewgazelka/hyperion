@@ -1,6 +1,6 @@
 use std::time::Instant;
 
-use evenio::{prelude::*, rayon::prelude::*};
+use evenio::{prelude::*};
 use tracing::{debug, instrument, trace};
 
 use crate::{
@@ -13,7 +13,7 @@ pub fn keep_alive(
     global: Single<&Global>,
     mut fetcher: Fetcher<(&mut Player, &mut Encoder)>,
 ) {
-    fetcher.par_iter_mut().for_each(|(player, encoder)| {
+    fetcher.iter_mut().for_each(|(player, encoder)| {
         // if we haven't sent a keep alive packet in 5 seconds, and a keep alive hasn't already
         // been sent and hasn't been responded to, send one
         if !player.unresponded_keep_alive && player.last_keep_alive_sent.elapsed().as_secs() >= 5 {

@@ -1,4 +1,4 @@
-use evenio::{prelude::*, rayon::prelude::*};
+use evenio::{prelude::*};
 use tracing::instrument;
 use valence_protocol::{
     packets::play,
@@ -24,7 +24,7 @@ pub fn sync_players(
     let tick = global.tick.unsigned_abs();
 
     fetcher
-        .par_iter_mut()
+        .iter_mut()
         .for_each(|(id, player, encoder, pose)| {
             let entity_id = VarInt(id.index().0 as i32);
             match (player.state.previous(), player.state.current()) {

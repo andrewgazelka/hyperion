@@ -6,15 +6,19 @@ use std::{
 };
 
 use anyhow::Context;
+use arrayvec::CapacityError;
 use evenio::prelude::Component;
+use libc::iovec;
 use sha2::Digest;
-use valence_protocol::{uuid::Uuid, Encode};
+use valence_protocol::{uuid::Uuid, CompressionThreshold, Encode};
 
 use crate::global::Global;
 
 mod buffer;
 
 pub use buffer::*;
+
+use crate::singleton::buffer_allocator::BufRef;
 
 #[cfg(target_os = "linux")]
 mod linux;
@@ -97,12 +101,12 @@ impl ServerDef for Server {
         self.server.drain(f);
     }
 
-    fn refresh_and_write<'a>(
-        &mut self,
-        global: &mut Global,
-        encoders: impl ExactSizeIterator<Item = RefreshItem<'a>>,
-    ) {
-        self.server.refresh_and_write(global, encoders);
+    fn allocate_buffers(&mut self, buffers: &[iovec]) {
+        self.server.allocate_buffers(buffers);
+    }
+
+    fn write<'a>(&mut self, global: &mut Global, writers: impl Iterator<Item = RefreshItem<'a>>) {
+        self.server.write(global, writers);
     }
 
     fn submit_events(&mut self) {
@@ -110,18 +114,18 @@ impl ServerDef for Server {
     }
 }
 
-pub type RefreshItem<'a> = (&'a mut Encoder, Fd);
+pub type RefreshItem<'a> = (&'a BufRef, Fd);
 
 pub trait ServerDef {
     fn new(address: impl ToSocketAddrs) -> anyhow::Result<Self>
     where
         Self: Sized;
     fn drain(&mut self, f: impl FnMut(ServerEvent));
-    fn refresh_and_write<'a>(
-        &mut self,
-        global: &mut Global,
-        encoders: impl ExactSizeIterator<Item = RefreshItem<'a>>,
-    );
+
+    // todo:make unsafe
+    fn allocate_buffers(&mut self, buffers: &[iovec]);
+
+    fn write<'a>(&mut self, global: &mut Global, writers: impl Iterator<Item = RefreshItem<'a>>);
 
     fn submit_events(&mut self);
 }
@@ -140,11 +144,11 @@ impl ServerDef for NotImplemented {
         unimplemented!("not implemented; use Linux")
     }
 
-    fn refresh_and_write<'a>(
-        &mut self,
-        _global: &mut Global,
-        encoders: impl ExactSizeIterator<Item = RefreshItem<'a>>,
-    ) {
+    fn allocate_buffers(&mut self, _buffers: &[iovec]) {
+        todo!()
+    }
+
+    fn write<'a>(&mut self, _global: &mut Global, writers: impl Iterator<Item = RefreshItem<'a>>) {
         unimplemented!("not implemented; use Linux")
     }
 
@@ -185,7 +189,7 @@ pub struct ClientConnection {
 
 mod encoder;
 
-#[derive(Component, Default)]
+#[derive(Component)]
 pub struct Encoder {
     /// The encoding buffer and logic
     enc: encoder::PacketEncoder,
@@ -200,6 +204,7 @@ impl Encoder {
     pub fn clear(&mut self) {
         self.enc.buf.clear();
     }
+
     /// Encode a packet.
     pub fn append<P>(&mut self, pkt: &P, global: &Global) -> anyhow::Result<()>
     where
@@ -207,16 +212,27 @@ impl Encoder {
     {
         self.enc.append_packet(pkt)?;
 
-        if self.enc.buf.needs_realloc() {
-            println!("needs realloc");
-            global.set_needs_realloc();
-        }
+        // if self.enc.buf.needs_realloc() {
+        //     println!("needs realloc");
+        //     global.set_needs_realloc();
+        // }
 
         Ok(())
     }
 
-    pub fn append_raw(&mut self, bytes: &[u8], global: &Global) {
-        self.enc.buf.extend_from_slice(bytes);
+    pub fn new(buffer: BufRef) -> Self {
+        Self {
+            enc: encoder::PacketEncoder::new(CompressionThreshold(-1), buffer),
+            deallocate_on_process: false,
+        }
+    }
+
+    pub fn buf(&self) -> &BufRef {
+        &self.enc.buf
+    }
+
+    pub fn append_raw(&mut self, bytes: &[u8], global: &Global) -> Result<(), CapacityError> {
+        self.enc.buf.try_extend_from_slice(bytes)
     }
 
     // /// This sends the bytes to the connection.

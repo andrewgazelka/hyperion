@@ -1,6 +1,16 @@
 //! All the networking related code.
 
-use std::{alloc::{alloc_zeroed, handle_alloc_error, Layout}, cell::UnsafeCell, cmp, marker::PhantomData, net::{TcpListener, ToSocketAddrs}, os::fd::AsRawFd, sync::atomic::{AtomicU16, Ordering}, time::Duration};
+use std::{
+    alloc::{alloc_zeroed, handle_alloc_error, Layout},
+    cell::UnsafeCell,
+    cmp,
+    marker::PhantomData,
+    net::{TcpListener, ToSocketAddrs},
+    os::fd::AsRawFd,
+    sync::atomic::{AtomicU16, Ordering},
+    time::Duration,
+};
+use std::cell::Ref;
 
 pub use io_uring::types::Fixed;
 use io_uring::{cqueue::buffer_select, squeue::SubmissionQueue, types::BufRingEntry, IoUring};
@@ -12,6 +22,7 @@ use crate::{
     global::Global,
     net::{Fd, ServerDef, ServerEvent},
 };
+use crate::singleton::buffer_allocator::BufRef;
 
 /// Default MiB/s threshold before we start to limit the sending of some packets.
 const DEFAULT_SPEED: u32 = 1024 * 1024;
@@ -75,9 +86,6 @@ pub struct LinuxServer {
     /// thread
     phantom: PhantomData<*const ()>,
 }
-
-unsafe impl Sync for LinuxServer {}
-unsafe impl Send for LinuxServer {}
 
 impl ServerDef for LinuxServer {
     fn new(address: impl ToSocketAddrs) -> anyhow::Result<Self> {
@@ -267,54 +275,16 @@ impl ServerDef for LinuxServer {
         }
     }
 
-    fn refresh_and_write<'a>(
+    fn allocate_buffers(&mut self, buffers: &[iovec]) {
+        println!("allocate buffers");
+        unsafe {self.register_buffers(buffers) };
+    }
+
+    fn write<'a>(
         &mut self,
         global: &mut Global,
-        items: impl ExactSizeIterator<Item = RefreshItem<'a>>,
+        items: impl Iterator<Item = RefreshItem<'a>>,
     ) {
-        if items.len() == 0 {
-            return;
-        }
-
-        println!("encoders len not 0");
-
-        if global.get_needs_realloc() {
-            println!("does not need realloc .. returning");
-
-            if global.has_registered_buffers_before {
-                println!("unregister...");
-
-                // todo: is this alright?
-                self.cancel(io_uring::types::CancelBuilder::any());
-                self.unregister_buffers();
-                println!("finished unregister...");
-            }
-            
-            let mut iovecs = Vec::new();
-            let mut write_info = Vec::new();
-
-            for (encoder, fd) in items {
-                encoder.enc.buf.prepare_for_register();
-                let Some(iovec) = encoder.enc.buf.as_capacity_iovec() else {
-                    continue;
-                };
-                iovecs.push(iovec);
-                write_info.push((encoder, fd));
-            }
-
-            if iovecs.is_empty() {
-                return;
-            }
-
-            unsafe { self.register_buffers(&iovecs) };
-
-            self.write_all(write_info.into_iter());
-
-            global.has_registered_buffers_before = true;
-
-            return;
-        }
-
         self.write_all(items);
     }
 
@@ -330,25 +300,24 @@ const SEND_MARKER: u64 = 0b1 << 62;
 
 impl LinuxServer {
     fn write_all<'a>(&mut self, items: impl Iterator<Item = RefreshItem<'a>>) {
-        println!("called write_all");
         items
-            .into_iter()
-            .filter(|item| item.0.enc.buf.ready_to_write())
-            .enumerate()
-            .for_each(|(idx, (encoder, fd))| {
+            .for_each(|(buf, fd)| {
                 let fd = fd.0;
-                let buf = encoder.enc.buf.as_ptr();
-                let len = encoder.enc.buf.len() as u32;
+                
+                if buf.len() == 0 {
+                    return;
+                }
+                
+                let location = buf.as_ptr();
+                let idx = buf.index();
+                let len = buf.len() as u32;
 
                 if len == 0 {
                     return;
                 }
 
-                let buf_index = idx as u16;
 
-                println!("writing {buf:?} of length {len} to fd {fd:?}");
-
-                self.write_raw(fd, buf, len, buf_index);
+                self.write_raw(fd, location, len, idx);
             });
     }
 
@@ -390,7 +359,6 @@ impl LinuxServer {
     }
 
     fn request_recv(submission: &mut SubmissionQueue, fd: Fixed) {
-
         unsafe {
             Self::push_entry(
                 submission,
@@ -423,14 +391,13 @@ impl LinuxServer {
     /// # Safety
     /// buffers must be valid
     pub unsafe fn register_buffers(&mut self, buffers: &[iovec]) {
-        println!("registering buffers {:?}", buffers);
+        // println!("registering buffers {:?}", buffers);
         self.uring.submitter().register_buffers(buffers).unwrap();
     }
 
     /// All requests in the submission queue must be finished or cancelled, or else this function
     /// will hang indefinetely.
     pub fn unregister_buffers(&mut self) {
-        self.uring.submitter()
-        .unregister_buffers().unwrap();
+        self.uring.submitter().unregister_buffers().unwrap();
     }
 }

@@ -2,7 +2,6 @@ use evenio::{
     event::Receiver,
     fetch::{Fetcher, Single},
     query::{Query, With},
-    rayon::prelude::*,
 };
 use tracing::instrument;
 use valence_protocol::math::{Vec2, Vec3};
@@ -26,7 +25,7 @@ pub fn entity_move_logic(
     mut entities: Fetcher<EntityQuery>,
     lookup: Single<&PlayerBoundingBoxes>,
 ) {
-    entities.par_iter_mut().for_each(|query| {
+    entities.iter_mut().for_each(|query| {
         let EntityQuery {
             running_speed,
             pose,

@@ -1,28 +1,33 @@
-use std::io::Read;
+use std::{io::Read, ops::DerefMut};
 
 use anyhow::ensure;
+use arrayvec::CapacityError;
 use valence_protocol::{CompressionThreshold, Encode, Packet, VarInt};
 
-use crate::net::{MaybeRegisteredBuffer, MAX_PACKET_SIZE};
+use crate::{net::MAX_PACKET_SIZE, singleton::buffer_allocator::BufRef};
 
-#[derive(Default)]
+const BUFFER_SIZE: usize = 1024 * 1024;
+
 pub struct PacketEncoder {
-    pub buf: MaybeRegisteredBuffer,
+    pub buf: BufRef,
     compress_buf: Vec<u8>,
     threshold: CompressionThreshold,
 }
 
 impl PacketEncoder {
-    pub fn new(threshold: CompressionThreshold) -> Self {
+    pub fn new(threshold: CompressionThreshold, buf: BufRef) -> Self {
+        // 1 MiB
+        const DEFAULT_SIZE: usize = 1024 * 1024;
+
         Self {
-            buf: MaybeRegisteredBuffer::default(),
+            buf,
             compress_buf: Vec::new(),
             threshold,
         }
     }
 
-    pub fn append_raw(&mut self, data: &[u8]) {
-        self.buf.extend_from_slice(data);
+    pub fn append_raw(&mut self, data: &[u8]) -> Result<(), CapacityError> {
+        self.buf.try_extend_from_slice(data)
     }
 
     pub fn append_packet<P>(&mut self, pkt: &P) -> anyhow::Result<()>
@@ -31,7 +36,7 @@ impl PacketEncoder {
     {
         let start_len = self.buf.len();
 
-        pkt.encode_with_id(&mut self.buf)?;
+        pkt.encode_with_id(self.buf.deref_mut())?;
 
         let data_len = self.buf.len() - start_len;
 
@@ -58,9 +63,9 @@ impl PacketEncoder {
 
                 self.buf.truncate(start_len);
 
-                VarInt(packet_len as i32).encode(&mut self.buf)?;
-                VarInt(data_len as i32).encode(&mut self.buf)?;
-                self.buf.extend_from_slice(&self.compress_buf);
+                VarInt(packet_len as i32).encode(self.buf.deref_mut())?;
+                VarInt(data_len as i32).encode(self.buf.deref_mut())?;
+                self.buf.try_extend_from_slice(&self.compress_buf)?;
             } else {
                 let data_len_size = 1;
                 let packet_len = data_len_size + data_len;
@@ -74,7 +79,10 @@ impl PacketEncoder {
 
                 let data_prefix_len = packet_len_size + data_len_size;
 
-                self.buf.put_bytes(0, data_prefix_len);
+                for _ in 0..data_prefix_len {
+                    self.buf.push(0);
+                }
+
                 self.buf
                     .copy_within(start_len..start_len + data_len, start_len + data_prefix_len);
 
@@ -97,7 +105,9 @@ impl PacketEncoder {
 
         let packet_len_size = VarInt(packet_len as i32).written_size();
 
-        self.buf.put_bytes(0, packet_len_size);
+        for _ in 0..packet_len_size {
+            self.buf.push(0);
+        }
         self.buf
             .copy_within(start_len..start_len + data_len, start_len + packet_len_size);
 

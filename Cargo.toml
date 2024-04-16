@@ -48,4 +48,5 @@ rayon-local = { path = "crates/rayon-local" }
 rust-mc-bot = { git = "https://github.com/andrewgazelka/rust-mc-bot", branch = "optimize" }
 glam = "0.26.0"
 
-evenio = { git = "https://github.com/rj00a/evenio", features = ["rayon"] }
+# todo: re-enable rayon
+evenio = { git = "https://github.com/kuviman/evenio", features = [], branch = "non-send" }
