@@ -45,10 +45,10 @@ pub fn ingress(
 ) {
     // clear encoders:todo: kinda jank
     // todo: ADDING THIS MAKES 100ms ping and without it is 0ms??? what
-    for (_, _, encoder, _) in players.iter_mut() {
-        encoder.clear();
-    }
-    
+    // for (_, _, encoder, _) in players.iter_mut() {
+    //     encoder.clear();
+    // }
+
     server.drain(|event| match event {
         ServerEvent::AddPlayer { fd } => {
             println!("add player");
@@ -99,7 +99,7 @@ pub fn ingress(
     let encoders = players
         .iter_mut()
         .map(|(_, _, encoder, fd)| (encoder.buf(), *fd));
-    
+
     server.write(&mut global, encoders);
 
 }

@@ -38,14 +38,12 @@ impl BufferAllocator {
 }
 
 struct BufferAllocatorInner {
-    // todo: try on stack? will probs need to increase stack size
+    // todo: try on stack? will probs need to increase stack size. idk if this even makes sense to do though.
     buffers: Box<[UnsafeCell<ArrayVec<u8, BUFFER_SIZE>>]>,
-    // todo: to unsafecell
     available: UnsafeCell<ArrayVec<u16, COUNT>>,
 }
 
 pub struct BufRef {
-    // todo: can just do pointer arithmetic
     index: u16,
     allocator: Rc<BufferAllocatorInner>,
 }
