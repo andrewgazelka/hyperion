@@ -1,8 +1,7 @@
 use evenio::{
-    event::{Insert, Receiver, Sender, Spawn},
+    event::{Despawn, Insert, Receiver, Sender, Spawn},
     fetch::{Fetcher, Single},
 };
-use evenio::event::Despawn;
 use libc::send;
 use serde_json::json;
 use tracing::{field::debug, info, instrument, trace, warn};
@@ -61,9 +60,9 @@ pub fn ingress(
         }
         ServerEvent::RemovePlayer { fd } => {
             let id = fd_lookup.remove(&fd).expect("player with fd not found");
-            
+
             sender.despawn(id);
-            
+
             info!("removed a player with fd {:?}", fd);
         }
         ServerEvent::RecvData { fd, data } => {
@@ -90,8 +89,9 @@ pub fn ingress(
 
     let encoders = players.iter_mut().map(|(_, _, encoder, fd)| (encoder, *fd));
     println!("start refreshing buffers");
-    server.refresh_buffers(&mut global, encoders);
+    server.refresh_and_write(&mut global, encoders);
     println!("done refreshing buffers");
+
 }
 
 fn process_handshake(login_state: &mut LoginState, packet: &PacketFrame) -> anyhow::Result<()> {
@@ -146,13 +146,26 @@ fn process_status(
 
             let send = packets::status::QueryResponseS2c { json: &json };
 
-            println!("query request: {query_request:?}");
+            info!("query request: {query_request:?}");
 
             encoder.append(&send, global)?;
 
             // todo: send response
         }
-        _ => {}
+
+        packets::status::QueryPingC2s::ID => {
+            let query_ping: packets::status::QueryPingC2s = packet.decode()?;
+
+            info!("query ping: {query_ping:?}");
+
+            let payload = query_ping.payload;
+
+            let send = packets::status::QueryPongS2c { payload };
+
+            encoder.append(&send, global)?;
+        }
+        
+        _ => panic!("unexpected packet id: {}", packet.id),
     }
 
     // todo: check version is correct

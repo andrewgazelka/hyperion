@@ -208,7 +208,7 @@ impl ServerDef for LinuxServer {
                 write if write & SEND_MARKER != 0 => {
                     let fd = Fixed((write & !SEND_MARKER) as u32);
                     let result = event.result();
-                    
+
                     match result.cmp(&0) {
                         cmp::Ordering::Less => {
                             error!("there was an error in write: {}", result);
@@ -267,7 +267,7 @@ impl ServerDef for LinuxServer {
         }
     }
 
-    fn refresh_buffers<'a>(
+    fn refresh_and_write<'a>(
         &mut self,
         global: &mut Global,
         items: impl ExactSizeIterator<Item = RefreshItem<'a>>,
@@ -295,7 +295,7 @@ impl ServerDef for LinuxServer {
 
             for (encoder, fd) in items {
                 encoder.enc.buf.prepare_for_register();
-                let Some(iovec) = encoder.enc.buf.as_len_iovec() else {
+                let Some(iovec) = encoder.enc.buf.as_capacity_iovec() else {
                     continue;
                 };
                 iovecs.push(iovec);
@@ -339,6 +339,11 @@ impl LinuxServer {
                 let fd = fd.0;
                 let buf = encoder.enc.buf.as_ptr();
                 let len = encoder.enc.buf.len() as u32;
+
+                if len == 0 {
+                    return;
+                }
+
                 let buf_index = idx as u16;
 
                 println!("writing {buf:?} of length {len} to fd {fd:?}");

@@ -97,12 +97,12 @@ impl ServerDef for Server {
         self.server.drain(f);
     }
 
-    fn refresh_buffers<'a>(
+    fn refresh_and_write<'a>(
         &mut self,
         global: &mut Global,
         encoders: impl ExactSizeIterator<Item = RefreshItem<'a>>,
     ) {
-        self.server.refresh_buffers(global, encoders);
+        self.server.refresh_and_write(global, encoders);
     }
 
     fn submit_events(&mut self) {
@@ -117,7 +117,7 @@ pub trait ServerDef {
     where
         Self: Sized;
     fn drain(&mut self, f: impl FnMut(ServerEvent));
-    fn refresh_buffers<'a>(
+    fn refresh_and_write<'a>(
         &mut self,
         global: &mut Global,
         encoders: impl ExactSizeIterator<Item = RefreshItem<'a>>,
@@ -140,7 +140,7 @@ impl ServerDef for NotImplemented {
         unimplemented!("not implemented; use Linux")
     }
 
-    fn refresh_buffers<'a>(
+    fn refresh_and_write<'a>(
         &mut self,
         _global: &mut Global,
         encoders: impl ExactSizeIterator<Item = RefreshItem<'a>>,
