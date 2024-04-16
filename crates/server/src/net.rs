@@ -19,7 +19,7 @@ pub use buffer::*;
 #[cfg(target_os = "linux")]
 mod linux;
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Component)]
 pub struct Fd(
     #[cfg(target_os = "linux")] linux::Fixed,
     #[cfg(target_os = "macos")] (),
@@ -100,7 +100,7 @@ impl ServerDef for Server {
     fn refresh_buffers<'a>(
         &mut self,
         global: &mut Global,
-        encoders: impl ExactSizeIterator<Item = &'a mut Encoder>,
+        encoders: impl ExactSizeIterator<Item = RefreshItem<'a>>,
     ) {
         self.server.refresh_buffers(global, encoders);
     }
@@ -110,6 +110,8 @@ impl ServerDef for Server {
     }
 }
 
+pub type RefreshItem<'a> = (&'a mut Encoder, Fd);
+
 pub trait ServerDef {
     fn new(address: impl ToSocketAddrs) -> anyhow::Result<Self>
     where
@@ -118,7 +120,7 @@ pub trait ServerDef {
     fn refresh_buffers<'a>(
         &mut self,
         global: &mut Global,
-        encoders: impl ExactSizeIterator<Item = &'a mut Encoder>,
+        encoders: impl ExactSizeIterator<Item = RefreshItem<'a>>,
     );
 
     fn submit_events(&mut self);
@@ -141,7 +143,7 @@ impl ServerDef for NotImplemented {
     fn refresh_buffers<'a>(
         &mut self,
         _global: &mut Global,
-        _encoders: impl Iterator<Item = &'a mut Encoder>,
+        encoders: impl ExactSizeIterator<Item = RefreshItem<'a>>,
     ) {
         unimplemented!("not implemented; use Linux")
     }
@@ -201,6 +203,12 @@ impl Encoder {
         P: valence_protocol::Packet + Encode,
     {
         self.enc.append_packet(pkt)?;
+
+        if self.enc.buf.needs_realloc() {
+            println!("needs realloc");
+            global.set_needs_realloc();
+        }
+
         Ok(())
     }
 

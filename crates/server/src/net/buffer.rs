@@ -36,6 +36,18 @@ impl MaybeRegisteredBuffer {
             &self.registered_buffer
         }
     }
+    
+    pub const fn needs_realloc(&self) -> bool {
+        self.new_buffer.is_some()
+    }
+
+    pub fn as_ptr(&self) -> *const u8 {
+        self.current_buffer().as_ptr()
+    }
+
+    pub fn len(&self) -> usize {
+        self.current_buffer().len()
+    }
 
     pub fn copy_within(&mut self, range: impl RangeBounds<usize>, offset: usize) {
         let buffer = self.current_buffer_mut();
@@ -76,10 +88,6 @@ impl MaybeRegisteredBuffer {
 
     pub fn truncate(&mut self, len: usize) {
         self.current_buffer_mut().truncate(len);
-    }
-
-    pub fn len(&self) -> usize {
-        self.current_buffer().len()
     }
 
     fn with_capacity(len: usize) -> Self {

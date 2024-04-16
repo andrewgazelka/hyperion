@@ -31,7 +31,7 @@ pub struct Global {
     pub shared: Arc<Shared>,
 
     needs_realloc: RayonLocal<Cell<bool>>,
-    
+
     pub has_registered_buffers_before: bool,
 }
 
@@ -51,10 +51,6 @@ impl Global {
     }
 
     pub fn get_needs_realloc(&mut self) -> bool {
-        // reduce
-        self.needs_realloc
-            .get_all_locals()
-            .iter()
-            .any(std::cell::Cell::get)
+        self.needs_realloc.get_all_locals().iter().any(Cell::get)
     }
 }

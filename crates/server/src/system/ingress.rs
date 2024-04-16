@@ -1,8 +1,4 @@
-use anyhow::bail;
-use derive_more::{Deref, DerefMut};
 use evenio::{
-    component::Component,
-    entity::EntityId,
     event::{Insert, Receiver, Sender, Spawn},
     fetch::{Fetcher, Single},
 };
@@ -27,7 +23,7 @@ use crate::{
 mod player_packet_buffer;
 pub use player_packet_buffer::PlayerPacketBuffer;
 
-use crate::net::{Encoder, MINECRAFT_VERSION, PROTOCOL_VERSION};
+use crate::net::{Encoder, Fd, MINECRAFT_VERSION, PROTOCOL_VERSION};
 
 // The `Receiver<Tick>` parameter tells our handler to listen for the `Tick` event.
 #[instrument(skip_all, level = "trace")]
@@ -36,15 +32,24 @@ pub fn ingress(
     mut fd_lookup: Single<&mut FdLookup>,
     mut global: Single<&mut Global>,
     mut server: Single<&mut Server>,
-    mut players: Fetcher<(&mut LoginState, &mut PlayerPacketBuffer, &mut Encoder)>,
-    mut sender: Sender<(Spawn, Insert<LoginState>, Insert<PlayerPacketBuffer>, Insert<Encoder>)>,
+    mut players: Fetcher<(&mut LoginState, &mut PlayerPacketBuffer, &mut Encoder, &Fd)>,
+    mut sender: Sender<(
+        Spawn,
+        Insert<LoginState>,
+        Insert<PlayerPacketBuffer>,
+        Insert<Encoder>,
+        Insert<Fd>,
+    )>,
 ) {
+    println!("...");
     server.drain(|event| match event {
         ServerEvent::AddPlayer { fd } => {
+            println!("add player");
             let new_player = sender.spawn();
             sender.insert(new_player, LoginState::Handshake);
             sender.insert(new_player, PlayerPacketBuffer::default());
             sender.insert(new_player, Encoder::default());
+            sender.insert(new_player, fd);
 
             fd_lookup.insert(fd, new_player);
 
@@ -56,8 +61,9 @@ pub fn ingress(
             info!("removed a player with fd {:?}", fd);
         }
         ServerEvent::RecvData { fd, data } => {
+            println!("got data: {data:?}");
             let id = *fd_lookup.get(&fd).expect("player with fd not found");
-            let (login_state, decoder, encoder) =
+            let (login_state, decoder, encoder, _) =
                 players.get_mut(id).expect("player with fd not found");
 
             decoder.queue_slice(data);
@@ -76,8 +82,10 @@ pub fn ingress(
 
     server.submit_events();
 
-    let encoders = players.iter_mut().map(|(_, _, encoder)| encoder);
+    let encoders = players.iter_mut().map(|(_, _, encoder, fd)| (encoder, *fd));
+    println!("start refreshing buffers");
     server.refresh_buffers(&mut global, encoders);
+    println!("done refreshing buffers");
 }
 
 fn process_handshake(login_state: &mut LoginState, packet: &PacketFrame) -> anyhow::Result<()> {
@@ -107,9 +115,12 @@ fn process_status(
 ) -> anyhow::Result<()> {
     debug_assert!(*login_state == LoginState::Status);
 
+    #[allow(clippy::single_match, reason = "todo del")]
     match packet.id {
         packets::status::QueryRequestC2s::ID => {
             let query_request: packets::status::QueryRequestC2s = packet.decode()?;
+            
+            println!("query request: {query_request:?}... responding");
 
             // https://wiki.vg/Server_List_Ping#Response
             let json = json!({

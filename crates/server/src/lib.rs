@@ -1,6 +1,7 @@
 //! Hyperion
 
 #![feature(split_at_checked)]
+#![feature(type_alias_impl_trait)]
 #![feature(lint_reasons)]
 #![expect(clippy::type_complexity, reason = "evenio uses a lot of complex types")]
 
@@ -10,9 +11,7 @@ mod chunk;
 mod singleton;
 
 use std::{
-    cell::Cell,
     collections::VecDeque,
-    fmt::Debug,
     net::ToSocketAddrs,
     sync::{atomic::AtomicU32, Arc},
     time::{Duration, Instant},
@@ -23,7 +22,6 @@ use bvh::aabb::Aabb;
 use evenio::prelude::*;
 use libc::{getrlimit, setrlimit, RLIMIT_NOFILE};
 use ndarray::s;
-use rayon_local::RayonLocal;
 use signal_hook::iterator::Signals;
 use singleton::bounding_box;
 use spin::Lazy;

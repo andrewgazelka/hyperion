@@ -2,21 +2,12 @@
 
 use std::{
     alloc::{alloc_zeroed, handle_alloc_error, Layout},
-    cell::{Cell, UnsafeCell},
-    ffi::c_void,
-    io::{self, ErrorKind, Write},
+    cell::UnsafeCell,
     marker::PhantomData,
-    mem::ManuallyDrop,
-    net::{TcpListener, TcpStream, ToSocketAddrs},
-    ops::{Index, IndexMut, Range, RangeBounds, RangeFrom, RangeTo},
-    os::fd::{AsRawFd, RawFd},
-    ptr::addr_of_mut,
-    slice::SliceIndex,
-    sync::{
-        atomic::{AtomicU16, AtomicU32, Ordering},
-        Arc,
-    },
-    time::{Duration, Instant},
+    net::{TcpListener, ToSocketAddrs},
+    os::fd::AsRawFd,
+    sync::atomic::{AtomicU16, Ordering},
+    time::Duration,
 };
 
 pub use io_uring::types::Fixed;
@@ -24,9 +15,10 @@ use io_uring::{cqueue::buffer_select, squeue::SubmissionQueue, types::BufRingEnt
 use libc::iovec;
 use tracing::{error, warn};
 
+use super::RefreshItem;
 use crate::{
     global::Global,
-    net::{Encoder, Fd, ServerDef, ServerEvent},
+    net::{Fd, ServerDef, ServerEvent},
 };
 
 /// Default MiB/s threshold before we start to limit the sending of some packets.
@@ -111,7 +103,7 @@ impl ServerDef for LinuxServer {
             .build(SUBMISSION_QUEUE_SIZE)
             .unwrap();
 
-        let mut submitter = uring.submitter();
+        let submitter = uring.submitter();
         submitter.register_files_sparse(IO_URING_FILE_COUNT)?;
         assert_eq!(
             submitter.register_files_update(LISTENER_FIXED_FD.0, &[listener.as_raw_fd()])?,
@@ -269,39 +261,60 @@ impl ServerDef for LinuxServer {
     fn refresh_buffers<'a>(
         &mut self,
         global: &mut Global,
-        encoders: impl ExactSizeIterator<Item = (&'a mut Encoder, &'a Fd)> + Clone,
+        encoders: impl ExactSizeIterator<Item = RefreshItem<'a>>,
     ) {
         if encoders.len() == 0 {
             return;
         }
 
+        println!("encoders len not 0");
+
         if !global.get_needs_realloc() {
+            println!("does not need realloc .. returning");
             return;
         }
 
-        let encoders_with_alloc: Vec<_> = encoders.clone()
-            .filter_map(|(encoder, _)| encoder.enc.buf.as_iovec())
-            .collect();
+        println!("a");
+
+        let mut encoders_with_alloc = Vec::new();
+        let mut write_info = Vec::new();
+
+        for (encoder, fd) in encoders {
+            let Some(iovec) = encoder.enc.buf.as_iovec() else {
+                continue;
+            };
+            encoders_with_alloc.push(iovec);
+            write_info.push((encoder, fd));
+        }
+
+        println!("b");
 
         if encoders_with_alloc.is_empty() {
+            println!("empty");
             return;
         }
 
         if global.has_registered_buffers_before {
+            println!("unregister...");
             self.unregister_buffers();
+            println!("finished unregister...");
         }
 
+        println!("registering buffers");
         unsafe { self.register_buffers(&encoders_with_alloc) };
-        
+        println!("finished registering buffers");
+
         // todo: clone
         // now write each one
-        for (encoder, fd) in encoders {
-            let enc = &mut encoder.enc;
-            if enc.buf.len() == 0 {
-                continue;
-            }
+        for (idx, (encoder, fd)) in write_info.into_iter().enumerate() {
             let fd = fd.0;
-            self.write_raw(fd, enc.buf.as_ptr(), enc.buf.len(), enc.buf_index);
+            let buf = encoder.enc.buf.as_ptr();
+            let len = encoder.enc.buf.len() as u32;
+            let buf_index = idx as u16;
+
+            println!("writing {buf:?} of length {len} to fd {fd:?}");
+
+            self.write_raw(fd, buf, len, buf_index);
         }
 
         global.has_registered_buffers_before = true;

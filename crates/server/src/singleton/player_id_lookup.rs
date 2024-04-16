@@ -1,5 +1,4 @@
 //! Lookup players by their UUID
-use std::collections::HashMap;
 
 use evenio::{entity::EntityId, prelude::Component};
 use fxhash::FxHashMap;
