@@ -289,7 +289,7 @@ impl ServerDef for LinuxServer {
                 self.unregister_buffers();
                 println!("finished unregister...");
             }
-
+            
             let mut iovecs = Vec::new();
             let mut write_info = Vec::new();
 
@@ -430,6 +430,7 @@ impl LinuxServer {
     /// All requests in the submission queue must be finished or cancelled, or else this function
     /// will hang indefinetely.
     pub fn unregister_buffers(&mut self) {
-        self.uring.submitter().unregister_buffers().unwrap();
+        self.uring.submitter()
+        .unregister_buffers().unwrap();
     }
 }
