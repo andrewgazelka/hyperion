@@ -36,6 +36,11 @@ impl MaybeRegisteredBuffer {
             &self.registered_buffer
         }
     }
+    
+    pub fn clear(&mut self) {
+        self.registered_buffer.clear();
+        self.new_buffer = None;
+    }
 
     pub const fn needs_realloc(&self) -> bool {
         self.new_buffer.is_some()

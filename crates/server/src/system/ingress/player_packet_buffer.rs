@@ -3,6 +3,6 @@ use evenio::component::Component;
 use valence_protocol::PacketDecoder;
 
 #[derive(Component, Deref, DerefMut, Default)]
-pub struct PlayerPacketBuffer {
+pub struct DecodeBuffer {
     decoder: PacketDecoder,
 }

@@ -197,6 +197,9 @@ pub struct Encoder {
 }
 
 impl Encoder {
+    pub fn clear(&mut self) {
+        self.enc.buf.clear();
+    }
     /// Encode a packet.
     pub fn append<P>(&mut self, pkt: &P, global: &Global) -> anyhow::Result<()>
     where

@@ -21,7 +21,7 @@ use crate::{
 };
 
 mod player_packet_buffer;
-pub use player_packet_buffer::PlayerPacketBuffer;
+pub use player_packet_buffer::DecodeBuffer;
 
 use crate::net::{Encoder, Fd, MINECRAFT_VERSION, PROTOCOL_VERSION};
 
@@ -32,23 +32,28 @@ pub fn ingress(
     mut fd_lookup: Single<&mut FdLookup>,
     mut global: Single<&mut Global>,
     mut server: Single<&mut Server>,
-    mut players: Fetcher<(&mut LoginState, &mut PlayerPacketBuffer, &mut Encoder, &Fd)>,
+    mut players: Fetcher<(&mut LoginState, &mut DecodeBuffer, &mut Encoder, &Fd)>,
     mut sender: Sender<(
         Spawn,
         Insert<LoginState>,
-        Insert<PlayerPacketBuffer>,
+        Insert<DecodeBuffer>,
         Insert<Encoder>,
         Insert<Fd>,
         Despawn,
     )>,
 ) {
+    // clear all encoders
+    for (_, _, encoder, _) in &mut players {
+        encoder.clear();
+    }
+
     println!("...");
     server.drain(|event| match event {
         ServerEvent::AddPlayer { fd } => {
             println!("add player");
             let new_player = sender.spawn();
             sender.insert(new_player, LoginState::Handshake);
-            sender.insert(new_player, PlayerPacketBuffer::default());
+            sender.insert(new_player, DecodeBuffer::default());
             sender.insert(new_player, Encoder::default());
             sender.insert(new_player, fd);
 
@@ -91,7 +96,6 @@ pub fn ingress(
     println!("start refreshing buffers");
     server.refresh_and_write(&mut global, encoders);
     println!("done refreshing buffers");
-
 }
 
 fn process_handshake(login_state: &mut LoginState, packet: &PacketFrame) -> anyhow::Result<()> {
@@ -164,7 +168,7 @@ fn process_status(
 
             encoder.append(&send, global)?;
         }
-        
+
         _ => panic!("unexpected packet id: {}", packet.id),
     }
 
