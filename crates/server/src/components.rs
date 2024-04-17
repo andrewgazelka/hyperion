@@ -92,6 +92,7 @@ impl Vitals {
         };
 
         *health += amount;
+        *health = health.min(20.0);
     }
 
     /// Hurt the player by a given amount.
@@ -107,7 +108,7 @@ impl Vitals {
 
         let max_hurt_resistant_time = global.max_hurt_resistant_time;
 
-        // immune.until = tick + i64::from(max_hurt_resistant_time) / 2;
+        immune.until = tick + i64::from(max_hurt_resistant_time) / 2;
 
         let Self::Alive {
             health, absorption, ..
@@ -125,8 +126,6 @@ impl Vitals {
                 return;
             }
         }
-
-        println!("reduced health to {health}");
 
         *health -= amount;
 

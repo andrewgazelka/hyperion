@@ -19,7 +19,6 @@ const REGENERATION_INTERVAL: i64 = 25;
 
 #[derive(Query)]
 pub struct UpdateHealthQuery<'a> {
-    prev_vitals: &'a mut Prev<Vitals>,
     vitals: &'a mut Vitals,
 }
 
@@ -34,8 +33,6 @@ pub fn update_health(
     // let regeneration = tick % REGENERATION_INTERVAL == 0;
 
     fetcher.iter_mut().for_each(|query| {
-        **query.prev_vitals = *query.vitals;
-
         let vitals = query.vitals;
         match vitals {
             &mut Vitals::Alive { regeneration, .. } => {
