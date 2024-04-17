@@ -6,10 +6,13 @@ use tracing::instrument;
 
 use crate::{
     events::Egress,
-    net::{Fd, Server},
-    singleton::{broadcast::BroadcastBuf, buffer_allocator::BufferAllocator},
+    global::Global,
+    net::{Fd, LocalEncoder, Server, ServerDef},
+    singleton::{
+        broadcast::BroadcastBuf,
+        buffer_allocator::{BufRef, BufferAllocator},
+    },
 };
-use crate::net::ServerDef;
 
 #[instrument(skip_all, level = "trace")]
 pub fn egress_broadcast(
@@ -17,20 +20,28 @@ pub fn egress_broadcast(
     bufs: Single<&BufferAllocator>,
     mut server: Single<&mut Server>,
     fds: Fetcher<&Fd>,
+    global: Single<&Global>,
     mut broadcast: Single<&mut BroadcastBuf>,
+
+    encoders: Fetcher<&mut LocalEncoder>,
 ) {
-    // let fd_count = fds.iter().count();
-    // println!("start broadcast");
     let mut buf = bufs.obtain().unwrap();
     buf.clear();
 
     broadcast.drain(|bytes| {
-        // println!("extending");
         buf.try_extend_from_slice(&bytes).unwrap();
     });
-    
 
-    // println!("broadcast buf len: {} ... fd count {}", buf.len(), fd_count);
-    
-    server.broadcast(&buf, fds.iter().copied());
+    // works(&buf, encoders, global);
+    // does_not_work(&buf, server, &fds);
+}
+
+fn works(buf: &[u8], encoders: Fetcher<&mut LocalEncoder>, global: Single<&Global>) {
+    for encoder in encoders {
+        encoder.append_raw(buf, &global).unwrap();
+    }
+}
+
+fn does_not_work(buf: &BufRef, mut server: Single<&mut Server>, fds: &Fetcher<&Fd>) {
+    server.broadcast(buf, fds.iter().copied());
 }
