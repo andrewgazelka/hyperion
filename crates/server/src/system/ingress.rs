@@ -69,6 +69,7 @@ pub fn ingress(
     )>,
     mut sender: IngressSender,
 ) {
+    println!("\n\n");
     // clear encoders:todo: kinda jank
     // todo: ADDING THIS MAKES 100ms ping and without it is 0ms??? what
     for (_, _, encoder, ..) in &mut players {
@@ -137,7 +138,7 @@ pub fn ingress(
                         .unwrap();
                     }
                     LoginState::Play => {
-                        println!("PAXKETTTTTTTTTTTTTT");
+                        // println!("PAXKETTTTTTTTTTTTTT");
                         let pose = pose.unwrap();
                         crate::packets::switch(frame, &global, &mut sender, pose).unwrap();
                     }

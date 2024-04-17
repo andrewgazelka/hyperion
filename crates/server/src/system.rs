@@ -30,10 +30,9 @@ pub use egress_local::egress_local;
 pub use entity_detect_collisions::entity_detect_collisions;
 pub use entity_move_logic::entity_move_logic;
 pub use entity_position::sync_entity_position;
-use evenio::event::Sender;
 pub use generate_egress_packets::generate_egress_packets;
-pub use ingress::ingress;
-pub use init_entity::init_entity as entity_spawn;
+pub use ingress::{ingress, IngressSender};
+pub use init_entity::init_entity;
 pub use init_player::init_player;
 pub use keep_alive::keep_alive;
 pub use kill_all::kill_all;
@@ -50,6 +49,3 @@ pub use update_health::update_health;
 pub use update_time::update_time;
 
 use crate::events::{AttackEntity, InitEntity, KickPlayer, KillAllEntities, SwingArm};
-
-
-pub use ingress::IngressSender;

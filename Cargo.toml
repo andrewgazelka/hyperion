@@ -49,5 +49,5 @@ rust-mc-bot = { git = "https://github.com/andrewgazelka/rust-mc-bot", branch = "
 glam = "0.26.0"
 
 # todo: re-enable rayon
-evenio = { git = "https://github.com/kuviman/evenio", features = [], branch = "non-send" }
-#evenio = { git = "https://github.com/rj00a/evenio", features = ["rayon"] }
+#evenio = { git = "https://github.com/kuviman/evenio", features = [], branch = "non-send" }
+evenio = { git = "https://github.com/rj00a/evenio", features = ["rayon"] }

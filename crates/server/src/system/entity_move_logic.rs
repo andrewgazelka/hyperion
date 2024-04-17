@@ -1,9 +1,10 @@
 use evenio::{
+    entity::EntityId,
     event::Receiver,
     fetch::{Fetcher, Single},
     query::{Query, With},
 };
-use tracing::instrument;
+use tracing::{info, instrument};
 use valence_protocol::math::{Vec2, Vec3};
 
 use crate::{
@@ -27,6 +28,7 @@ pub fn entity_move_logic(
     lookup: Single<&PlayerBoundingBoxes>,
 ) {
     entities.iter_mut().for_each(|query| {
+        info!("entity move logic!!!!");
         let EntityQuery {
             running_speed,
             pose,

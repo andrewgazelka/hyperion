@@ -2,7 +2,7 @@ use evenio::{
     event::Receiver,
     fetch::{Fetcher, Single},
 };
-use tracing::instrument;
+use tracing::{info, instrument};
 
 use crate::{
     events::Egress,
@@ -25,14 +25,17 @@ pub fn egress_broadcast(
 
     encoders: Fetcher<&mut LocalEncoder>,
 ) {
-    let mut buf = bufs.obtain().unwrap();
-    buf.clear();
-
+    // info!("broadcasting");
+    // let mut buf = bufs.obtain().unwrap();
+    // buf.clear();
+    // 
+    let mut full_buf = Vec::new();
+    
     broadcast.drain(|bytes| {
-        buf.try_extend_from_slice(&bytes).unwrap();
+        full_buf.extend_from_slice(&bytes);
     });
 
-    // works(&buf, encoders, global);
+    works(&full_buf, encoders, global);
     // does_not_work(&buf, server, &fds);
 }
 

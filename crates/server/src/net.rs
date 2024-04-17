@@ -7,6 +7,7 @@ use std::{
 
 use anyhow::Context;
 use arrayvec::CapacityError;
+use evenio::handler::Local;
 use evenio::prelude::Component;
 use libc::iovec;
 use sha2::Digest;
@@ -189,6 +190,11 @@ pub struct LocalEncoder {
     /// The encoding buffer and logic
     enc: encoder::PacketEncoder,
 }
+
+// TODO: REMOVE
+unsafe impl Send for LocalEncoder {}
+unsafe impl Sync for LocalEncoder {}
+
 
 impl LocalEncoder {
     pub fn clear(&mut self) {

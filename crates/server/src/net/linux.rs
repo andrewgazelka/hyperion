@@ -86,6 +86,10 @@ pub struct LinuxServer {
     phantom: PhantomData<*const ()>,
 }
 
+// TODO: REMOVE
+unsafe impl Send for LinuxServer {}
+unsafe impl Sync for LinuxServer {}
+
 impl ServerDef for LinuxServer {
     fn new(address: impl ToSocketAddrs) -> anyhow::Result<Self> {
         let listener = TcpListener::bind(address)?;

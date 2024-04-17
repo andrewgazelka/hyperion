@@ -79,7 +79,7 @@ pub fn player_join_world(
     players: Fetcher<PlayerQuery>,
     mut uuid_lookup: Single<&mut PlayerUuidLookup>,
     mut id_lookup: Single<&mut PlayerIdLookup>,
-    mut broadcast: Single<&mut BroadcastBuf>,
+    // mut broadcast: Single<&mut BroadcastBuf>,
 ) {
     static CACHED_DATA: once_cell::sync::OnceCell<bytes::Bytes> = once_cell::sync::OnceCell::new();
     println!("PlayerJoinWorld");
@@ -99,7 +99,7 @@ pub fn player_join_world(
 
     info!("got cached data");
 
-    let broadcast = broadcast.get_round_robin();
+    // let broadcast = broadcast.get_round_robin();
 
     let query = r.query;
 
@@ -158,7 +158,7 @@ pub fn player_join_world(
         overlay: false,
     };
 
-    broadcast.append_packet(&text).unwrap();
+    // broadcast.append_packet(&text).unwrap();
 
     let encoder = query.encoder;
 
@@ -186,7 +186,7 @@ pub fn player_join_world(
         entries: Cow::Borrowed(entries),
     };
 
-    broadcast.append_packet(&info).unwrap();
+    // broadcast.append_packet(&info).unwrap();
 
     for entity in entities {
         let pkt = spawn_packet(entity.id, *entity.uuid, entity.pose);
@@ -227,14 +227,14 @@ pub fn player_join_world(
 
     let current_name = query.name;
 
-    broadcast
-        .append_packet(&play::TeamS2c {
-            team_name: "no_tag",
-            mode: Mode::AddEntities {
-                entities: vec![current_name],
-            },
-        })
-        .unwrap();
+    // broadcast
+    //     .append_packet(&play::TeamS2c {
+    //         team_name: "no_tag",
+    //         mode: Mode::AddEntities {
+    //             entities: vec![current_name],
+    //         },
+    //     })
+    //     .unwrap();
 
     encoder
         .append(
@@ -312,14 +312,14 @@ pub fn player_join_world(
         )
         .unwrap();
 
-    broadcast.append_packet(&spawn_player).unwrap();
-
-    broadcast
-        .append_packet(&crate::packets::def::EntityEquipmentUpdateS2c {
-            entity_id: current_entity_id,
-            equipment: Cow::Borrowed(&equipment),
-        })
-        .unwrap();
+    // broadcast.append_packet(&spawn_player).unwrap();
+    // 
+    // broadcast
+    //     .append_packet(&crate::packets::def::EntityEquipmentUpdateS2c {
+    //         entity_id: current_entity_id,
+    //         equipment: Cow::Borrowed(&equipment),
+    //     })
+    //     .unwrap();
 
     info!("Player {} joined the world", query.name);
 }

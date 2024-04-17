@@ -358,7 +358,9 @@ pub fn switch(
         play::CommandExecutionC2s::ID => {
             chat_command(data, global, pose, sender)?;
         }
-        _ => info!("unknown packet id: 0x{:02X}", packet_id),
+        _ => {
+            // info!("unknown packet id: 0x{:02X}", packet_id)
+        },
     }
 
     Ok(())

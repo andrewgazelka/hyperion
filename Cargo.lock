@@ -843,20 +843,21 @@ dependencies = [
 [[package]]
 name = "evenio"
 version = "0.5.0"
-source = "git+https://github.com/kuviman/evenio?branch=non-send#9ef4e00c2bcec0b5230319cde99c4c9838358c88"
+source = "git+https://github.com/rj00a/evenio#f3e7e36a68dad224f7ec351fafddfcd076178c92"
 dependencies = [
  "ahash",
  "bumpalo",
  "evenio_macros",
  "hashbrown",
  "indexmap",
+ "rayon",
  "slab",
 ]
 
 [[package]]
 name = "evenio_macros"
 version = "0.5.0"
-source = "git+https://github.com/kuviman/evenio?branch=non-send#9ef4e00c2bcec0b5230319cde99c4c9838358c88"
+source = "git+https://github.com/rj00a/evenio#f3e7e36a68dad224f7ec351fafddfcd076178c92"
 dependencies = [
  "proc-macro2",
  "quote",
