@@ -213,7 +213,6 @@ fn chat_command(
     //     };
     //     query.vitals.hurt(global, amount.parse()?, query.immunity);
     else if first == Some("spawn") {
-        println!("spawnnnn");
         let args: Vec<_> = cmd.collect();
 
         let loc = pose.position;

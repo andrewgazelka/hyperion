@@ -82,7 +82,6 @@ pub fn player_join_world(
     mut broadcast: Single<&mut BroadcastBuf>,
 ) {
     static CACHED_DATA: once_cell::sync::OnceCell<bytes::Bytes> = once_cell::sync::OnceCell::new();
-    println!("PlayerJoinWorld");
 
     let compression_level = global.0.shared.compression_level;
 
@@ -275,7 +274,6 @@ pub fn player_join_world(
             pitch: ByteAngle::from_degrees(pose.pitch),
         };
 
-        println!("pose is {pose:?}");
         encoder.append(&pkt, &global).unwrap();
 
         let pkt = crate::packets::def::EntityEquipmentUpdateS2c {
