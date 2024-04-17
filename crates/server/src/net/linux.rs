@@ -293,7 +293,6 @@ impl ServerDef for LinuxServer {
 
             let broadcast_len = broadcast_buf.len();
             if broadcast_len != 0 && broadcast {
-                // info!("broadcasting");
                 let location = broadcast_buf.as_ptr();
                 let idx = broadcast_buf.index();
                 let len = broadcast_len as u32;
@@ -301,7 +300,6 @@ impl ServerDef for LinuxServer {
                 self.write_raw(fd, location, len, idx);
             }
         });
-        // self.server.write_all(global, broadcast, writers);
     }
 
     fn submit_events(&mut self) {
@@ -315,8 +313,6 @@ const RECV_MARKER: u64 = 0b1 << 63;
 const SEND_MARKER: u64 = 0b1 << 62;
 
 impl LinuxServer {
-    fn write_all<'a>(&mut self, items: impl Iterator<Item = RefreshItem<'a>>) {}
-
     /// # Safety
     /// The entry must be valid for the duration of the operation
     unsafe fn push_entry(submission: &mut SubmissionQueue, entry: &io_uring::squeue::Entry) {
@@ -371,6 +367,8 @@ impl LinuxServer {
                 &mut self.uring.submission(),
                 &io_uring::opcode::WriteFixed::new(fd, buf, len, buf_index)
                     .build()
+                    // IO_LINK allows adjacent fd writes to be sequential which is SUPER important to make
+                    // sure things get written in the right (or at least deterministic) order
                     .flags(squeue::Flags::IO_LINK)
                     .user_data((fd.0 as u64) | SEND_MARKER),
             );
