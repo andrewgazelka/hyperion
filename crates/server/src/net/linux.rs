@@ -12,9 +12,11 @@ use std::{
 };
 
 pub use io_uring::types::Fixed;
-use io_uring::{cqueue::buffer_select, squeue::SubmissionQueue, types::BufRingEntry, IoUring};
+use io_uring::{
+    cqueue::buffer_select, squeue, squeue::SubmissionQueue, types::BufRingEntry, IoUring,
+};
 use libc::iovec;
-use tracing::{error, info, warn};
+use tracing::{error, info, trace, warn};
 
 use super::RefreshItem;
 use crate::{
@@ -85,6 +87,10 @@ pub struct LinuxServer {
     /// thread
     phantom: PhantomData<*const ()>,
 }
+
+// TODO: REMOVE
+unsafe impl Send for LinuxServer {}
+unsafe impl Sync for LinuxServer {}
 
 impl ServerDef for LinuxServer {
     fn new(address: impl ToSocketAddrs) -> anyhow::Result<Self> {
@@ -208,7 +214,7 @@ impl ServerDef for LinuxServer {
                         }
                         cmp::Ordering::Greater => {
                             // Write operation completed successfully
-                            info!("successful write response");
+                            trace!("successful write response");
                         }
                     }
                 }
@@ -217,7 +223,7 @@ impl ServerDef for LinuxServer {
                     let disconnected = event.result() == 0;
 
                     if event.flags() & IORING_CQE_F_MORE == 0 && !disconnected {
-                        info!("socket recv rerequested");
+                        trace!("socket recv rerequested");
                         Self::request_recv(&mut submission, fd);
                     }
 
@@ -260,26 +266,39 @@ impl ServerDef for LinuxServer {
         unsafe { self.register_buffers(buffers) };
     }
 
-    fn write<'a>(&mut self, _global: &mut Global, items: impl Iterator<Item = RefreshItem<'a>>) {
-        self.write_all(items);
-    }
+    /// Impl with local sends BEFORE broadcasting
+    fn write_all<'a>(
+        &mut self,
+        global: &mut Global,
+        broadcast_buf: &'a BufRef,
+        writers: impl Iterator<Item = RefreshItem<'a>>,
+    ) {
+        writers.for_each(|item| {
+            let RefreshItem {
+                local,
+                fd,
+                broadcast,
+            } = item;
 
-    fn broadcast(&mut self, buf: &BufRef, fds: impl Iterator<Item = Fd>) {
-        if buf.len() == 0 {
-            return;
-        }
-
-        let location = buf.as_ptr();
-        let idx = buf.index();
-        let len = buf.len() as u32;
-
-        if len == 0 {
-            return;
-        }
-
-        fds.for_each(|fd| {
             let fd = fd.0;
-            self.write_raw(fd, location, len, idx);
+
+            let local_len = local.len();
+            if local_len != 0 {
+                let location = local.as_ptr();
+                let idx = local.index();
+                let len = local_len as u32;
+
+                self.write_raw(fd, location, len, idx);
+            }
+
+            let broadcast_len = broadcast_buf.len();
+            if broadcast_len != 0 && broadcast {
+                let location = broadcast_buf.as_ptr();
+                let idx = broadcast_buf.index();
+                let len = broadcast_len as u32;
+
+                self.write_raw(fd, location, len, idx);
+            }
         });
     }
 
@@ -294,26 +313,6 @@ const RECV_MARKER: u64 = 0b1 << 63;
 const SEND_MARKER: u64 = 0b1 << 62;
 
 impl LinuxServer {
-    fn write_all<'a>(&mut self, items: impl Iterator<Item = RefreshItem<'a>>) {
-        items.for_each(|(buf, fd)| {
-            let fd = fd.0;
-
-            if buf.len() == 0 {
-                return;
-            }
-
-            let location = buf.as_ptr();
-            let idx = buf.index();
-            let len = buf.len() as u32;
-
-            if len == 0 {
-                return;
-            }
-
-            self.write_raw(fd, location, len, idx);
-        });
-    }
-
     /// # Safety
     /// The entry must be valid for the duration of the operation
     unsafe fn push_entry(submission: &mut SubmissionQueue, entry: &io_uring::squeue::Entry) {
@@ -368,6 +367,9 @@ impl LinuxServer {
                 &mut self.uring.submission(),
                 &io_uring::opcode::WriteFixed::new(fd, buf, len, buf_index)
                     .build()
+                    // IO_LINK allows adjacent fd writes to be sequential which is SUPER important to make
+                    // sure things get written in the right (or at least deterministic) order
+                    .flags(squeue::Flags::IO_LINK)
                     .user_data((fd.0 as u64) | SEND_MARKER),
             );
         }

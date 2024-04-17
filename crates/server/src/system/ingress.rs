@@ -25,13 +25,15 @@ mod player_packet_buffer;
 
 use crate::{
     components::{FullEntityPose, LoginState},
-    events::{Gametick, PlayerInit},
+    events::{
+        AttackEntity, Gametick, InitEntity, KickPlayer, KillAllEntities, PlayerInit, SwingArm,
+    },
     net::{Fd, LocalEncoder, MINECRAFT_VERSION, PROTOCOL_VERSION},
-    singleton::buffer_allocator::BufferAllocator,
+    singleton::{buffer_allocator::BufferAllocator, player_id_lookup::PlayerIdLookup},
     system::ingress::player_packet_buffer::DecodeBuffer,
 };
 
-type IngressSender<'a> = Sender<
+pub type IngressSender<'a> = Sender<
     'a,
     (
         Spawn,
@@ -41,6 +43,11 @@ type IngressSender<'a> = Sender<
         Insert<Fd>,
         PlayerInit,
         Despawn,
+        KickPlayer,
+        InitEntity,
+        KillAllEntities,
+        SwingArm,
+        AttackEntity,
     ),
 >;
 
@@ -50,14 +57,21 @@ pub fn ingress(
     _: Receiver<Gametick>,
     mut fd_lookup: Single<&mut FdLookup>,
     mut global: Single<&mut Global>,
+    id_lookup: Single<&PlayerIdLookup>,
     mut server: Single<&mut Server>,
     buffers: Single<&mut BufferAllocator>,
-    mut players: Fetcher<(&mut LoginState, &mut DecodeBuffer, &mut LocalEncoder, &Fd)>,
+    mut players: Fetcher<(
+        &mut LoginState,
+        &mut DecodeBuffer,
+        &mut LocalEncoder,
+        &Fd,
+        Option<&mut FullEntityPose>,
+    )>,
     mut sender: IngressSender,
 ) {
     // clear encoders:todo: kinda jank
     // todo: ADDING THIS MAKES 100ms ping and without it is 0ms??? what
-    for (_, _, encoder, _) in &mut players {
+    for (_, _, encoder, ..) in &mut players {
         encoder.clear();
     }
 
@@ -91,7 +105,7 @@ pub fn ingress(
         ServerEvent::RecvData { fd, data } => {
             trace!("got data: {data:?}");
             let id = *fd_lookup.get(&fd).expect("player with fd not found");
-            let (login_state, decoder, encoder, _) =
+            let (login_state, decoder, encoder, _, mut pose) =
                 players.get_mut(id).expect("player with fd not found");
 
             decoder.queue_slice(data);
@@ -111,14 +125,31 @@ pub fn ingress(
                         sender.despawn(id);
                     }
                     LoginState::Login => {
-                        process_login(id, login_state, &frame, encoder, &global, &mut sender)
-                            .unwrap();
+                        process_login(
+                            id,
+                            login_state,
+                            &frame,
+                            encoder,
+                            decoder,
+                            &global,
+                            &mut sender,
+                        )
+                        .unwrap();
                     }
-                    LoginState::Play => {}
+                    LoginState::TransitioningPlay | LoginState::Play => {
+                        // we got a play packet, so we are now in play state
+                        *login_state = LoginState::Play;
+                        // println!("PAXKETTTTTTTTTTTTTT");
+                        if let Some(pose) = &mut pose {
+                            crate::packets::switch(frame, &global, &mut sender, pose).unwrap();
+                        }
+                    }
                 }
             }
         }
     });
+
+    // this is important so broadcast order is not before player gets change to play
 }
 
 fn process_handshake(login_state: &mut LoginState, packet: &PacketFrame) -> anyhow::Result<()> {
@@ -145,6 +176,7 @@ fn process_login(
     login_state: &mut LoginState,
     packet: &PacketFrame,
     encoder: &mut LocalEncoder,
+    decoder: &mut DecodeBuffer,
     global: &Global,
     sender: &mut IngressSender,
 ) -> anyhow::Result<()> {
@@ -164,6 +196,7 @@ fn process_login(
     encoder.append(&pkt, global)?;
 
     encoder.set_compression(global.shared.compression_level);
+    decoder.set_compression(global.shared.compression_level);
 
     let pkt = login::LoginSuccessS2c {
         uuid,
@@ -178,7 +211,7 @@ fn process_login(
     let username = Box::from(username);
 
     // todo: impl rest
-    *login_state = LoginState::Play;
+    *login_state = LoginState::TransitioningPlay;
 
     sender.send(PlayerInit {
         entity: id,

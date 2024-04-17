@@ -7,6 +7,7 @@ use std::{
 
 use anyhow::Context;
 use arrayvec::CapacityError;
+use bytes::Buf;
 use evenio::prelude::Component;
 use libc::iovec;
 use sha2::Digest;
@@ -100,20 +101,26 @@ impl ServerDef for Server {
         self.server.allocate_buffers(buffers);
     }
 
-    fn write<'a>(&mut self, global: &mut Global, writers: impl Iterator<Item = RefreshItem<'a>>) {
-        self.server.write(global, writers);
-    }
-
-    fn broadcast(&mut self, buf: &BufRef, fds: impl Iterator<Item = Fd>) {
-        self.server.broadcast(buf, fds);
-    }
-
     fn submit_events(&mut self) {
         self.server.submit_events();
     }
+
+    /// Impl with local sends BEFORE broadcasting
+    fn write_all<'a>(
+        &mut self,
+        global: &mut Global,
+        broadcast: &'a BufRef,
+        writers: impl Iterator<Item = RefreshItem<'a>>,
+    ) {
+        self.server.write_all(global, broadcast, writers);
+    }
 }
 
-pub type RefreshItem<'a> = (&'a BufRef, Fd);
+pub struct RefreshItem<'a> {
+    pub local: &'a BufRef,
+    pub fd: Fd,
+    pub broadcast: bool,
+}
 
 pub trait ServerDef {
     fn new(address: impl ToSocketAddrs) -> anyhow::Result<Self>
@@ -124,9 +131,12 @@ pub trait ServerDef {
     // todo:make unsafe
     fn allocate_buffers(&mut self, buffers: &[iovec]);
 
-    fn write<'a>(&mut self, global: &mut Global, writers: impl Iterator<Item = RefreshItem<'a>>);
-
-    fn broadcast(&mut self, buf: &BufRef, fds: impl Iterator<Item = Fd>);
+    fn write_all<'a>(
+        &mut self,
+        global: &mut Global,
+        broadcast: &'a BufRef,
+        writers: impl Iterator<Item = RefreshItem<'a>>,
+    );
 
     fn submit_events(&mut self);
 }
@@ -146,14 +156,15 @@ impl ServerDef for NotImplemented {
     }
 
     fn allocate_buffers(&mut self, _buffers: &[iovec]) {
-        todo!()
-    }
-
-    fn write<'a>(&mut self, _global: &mut Global, _writers: impl Iterator<Item = RefreshItem<'a>>) {
         unimplemented!("not implemented; use Linux")
     }
 
-    fn broadcast(&mut self, _buf: &BufRef, _fds: impl Iterator<Item = Fd>) {
+    fn write_all<'a>(
+        &mut self,
+        global: &mut Global,
+        broadcast: &'a BufRef,
+        writers: impl Iterator<Item = RefreshItem<'a>>,
+    ) {
         unimplemented!("not implemented; use Linux")
     }
 
@@ -189,6 +200,10 @@ pub struct LocalEncoder {
     /// The encoding buffer and logic
     enc: encoder::PacketEncoder,
 }
+
+// TODO: REMOVE
+unsafe impl Send for LocalEncoder {}
+unsafe impl Sync for LocalEncoder {}
 
 impl LocalEncoder {
     pub fn clear(&mut self) {

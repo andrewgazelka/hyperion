@@ -35,6 +35,7 @@ pub enum LoginState {
     Handshake,
     Status,
     Login,
+    TransitioningPlay,
     Play,
     Terminate,
 }
@@ -61,7 +62,15 @@ pub enum Vitals {
     },
 }
 
-#[derive(Component, Debug, Eq, PartialEq)]
+impl Vitals {
+    pub const ALIVE: Self = Self::Alive {
+        health: 20.0,
+        absorption: Absorption::DEFAULT,
+        regeneration: Regeneration::DEFAULT,
+    };
+}
+
+#[derive(Component, Debug, Eq, PartialEq, Default)]
 pub struct ImmuneStatus {
     pub until: i64,
 }
@@ -88,17 +97,17 @@ impl Vitals {
     /// Hurt the player by a given amount.
     pub fn hurt(&mut self, global: &Global, mut amount: f32, immune: &mut ImmuneStatus) {
         debug_assert!(amount.is_finite());
-        debug_assert!(amount > 0.0);
+        debug_assert!(amount >= 0.0);
 
         let tick = global.tick;
 
-        if global.tick < immune.until {
+        if tick < immune.until {
             return;
         }
 
         let max_hurt_resistant_time = global.max_hurt_resistant_time;
 
-        immune.until = tick + i64::from(max_hurt_resistant_time) / 2;
+        // immune.until = tick + i64::from(max_hurt_resistant_time) / 2;
 
         let Self::Alive {
             health, absorption, ..
@@ -116,6 +125,8 @@ impl Vitals {
                 return;
             }
         }
+
+        println!("reduced health to {health}");
 
         *health -= amount;
 

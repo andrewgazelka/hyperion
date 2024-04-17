@@ -314,12 +314,12 @@ pub fn player_join_world(
 
     broadcast.append_packet(&spawn_player).unwrap();
 
-    broadcast
-        .append_packet(&crate::packets::def::EntityEquipmentUpdateS2c {
-            entity_id: current_entity_id,
-            equipment: Cow::Borrowed(&equipment),
-        })
-        .unwrap();
+    // broadcast
+    //     .append_packet(&crate::packets::def::EntityEquipmentUpdateS2c {
+    //         entity_id: current_entity_id,
+    //         equipment: Cow::Borrowed(&equipment),
+    //     })
+    //     .unwrap();
 
     info!("Player {} joined the world", query.name);
 }

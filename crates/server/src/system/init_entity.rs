@@ -1,16 +1,19 @@
 use evenio::{
     entity::EntityId,
     event::{Insert, Receiver, Sender, Spawn},
+    fetch::Fetcher,
     prelude::Single,
 };
 use generator::EntityType;
 use rand_distr::{Distribution, LogNormal};
-use tracing::instrument;
+use tracing::{info, instrument};
 use valence_protocol::{ByteAngle, VarInt, Velocity};
 
 use crate::{
     components::{EntityReaction, FullEntityPose, MinecraftEntity, RunningSpeed, Uuid},
     events::InitEntity,
+    global::Global,
+    net::LocalEncoder,
     singleton::broadcast::BroadcastBuf,
     system::entity_position::PositionSyncMetadata,
 };
@@ -22,6 +25,8 @@ pub fn spawn_packet(
 ) -> valence_protocol::packets::play::EntitySpawnS2c {
     #[expect(clippy::cast_possible_wrap, reason = "wrapping is ok in this case")]
     let entity_id = VarInt(id.index().0 as i32);
+
+    info!("spawn packet for zombie with id {entity_id:?} pose {pose:?}");
 
     valence_protocol::packets::play::EntitySpawnS2c {
         entity_id,
@@ -39,6 +44,9 @@ pub fn spawn_packet(
 #[instrument(skip_all)]
 pub fn init_entity(
     r: Receiver<InitEntity>,
+    // encoders: Fetcher<(&mut LocalEncoder)>,
+    global: Single<&Global>,
+
     mut s: Sender<(
         Insert<FullEntityPose>,
         Insert<PositionSyncMetadata>,
@@ -66,6 +74,10 @@ pub fn init_entity(
     let pose = event.pose;
 
     let pkt = spawn_packet(id, uuid, &pose);
+
+    // for encoder in encoders {
+    //     encoder.append(&pkt, &global).unwrap();
+    // }
 
     broadcast.get_round_robin().append_packet(&pkt).unwrap();
 }

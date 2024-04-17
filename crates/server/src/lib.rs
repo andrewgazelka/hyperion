@@ -6,8 +6,6 @@
 #![feature(io_error_more)]
 #![expect(clippy::type_complexity, reason = "evenio uses a lot of complex types")]
 
-extern crate core;
-
 mod chunk;
 mod singleton;
 
@@ -170,7 +168,7 @@ impl Game {
         world.add_handler(system::init_player);
         world.add_handler(system::player_join_world);
         world.add_handler(system::player_kick);
-        world.add_handler(system::entity_spawn);
+        world.add_handler(system::init_entity);
         world.add_handler(system::entity_move_logic);
         world.add_handler(system::entity_detect_collisions);
         world.add_handler(system::sync_entity_position);
@@ -185,8 +183,9 @@ impl Game {
         world.add_handler(system::pkt_hand_swing);
 
         world.add_handler(system::generate_egress_packets);
-        world.add_handler(system::egress_broadcast);
-        world.add_handler(system::egress_local);
+
+        world.add_handler(system::egress);
+
         world.add_handler(system::keep_alive);
         world.add_handler(system::stats_message);
         world.add_handler(system::kill_all);
