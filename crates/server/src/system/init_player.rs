@@ -3,13 +3,13 @@ use tracing::{info, instrument};
 
 use crate::{
     components::{
-        AiTargetable, EntityReaction, FullEntityPose, InGameName, KeepAlive, Player, Uuid,
+        AiTargetable, EntityReaction, FullEntityPose, ImmuneStatus, InGameName, KeepAlive, Player,
+        Uuid, Vitals,
     },
     events::{PlayerInit, PlayerJoinWorld},
     system::entity_position::PositionSyncMetadata,
+    tracker::Prev,
 };
-use crate::components::{ImmuneStatus, Vitals};
-use crate::tracker::Prev;
 
 #[instrument(skip_all)]
 pub fn init_player(
@@ -53,10 +53,10 @@ pub fn init_player(
     s.insert(entity, Uuid::from(uuid));
     s.insert(entity, PositionSyncMetadata::default());
     s.insert(entity, KeepAlive::default());
-    
+
     s.insert(entity, Prev::from(Vitals::ALIVE));
     s.insert(entity, Vitals::ALIVE);
-    
+
     s.insert(entity, FullEntityPose::player());
     s.insert(entity, EntityReaction::default());
 

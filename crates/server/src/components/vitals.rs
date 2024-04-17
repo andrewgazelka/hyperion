@@ -28,9 +28,7 @@ pub struct Regeneration {
 }
 
 impl Regeneration {
-    pub const DEFAULT: Self = Self {
-        end_tick: 0,
-    };
+    pub const DEFAULT: Self = Self { end_tick: 0 };
 }
 
 impl Default for Regeneration {

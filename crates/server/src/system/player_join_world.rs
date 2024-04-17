@@ -313,7 +313,7 @@ pub fn player_join_world(
         .unwrap();
 
     broadcast.append_packet(&spawn_player).unwrap();
-    
+
     // broadcast
     //     .append_packet(&crate::packets::def::EntityEquipmentUpdateS2c {
     //         entity_id: current_entity_id,

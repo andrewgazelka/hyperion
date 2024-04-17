@@ -360,7 +360,7 @@ pub fn switch(
         }
         _ => {
             // info!("unknown packet id: 0x{:02X}", packet_id)
-        },
+        }
     }
 
     Ok(())

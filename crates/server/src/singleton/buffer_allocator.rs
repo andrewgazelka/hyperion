@@ -25,7 +25,6 @@ pub struct BufferAllocator {
 unsafe impl Send for BufferAllocator {}
 unsafe impl Sync for BufferAllocator {}
 
-
 impl BufferAllocator {
     pub fn obtain(&self) -> Option<BufRef> {
         let index = unsafe { &mut *self.inner.available.get() }.pop()?;

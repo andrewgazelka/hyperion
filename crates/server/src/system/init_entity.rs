@@ -1,9 +1,9 @@
 use evenio::{
     entity::EntityId,
     event::{Insert, Receiver, Sender, Spawn},
+    fetch::Fetcher,
     prelude::Single,
 };
-use evenio::fetch::Fetcher;
 use generator::EntityType;
 use rand_distr::{Distribution, LogNormal};
 use tracing::{info, instrument};
@@ -12,11 +12,11 @@ use valence_protocol::{ByteAngle, VarInt, Velocity};
 use crate::{
     components::{EntityReaction, FullEntityPose, MinecraftEntity, RunningSpeed, Uuid},
     events::InitEntity,
+    global::Global,
+    net::LocalEncoder,
     singleton::broadcast::BroadcastBuf,
     system::entity_position::PositionSyncMetadata,
 };
-use crate::global::Global;
-use crate::net::LocalEncoder;
 
 pub fn spawn_packet(
     id: EntityId,

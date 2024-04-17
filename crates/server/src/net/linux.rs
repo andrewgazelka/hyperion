@@ -12,9 +12,11 @@ use std::{
 };
 
 pub use io_uring::types::Fixed;
-use io_uring::{cqueue::buffer_select, squeue::SubmissionQueue, types::BufRingEntry, IoUring, squeue};
+use io_uring::{
+    cqueue::buffer_select, squeue, squeue::SubmissionQueue, types::BufRingEntry, IoUring,
+};
 use libc::iovec;
-use tracing::{error, trace, warn, info};
+use tracing::{error, info, trace, warn};
 
 use super::RefreshItem;
 use crate::{
@@ -298,7 +300,6 @@ impl ServerDef for LinuxServer {
 
                 self.write_raw(fd, location, len, idx);
             }
-
         });
         // self.server.write_all(global, broadcast, writers);
     }
@@ -314,8 +315,7 @@ const RECV_MARKER: u64 = 0b1 << 63;
 const SEND_MARKER: u64 = 0b1 << 62;
 
 impl LinuxServer {
-    fn write_all<'a>(&mut self, items: impl Iterator<Item = RefreshItem<'a>>) {
-    }
+    fn write_all<'a>(&mut self, items: impl Iterator<Item = RefreshItem<'a>>) {}
 
     /// # Safety
     /// The entry must be valid for the duration of the operation
