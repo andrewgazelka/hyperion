@@ -23,7 +23,7 @@ pub fn keep_alive(
             keep_alive.last_sent = Some(Instant::now());
             return;
         };
-        
+
         // if we haven't sent a keep alive packet in 5 seconds, and a keep alive hasn't already
         // been sent and hasn't been responded to, send one
         let elapsed = sent.elapsed();

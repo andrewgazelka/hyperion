@@ -23,7 +23,6 @@ pub struct KeepAlive {
     pub unresponded: bool,
 }
 
-
 /// A component that represents a Player. In the future, this should be broken up into multiple components.
 ///
 /// Why should it be broken up? The more things are broken up, the more we can take advantage of Rust borrowing rules.
@@ -173,7 +172,7 @@ pub struct FullEntityPose {
 impl FullEntityPose {
     pub fn player() -> Self {
         let position = Vec3::new(0.0, 70.0, 0.0);
-        
+
         Self {
             position,
             yaw: 0.0,

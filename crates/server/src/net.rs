@@ -12,10 +12,7 @@ use libc::iovec;
 use sha2::Digest;
 use valence_protocol::{uuid::Uuid, CompressionThreshold, Encode};
 
-use crate::{
-    global::Global,
-    singleton::buffer_allocator::{BufRef},
-};
+use crate::{global::Global, singleton::buffer_allocator::BufRef};
 
 #[cfg(target_os = "linux")]
 mod linux;
