@@ -20,16 +20,4 @@ pub fn egress_local(
     let encoders = encoders.iter().map(|(encoder, fd)| (encoder.buf(), *fd));
     server.write(&mut global, encoders);
     server.submit_events();
-    //    let compression = global.0.shared.compression_level;
-    //
-    //    connections
-    //        .par_iter_mut()
-    //        .for_each(|(connection, encoder)| {
-    //            let bytes = encoder.take(compression);
-    //            if bytes.is_empty() {
-    //                return;
-    //            }
-    //            trace!("about to send bytes {:?}", bytes.len());
-    //            let _ = connection.send(bytes);
-    //        });
 }
