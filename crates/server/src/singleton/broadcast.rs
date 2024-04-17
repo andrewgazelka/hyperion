@@ -113,7 +113,6 @@ impl<'a> AppendOnlyEncoder<'a> {
     where
         P: valence_protocol::Packet + Encode,
     {
-        println!("appending to broadcast packet {}", P::NAME);
         self.encoder.append_packet(pkt)
     }
 }

@@ -29,7 +29,6 @@ pub fn init_player(
         PlayerJoinWorld,
     )>,
 ) {
-    println!("yoooooo");
     // take ownership
     let event = EventMut::take(r.event);
 
@@ -60,6 +59,5 @@ pub fn init_player(
     s.insert(entity, FullEntityPose::player());
     s.insert(entity, EntityReaction::default());
 
-    println!("sending player join world");
     s.send(PlayerJoinWorld { target: entity });
 }

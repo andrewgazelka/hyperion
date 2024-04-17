@@ -71,6 +71,7 @@ impl BufRef {
 
 impl Drop for BufRef {
     fn drop(&mut self) {
+        self.clear();
         unsafe { &mut *self.allocator.available.get() }.push(self.index);
     }
 }

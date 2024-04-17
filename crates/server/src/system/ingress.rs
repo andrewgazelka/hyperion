@@ -77,7 +77,6 @@ pub fn ingress(
 
     server.drain(|event| match event {
         ServerEvent::AddPlayer { fd } => {
-            println!("add player");
             let new_player = sender.spawn();
             sender.insert(new_player, LoginState::Handshake);
             sender.insert(new_player, DecodeBuffer::default());
@@ -137,9 +136,7 @@ pub fn ingress(
                         .unwrap();
                     }
                     LoginState::TransitioningPlay | LoginState::Play => {
-                        // we got a play packet, so we are now in play state
                         *login_state = LoginState::Play;
-                        // println!("PAXKETTTTTTTTTTTTTT");
                         if let Some(pose) = &mut pose {
                             crate::packets::switch(frame, &global, &mut sender, pose).unwrap();
                         }
@@ -235,8 +232,6 @@ fn process_status(
     match packet.id {
         packets::status::QueryRequestC2s::ID => {
             let query_request: packets::status::QueryRequestC2s = packet.decode()?;
-
-            println!("query request: {query_request:?}... responding");
 
             // https://wiki.vg/Server_List_Ping#Response
             let json = json!({

@@ -98,7 +98,6 @@ impl ServerDef for LinuxServer {
         let listener = TcpListener::bind(address)?;
 
         let addr = listener.local_addr()?;
-        println!("starting on {addr:?}");
 
         // TODO: Try to use defer taskrun
         let mut uring = IoUring::builder()
@@ -263,7 +262,6 @@ impl ServerDef for LinuxServer {
     }
 
     fn allocate_buffers(&mut self, buffers: &[iovec]) {
-        println!("allocate buffers");
         unsafe { self.register_buffers(buffers) };
     }
 
@@ -285,12 +283,6 @@ impl ServerDef for LinuxServer {
 
             let local_len = local.len();
             if local_len != 0 {
-                if local_len < 1024 {
-                    let bytes: Bytes = local.iter().copied().collect();
-
-                    println!("writing {bytes:?}");
-                }
-
                 let location = local.as_ptr();
                 let idx = local.index();
                 let len = local_len as u32;
@@ -300,14 +292,11 @@ impl ServerDef for LinuxServer {
 
             let broadcast_len = broadcast_buf.len();
             if broadcast_len != 0 && broadcast {
-                info!("broadcasting");
                 let location = broadcast_buf.as_ptr();
                 let idx = broadcast_buf.index();
                 let len = broadcast_len as u32;
 
                 self.write_raw(fd, location, len, idx);
-            } else {
-                info!("not broadcasting");
             }
         });
     }
@@ -396,7 +385,6 @@ impl LinuxServer {
     /// # Safety
     /// buffers must be valid
     pub unsafe fn register_buffers(&mut self, buffers: &[iovec]) {
-        // println!("registering buffers {:?}", buffers);
         self.uring.submitter().register_buffers(buffers).unwrap();
     }
 
