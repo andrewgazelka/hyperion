@@ -6,7 +6,6 @@ use crate::{
     events::{InitPlayer, PlayerJoinWorld},
     net::LocalEncoder,
     system::entity_position::PositionSyncMetadata,
-    tracker::Delta,
 };
 
 #[instrument(skip_all)]

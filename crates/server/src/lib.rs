@@ -26,7 +26,7 @@ use signal_hook::iterator::Signals;
 use singleton::bounding_box;
 use spin::Lazy;
 use tracing::{debug, error, info, instrument, trace, warn};
-use valence_protocol::{CompressionThreshold, Hand};
+use valence_protocol::CompressionThreshold;
 
 use crate::{
     components::Vitals,
@@ -38,7 +38,6 @@ use crate::{
         player_aabb_lookup::PlayerBoundingBoxes, player_id_lookup::PlayerIdLookup,
         player_uuid_lookup::PlayerUuidLookup,
     },
-    tracker::Delta,
 };
 
 mod components;

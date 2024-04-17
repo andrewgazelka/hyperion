@@ -1,18 +1,10 @@
 use evenio::prelude::*;
 use tracing::instrument;
-use valence_protocol::{
-    packets::play,
-    sound::{SoundCategory, SoundId},
-    VarInt,
-};
+use valence_protocol::{packets::play, VarInt};
 use valence_text::{Color, IntoText};
 
 use crate::{
-    components::{FullEntityPose, Player},
-    events::Gametick,
-    global::Global,
-    net::LocalEncoder,
-    tracker::Delta,
+    components::FullEntityPose, events::Gametick, global::Global, net::LocalEncoder, tracker::Prev,
     Vitals,
 };
 
@@ -26,7 +18,8 @@ const SPECTATOR: f32 = 3.0;
 pub struct SyncPlayersQuery<'a> {
     id: EntityId,
     pose: &'a FullEntityPose,
-    vitals: &'a mut Delta<Vitals>,
+    prev_vitals: &'a mut Prev<Vitals>,
+    vitals: &'a mut Vitals,
     encoder: &'a mut LocalEncoder,
 }
 
@@ -43,20 +36,23 @@ pub fn sync_players(
         let vitals = query.vitals;
         let encoder = query.encoder;
 
-        match (vitals.previous(), vitals.current()) {
+        let previous = &mut **query.prev_vitals;
+        let current = vitals;
+
+        match (previous, current) {
             (
                 Vitals::Alive {
                     health: previous_health,
-                    absorption: previous_absorption,
                     regeneration: previous_regeneration,
+                    ..
                 },
                 Vitals::Alive {
                     health: current_health,
-                    absorption: current_absorption,
                     regeneration: current_regeneration,
+                    ..
                 },
             ) => {
-                if (previous_health - current_health).abs() > f32::EPSILON {
+                if (*previous_health - *current_health).abs() > f32::EPSILON {
                     // TODO: Sync absorption hearts
 
                     let _ = encoder.append(
@@ -116,7 +112,7 @@ pub fn sync_players(
                     &global,
                 );
 
-                let seconds_remaining = (respawn_tick - tick) as f32 / 20.0;
+                let seconds_remaining = (*respawn_tick - tick) as f32 / 20.0;
                 let _ = encoder.append(
                     &play::SubtitleS2c {
                         subtitle_text: ("Respawning in ".into_text()
@@ -161,7 +157,7 @@ pub fn sync_players(
                 // TODO: Update absorption and regeneration
             }
             (Vitals::Dead { .. }, Vitals::Dead { respawn_tick }) => {
-                let seconds_remaining = (respawn_tick - tick) as f32 / 20.0;
+                let seconds_remaining = (*respawn_tick - tick) as f32 / 20.0;
                 let _ = encoder.append(
                     &play::SubtitleS2c {
                         subtitle_text: ("Respawning in ".into_text()
@@ -174,6 +170,7 @@ pub fn sync_players(
             }
         }
 
-        vitals.update_previous();
+        // todo: add
+        // vitals.update_previous();
     });
 }

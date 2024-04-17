@@ -2,14 +2,11 @@ use evenio::prelude::*;
 use tracing::instrument;
 
 use crate::{
-    components::{
-        vitals::{Absorption, Regeneration},
-        Player,
-    },
+    components::vitals::{Absorption, Regeneration},
     events::Gametick,
     global::Global,
     tracker::Prev,
-    Delta, Vitals,
+    Vitals,
 };
 
 /// Interval to regenerate half a heart from having a full hunger bar measured in ticks. All players
@@ -34,7 +31,7 @@ pub fn update_health(
 ) {
     let tick = global.tick;
     let hunger = tick % HUNGER_INTERVAL == 0;
-    let regeneration = tick % REGENERATION_INTERVAL == 0;
+    // let regeneration = tick % REGENERATION_INTERVAL == 0;
 
     fetcher.iter_mut().for_each(|query| {
         **query.prev_vitals = *query.vitals;

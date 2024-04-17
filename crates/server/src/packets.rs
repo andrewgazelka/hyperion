@@ -1,5 +1,5 @@
 #![expect(
-    unused_variables,
+    unused,
     reason = "there are still many changes that need to be made to this file"
 )]
 #![allow(
@@ -276,7 +276,7 @@ fn chat_command(
 
 fn hand_swing(
     mut data: &[u8],
-    query: PacketSwitchQuery,
+    query: &PacketSwitchQuery,
     sender: &mut IngressSender,
 ) -> anyhow::Result<()> {
     let packet = play::HandSwingC2s::decode(&mut data)?;
@@ -316,7 +316,7 @@ fn player_interact_entity(
 }
 
 #[derive(Query)]
-struct PacketSwitchQuery<'a> {
+pub struct PacketSwitchQuery<'a> {
     id: EntityId,
     pose: &'a mut FullEntityPose,
     vitals: &'a mut Vitals,
@@ -337,7 +337,7 @@ pub fn switch(
     let data = &*data;
 
     match packet_id {
-        play::HandSwingC2s::ID => hand_swing(data, query, sender)?,
+        play::HandSwingC2s::ID => hand_swing(data, &query, sender)?,
         play::TeleportConfirmC2s::ID => confirm_teleport(data),
         // play::ClientSettingsC2s::ID => client_settings(data, player)?,
         play::CustomPayloadC2s::ID => custom_payload(data),

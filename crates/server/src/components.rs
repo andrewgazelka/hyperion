@@ -1,7 +1,7 @@
-use std::{num::NonZeroU64, sync::Arc, time::Instant};
+use std::time::Instant;
 
 use bvh::aabb::Aabb;
-use derive_more::{Deref, DerefMut, Display, From};
+use derive_more::{Deref, Display, From};
 use evenio::component::Component;
 use glam::Vec3;
 
@@ -101,9 +101,7 @@ impl Vitals {
         immune.until = tick + i64::from(max_hurt_resistant_time) / 2;
 
         let Self::Alive {
-            health,
-            absorption,
-            regeneration,
+            health, absorption, ..
         } = self
         else {
             return;

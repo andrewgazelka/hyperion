@@ -1,4 +1,4 @@
-use std::{borrow::Cow, collections::BTreeSet, io::Write, ops::Deref};
+use std::{borrow::Cow, collections::BTreeSet, io::Write};
 
 use anyhow::Context;
 use chunk::{
@@ -139,7 +139,7 @@ pub fn player_join_world(
 
     let entries = &[play::player_list_s2c::PlayerListEntry {
         player_uuid: query.uuid.0,
-        username: &query.name,
+        username: query.name,
         properties: Cow::Borrowed(&[]),
         chat_data: None,
         listed: true,
@@ -220,7 +220,7 @@ pub fn player_join_world(
         )
         .unwrap();
 
-    let current_name = &*query.name;
+    let current_name = query.name;
 
     broadcast
         .append_packet(&play::TeamS2c {
