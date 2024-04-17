@@ -333,7 +333,7 @@ pub fn switch(
     raw: PacketFrame,
     global: &Global,
     sender: &mut IngressSender,
-    pose: &FullEntityPose,
+    pose: &mut FullEntityPose,
     // query: PacketSwitchQuery,
 ) -> anyhow::Result<()> {
     let packet_id = raw.id;
@@ -345,9 +345,9 @@ pub fn switch(
         // play::TeleportConfirmC2s::ID => confirm_teleport(data),
         // // play::ClientSettingsC2s::ID => client_settings(data, player)?,
         // play::CustomPayloadC2s::ID => custom_payload(data),
-        // play::FullC2s::ID => full(data, query.pose)?,
-        // play::PositionAndOnGroundC2s::ID => position_and_on_ground(data, query.pose)?,
-        // play::LookAndOnGroundC2s::ID => look_and_on_ground(data, query.pose)?,
+        play::FullC2s::ID => full(data, pose)?,
+        play::PositionAndOnGroundC2s::ID => position_and_on_ground(data, pose)?,
+        play::LookAndOnGroundC2s::ID => look_and_on_ground(data, pose)?,
         // play::ClientCommandC2s::ID => player_command(data),
         // play::UpdatePlayerAbilitiesC2s::ID => update_player_abilities(data)?,
         // play::UpdateSelectedSlotC2s::ID => update_selected_slot(data)?,

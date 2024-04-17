@@ -61,7 +61,15 @@ pub enum Vitals {
     },
 }
 
-#[derive(Component, Debug, Eq, PartialEq)]
+impl Vitals {
+    pub const ALIVE: Self = Self::Alive {
+        health: 20.0,
+        absorption: Absorption::DEFAULT,
+        regeneration: Regeneration::DEFAULT,
+    };
+}
+
+#[derive(Component, Debug, Eq, PartialEq, Default)]
 pub struct ImmuneStatus {
     pub until: i64,
 }

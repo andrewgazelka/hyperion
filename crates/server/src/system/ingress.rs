@@ -65,7 +65,7 @@ pub fn ingress(
         &mut DecodeBuffer,
         &mut LocalEncoder,
         &Fd,
-        Option<&FullEntityPose>,
+        Option<&mut FullEntityPose>,
     )>,
     mut sender: IngressSender,
 ) {
@@ -106,7 +106,7 @@ pub fn ingress(
         ServerEvent::RecvData { fd, data } => {
             trace!("got data: {data:?}");
             let id = *fd_lookup.get(&fd).expect("player with fd not found");
-            let (login_state, decoder, encoder, _, pose) =
+            let (login_state, decoder, encoder, _, mut pose) =
                 players.get_mut(id).expect("player with fd not found");
 
             decoder.queue_slice(data);
@@ -139,8 +139,9 @@ pub fn ingress(
                     }
                     LoginState::Play => {
                         // println!("PAXKETTTTTTTTTTTTTT");
-                        let pose = pose.unwrap();
-                        crate::packets::switch(frame, &global, &mut sender, pose).unwrap();
+                        if let Some(pose) = &mut pose {
+                            crate::packets::switch(frame, &global, &mut sender, pose).unwrap();
+                        }
                     }
                 }
             }
