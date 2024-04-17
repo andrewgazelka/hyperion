@@ -99,7 +99,7 @@ pub fn player_join_world(
 
     info!("got cached data");
 
-    let broadcast = broadcast.get_round_robin();
+    let mut broadcast = broadcast.get_round_robin();
 
     let query = r.query;
 
@@ -313,13 +313,6 @@ pub fn player_join_world(
         .unwrap();
 
     broadcast.append_packet(&spawn_player).unwrap();
-
-    // broadcast
-    //     .append_packet(&crate::packets::def::EntityEquipmentUpdateS2c {
-    //         entity_id: current_entity_id,
-    //         equipment: Cow::Borrowed(&equipment),
-    //     })
-    //     .unwrap();
 
     info!("Player {} joined the world", query.name);
 }

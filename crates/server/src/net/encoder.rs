@@ -12,6 +12,15 @@ pub struct PacketEncoder {
     threshold: CompressionThreshold,
 }
 
+impl std::fmt::Debug for PacketEncoder {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PacketEncoder")
+            .field("buf", &self.buf)
+            .field("threshold", &self.threshold)
+            .finish()
+    }
+}
+
 impl PacketEncoder {
     pub fn new(threshold: CompressionThreshold, buf: BufRef) -> Self {
         Self {

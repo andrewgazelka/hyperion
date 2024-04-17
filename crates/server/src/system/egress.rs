@@ -1,3 +1,4 @@
+use bytes::Bytes;
 use evenio::{
     event::Receiver,
     fetch::{Fetcher, Single},
@@ -25,6 +26,21 @@ pub fn egress(
     mut broadcast: Single<&mut BroadcastBuf>,
 ) {
     let mut broadcast_buf = bufs.obtain().unwrap();
+
+    println!("broadcast buf: {broadcast_buf:?}");
+
+    // print player bufs
+    for (encoder, fd, state) in encoders.iter() {
+        println!("encoder: {encoder:?}");
+
+        if encoder.buf().len() < 1024 {
+            let bytes: Bytes = encoder.buf().iter().copied().collect();
+
+            println!("encoder before: {bytes:?}");
+            continue;
+        }
+    }
+
     broadcast_buf.clear();
 
     broadcast.drain(|bytes| {
