@@ -12,7 +12,10 @@ use libc::iovec;
 use sha2::Digest;
 use valence_protocol::{uuid::Uuid, CompressionThreshold, Encode};
 
-use crate::{global::Global, singleton::buffer_allocator::BufRef};
+use crate::{
+    global::Global,
+    singleton::buffer_allocator::{BufRef},
+};
 
 #[cfg(target_os = "linux")]
 mod linux;
@@ -57,6 +60,7 @@ impl PartialEq for Fd {
 #[cfg(target_os = "linux")]
 impl Eq for Fd {}
 
+#[allow(unused, reason = "these are used on linux")]
 pub enum ServerEvent<'a> {
     AddPlayer { fd: Fd },
     RemovePlayer { fd: Fd },
@@ -103,6 +107,10 @@ impl ServerDef for Server {
         self.server.write(global, writers);
     }
 
+    fn broadcast(&mut self, buf: &BufRef, fds: impl Iterator<Item = Fd>) {
+        self.server.broadcast(buf, fds);
+    }
+
     fn submit_events(&mut self) {
         self.server.submit_events();
     }
@@ -120,6 +128,8 @@ pub trait ServerDef {
     fn allocate_buffers(&mut self, buffers: &[iovec]);
 
     fn write<'a>(&mut self, global: &mut Global, writers: impl Iterator<Item = RefreshItem<'a>>);
+
+    fn broadcast(&mut self, buf: &BufRef, fds: impl Iterator<Item = Fd>);
 
     fn submit_events(&mut self);
 }
@@ -143,6 +153,10 @@ impl ServerDef for NotImplemented {
     }
 
     fn write<'a>(&mut self, _global: &mut Global, _writers: impl Iterator<Item = RefreshItem<'a>>) {
+        unimplemented!("not implemented; use Linux")
+    }
+
+    fn broadcast(&mut self, _buf: &BufRef, _fds: impl Iterator<Item = Fd>) {
         unimplemented!("not implemented; use Linux")
     }
 
@@ -192,6 +206,10 @@ impl LocalEncoder {
         self.enc.append_packet(pkt)?;
 
         Ok(())
+    }
+
+    pub fn set_compression(&mut self, compression_level: CompressionThreshold) {
+        self.enc.set_compression(compression_level);
     }
 
     pub fn new(buffer: BufRef) -> Self {

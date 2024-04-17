@@ -16,12 +16,13 @@ pub mod vitals;
 #[derive(Component, Deref, From, Display)]
 pub struct InGameName(Box<str>);
 
-#[derive(Component)]
+#[derive(Component, Default)]
 pub struct KeepAlive {
-    pub last_sent: Instant,
+    pub last_sent: Option<Instant>,
     /// Set to true if a keep alive has been sent to the client and the client hasn't responded.
     pub unresponded: bool,
 }
+
 
 /// A component that represents a Player. In the future, this should be broken up into multiple components.
 ///
@@ -167,6 +168,19 @@ pub struct FullEntityPose {
 
     /// The bounding box of the entity.
     pub bounding: Aabb,
+}
+
+impl FullEntityPose {
+    pub fn player() -> Self {
+        let position = Vec3::new(0.0, 70.0, 0.0);
+        
+        Self {
+            position,
+            yaw: 0.0,
+            pitch: 0.0,
+            bounding: Aabb::create(position, 0.6, 1.8),
+        }
+    }
 }
 
 impl FullEntityPose {

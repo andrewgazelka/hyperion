@@ -82,6 +82,7 @@ pub fn player_join_world(
     mut broadcast: Single<&mut BroadcastBuf>,
 ) {
     static CACHED_DATA: once_cell::sync::OnceCell<bytes::Bytes> = once_cell::sync::OnceCell::new();
+    println!("PlayerJoinWorld");
 
     let compression_level = global.0.shared.compression_level;
 
@@ -95,6 +96,8 @@ pub fn player_join_world(
         let bytes = encoder.take();
         bytes.freeze()
     });
+
+    info!("got cached data");
 
     let broadcast = broadcast.get_round_robin();
 
@@ -160,6 +163,8 @@ pub fn player_join_world(
     let encoder = query.encoder;
 
     encoder.append_raw(cached_data, &global).unwrap();
+
+    info!("appending cached data");
 
     encoder
         .append(
@@ -269,6 +274,8 @@ pub fn player_join_world(
             yaw: ByteAngle::from_degrees(pose.yaw),
             pitch: ByteAngle::from_degrees(pose.pitch),
         };
+
+        println!("pose is {pose:?}");
         encoder.append(&pkt, &global).unwrap();
 
         let pkt = crate::packets::def::EntityEquipmentUpdateS2c {
@@ -655,6 +662,8 @@ fn inner(encoder: &mut PacketEncoder) -> anyhow::Result<()> {
         sky_light_arrays: Cow::Owned(sky_light_arrays),
         block_light_arrays: Cow::Borrowed(&[]),
     };
+
+
     for x in -16..=16 {
         for z in -16..=16 {
             pkt.pos = ChunkPos::new(x, z);

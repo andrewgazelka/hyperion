@@ -12,12 +12,11 @@ pub struct InitEntity {
 }
 
 #[derive(Event)]
-pub struct InitPlayer {
-    #[event(target)]
+pub struct PlayerInit {
     pub entity: EntityId,
 
     /// The name of the player i.e., `Emerald_Explorer`.
-    pub name: Box<str>,
+    pub username: Box<str>,
     pub uuid: uuid::Uuid,
     pub pose: FullEntityPose,
 }

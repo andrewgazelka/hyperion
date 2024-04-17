@@ -20,6 +20,7 @@ use super::RefreshItem;
 use crate::{
     global::Global,
     net::{Fd, ServerDef, ServerEvent},
+    singleton::buffer_allocator::BufRef,
 };
 
 /// Default MiB/s threshold before we start to limit the sending of some packets.
@@ -261,6 +262,25 @@ impl ServerDef for LinuxServer {
 
     fn write<'a>(&mut self, _global: &mut Global, items: impl Iterator<Item = RefreshItem<'a>>) {
         self.write_all(items);
+    }
+
+    fn broadcast(&mut self, buf: &BufRef, fds: impl Iterator<Item = Fd>) {
+        if buf.len() == 0 {
+            return;
+        }
+
+        let location = buf.as_ptr();
+        let idx = buf.index();
+        let len = buf.len() as u32;
+
+        if len == 0 {
+            return;
+        }
+
+        fds.for_each(|fd| {
+            let fd = fd.0;
+            self.write_raw(fd, location, len, idx);
+        });
     }
 
     fn submit_events(&mut self) {

@@ -19,9 +19,14 @@ pub fn keep_alive(
     mut s: Sender<KickPlayer>,
 ) {
     fetcher.iter_mut().for_each(|(id, keep_alive, encoder)| {
+        let Some(sent) = &mut keep_alive.last_sent else {
+            keep_alive.last_sent = Some(Instant::now());
+            return;
+        };
+        
         // if we haven't sent a keep alive packet in 5 seconds, and a keep alive hasn't already
         // been sent and hasn't been responded to, send one
-        let elapsed = keep_alive.last_sent.elapsed();
+        let elapsed = sent.elapsed();
 
         if elapsed > global.keep_alive_timeout {
             s.send(KickPlayer {
@@ -32,7 +37,7 @@ pub fn keep_alive(
         }
 
         if !keep_alive.unresponded && elapsed.as_secs() >= 5 {
-            keep_alive.last_sent = Instant::now();
+            *sent = Instant::now();
 
             // todo: handle and disconnect
             send_keep_alive(encoder, &global).unwrap();

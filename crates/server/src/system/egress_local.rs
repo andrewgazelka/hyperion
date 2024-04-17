@@ -7,16 +7,18 @@ use tracing::instrument;
 use crate::{
     events::Egress,
     global::Global,
-    net::{LocalEncoder, Server, ServerDef},
+    net::{Fd, LocalEncoder, Server, ServerDef},
 };
 
 #[instrument(skip_all, level = "trace")]
 pub fn egress_local(
     _: Receiver<Egress>,
-    _connections: Fetcher<&mut LocalEncoder>,
-    _global: Single<&Global>,
+    mut global: Single<&mut Global>,
+    encoders: Fetcher<(&LocalEncoder, &Fd)>,
     mut server: Single<&mut Server>,
 ) {
+    let encoders = encoders.iter().map(|(encoder, fd)| (encoder.buf(), *fd));
+    server.write(&mut global, encoders);
     server.submit_events();
     //    let compression = global.0.shared.compression_level;
     //

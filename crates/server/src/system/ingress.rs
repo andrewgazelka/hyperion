@@ -3,15 +3,16 @@ use std::borrow::Cow;
 use evenio::{
     event::{Despawn, Insert, Receiver, Sender, Spawn},
     fetch::{Fetcher, Single},
+    prelude::EntityId,
 };
 use serde_json::json;
-use tracing::{info, instrument, warn};
+use tracing::{info, instrument, trace, warn};
 use uuid::Uuid;
 use valence_protocol::{
     decode::PacketFrame,
     packets,
-    packets::{handshaking::handshake_c2s::HandshakeNextState, login},
-    Bounded, Packet,
+    packets::{handshaking::handshake_c2s::HandshakeNextState, login, login::LoginCompressionS2c},
+    Bounded, Packet, VarInt,
 };
 
 use crate::{
@@ -23,12 +24,25 @@ use crate::{
 mod player_packet_buffer;
 
 use crate::{
-    components::LoginState,
-    events::Gametick,
+    components::{FullEntityPose, LoginState},
+    events::{Gametick, PlayerInit},
     net::{Fd, LocalEncoder, MINECRAFT_VERSION, PROTOCOL_VERSION},
     singleton::buffer_allocator::BufferAllocator,
     system::ingress::player_packet_buffer::DecodeBuffer,
 };
+
+type IngressSender<'a> = Sender<
+    'a,
+    (
+        Spawn,
+        Insert<LoginState>,
+        Insert<DecodeBuffer>,
+        Insert<LocalEncoder>,
+        Insert<Fd>,
+        PlayerInit,
+        Despawn,
+    ),
+>;
 
 // The `Receiver<Tick>` parameter tells our handler to listen for the `Tick` event.
 #[instrument(skip_all, level = "trace")]
@@ -39,14 +53,7 @@ pub fn ingress(
     mut server: Single<&mut Server>,
     buffers: Single<&mut BufferAllocator>,
     mut players: Fetcher<(&mut LoginState, &mut DecodeBuffer, &mut LocalEncoder, &Fd)>,
-    mut sender: Sender<(
-        Spawn,
-        Insert<LoginState>,
-        Insert<DecodeBuffer>,
-        Insert<LocalEncoder>,
-        Insert<Fd>,
-        Despawn,
-    )>,
+    mut sender: IngressSender,
 ) {
     // clear encoders:todo: kinda jank
     // todo: ADDING THIS MAKES 100ms ping and without it is 0ms??? what
@@ -82,7 +89,7 @@ pub fn ingress(
             info!("removed a player with fd {:?}", fd);
         }
         ServerEvent::RecvData { fd, data } => {
-            info!("got data: {data:?}");
+            trace!("got data: {data:?}");
             let id = *fd_lookup.get(&fd).expect("player with fd not found");
             let (login_state, decoder, encoder, _) =
                 players.get_mut(id).expect("player with fd not found");
@@ -104,21 +111,14 @@ pub fn ingress(
                         sender.despawn(id);
                     }
                     LoginState::Login => {
-                        process_login(login_state, &frame, encoder, &global).unwrap();
+                        process_login(id, login_state, &frame, encoder, &global, &mut sender)
+                            .unwrap();
                     }
-                    LoginState::Play => {
-                        unimplemented!("not implemented yet");
-                    }
+                    LoginState::Play => {}
                 }
             }
         }
     });
-
-    let encoders = players
-        .iter_mut()
-        .map(|(_, _, encoder, fd)| (encoder.buf(), *fd));
-
-    server.write(&mut global, encoders);
 }
 
 fn process_handshake(login_state: &mut LoginState, packet: &PacketFrame) -> anyhow::Result<()> {
@@ -141,29 +141,51 @@ fn process_handshake(login_state: &mut LoginState, packet: &PacketFrame) -> anyh
 }
 
 fn process_login(
+    id: EntityId,
     login_state: &mut LoginState,
     packet: &PacketFrame,
     encoder: &mut LocalEncoder,
     global: &Global,
+    sender: &mut IngressSender,
 ) -> anyhow::Result<()> {
     debug_assert!(*login_state == LoginState::Login);
 
-    let login: login::LoginHelloC2s = packet.decode()?;
+    let login::LoginHelloC2s { username, .. } = packet.decode()?;
 
-    info!("login packet: {login:?}");
+    info!("received LoginHello for {username}");
 
-    // login success
+    let username = username.0;
+    let uuid = Uuid::new_v4();
+
+    let pkt = LoginCompressionS2c {
+        threshold: VarInt(global.shared.compression_level.0),
+    };
+
+    encoder.append(&pkt, global)?;
+
+    encoder.set_compression(global.shared.compression_level);
 
     let pkt = login::LoginSuccessS2c {
-        uuid: Uuid::new_v4(),
-        username: Bounded("Bob"),
+        uuid,
+        username: Bounded(username),
+
+        // todo: do any properties make sense to include?
         properties: Cow::default(),
     };
 
     encoder.append(&pkt, global)?;
 
+    let username = Box::from(username);
+
     // todo: impl rest
-    *login_state = LoginState::Terminate;
+    *login_state = LoginState::Play;
+
+    sender.send(PlayerInit {
+        entity: id,
+        username,
+        uuid,
+        pose: FullEntityPose::player(),
+    });
 
     Ok(())
 }
