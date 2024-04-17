@@ -173,7 +173,7 @@ impl ServerDef for LinuxServer {
         })
     }
 
-    fn drain(&mut self, mut f: impl FnMut(ServerEvent)) {
+    fn drain(&mut self, mut f: impl FnMut(ServerEvent)) -> std::io::Result<()> {
         let (_, mut submission, mut completion) = self.uring.split();
         completion.sync();
         if completion.overflow() > 0 {
@@ -206,9 +206,12 @@ impl ServerDef for LinuxServer {
                     match result.cmp(&0) {
                         cmp::Ordering::Less => {
                             error!("there was an error in write: {}", result);
+                            return Err(std::io::Error::last_os_error());
                         }
                         cmp::Ordering::Equal => {
                             // A result of 0 indicates that the client closed the connection gracefully
+
+                            info!("disconnected during send");
                             f(ServerEvent::RemovePlayer { fd: Fd(fd) });
                             // Perform any necessary cleanup for the disconnected client
                         }
@@ -228,9 +231,12 @@ impl ServerDef for LinuxServer {
                     }
 
                     if disconnected {
+                        info!("disconnected during recv");
                         f(ServerEvent::RemovePlayer { fd: Fd(fd) });
                     } else if event.result() < 0 {
+                        // -104
                         error!("there was an error in recv: {}", event.result());
+                        return Err(std::io::Error::last_os_error());
                     } else {
                         let bytes_received = event.result() as usize;
                         let buffer_id =
@@ -259,6 +265,8 @@ impl ServerDef for LinuxServer {
         unsafe {
             (*self.c2s_shared_tail).store(self.c2s_local_tail, Ordering::Relaxed);
         }
+
+        Ok(())
     }
 
     fn allocate_buffers(&mut self, buffers: &[iovec]) {

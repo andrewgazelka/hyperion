@@ -75,76 +75,78 @@ pub fn ingress(
         encoder.clear();
     }
 
-    server.drain(|event| match event {
-        ServerEvent::AddPlayer { fd } => {
-            let new_player = sender.spawn();
-            sender.insert(new_player, LoginState::Handshake);
-            sender.insert(new_player, DecodeBuffer::default());
+    server
+        .drain(|event| match event {
+            ServerEvent::AddPlayer { fd } => {
+                let new_player = sender.spawn();
+                sender.insert(new_player, LoginState::Handshake);
+                sender.insert(new_player, DecodeBuffer::default());
 
-            let buffer = buffers.obtain().unwrap();
+                let buffer = buffers.obtain().unwrap();
 
-            sender.insert(new_player, LocalEncoder::new(buffer));
-            sender.insert(new_player, fd);
+                sender.insert(new_player, LocalEncoder::new(buffer));
+                sender.insert(new_player, fd);
 
-            fd_lookup.insert(fd, new_player);
+                fd_lookup.insert(fd, new_player);
 
-            global.set_needs_realloc();
+                global.set_needs_realloc();
 
-            info!("got a player with fd {:?}", fd);
-        }
-        ServerEvent::RemovePlayer { fd } => {
-            let Some(id) = fd_lookup.remove(&fd) else {
-                return;
-            };
+                info!("got a player with fd {:?}", fd);
+            }
+            ServerEvent::RemovePlayer { fd } => {
+                let Some(id) = fd_lookup.remove(&fd) else {
+                    return;
+                };
 
-            sender.despawn(id);
+                sender.despawn(id);
 
-            info!("removed a player with fd {:?}", fd);
-        }
-        ServerEvent::RecvData { fd, data } => {
-            trace!("got data: {data:?}");
-            let id = *fd_lookup.get(&fd).expect("player with fd not found");
-            let (login_state, decoder, encoder, _, mut pose) =
-                players.get_mut(id).expect("player with fd not found");
+                info!("removed a player with fd {:?}", fd);
+            }
+            ServerEvent::RecvData { fd, data } => {
+                trace!("got data: {data:?}");
+                let id = *fd_lookup.get(&fd).expect("player with fd not found");
+                let (login_state, decoder, encoder, _, mut pose) =
+                    players.get_mut(id).expect("player with fd not found");
 
-            decoder.queue_slice(data);
+                decoder.queue_slice(data);
 
-            while let Some(frame) = decoder.try_next_packet().unwrap() {
-                match *login_state {
-                    LoginState::Handshake => process_handshake(login_state, &frame).unwrap(),
-                    LoginState::Status => {
-                        process_status(login_state, &frame, encoder, &global).unwrap();
-                    }
-                    LoginState::Terminate => {
-                        // todo: does this properly terminate the connection? I don't think so probably
-                        let Some(id) = fd_lookup.remove(&fd) else {
-                            return;
-                        };
+                while let Some(frame) = decoder.try_next_packet().unwrap() {
+                    match *login_state {
+                        LoginState::Handshake => process_handshake(login_state, &frame).unwrap(),
+                        LoginState::Status => {
+                            process_status(login_state, &frame, encoder, &global).unwrap();
+                        }
+                        LoginState::Terminate => {
+                            // todo: does this properly terminate the connection? I don't think so probably
+                            let Some(id) = fd_lookup.remove(&fd) else {
+                                return;
+                            };
 
-                        sender.despawn(id);
-                    }
-                    LoginState::Login => {
-                        process_login(
-                            id,
-                            login_state,
-                            &frame,
-                            encoder,
-                            decoder,
-                            &global,
-                            &mut sender,
-                        )
-                        .unwrap();
-                    }
-                    LoginState::TransitioningPlay | LoginState::Play => {
-                        *login_state = LoginState::Play;
-                        if let Some(pose) = &mut pose {
-                            crate::packets::switch(frame, &global, &mut sender, pose).unwrap();
+                            sender.despawn(id);
+                        }
+                        LoginState::Login => {
+                            process_login(
+                                id,
+                                login_state,
+                                &frame,
+                                encoder,
+                                decoder,
+                                &global,
+                                &mut sender,
+                            )
+                            .unwrap();
+                        }
+                        LoginState::TransitioningPlay | LoginState::Play => {
+                            *login_state = LoginState::Play;
+                            if let Some(pose) = &mut pose {
+                                crate::packets::switch(frame, &global, &mut sender, pose).unwrap();
+                            }
                         }
                     }
                 }
             }
-        }
-    });
+        })
+        .unwrap();
 
     // this is important so broadcast order is not before player gets change to play
 }

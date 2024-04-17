@@ -93,8 +93,8 @@ impl ServerDef for Server {
         }
     }
 
-    fn drain(&mut self, f: impl FnMut(ServerEvent)) {
-        self.server.drain(f);
+    fn drain(&mut self, f: impl FnMut(ServerEvent)) -> std::io::Result<()> {
+        self.server.drain(f)
     }
 
     fn allocate_buffers(&mut self, buffers: &[iovec]) {
@@ -126,7 +126,7 @@ pub trait ServerDef {
     fn new(address: impl ToSocketAddrs) -> anyhow::Result<Self>
     where
         Self: Sized;
-    fn drain(&mut self, f: impl FnMut(ServerEvent));
+    fn drain(&mut self, f: impl FnMut(ServerEvent)) -> std::io::Result<()>;
 
     // todo:make unsafe
     fn allocate_buffers(&mut self, buffers: &[iovec]);
@@ -151,7 +151,7 @@ impl ServerDef for NotImplemented {
         unimplemented!("not implemented; use Linux")
     }
 
-    fn drain(&mut self, _f: impl FnMut(ServerEvent)) {
+    fn drain(&mut self, _f: impl FnMut(ServerEvent)) -> std::io::Result<()> {
         unimplemented!("not implemented; use Linux")
     }
 
