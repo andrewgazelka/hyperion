@@ -36,7 +36,6 @@ pub fn init_player(
     s.insert(entity, Player {
         last_keep_alive_sent: std::time::Instant::now(),
         unresponded_keep_alive: false,
-        ping: std::time::Duration::from_secs(1),
         name,
         locale: None,
         state: Tracker::default(),

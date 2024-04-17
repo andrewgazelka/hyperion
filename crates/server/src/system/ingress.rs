@@ -3,27 +3,25 @@ use evenio::{
     fetch::{Fetcher, Single},
 };
 use serde_json::json;
-use tracing::{field::debug, info, instrument, trace, warn};
+use tracing::{info, instrument, warn};
 use valence_protocol::{
-    decode::PacketFrame, packets, packets::handshaking::handshake_c2s::HandshakeNextState,
-    var_int::VarIntDecodeError, Decode, Packet, PacketDecoder, VarInt,
+    decode::PacketFrame, packets, packets::handshaking::handshake_c2s::HandshakeNextState, Packet,
 };
 
 use crate::{
     global::Global,
     net::{Server, ServerDef, ServerEvent},
-    singleton::{
-        fd_lookup::FdLookup, player_id_lookup::PlayerIdLookup, player_uuid_lookup::PlayerUuidLookup,
-    },
-    system::IngressSender,
-    ConnectionRef, FullEntityPose, Gametick, LoginState, Player,
+    singleton::fd_lookup::FdLookup,
+    Gametick, LoginState,
 };
 
 mod player_packet_buffer;
 
-use crate::net::{Encoder, Fd, MINECRAFT_VERSION, PROTOCOL_VERSION};
-use crate::singleton::buffer_allocator::BufferAllocator;
-use crate::system::ingress::player_packet_buffer::DecodeBuffer;
+use crate::{
+    net::{Encoder, Fd, MINECRAFT_VERSION, PROTOCOL_VERSION},
+    singleton::buffer_allocator::BufferAllocator,
+    system::ingress::player_packet_buffer::DecodeBuffer,
+};
 
 // The `Receiver<Tick>` parameter tells our handler to listen for the `Tick` event.
 #[instrument(skip_all, level = "trace")]
@@ -32,7 +30,7 @@ pub fn ingress(
     mut fd_lookup: Single<&mut FdLookup>,
     mut global: Single<&mut Global>,
     mut server: Single<&mut Server>,
-    mut buffers: Single<&mut BufferAllocator>,
+    buffers: Single<&mut BufferAllocator>,
     mut players: Fetcher<(&mut LoginState, &mut DecodeBuffer, &mut Encoder, &Fd)>,
     mut sender: Sender<(
         Spawn,
@@ -45,9 +43,9 @@ pub fn ingress(
 ) {
     // clear encoders:todo: kinda jank
     // todo: ADDING THIS MAKES 100ms ping and without it is 0ms??? what
-    // for (_, _, encoder, _) in players.iter_mut() {
-    //     encoder.clear();
-    // }
+    for (_, _, encoder, _) in &mut players {
+        encoder.clear();
+    }
 
     server.drain(|event| match event {
         ServerEvent::AddPlayer { fd } => {
@@ -55,9 +53,9 @@ pub fn ingress(
             let new_player = sender.spawn();
             sender.insert(new_player, LoginState::Handshake);
             sender.insert(new_player, DecodeBuffer::default());
-            
+
             let buffer = buffers.obtain().unwrap();
-            
+
             sender.insert(new_player, Encoder::new(buffer));
             sender.insert(new_player, fd);
 
@@ -68,14 +66,16 @@ pub fn ingress(
             info!("got a player with fd {:?}", fd);
         }
         ServerEvent::RemovePlayer { fd } => {
-            let id = fd_lookup.remove(&fd).expect("player with fd not found");
+            let Some(id) = fd_lookup.remove(&fd) else {
+                return;
+            };
 
             sender.despawn(id);
 
             info!("removed a player with fd {:?}", fd);
         }
         ServerEvent::RecvData { fd, data } => {
-            println!("got data: {data:?}");
+            info!("got data: {data:?}");
             let id = *fd_lookup.get(&fd).expect("player with fd not found");
             let (login_state, decoder, encoder, _) =
                 players.get_mut(id).expect("player with fd not found");
@@ -88,13 +88,24 @@ pub fn ingress(
                     LoginState::Status => {
                         process_status(login_state, &frame, encoder, &global).unwrap();
                     }
-                    LoginState::Login | LoginState::Play | LoginState::Terminate => {}
+                    LoginState::Terminate => {
+                        // todo: does this properly terminate the connection? I don't think so probably
+                        let Some(id) = fd_lookup.remove(&fd) else {
+                            return;
+                        };
+
+                        sender.despawn(id);
+                    }
+                    LoginState::Login => {
+                        process_login(login_state, &frame, encoder).unwrap();
+                    }
+                    LoginState::Play => {
+                        unimplemented!("not implemented yet");
+                    }
                 }
             }
         }
     });
-
-    server.submit_events();
 
     let encoders = players
         .iter_mut()
@@ -102,6 +113,7 @@ pub fn ingress(
 
     server.write(&mut global, encoders);
 
+    server.submit_events();
 }
 
 fn process_handshake(login_state: &mut LoginState, packet: &PacketFrame) -> anyhow::Result<()> {
@@ -123,6 +135,19 @@ fn process_handshake(login_state: &mut LoginState, packet: &PacketFrame) -> anyh
     Ok(())
 }
 
+fn process_login(login_state: &mut LoginState, packet: &PacketFrame, encoder: &mut Encoder) -> anyhow::Result<()> {
+    debug_assert!(*login_state == LoginState::Login);
+
+    let login: packets::login::LoginHelloC2s = packet.decode()?;
+
+    info!("login packet: {login:?}");
+   
+    // todo: impl rest
+    *login_state = LoginState::Terminate;
+
+    Ok(())
+}
+
 fn process_status(
     login_state: &mut LoginState,
     packet: &PacketFrame,
@@ -130,7 +155,6 @@ fn process_status(
     global: &Global,
 ) -> anyhow::Result<()> {
     debug_assert!(*login_state == LoginState::Status);
-
 
     #[allow(clippy::single_match, reason = "todo del")]
     match packet.id {
@@ -157,26 +181,31 @@ fn process_status(
 
             let send = packets::status::QueryResponseS2c { json: &json };
 
-            info!("query request: {query_request:?}");
+            info!("sent query response: {query_request:?}");
 
             encoder.append(&send, global)?;
 
-            // todo: send response
+            // we send this right away so our ping looks better
+            let send = packets::status::QueryPongS2c { payload: 123 };
+            encoder.append(&send, global)?;
+
+            // short circuit
+            *login_state = LoginState::Terminate;
         }
 
         packets::status::QueryPingC2s::ID => {
             let query_ping: packets::status::QueryPingC2s = packet.decode()?;
 
-            info!("query ping: {query_ping:?}");
-
             let payload = query_ping.payload;
 
-            let send = packets::status::QueryPongS2c { payload };
+            let send = packets::status::QueryPongS2c { payload: 123 };
 
             encoder.append(&send, global)?;
+
+            info!("sent query response: {query_ping:?}");
             *login_state = LoginState::Terminate;
         }
-        
+
         _ => panic!("unexpected packet id: {}", packet.id),
     }
 

@@ -6,11 +6,11 @@ use crate::{global::Global, singleton::broadcast::BroadcastBuf, Gametick, Player
 #[instrument(skip_all, level = "trace")]
 pub fn clean_up_io(
     _r: Receiver<Gametick>,
-    io_entities: Fetcher<(EntityId, &mut Player, &Uuid)>,
-    global: Single<&Global>,
-    broadcast: Single<&mut BroadcastBuf>,
+    _io_entities: Fetcher<(EntityId, &mut Player, &Uuid)>,
+    _global: Single<&Global>,
+    _broadcast: Single<&mut BroadcastBuf>,
 
-    s: Sender<Despawn>,
+    _s: Sender<Despawn>,
 ) {
     // todo: this might not be that efficient honestly
     //    let mut despawn_uuids = Vec::new();

@@ -11,7 +11,7 @@ use libc::iovec;
 
 use crate::net::ServerDef;
 
-const COUNT: usize = 2;
+const COUNT: usize = 1024;
 
 const BUFFER_SIZE: usize = 1024;
 

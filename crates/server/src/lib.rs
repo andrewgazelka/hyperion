@@ -129,9 +129,6 @@ pub struct Player {
     /// Set to true if a keep alive has been sent to the client and the client hasn't responded.
     unresponded_keep_alive: bool,
 
-    /// The player's ping. This is likely higher than the player's real ping.
-    ping: Duration,
-
     /// The locale of the player. This could in the future be used to determine the language of the player's chat messages.
     locale: Option<String>,
 

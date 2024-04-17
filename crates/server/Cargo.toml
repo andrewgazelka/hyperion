@@ -44,7 +44,6 @@ evenio.workspace = true
 flume = "0.11.0"
 
 # todo: how much will adding "sync" wakers hurt performance?
-monoio = { version = "0.2.3", features = ["sync"] }
 signal-hook = "0.3.17"
 base64 = "0.22.0"
 uuid = { version = "1.8.0", features = ["v3"] }

@@ -7,7 +7,7 @@ use crate::{singleton::broadcast::BroadcastBuf, Egress};
 pub fn egress_broadcast(
     _: Receiver<Egress>,
     //    connections: Fetcher<&Connection>,
-    broadcast: Single<&mut BroadcastBuf>,
+    _broadcast: Single<&mut BroadcastBuf>,
 ) {
     //    broadcast.par_drain(|buf| {
     //        for connection in &connections {

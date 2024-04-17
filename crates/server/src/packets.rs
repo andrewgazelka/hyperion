@@ -133,7 +133,7 @@ fn keep_alive(player: &mut Player) -> anyhow::Result<()> {
         "keep alive sent unexpectedly"
     );
     player.unresponded_keep_alive = false;
-    player.ping = player.last_keep_alive_sent.elapsed();
+    // player.ping = player.last_keep_alive_sent.elapsed();
     Ok(())
 }
 

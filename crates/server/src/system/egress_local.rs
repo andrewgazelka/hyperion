@@ -9,8 +9,8 @@ use crate::{global::Global, net::Encoder, Egress};
 #[instrument(skip_all, level = "trace")]
 pub fn egress_local(
     _: Receiver<Egress>,
-    connections: Fetcher<&mut Encoder>,
-    global: Single<&Global>,
+    _connections: Fetcher<&mut Encoder>,
+    _global: Single<&Global>,
 ) {
     //    let compression = global.0.shared.compression_level;
     //

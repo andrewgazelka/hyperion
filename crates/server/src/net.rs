@@ -14,10 +14,6 @@ use valence_protocol::{uuid::Uuid, CompressionThreshold, Encode};
 
 use crate::global::Global;
 
-mod buffer;
-
-pub use buffer::*;
-
 use crate::singleton::buffer_allocator::BufRef;
 
 #[cfg(target_os = "linux")]
@@ -38,7 +34,7 @@ impl Hash for Fd {
 
 #[cfg(not(target_os = "linux"))]
 impl PartialEq for Fd {
-    fn eq(&self, other: &Self) -> bool {
+    fn eq(&self, _other: &Self) -> bool {
         unimplemented!()
     }
 }
@@ -48,7 +44,7 @@ impl Eq for Fd {}
 
 #[cfg(not(target_os = "linux"))]
 impl Hash for Fd {
-    fn hash<H: Hasher>(&self, state: &mut H) {
+    fn hash<H: Hasher>(&self, _state: &mut H) {
         unimplemented!()
     }
 }
@@ -148,7 +144,7 @@ impl ServerDef for NotImplemented {
         todo!()
     }
 
-    fn write<'a>(&mut self, _global: &mut Global, writers: impl Iterator<Item = RefreshItem<'a>>) {
+    fn write<'a>(&mut self, _global: &mut Global, _writers: impl Iterator<Item = RefreshItem<'a>>) {
         unimplemented!("not implemented; use Linux")
     }
 
@@ -227,11 +223,11 @@ impl Encoder {
         }
     }
 
-    pub fn buf(&self) -> &BufRef {
+    pub const fn buf(&self) -> &BufRef {
         &self.enc.buf
     }
 
-    pub fn append_raw(&mut self, bytes: &[u8], global: &Global) -> Result<(), CapacityError> {
+    pub fn append_raw(&mut self, bytes: &[u8], _global: &Global) -> Result<(), CapacityError> {
         self.enc.buf.try_extend_from_slice(bytes)
     }
 

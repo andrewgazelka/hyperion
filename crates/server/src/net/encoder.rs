@@ -1,4 +1,4 @@
-use std::{io::Read, ops::DerefMut};
+use std::io::Read;
 
 use anyhow::ensure;
 use arrayvec::CapacityError;
@@ -36,7 +36,7 @@ impl PacketEncoder {
     {
         let start_len = self.buf.len();
 
-        pkt.encode_with_id(self.buf.deref_mut())?;
+        pkt.encode_with_id(&mut *self.buf)?;
 
         let data_len = self.buf.len() - start_len;
 
@@ -63,8 +63,8 @@ impl PacketEncoder {
 
                 self.buf.truncate(start_len);
 
-                VarInt(packet_len as i32).encode(self.buf.deref_mut())?;
-                VarInt(data_len as i32).encode(self.buf.deref_mut())?;
+                VarInt(packet_len as i32).encode(&mut *self.buf)?;
+                VarInt(data_len as i32).encode(&mut *self.buf)?;
                 self.buf.try_extend_from_slice(&self.compress_buf)?;
             } else {
                 let data_len_size = 1;

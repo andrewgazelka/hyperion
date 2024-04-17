@@ -2,7 +2,6 @@ use evenio::{
     event::Receiver,
     fetch::{Fetcher, Single},
 };
-use rayon::prelude::*;
 use tracing::instrument;
 use valence_protocol::{packets::play, VarInt, Velocity};
 
