@@ -1,11 +1,16 @@
+use std::borrow::Cow;
 use evenio::{
     event::{Despawn, Insert, Receiver, Sender, Spawn},
     fetch::{Fetcher, Single},
 };
 use serde_json::json;
 use tracing::{info, instrument, warn};
+use uuid::Uuid;
 use valence_protocol::{
-    decode::PacketFrame, packets, packets::handshaking::handshake_c2s::HandshakeNextState, Packet,
+    decode::PacketFrame,
+    packets,
+    packets::{handshaking::handshake_c2s::HandshakeNextState, login, play},
+    Bounded, Packet,
 };
 
 use crate::{
@@ -97,7 +102,7 @@ pub fn ingress(
                         sender.despawn(id);
                     }
                     LoginState::Login => {
-                        process_login(login_state, &frame, encoder).unwrap();
+                        process_login(login_state, &frame, encoder, &global).unwrap();
                     }
                     LoginState::Play => {
                         unimplemented!("not implemented yet");
@@ -135,13 +140,28 @@ fn process_handshake(login_state: &mut LoginState, packet: &PacketFrame) -> anyh
     Ok(())
 }
 
-fn process_login(login_state: &mut LoginState, packet: &PacketFrame, encoder: &mut Encoder) -> anyhow::Result<()> {
+fn process_login(
+    login_state: &mut LoginState,
+    packet: &PacketFrame,
+    encoder: &mut Encoder,
+    global: &Global,
+) -> anyhow::Result<()> {
     debug_assert!(*login_state == LoginState::Login);
 
     let login: packets::login::LoginHelloC2s = packet.decode()?;
 
     info!("login packet: {login:?}");
-   
+
+    // login success
+
+    let pkt = login::LoginSuccessS2c {
+        uuid: Uuid::new_v4(),
+        username: Bounded("Bob"),
+        properties: Cow::default(),
+    };
+
+    encoder.append(&pkt, global)?;
+
     // todo: impl rest
     *login_state = LoginState::Terminate;
 
