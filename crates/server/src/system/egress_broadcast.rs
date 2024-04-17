@@ -9,6 +9,7 @@ use crate::{
     net::{Fd, Server},
     singleton::{broadcast::BroadcastBuf, buffer_allocator::BufferAllocator},
 };
+use crate::net::ServerDef;
 
 #[instrument(skip_all, level = "trace")]
 pub fn egress_broadcast(
@@ -18,14 +19,18 @@ pub fn egress_broadcast(
     fds: Fetcher<&Fd>,
     mut broadcast: Single<&mut BroadcastBuf>,
 ) {
-    // let mut buf = bufs.obtain().unwrap();
-    // buf.clear();
+    // let fd_count = fds.iter().count();
+    // println!("start broadcast");
+    let mut buf = bufs.obtain().unwrap();
+    buf.clear();
 
     broadcast.drain(|bytes| {
-        // buf.try_extend_from_slice(&bytes).unwrap();
+        // println!("extending");
+        buf.try_extend_from_slice(&bytes).unwrap();
     });
+    
 
-    // println!("broadcast buf len: {}", buf.len());
-    //
-    // server.broadcast(&buf, fds.iter().copied());
+    // println!("broadcast buf len: {} ... fd count {}", buf.len(), fd_count);
+    
+    server.broadcast(&buf, fds.iter().copied());
 }
