@@ -69,7 +69,6 @@ pub fn ingress(
     )>,
     mut sender: IngressSender,
 ) {
-    println!("\n\n");
     // clear encoders:todo: kinda jank
     // todo: ADDING THIS MAKES 100ms ping and without it is 0ms??? what
     for (_, _, encoder, ..) in &mut players {

@@ -36,10 +36,10 @@ pub fn sync_players(
         let vitals = query.vitals;
         let encoder = query.encoder;
 
-        let previous = &mut **query.prev_vitals;
-        let current = vitals;
+        let mut previous = &mut **query.prev_vitals;
+        let mut current = vitals;
 
-        match (previous, current) {
+        match (&mut previous, &mut current) {
             (
                 Vitals::Alive {
                     health: previous_health,
@@ -170,7 +170,6 @@ pub fn sync_players(
             }
         }
 
-        // todo: add
-        // vitals.update_previous();
+        *previous = *current;
     });
 }
