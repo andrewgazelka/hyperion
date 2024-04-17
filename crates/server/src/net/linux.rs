@@ -13,6 +13,7 @@ use std::{
 
 pub use io_uring::types::Fixed;
 use io_uring::{cqueue::buffer_select, squeue::SubmissionQueue, types::BufRingEntry, IoUring};
+use io_uring::squeue::Flags;
 use libc::iovec;
 use tracing::{error, info, warn};
 
@@ -50,6 +51,7 @@ const WRITE_DELAY: Duration = Duration::from_millis(1);
 const READ_BUF_SIZE: usize = 4096;
 
 fn page_size() -> usize {
+    Flags::IO_LINK
     // SAFETY: This is valid
     unsafe { libc::sysconf(libc::_SC_PAGESIZE) as usize }
 }

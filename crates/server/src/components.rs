@@ -35,6 +35,7 @@ pub enum LoginState {
     Handshake,
     Status,
     Login,
+    TransitioningPlay,
     Play,
     Terminate,
 }
@@ -124,7 +125,7 @@ impl Vitals {
                 return;
             }
         }
-        
+
         println!("reduced health to {health}");
 
         *health -= amount;

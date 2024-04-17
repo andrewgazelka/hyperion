@@ -136,7 +136,10 @@ pub fn ingress(
                         )
                         .unwrap();
                     }
-                    LoginState::Play => {
+                    LoginState::TransitioningPlay | LoginState::Play => {
+                        println!("we in play boi");
+                        // we got a play packet, so we are now in play state
+                        *login_state = LoginState::Play;
                         // println!("PAXKETTTTTTTTTTTTTT");
                         if let Some(pose) = &mut pose {
                             crate::packets::switch(frame, &global, &mut sender, pose).unwrap();
@@ -146,6 +149,8 @@ pub fn ingress(
             }
         }
     });
+
+    // this is important so broadcast order is not before player gets change to play
 }
 
 fn process_handshake(login_state: &mut LoginState, packet: &PacketFrame) -> anyhow::Result<()> {
@@ -207,7 +212,7 @@ fn process_login(
     let username = Box::from(username);
 
     // todo: impl rest
-    *login_state = LoginState::Play;
+    *login_state = LoginState::TransitioningPlay;
 
     sender.send(PlayerInit {
         entity: id,
