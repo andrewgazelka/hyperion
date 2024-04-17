@@ -33,7 +33,9 @@ impl BufferAllocator {
 
     pub fn new(server_def: &mut impl ServerDef) -> Self {
         let inner = BufferAllocatorInner::new(server_def);
-        Self { inner: Rc::new(inner) }
+        Self {
+            inner: Rc::new(inner),
+        }
     }
 }
 
@@ -79,7 +81,7 @@ impl BufferAllocatorInner {
         clippy::large_stack_frames,
         reason = "todo probs remove somehow but idk how"
     )]
-   fn new(server_def: &mut impl ServerDef) -> Self {
+    fn new(server_def: &mut impl ServerDef) -> Self {
         let available = std::array::from_fn(|i| i as u16);
 
         let buffers: Box<_> = (0..COUNT)

@@ -6,8 +6,6 @@ use valence_protocol::{CompressionThreshold, Encode, Packet, VarInt};
 
 use crate::{net::MAX_PACKET_SIZE, singleton::buffer_allocator::BufRef};
 
-const BUFFER_SIZE: usize = 1024 * 1024;
-
 pub struct PacketEncoder {
     pub buf: BufRef,
     compress_buf: Vec<u8>,
@@ -16,9 +14,6 @@ pub struct PacketEncoder {
 
 impl PacketEncoder {
     pub fn new(threshold: CompressionThreshold, buf: BufRef) -> Self {
-        // 1 MiB
-        const DEFAULT_SIZE: usize = 1024 * 1024;
-
         Self {
             buf,
             compress_buf: Vec::new(),

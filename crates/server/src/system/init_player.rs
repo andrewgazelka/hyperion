@@ -2,8 +2,11 @@ use evenio::prelude::*;
 use tracing::instrument;
 
 use crate::{
-    net::Encoder, system::entity_position::PositionSyncMetadata, tracker::Tracker, EntityReaction,
-    FullEntityPose, InitPlayer, Player, PlayerJoinWorld, Targetable, Uuid,
+    components::{AiTargetable, EntityReaction, FullEntityPose, InGameName, Player, Uuid},
+    events::{InitPlayer, PlayerJoinWorld},
+    net::LocalEncoder,
+    system::entity_position::PositionSyncMetadata,
+    tracker::Delta,
 };
 
 #[instrument(skip_all)]
@@ -15,8 +18,8 @@ pub fn init_player(
         Insert<Player>,
         Insert<EntityReaction>,
         Insert<Uuid>,
-        Insert<Targetable>,
-        Insert<Encoder>,
+        Insert<AiTargetable>,
+        Insert<LocalEncoder>,
         PlayerJoinWorld,
     )>,
 ) {
@@ -25,26 +28,16 @@ pub fn init_player(
 
     let InitPlayer {
         entity,
-        encoder,
         name,
         uuid,
-        pos,
+        pose,
     } = event;
 
-    s.insert(entity, pos);
-    s.insert(entity, Targetable);
-    s.insert(entity, Player {
-        last_keep_alive_sent: std::time::Instant::now(),
-        unresponded_keep_alive: false,
-        name,
-        locale: None,
-        state: Tracker::default(),
-        immune_until: 0,
-    });
-    s.insert(entity, encoder);
-    s.insert(entity, Uuid(uuid));
+    s.insert(entity, pose);
+    s.insert(entity, AiTargetable);
+    s.insert(entity, InGameName::from(name));
+    s.insert(entity, Uuid::from(uuid));
     s.insert(entity, PositionSyncMetadata::default());
-
     s.insert(entity, EntityReaction::default());
 
     s.send(PlayerJoinWorld { target: entity });

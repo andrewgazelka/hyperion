@@ -3,8 +3,10 @@ use tracing::instrument;
 use valence_protocol::{packets::play, VarInt};
 
 use crate::{
-    net::Encoder, singleton::broadcast::BroadcastBuf, AttackEntity, EntityReaction, FullEntityPose,
-    Player,
+    components::{EntityReaction, FullEntityPose, Player},
+    events::AttackEntity,
+    net::LocalEncoder,
+    singleton::broadcast::BroadcastBuf,
 };
 
 #[instrument(skip_all, level = "trace")]
@@ -16,7 +18,7 @@ pub fn pkt_attack(
             EntityId,
             &FullEntityPose,
             &mut EntityReaction,
-            &mut Encoder,
+            &mut LocalEncoder,
             &mut Player,
         ),
     >,

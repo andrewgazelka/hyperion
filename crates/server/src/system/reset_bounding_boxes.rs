@@ -8,8 +8,9 @@ use evenio::{
 use tracing::instrument;
 
 use crate::{
+    components::FullEntityPose,
+    events::Gametick,
     singleton::bounding_box::{EntityBoundingBoxes, Stored},
-    FullEntityPose, Gametick,
 };
 
 #[derive(Query, Debug)]

@@ -2,6 +2,7 @@
 use std::{
     cell::Cell,
     sync::{atomic::AtomicU32, Arc},
+    time::Duration,
 };
 
 use evenio::component::Component;
@@ -33,6 +34,8 @@ pub struct Global {
     needs_realloc: RayonLocal<Cell<bool>>,
 
     pub has_registered_buffers_before: bool,
+
+    pub keep_alive_timeout: Duration,
 }
 
 impl Global {
@@ -43,6 +46,7 @@ impl Global {
             shared,
             needs_realloc: RayonLocal::init_with(|| Cell::new(false)),
             has_registered_buffers_before: false,
+            keep_alive_timeout: Duration::from_secs(20),
         }
     }
 

@@ -10,7 +10,6 @@ use std::{
     sync::atomic::{AtomicU16, Ordering},
     time::Duration,
 };
-use std::cell::Ref;
 
 pub use io_uring::types::Fixed;
 use io_uring::{cqueue::buffer_select, squeue::SubmissionQueue, types::BufRingEntry, IoUring};
@@ -22,7 +21,6 @@ use crate::{
     global::Global,
     net::{Fd, ServerDef, ServerEvent},
 };
-use crate::singleton::buffer_allocator::BufRef;
 
 /// Default MiB/s threshold before we start to limit the sending of some packets.
 const DEFAULT_SPEED: u32 = 1024 * 1024;
@@ -181,25 +179,6 @@ impl ServerDef for LinuxServer {
         for event in completion {
             match event.user_data() {
                 0 => {
-                    // `IORING_CQE_F_MORE` is a flag used in the context of the io_uring asynchronous I/O framework,
-                    // which is a Linux kernel feature.
-                    // This flag is specifically related to completion queue events (CQEs).
-                    // When `IORING_CQE_F_MORE` is set in a CQE,
-                    // it indicates that there are more completion events to be processed after the current one.
-                    // This is particularly useful in scenarios
-                    // where multiple I/O operations are being completed at once,
-                    // allowing for more efficient processing
-                    // by enabling the application
-                    // to handle several completion events in a batch-like manner
-                    // before needing to recheck the completion queue.
-                    //
-                    // The use of `IORING_CQE_F_MORE`
-                    // can enhance performance in high-throughput I/O environments
-                    // by reducing the overhead of accessing the completion queue multiple times.
-                    // Instead, you can gather and process multiple completions in a single sweep.
-                    // This is especially advantageous in systems where minimizing latency
-                    // and maximizing throughput are critical,
-                    // such as in database management systems or high-performance computing applications.
                     if event.flags() & IORING_CQE_F_MORE == 0 {
                         warn!("multishot accept rerequested");
                         Self::request_accept(&mut submission);
@@ -277,14 +256,10 @@ impl ServerDef for LinuxServer {
 
     fn allocate_buffers(&mut self, buffers: &[iovec]) {
         println!("allocate buffers");
-        unsafe {self.register_buffers(buffers) };
+        unsafe { self.register_buffers(buffers) };
     }
 
-    fn write<'a>(
-        &mut self,
-        global: &mut Global,
-        items: impl Iterator<Item = RefreshItem<'a>>,
-    ) {
+    fn write<'a>(&mut self, _global: &mut Global, items: impl Iterator<Item = RefreshItem<'a>>) {
         self.write_all(items);
     }
 
@@ -300,25 +275,23 @@ const SEND_MARKER: u64 = 0b1 << 62;
 
 impl LinuxServer {
     fn write_all<'a>(&mut self, items: impl Iterator<Item = RefreshItem<'a>>) {
-        items
-            .for_each(|(buf, fd)| {
-                let fd = fd.0;
-                
-                if buf.len() == 0 {
-                    return;
-                }
-                
-                let location = buf.as_ptr();
-                let idx = buf.index();
-                let len = buf.len() as u32;
+        items.for_each(|(buf, fd)| {
+            let fd = fd.0;
 
-                if len == 0 {
-                    return;
-                }
+            if buf.len() == 0 {
+                return;
+            }
 
+            let location = buf.as_ptr();
+            let idx = buf.index();
+            let len = buf.len() as u32;
 
-                self.write_raw(fd, location, len, idx);
-            });
+            if len == 0 {
+                return;
+            }
+
+            self.write_raw(fd, location, len, idx);
+        });
     }
 
     /// # Safety

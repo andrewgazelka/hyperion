@@ -4,8 +4,9 @@ use tracing::instrument;
 use valence_protocol::{packets::play, ByteAngle, VarInt};
 
 use crate::{
+    components::{FullEntityPose, Uuid},
+    events::Gametick,
     singleton::broadcast::{BroadcastBuf, PacketMetadata, PacketNecessity},
-    FullEntityPose, Gametick, Uuid,
 };
 
 #[derive(Query, Debug)]

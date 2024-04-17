@@ -19,7 +19,6 @@ use std::{
 };
 
 use anyhow::Context;
-use bvh::aabb::Aabb;
 use evenio::prelude::*;
 use libc::{getrlimit, setrlimit, RLIMIT_NOFILE};
 use ndarray::s;
@@ -27,18 +26,23 @@ use signal_hook::iterator::Signals;
 use singleton::bounding_box;
 use spin::Lazy;
 use tracing::{debug, error, info, instrument, trace, warn};
-use valence_protocol::{math::Vec3, CompressionThreshold, Hand};
+use valence_protocol::{CompressionThreshold, Hand};
 
 use crate::{
+    components::Vitals,
+    events::{Egress, Gametick, StatsEvent},
     global::Global,
-    net::{Encoder, Fd, Server, ServerDef},
+    net::{Server, ServerDef},
     singleton::{
-        broadcast::BroadcastBuf, fd_lookup::FdLookup, player_aabb_lookup::PlayerBoundingBoxes,
-        player_id_lookup::PlayerIdLookup, player_uuid_lookup::PlayerUuidLookup,
+        broadcast::BroadcastBuf, buffer_allocator::BufferAllocator, fd_lookup::FdLookup,
+        player_aabb_lookup::PlayerBoundingBoxes, player_id_lookup::PlayerIdLookup,
+        player_uuid_lookup::PlayerUuidLookup,
     },
-    tracker::Tracker,
+    tracker::Delta,
 };
-use crate::singleton::buffer_allocator::{BufferAllocator};
+
+mod components;
+mod events;
 
 mod global;
 mod net;
@@ -48,278 +52,12 @@ mod system;
 
 mod bits;
 
-mod pose;
 mod tracker;
 
 mod config;
 
 /// History size for sliding average.
 const MSPT_HISTORY_SIZE: usize = 100;
-
-/// The absorption effect
-#[derive(Clone, PartialEq, Debug)]
-#[repr(packed)]
-struct Absorption {
-    /// This effect goes away on the tick with the value `end_tick`,
-    end_tick: u64,
-    /// The amount of health that is allocated to the absorption effect
-    bonus_health: f32,
-}
-
-#[derive(Clone, PartialEq, Debug)]
-struct Regeneration {
-    /// This effect goes away on the tick with the value `end_tick`.
-    end_tick: u64,
-}
-
-#[derive(Clone, PartialEq, Debug)]
-enum PlayerState {
-    /// If the player is alive
-    Alive {
-        /// Measured in half hearts
-        health: f32,
-
-        /// The absorption effect
-        absorption: Absorption,
-        /// The regeneration effect
-        regeneration: Regeneration,
-    },
-    /// If the player is dead
-    Dead {
-        /// The tick the player will be respawned
-        respawn_tick: u64,
-    },
-}
-
-impl Default for Tracker<PlayerState> {
-    fn default() -> Self {
-        let mut value = Self::new(PlayerState::Alive {
-            health: 0.0,
-            absorption: Absorption {
-                end_tick: 0,
-                bonus_health: 0.0,
-            },
-            regeneration: Regeneration { end_tick: 0 },
-        });
-        // This update is needed so that a s2c packet updating the client's health is sent. If
-        // this isn't sent, the client won't show the first time it takes damage as actual damage
-        // because it believes that the server is simply updating its health to the amount of
-        // health the player had when it left.
-        value.update(|state| {
-            let PlayerState::Alive { health, .. } = state else {
-                unreachable!()
-            };
-            *health = 20.0;
-        });
-        value
-    }
-}
-
-/// A component that represents a Player. In the future, this should be broken up into multiple components.
-///
-/// Why should it be broken up? The more things are broken up, the more we can take advantage of Rust borrowing rules.
-#[derive(Component)]
-pub struct Player {
-    /// The name of the player i.e., `Emerald_Explorer`.
-    name: Box<str>,
-
-    /// The last time the player was sent a keep alive packet. TODO: this should be using a tick.
-    last_keep_alive_sent: Instant,
-
-    /// Set to true if a keep alive has been sent to the client and the client hasn't responded.
-    unresponded_keep_alive: bool,
-
-    /// The locale of the player. This could in the future be used to determine the language of the player's chat messages.
-    locale: Option<String>,
-
-    /// The state of the player.
-    state: Tracker<PlayerState>,
-
-    /// The time until the player is immune to being hurt in ticks.
-    immune_until: u64,
-}
-
-#[derive(Component, Debug, Eq, PartialEq)]
-#[repr(u8)]
-enum LoginState {
-    Handshake,
-    Status,
-    Login,
-    Play,
-    Terminate,
-}
-
-#[derive(Component)]
-struct ConnectionRef {
-    fd: Fd,
-}
-
-impl Player {
-    /// Heal the player by a given amount.
-    fn heal(&mut self, amount: f32) {
-        assert!(amount.is_finite());
-        assert!(amount > 0.0);
-
-        self.state.update(|state| {
-            let PlayerState::Alive { health, .. } = state else {
-                return;
-            };
-            *health = (*health + amount).min(20.0);
-        });
-    }
-
-    /// If the player is immune to being hurt, this returns false.
-    const fn is_invincible(&self, global: &Global) -> bool {
-        let tick = global.tick.unsigned_abs();
-
-        if tick < self.immune_until {
-            return true;
-        }
-
-        false
-    }
-
-    /// Hurt the player by a given amount.
-    fn hurt(&mut self, global: &Global, mut amount: f32) {
-        debug_assert!(amount.is_finite());
-        debug_assert!(amount > 0.0);
-
-        if self.is_invincible(global) {
-            return;
-        }
-
-        let tick = global.tick.unsigned_abs();
-
-        let max_hurt_resistant_time = global.max_hurt_resistant_time;
-
-        self.immune_until = tick + u64::from(max_hurt_resistant_time) / 2;
-
-        self.state.update(|state| {
-            let PlayerState::Alive {
-                health, absorption, ..
-            } = state
-            else {
-                return;
-            };
-
-            if tick < absorption.end_tick {
-                if amount > absorption.bonus_health {
-                    amount -= absorption.bonus_health;
-                    absorption.bonus_health = 0.0;
-                } else {
-                    absorption.bonus_health -= amount;
-                    return;
-                }
-            }
-            *health -= amount;
-
-            if *health <= 0.0 {
-                *state = PlayerState::Dead {
-                    respawn_tick: tick + 100,
-                };
-            }
-        });
-    }
-}
-
-#[allow(clippy::missing_docs_in_private_items, reason = "self-explanatory")]
-#[derive(Event)]
-struct InitPlayer {
-    entity: EntityId,
-    encoder: Encoder,
-    name: Box<str>,
-    uuid: uuid::Uuid,
-    pos: FullEntityPose,
-}
-
-/// A UUID component. Generally speaking, this tends to be tied to entities with a [`Player`] component.
-#[derive(Component, Copy, Clone, Debug)]
-struct Uuid(uuid::Uuid);
-
-/// Initialize a Minecraft entity (like a zombie) with a given pose.
-#[derive(Event)]
-pub struct InitEntity {
-    /// The pose of the entity.
-    pub pose: FullEntityPose,
-}
-
-/// If the entity can be targeted by non-player entities.
-#[derive(Component)]
-pub struct Targetable;
-
-/// Sent whenever a player joins the server.
-#[derive(Event)]
-struct PlayerJoinWorld {
-    /// The [`EntityId`] of the player.
-    #[event(target)]
-    target: EntityId,
-}
-
-/// Any living minecraft entity that is NOT a player.
-///
-/// Example: zombie, skeleton, etc.
-#[derive(Component, Debug)]
-pub struct MinecraftEntity;
-
-/// The running multiplier of the entity. This defaults to 1.0.
-#[derive(Component, Debug, Copy, Clone)]
-pub struct RunningSpeed(f32);
-
-impl Default for RunningSpeed {
-    fn default() -> Self {
-        Self(0.1)
-    }
-}
-
-/// An event that is sent whenever a player is kicked from the server.
-#[derive(Event)]
-struct KickPlayer {
-    /// The [`EntityId`] of the player.
-    #[event(target)] // Works on tuple struct fields as well.
-    target: EntityId,
-    /// The reason the player was kicked.
-    reason: String,
-}
-
-/// An event that is sent whenever a player swings an arm.
-#[derive(Event)]
-struct SwingArm {
-    /// The [`EntityId`] of the player.
-    #[event(target)]
-    target: EntityId,
-    /// The hand the player is swinging.
-    hand: Hand,
-}
-
-#[derive(Event)]
-struct AttackEntity {
-    /// The [`EntityId`] of the player.
-    #[event(target)]
-    target: EntityId,
-    /// The location of the player that is hitting.
-    from_pos: Vec3,
-}
-
-/// An event to kill all minecraft entities (like zombies, skeletons, etc). This will be sent to the equivalent of
-/// `/killall` in the game.
-#[derive(Event)]
-struct KillAllEntities;
-
-/// An event when server stats are updated.
-#[derive(Event, Copy, Clone)]
-struct StatsEvent {
-    /// The number of milliseconds per tick in the last second.
-    ms_per_tick_mean_1s: f64,
-    /// The number of milliseconds per tick in the last 5 seconds.
-    ms_per_tick_mean_5s: f64,
-}
-
-#[derive(Event)]
-struct Gametick;
-
-/// An event that is sent when it is time to send packets to clients.
-#[derive(Event)]
-struct Egress;
 
 /// on macOS, the soft limit for the number of open file descriptors is often 256. This is far too low
 /// to test 10k players with.
@@ -443,7 +181,6 @@ impl Game {
         world.add_handler(system::sync_players);
         world.add_handler(system::rebuild_player_location);
         world.add_handler(system::player_detect_mob_hits);
-        world.add_handler(system::clean_up_io);
 
         world.add_handler(system::pkt_attack);
         world.add_handler(system::pkt_hand_swing);
@@ -593,51 +330,3 @@ impl Game {
 // todo: remove static and make this an `Arc` to prevent weird behavior with multiple `Game`s
 /// A shutdown atomic which is used to shut down the [`Game`] gracefully.
 static SHUTDOWN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-
-/// The full pose of an entity. This is used for both [`Player`] and [`MinecraftEntity`].
-#[derive(Component, Copy, Clone, Debug)]
-pub struct FullEntityPose {
-    /// The (x, y, z) position of the entity.
-    /// Note we are using [`Vec3`] instead of [`glam::DVec3`] because *cache locality* is important.
-    /// However, the Notchian server uses double precision floating point numbers for the position.
-    pub position: Vec3,
-
-    /// The yaw of the entity. (todo: probably need a separate component for head yaw, perhaps separate this out)
-    pub yaw: f32,
-
-    /// The pitch of the entity.
-    pub pitch: f32,
-
-    /// The bounding box of the entity.
-    pub bounding: Aabb,
-}
-
-impl FullEntityPose {
-    /// Move the pose by the given vector.
-    pub fn move_by(&mut self, vec: Vec3) {
-        self.position += vec;
-        self.bounding = self.bounding.move_by(vec);
-    }
-
-    /// Teleport the pose to the given position.
-    pub fn move_to(&mut self, pos: Vec3) {
-        self.bounding = self.bounding.move_to(pos);
-        self.position = pos;
-    }
-}
-
-/// The reaction of an entity, in particular to collisions as calculated in `entity_detect_collisions`.
-///
-/// Why is this useful?
-///
-/// - We want to be able to detect collisions in parallel.
-/// - Since we are accessing bounding boxes in parallel,
-/// we need to be able to make sure the bounding boxes are immutable (unless we have something like a
-/// [`Arc`] or [`std::sync::RwLock`], but this is not efficient).
-/// - Therefore, we have an [`EntityReaction`] component which is used to store the reaction of an entity to collisions.
-/// - Later we can apply the reaction to the entity's [`FullEntityPose`] to move the entity.
-#[derive(Component, Default, Debug)]
-pub struct EntityReaction {
-    /// The velocity of the entity.
-    velocity: Vec3,
-}

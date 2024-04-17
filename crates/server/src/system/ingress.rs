@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+
 use evenio::{
     event::{Despawn, Insert, Receiver, Sender, Spawn},
     fetch::{Fetcher, Single},
@@ -9,7 +10,7 @@ use uuid::Uuid;
 use valence_protocol::{
     decode::PacketFrame,
     packets,
-    packets::{handshaking::handshake_c2s::HandshakeNextState, login, play},
+    packets::{handshaking::handshake_c2s::HandshakeNextState, login},
     Bounded, Packet,
 };
 
@@ -17,13 +18,14 @@ use crate::{
     global::Global,
     net::{Server, ServerDef, ServerEvent},
     singleton::fd_lookup::FdLookup,
-    Gametick, LoginState,
 };
 
 mod player_packet_buffer;
 
 use crate::{
-    net::{Encoder, Fd, MINECRAFT_VERSION, PROTOCOL_VERSION},
+    components::LoginState,
+    events::Gametick,
+    net::{Fd, LocalEncoder, MINECRAFT_VERSION, PROTOCOL_VERSION},
     singleton::buffer_allocator::BufferAllocator,
     system::ingress::player_packet_buffer::DecodeBuffer,
 };
@@ -36,12 +38,12 @@ pub fn ingress(
     mut global: Single<&mut Global>,
     mut server: Single<&mut Server>,
     buffers: Single<&mut BufferAllocator>,
-    mut players: Fetcher<(&mut LoginState, &mut DecodeBuffer, &mut Encoder, &Fd)>,
+    mut players: Fetcher<(&mut LoginState, &mut DecodeBuffer, &mut LocalEncoder, &Fd)>,
     mut sender: Sender<(
         Spawn,
         Insert<LoginState>,
         Insert<DecodeBuffer>,
-        Insert<Encoder>,
+        Insert<LocalEncoder>,
         Insert<Fd>,
         Despawn,
     )>,
@@ -61,7 +63,7 @@ pub fn ingress(
 
             let buffer = buffers.obtain().unwrap();
 
-            sender.insert(new_player, Encoder::new(buffer));
+            sender.insert(new_player, LocalEncoder::new(buffer));
             sender.insert(new_player, fd);
 
             fd_lookup.insert(fd, new_player);
@@ -117,8 +119,6 @@ pub fn ingress(
         .map(|(_, _, encoder, fd)| (encoder.buf(), *fd));
 
     server.write(&mut global, encoders);
-
-    server.submit_events();
 }
 
 fn process_handshake(login_state: &mut LoginState, packet: &PacketFrame) -> anyhow::Result<()> {
@@ -143,12 +143,12 @@ fn process_handshake(login_state: &mut LoginState, packet: &PacketFrame) -> anyh
 fn process_login(
     login_state: &mut LoginState,
     packet: &PacketFrame,
-    encoder: &mut Encoder,
+    encoder: &mut LocalEncoder,
     global: &Global,
 ) -> anyhow::Result<()> {
     debug_assert!(*login_state == LoginState::Login);
 
-    let login: packets::login::LoginHelloC2s = packet.decode()?;
+    let login: login::LoginHelloC2s = packet.decode()?;
 
     info!("login packet: {login:?}");
 
@@ -171,7 +171,7 @@ fn process_login(
 fn process_status(
     login_state: &mut LoginState,
     packet: &PacketFrame,
-    encoder: &mut Encoder,
+    encoder: &mut LocalEncoder,
     global: &Global,
 ) -> anyhow::Result<()> {
     debug_assert!(*login_state == LoginState::Status);
@@ -218,7 +218,7 @@ fn process_status(
 
             let payload = query_ping.payload;
 
-            let send = packets::status::QueryPongS2c { payload: 123 };
+            let send = packets::status::QueryPongS2c { payload };
 
             encoder.append(&send, global)?;
 

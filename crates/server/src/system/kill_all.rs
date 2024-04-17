@@ -2,7 +2,11 @@ use evenio::prelude::*;
 use tracing::instrument;
 use valence_protocol::VarInt;
 
-use crate::{singleton::broadcast::BroadcastBuf, KillAllEntities, MinecraftEntity, Player};
+use crate::{
+    components::{MinecraftEntity, Player},
+    events::KillAllEntities,
+    singleton::broadcast::BroadcastBuf,
+};
 
 #[instrument(skip_all)]
 pub fn kill_all(

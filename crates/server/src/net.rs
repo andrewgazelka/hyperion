@@ -12,9 +12,7 @@ use libc::iovec;
 use sha2::Digest;
 use valence_protocol::{uuid::Uuid, CompressionThreshold, Encode};
 
-use crate::global::Global;
-
-use crate::singleton::buffer_allocator::BufRef;
+use crate::{global::Global, singleton::buffer_allocator::BufRef};
 
 #[cfg(target_os = "linux")]
 mod linux;
@@ -173,45 +171,25 @@ fn offline_uuid(username: &str) -> anyhow::Result<Uuid> {
     Uuid::from_slice(slice).context("failed to create uuid")
 }
 
-/// Sent from the I/O thread when it has established a connection with the player through a handshake
-pub struct ClientConnection {
-    /// The local encoder used by that player
-    pub encoder: Encoder,
-    /// The name of the player.
-    pub name: Box<str>,
-    /// The UUID of the player.
-    pub uuid: Uuid,
-}
-
 mod encoder;
 
 #[derive(Component)]
-pub struct Encoder {
+pub struct LocalEncoder {
     /// The encoding buffer and logic
     enc: encoder::PacketEncoder,
-
-    /// If we should clear the `enc` allocation once we are done sending it off.
-    ///
-    /// In the future, perhaps we will have a global buffer if it is performant enough.
-    deallocate_on_process: bool,
 }
 
-impl Encoder {
+impl LocalEncoder {
     pub fn clear(&mut self) {
         self.enc.buf.clear();
     }
 
     /// Encode a packet.
-    pub fn append<P>(&mut self, pkt: &P, global: &Global) -> anyhow::Result<()>
+    pub fn append<P>(&mut self, pkt: &P, _global: &Global) -> anyhow::Result<()>
     where
         P: valence_protocol::Packet + Encode,
     {
         self.enc.append_packet(pkt)?;
-
-        // if self.enc.buf.needs_realloc() {
-        //     println!("needs realloc");
-        //     global.set_needs_realloc();
-        // }
 
         Ok(())
     }
@@ -219,7 +197,6 @@ impl Encoder {
     pub fn new(buffer: BufRef) -> Self {
         Self {
             enc: encoder::PacketEncoder::new(CompressionThreshold(-1), buffer),
-            deallocate_on_process: false,
         }
     }
 
@@ -230,12 +207,4 @@ impl Encoder {
     pub fn append_raw(&mut self, bytes: &[u8], _global: &Global) -> Result<(), CapacityError> {
         self.enc.buf.try_extend_from_slice(bytes)
     }
-
-    // /// This sends the bytes to the connection.
-    // /// [`PacketEncoder`] can have compression enabled.
-    // /// One must make sure the bytes are pre-compressed if compression is enabled.
-    // pub fn append(&mut self, bytes: &[u8]) {
-    //     trace!("send raw bytes");
-    //     self.enc.
-    // }
 }

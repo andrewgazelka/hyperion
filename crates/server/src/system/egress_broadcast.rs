@@ -1,7 +1,7 @@
 use evenio::{event::Receiver, fetch::Single};
 use tracing::instrument;
 
-use crate::{singleton::broadcast::BroadcastBuf, Egress};
+use crate::{events::Egress, singleton::broadcast::BroadcastBuf};
 
 #[instrument(skip_all, level = "trace")]
 pub fn egress_broadcast(

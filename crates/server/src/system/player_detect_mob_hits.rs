@@ -6,8 +6,10 @@ use evenio::{
 use tracing::instrument;
 
 use crate::{
-    global::Global, singleton::bounding_box::EntityBoundingBoxes, EntityReaction, FullEntityPose,
-    Gametick, Player,
+    components::{EntityReaction, FullEntityPose, Player},
+    events::Gametick,
+    global::Global,
+    singleton::bounding_box::EntityBoundingBoxes,
 };
 
 #[instrument(skip_all, level = "trace")]

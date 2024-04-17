@@ -4,14 +4,20 @@ use evenio::{
 };
 use tracing::instrument;
 
-use crate::{global::Global, net::Encoder, Egress};
+use crate::{
+    events::Egress,
+    global::Global,
+    net::{LocalEncoder, Server, ServerDef},
+};
 
 #[instrument(skip_all, level = "trace")]
 pub fn egress_local(
     _: Receiver<Egress>,
-    _connections: Fetcher<&mut Encoder>,
+    _connections: Fetcher<&mut LocalEncoder>,
     _global: Single<&Global>,
+    mut server: Single<&mut Server>,
 ) {
+    server.submit_events();
     //    let compression = global.0.shared.compression_level;
     //
     //    connections
