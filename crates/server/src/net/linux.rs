@@ -11,6 +11,7 @@ use std::{
     time::Duration,
 };
 
+use bytes::Bytes;
 pub use io_uring::types::Fixed;
 use io_uring::{
     cqueue::buffer_select, squeue, squeue::SubmissionQueue, types::BufRingEntry, IoUring,
@@ -284,6 +285,12 @@ impl ServerDef for LinuxServer {
 
             let local_len = local.len();
             if local_len != 0 {
+                if local_len < 1024 {
+                    let bytes: Bytes = local.iter().copied().collect();
+
+                    println!("writing {bytes:?}");
+                }
+
                 let location = local.as_ptr();
                 let idx = local.index();
                 let len = local_len as u32;
@@ -293,11 +300,14 @@ impl ServerDef for LinuxServer {
 
             let broadcast_len = broadcast_buf.len();
             if broadcast_len != 0 && broadcast {
+                info!("broadcasting");
                 let location = broadcast_buf.as_ptr();
                 let idx = broadcast_buf.index();
                 let len = broadcast_len as u32;
 
                 self.write_raw(fd, location, len, idx);
+            } else {
+                info!("not broadcasting");
             }
         });
     }

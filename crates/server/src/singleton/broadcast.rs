@@ -96,6 +96,28 @@ impl BroadcastBuf {
     }
 }
 
+pub struct AppendOnlyEncoder<'a> {
+    encoder: &'a mut PacketEncoder,
+}
+
+impl<'a> AppendOnlyEncoder<'a> {
+    fn new(encoder: &'a mut PacketEncoder) -> Self {
+        Self { encoder }
+    }
+
+    pub fn append_raw(&mut self, data: &[u8]) {
+        self.encoder.append_bytes(data);
+    }
+
+    pub fn append_packet<P>(&mut self, pkt: &P) -> anyhow::Result<()>
+    where
+        P: valence_protocol::Packet + Encode,
+    {
+        println!("appending to broadcast packet {}", P::NAME);
+        self.encoder.append_packet(pkt)
+    }
+}
+
 impl BroadcastBuf {
     #[expect(
         unused_variables,
@@ -122,9 +144,10 @@ impl BroadcastBuf {
     /// Returns a reference to the [`PacketEncoder`] usually local to a rayon thread based on a
     /// round robin policy.
     /// This is so that packets can evenly be spread out across threads.
-    pub fn get_round_robin(&mut self) -> &mut PacketEncoder {
+    pub fn get_round_robin(&mut self) -> AppendOnlyEncoder {
         let local = self.rayon_local.get_local_round_robin();
-        local.get_mut()
+        let local = local.get_mut();
+        AppendOnlyEncoder::new(local)
     }
 
     /// Drain all buffers in parallel. This is useful for sending the buffers to the actual players.
