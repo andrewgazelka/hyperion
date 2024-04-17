@@ -292,14 +292,11 @@ impl ServerDef for LinuxServer {
 
             let broadcast_len = broadcast_buf.len();
             if broadcast_len != 0 && broadcast {
-                info!("broadcasting");
                 let location = broadcast_buf.as_ptr();
                 let idx = broadcast_buf.index();
                 let len = broadcast_len as u32;
 
                 self.write_raw(fd, location, len, idx);
-            } else {
-                info!("not broadcasting");
             }
         });
     }

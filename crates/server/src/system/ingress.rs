@@ -232,7 +232,7 @@ fn process_status(
     match packet.id {
         packets::status::QueryRequestC2s::ID => {
             let query_request: packets::status::QueryRequestC2s = packet.decode()?;
-            
+
             // https://wiki.vg/Server_List_Ping#Response
             let json = json!({
                 "version": {
