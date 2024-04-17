@@ -2,8 +2,7 @@
 
 #![allow(clippy::missing_docs_in_private_items, reason = "self-explanatory")]
 
-mod egress_broadcast;
-mod egress_local;
+mod egress;
 mod entity_detect_collisions;
 mod entity_move_logic;
 mod entity_position;
@@ -25,8 +24,7 @@ mod sync_players;
 mod update_health;
 mod update_time;
 
-pub use egress_broadcast::egress_broadcast;
-pub use egress_local::egress_local;
+pub use egress::egress;
 pub use entity_detect_collisions::entity_detect_collisions;
 pub use entity_move_logic::entity_move_logic;
 pub use entity_position::sync_entity_position;

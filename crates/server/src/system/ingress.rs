@@ -137,7 +137,6 @@ pub fn ingress(
                         .unwrap();
                     }
                     LoginState::TransitioningPlay | LoginState::Play => {
-                        println!("we in play boi");
                         // we got a play packet, so we are now in play state
                         *login_state = LoginState::Play;
                         // println!("PAXKETTTTTTTTTTTTTT");

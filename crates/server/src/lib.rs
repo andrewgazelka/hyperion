@@ -184,8 +184,7 @@ impl Game {
 
         world.add_handler(system::generate_egress_packets);
 
-        world.add_handler(system::egress_broadcast);
-        world.add_handler(system::egress_local);
+        world.add_handler(system::egress);
 
         world.add_handler(system::keep_alive);
         world.add_handler(system::stats_message);
