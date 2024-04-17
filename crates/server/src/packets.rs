@@ -1,5 +1,5 @@
 #![expect(
-    unused_variables,
+    unused,
     reason = "there are still many changes that need to be made to this file"
 )]
 #![allow(
@@ -15,7 +15,7 @@ use std::str::FromStr;
 
 use anyhow::{bail, ensure};
 use bvh::aabb::Aabb;
-use evenio::entity::EntityId;
+use evenio::{entity::EntityId, query::Query};
 use tracing::debug;
 use valence_protocol::{
     decode::PacketFrame,
@@ -25,19 +25,20 @@ use valence_protocol::{
 };
 
 use crate::{
-    global::Global, singleton::player_id_lookup::PlayerIdLookup, system::IngressSender, Absorption,
-    AttackEntity, FullEntityPose, InitEntity, KillAllEntities, Player, PlayerState, Regeneration,
-    SwingArm,
+    components::{
+        vitals::{Absorption, Regeneration},
+        FullEntityPose, ImmuneStatus, KeepAlive,
+    },
+    events::{AttackEntity, InitEntity, KillAllEntities, SwingArm},
+    global::Global,
+    net::LocalEncoder,
+    singleton::player_id_lookup::PlayerIdLookup,
+    system::IngressSender,
+    Vitals,
 };
 
 const fn confirm_teleport(_pkt: &[u8]) {
     // ignore
-}
-
-fn client_settings(mut data: &[u8], player: &mut Player) -> anyhow::Result<()> {
-    let pkt = play::ClientSettingsC2s::decode(&mut data)?;
-    player.locale = Some(pkt.locale.to_owned());
-    Ok(())
 }
 
 const fn custom_payload(_data: &[u8]) {
@@ -127,13 +128,10 @@ fn update_selected_slot(mut data: &[u8]) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn keep_alive(player: &mut Player) -> anyhow::Result<()> {
-    ensure!(
-        !player.unresponded_keep_alive,
-        "keep alive sent unexpectedly"
-    );
-    player.unresponded_keep_alive = false;
-    player.ping = player.last_keep_alive_sent.elapsed();
+fn keep_alive(player: &mut KeepAlive) -> anyhow::Result<()> {
+    ensure!(!player.unresponded, "keep alive sent unexpectedly");
+    player.unresponded = false;
+    // player.ping = player.last_keep_alive_sent.elapsed();
     Ok(())
 }
 
@@ -168,8 +166,7 @@ impl FromStr for HybridPos {
 fn chat_command(
     mut data: &[u8],
     global: &Global,
-    player: &mut Player,
-    full_entity_pose: &FullEntityPose,
+    query: PacketSwitchQuery,
     sender: &mut IngressSender,
 ) -> anyhow::Result<()> {
     const BASE_RADIUS: f32 = 4.0;
@@ -178,44 +175,45 @@ fn chat_command(
     let mut cmd = pkt.command.0.split(' ');
 
     let first = cmd.next();
-    let tick = global.tick.unsigned_abs();
+    let tick = global.tick;
 
     if first == Some("ka") {
         sender.send(KillAllEntities);
     } else if first == Some("golden_apple") {
-        player.state.update(|state| {
-            let PlayerState::Alive {
-                absorption,
-                regeneration,
-                ..
-            } = state
-            else {
-                return;
-            };
-            *absorption = Absorption {
-                end_tick: tick + 2400,
-                bonus_health: 4.0,
-            };
-            *regeneration = Regeneration {
-                end_tick: tick + 100,
-            };
-        });
+        let vitals = query.vitals;
+
+        let Vitals::Alive {
+            absorption,
+            regeneration,
+            ..
+        } = vitals
+        else {
+            return Ok(());
+        };
+
+        *absorption = Absorption {
+            end_tick: tick + 2400,
+            bonus_health: 4.0,
+        };
+        *regeneration = Regeneration {
+            end_tick: tick + 100,
+        };
     } else if first == Some("heal") {
         let args: Vec<_> = cmd.collect();
         let [amount] = args.as_slice() else {
             anyhow::bail!("expected 1 number");
         };
-        player.heal(amount.parse()?);
+        query.vitals.heal(amount.parse()?);
     } else if first == Some("hurt") {
         let args: Vec<_> = cmd.collect();
         let [amount] = args.as_slice() else {
             anyhow::bail!("expected 1 number");
         };
-        player.hurt(global, amount.parse()?);
+        query.vitals.hurt(global, amount.parse()?, query.immunity);
     } else if first == Some("spawn") {
         let args: Vec<_> = cmd.collect();
 
-        let loc = full_entity_pose.position;
+        let loc = query.pose.position;
 
         let [x, y, z] = match args.as_slice() {
             &[x, y, z] => [x.parse()?, y.parse()?, z.parse()?],
@@ -276,13 +274,17 @@ fn chat_command(
     Ok(())
 }
 
-fn hand_swing(mut data: &[u8], id: EntityId, sender: &mut IngressSender) -> anyhow::Result<()> {
+fn hand_swing(
+    mut data: &[u8],
+    query: &PacketSwitchQuery,
+    sender: &mut IngressSender,
+) -> anyhow::Result<()> {
     let packet = play::HandSwingC2s::decode(&mut data)?;
 
     let packet = packet.hand;
 
     let event = SwingArm {
-        target: id,
+        target: query.id,
         hand: packet,
     };
 
@@ -313,36 +315,44 @@ fn player_interact_entity(
     Ok(())
 }
 
+#[derive(Query)]
+pub struct PacketSwitchQuery<'a> {
+    id: EntityId,
+    pose: &'a mut FullEntityPose,
+    vitals: &'a mut Vitals,
+    encoder: &'a mut LocalEncoder,
+    keep_alive: &'a mut KeepAlive,
+    immunity: &'a mut ImmuneStatus,
+}
+
 pub fn switch(
     raw: PacketFrame,
     global: &Global,
-    id: EntityId,
-    player: &mut Player,
-    full_entity_pose: &mut FullEntityPose,
     id_lookup: &PlayerIdLookup,
     sender: &mut IngressSender,
+    query: PacketSwitchQuery,
 ) -> anyhow::Result<()> {
     let packet_id = raw.id;
     let data = raw.body;
     let data = &*data;
 
     match packet_id {
-        play::HandSwingC2s::ID => hand_swing(data, id, sender)?,
+        play::HandSwingC2s::ID => hand_swing(data, &query, sender)?,
         play::TeleportConfirmC2s::ID => confirm_teleport(data),
-        play::ClientSettingsC2s::ID => client_settings(data, player)?,
+        // play::ClientSettingsC2s::ID => client_settings(data, player)?,
         play::CustomPayloadC2s::ID => custom_payload(data),
-        play::FullC2s::ID => full(data, full_entity_pose)?,
-        play::PositionAndOnGroundC2s::ID => position_and_on_ground(data, full_entity_pose)?,
-        play::LookAndOnGroundC2s::ID => look_and_on_ground(data, full_entity_pose)?,
+        play::FullC2s::ID => full(data, query.pose)?,
+        play::PositionAndOnGroundC2s::ID => position_and_on_ground(data, query.pose)?,
+        play::LookAndOnGroundC2s::ID => look_and_on_ground(data, query.pose)?,
         play::ClientCommandC2s::ID => player_command(data),
         play::UpdatePlayerAbilitiesC2s::ID => update_player_abilities(data)?,
         play::UpdateSelectedSlotC2s::ID => update_selected_slot(data)?,
         play::PlayerInteractEntityC2s::ID => {
-            player_interact_entity(data, id_lookup, full_entity_pose.position, sender)?;
+            player_interact_entity(data, id_lookup, query.pose.position, sender)?;
         }
-        play::KeepAliveC2s::ID => keep_alive(player)?,
+        play::KeepAliveC2s::ID => keep_alive(query.keep_alive)?,
         play::CommandExecutionC2s::ID => {
-            chat_command(data, global, player, full_entity_pose, sender)?;
+            chat_command(data, global, query, sender)?;
         }
         _ => debug!("unknown packet id: 0x{:02X}", packet_id),
     }

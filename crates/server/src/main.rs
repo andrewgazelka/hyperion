@@ -28,6 +28,7 @@ fn init() -> anyhow::Result<()> {
     let default_address = format!("{ip}:{port}");
 
     // 10k players, we want at least 2^14 = 16,384 file handles
+
     adjust_file_limits(16_384)?;
 
     rayon::ThreadPoolBuilder::new()

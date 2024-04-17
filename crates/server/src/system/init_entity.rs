@@ -9,8 +9,10 @@ use tracing::instrument;
 use valence_protocol::{ByteAngle, VarInt, Velocity};
 
 use crate::{
-    singleton::broadcast::BroadcastBuf, system::entity_position::PositionSyncMetadata,
-    EntityReaction, FullEntityPose, InitEntity, MinecraftEntity, RunningSpeed, Uuid,
+    components::{EntityReaction, FullEntityPose, MinecraftEntity, RunningSpeed, Uuid},
+    events::InitEntity,
+    singleton::broadcast::BroadcastBuf,
+    system::entity_position::PositionSyncMetadata,
 };
 
 pub fn spawn_packet(
@@ -23,7 +25,7 @@ pub fn spawn_packet(
 
     valence_protocol::packets::play::EntitySpawnS2c {
         entity_id,
-        object_uuid: uuid.0,
+        object_uuid: *uuid,
         kind: VarInt(EntityType::Zombie as i32),
         position: pose.position.as_dvec3(),
         pitch: ByteAngle::from_degrees(pose.pitch),
@@ -52,7 +54,7 @@ pub fn init_entity(
 
     let id = s.spawn();
 
-    let uuid = Uuid(uuid::Uuid::new_v4());
+    let uuid = Uuid::from(uuid::Uuid::new_v4());
 
     s.insert(id, MinecraftEntity);
     s.insert(id, event.pose);

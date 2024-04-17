@@ -1,7 +1,7 @@
 use evenio::prelude::*;
 use tracing::instrument;
 
-use crate::{global::Global, singleton::broadcast::BroadcastBuf, Gametick};
+use crate::{events::Gametick, global::Global, singleton::broadcast::BroadcastBuf};
 
 #[instrument(skip_all, level = "trace")]
 pub fn update_time(

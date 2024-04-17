@@ -22,10 +22,12 @@ members = [
 opt-level = 3
 
 [profile.release]
+
 #debug = true
 lto = "fat"
 codegen-units = 1
 panic = "abort"
+
 
 # custom release-debug profile
 [profile.release-debug]
@@ -46,4 +48,6 @@ rayon-local = { path = "crates/rayon-local" }
 rust-mc-bot = { git = "https://github.com/andrewgazelka/rust-mc-bot", branch = "optimize" }
 glam = "0.26.0"
 
-evenio = { git = "https://github.com/rj00a/evenio", features = ["rayon"] }
+# todo: re-enable rayon
+evenio = { git = "https://github.com/kuviman/evenio", features = [], branch = "non-send" }
+#evenio = { git = "https://github.com/rj00a/evenio", features = ["rayon"] }

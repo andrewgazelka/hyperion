@@ -1,8 +1,6 @@
-//! Utilities for working with pose. This should probably be moved elsewhere.
-
 use bvh::aabb::Aabb;
 
-use crate::{EntityReaction, FullEntityPose};
+use crate::components::{EntityReaction, FullEntityPose};
 
 impl FullEntityPose {
     /// # Safety

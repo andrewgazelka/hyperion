@@ -1,0 +1,10 @@
+{
+  "name": "Debian",
+  "build" : {
+    "dockerfile": "Dockerfile-dev"
+  },
+  "mounts": [
+    "type=volume,target=${containerWorkspaceFolder}/target"
+  ],
+  "forwardPorts": [25565]
+}

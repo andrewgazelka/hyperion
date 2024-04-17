@@ -1,57 +1,55 @@
 use evenio::prelude::*;
-use tracing::instrument;
+use tracing::{info, instrument};
 
 use crate::{
-    net::{Connection, Encoder},
+    components::{
+        AiTargetable, EntityReaction, FullEntityPose, InGameName, KeepAlive, Player, Uuid,
+    },
+    events::{PlayerInit, PlayerJoinWorld},
     system::entity_position::PositionSyncMetadata,
-    tracker::Tracker,
-    EntityReaction, FullEntityPose, InitPlayer, Player, PlayerJoinWorld, Targetable, Uuid,
 };
 
 #[instrument(skip_all)]
 pub fn init_player(
-    r: ReceiverMut<InitPlayer>,
+    r: ReceiverMut<PlayerInit>,
     mut s: Sender<(
         Insert<FullEntityPose>,
         Insert<PositionSyncMetadata>,
         Insert<Player>,
         Insert<EntityReaction>,
         Insert<Uuid>,
-        Insert<Targetable>,
-        Insert<Encoder>,
-        Insert<Connection>,
+        Insert<KeepAlive>,
+        Insert<AiTargetable>,
+        Insert<InGameName>,
         PlayerJoinWorld,
     )>,
 ) {
+    println!("yoooooo");
     // take ownership
     let event = EventMut::take(r.event);
 
-    let InitPlayer {
+    // todo: bug in evenio I think where if it is targetting this event will not fire
+    // let entity = event.target();
+
+    let PlayerInit {
         entity,
-        encoder,
-        connection,
-        name,
+        username: name,
         uuid,
-        pos,
+        pose,
     } = event;
 
-    s.insert(entity, pos);
-    s.insert(entity, Targetable);
-    s.insert(entity, Player {
-        last_keep_alive_sent: std::time::Instant::now(),
-        unresponded_keep_alive: false,
-        ping: std::time::Duration::from_secs(1),
-        name,
-        locale: None,
-        state: Tracker::default(),
-        immune_until: 0,
-    });
-    s.insert(entity, encoder);
-    s.insert(entity, connection);
-    s.insert(entity, Uuid(uuid));
-    s.insert(entity, PositionSyncMetadata::default());
+    info!("PlayerInit: {name}");
 
+    s.insert(entity, pose);
+    s.insert(entity, Player);
+    s.insert(entity, AiTargetable);
+    s.insert(entity, InGameName::from(name));
+    s.insert(entity, Uuid::from(uuid));
+    s.insert(entity, PositionSyncMetadata::default());
+    s.insert(entity, KeepAlive::default());
+    s.insert(entity, FullEntityPose::player());
     s.insert(entity, EntityReaction::default());
 
+    println!("sending player join world");
     s.send(PlayerJoinWorld { target: entity });
 }

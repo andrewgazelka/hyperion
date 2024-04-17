@@ -8,15 +8,16 @@ use valence_protocol::{
 };
 
 use crate::{
+    components::Uuid,
+    events::KickPlayer,
     global::Global,
-    net::Encoder,
+    net::LocalEncoder,
     singleton::{player_id_lookup::PlayerIdLookup, player_uuid_lookup::PlayerUuidLookup},
-    KickPlayer, Uuid,
 };
 
 #[instrument(skip_all)]
 pub fn player_kick(
-    r: Receiver<KickPlayer, (EntityId, &Uuid, &mut Encoder)>,
+    r: Receiver<KickPlayer, (EntityId, &Uuid, &mut LocalEncoder)>,
     global: Single<&Global>,
     mut uuid_lookup: Single<&mut PlayerUuidLookup>,
     mut id_lookup: Single<&mut PlayerIdLookup>,
@@ -33,9 +34,12 @@ pub fn player_kick(
     let reason = reason.into_text().color(Color::RED);
 
     encoder
-        .encode(&play::DisconnectS2c {
-            reason: reason.into(),
-        })
+        .append(
+            &play::DisconnectS2c {
+                reason: reason.into(),
+            },
+            &global,
+        )
         .unwrap();
 
     // todo: also handle disconnecting without kicking, io socket being closed, etc

@@ -1,22 +1,46 @@
 use std::time::Instant;
 
-use evenio::{prelude::*, rayon::prelude::*};
-use tracing::{debug, instrument, trace};
+use evenio::prelude::*;
+use tracing::{instrument, trace};
 
-use crate::{net::Encoder, system::player_join_world::send_keep_alive, Gametick, Player};
+use crate::{
+    components::KeepAlive,
+    events::{Gametick, KickPlayer},
+    global::Global,
+    net::LocalEncoder,
+    system::player_join_world::send_keep_alive,
+};
 
 #[instrument(skip_all, level = "trace")]
-pub fn keep_alive(_: Receiver<Gametick>, mut fetcher: Fetcher<(&mut Player, &mut Encoder)>) {
-    fetcher.par_iter_mut().for_each(|(player, encoder)| {
+pub fn keep_alive(
+    _: Receiver<Gametick>,
+    global: Single<&Global>,
+    mut fetcher: Fetcher<(EntityId, &mut KeepAlive, &mut LocalEncoder)>,
+    mut s: Sender<KickPlayer>,
+) {
+    fetcher.iter_mut().for_each(|(id, keep_alive, encoder)| {
+        let Some(sent) = &mut keep_alive.last_sent else {
+            keep_alive.last_sent = Some(Instant::now());
+            return;
+        };
+
         // if we haven't sent a keep alive packet in 5 seconds, and a keep alive hasn't already
         // been sent and hasn't been responded to, send one
-        if !player.unresponded_keep_alive && player.last_keep_alive_sent.elapsed().as_secs() >= 5 {
-            player.last_keep_alive_sent = Instant::now();
-            // todo: handle and disconnect
-            let name = &player.name;
-            debug!("sending keep alive to {name}");
+        let elapsed = sent.elapsed();
 
-            send_keep_alive(encoder.inner_mut()).unwrap();
+        if elapsed > global.keep_alive_timeout {
+            s.send(KickPlayer {
+                target: id,
+                reason: "keep alive timeout".into(),
+            });
+            return;
+        }
+
+        if !keep_alive.unresponded && elapsed.as_secs() >= 5 {
+            *sent = Instant::now();
+
+            // todo: handle and disconnect
+            send_keep_alive(encoder, &global).unwrap();
 
             trace!("keep alive");
         }

@@ -144,4 +144,18 @@ impl BroadcastBuf {
                 f(bytes);
             });
     }
+
+    pub fn drain(&mut self, mut f: impl FnMut(bytes::Bytes)) {
+        self.rayon_local
+            .get_all_locals()
+            .iter_mut()
+            .for_each(|encoder| {
+                let encoder = encoder.get_mut();
+                let bytes = encoder.take().freeze();
+                if bytes.is_empty() {
+                    return;
+                }
+                f(bytes);
+            });
+    }
 }

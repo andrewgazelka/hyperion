@@ -1,11 +1,12 @@
-use evenio::{prelude::*, rayon::prelude::*};
+use evenio::prelude::*;
 use glam::{Vec2, Vec3};
 use tracing::instrument;
 use valence_protocol::{packets::play, ByteAngle, VarInt};
 
 use crate::{
+    components::{FullEntityPose, Uuid},
+    events::Gametick,
     singleton::broadcast::{BroadcastBuf, PacketMetadata, PacketNecessity},
-    FullEntityPose, Gametick, Uuid,
 };
 
 #[derive(Query, Debug)]
@@ -30,7 +31,7 @@ pub fn sync_entity_position(
     mut entities: Fetcher<EntityQuery>,
     broadcast: Single<&BroadcastBuf>,
 ) {
-    entities.par_iter_mut().for_each(|query| {
+    entities.iter_mut().for_each(|query| {
         let EntityQuery {
             id,
             uuid,
