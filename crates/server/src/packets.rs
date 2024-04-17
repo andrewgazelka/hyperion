@@ -27,7 +27,7 @@ use valence_protocol::{
 use crate::{
     components::{
         vitals::{Absorption, Regeneration},
-        FullEntityPose, ImmuneStatus, KeepAlive, Player,
+        FullEntityPose, ImmuneStatus, KeepAlive,
     },
     events::{AttackEntity, InitEntity, KillAllEntities, SwingArm},
     global::Global,

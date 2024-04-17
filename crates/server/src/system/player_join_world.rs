@@ -193,7 +193,7 @@ pub fn player_join_world(
         .iter()
         .map(|query| play::player_list_s2c::PlayerListEntry {
             player_uuid: query.uuid.0,
-            username: &query.name,
+            username: query.name,
             properties: Cow::Borrowed(&[]),
             chat_data: None,
             listed: true,
@@ -203,9 +203,9 @@ pub fn player_join_world(
         })
         .collect::<Vec<_>>();
 
-    let player_names: Vec<&str> = players
+    let player_names: Vec<_> = players
         .iter()
-        .map(|query| query.name.deref().deref().deref()) // todo: lol
+        .map(|query| &***query.name) // todo: lol
         .collect();
 
     encoder

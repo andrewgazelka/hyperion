@@ -66,13 +66,19 @@ pub struct ImmuneStatus {
     pub until: i64,
 }
 
+impl ImmuneStatus {
+    pub const fn is_invincible(&self, global: &Global) -> bool {
+        global.tick < self.until
+    }
+}
+
 impl Vitals {
     /// Heal the player by a given amount.
     pub fn heal(&mut self, amount: f32) {
         assert!(amount.is_finite());
         assert!(amount > 0.0);
 
-        let Vitals::Alive { health, .. } = self else {
+        let Self::Alive { health, .. } = self else {
             return;
         };
 
@@ -94,7 +100,7 @@ impl Vitals {
 
         immune.until = tick + i64::from(max_hurt_resistant_time) / 2;
 
-        let Vitals::Alive {
+        let Self::Alive {
             health,
             absorption,
             regeneration,
@@ -116,7 +122,7 @@ impl Vitals {
         *health -= amount;
 
         if *health <= 0.0 {
-            *self = Vitals::Dead {
+            *self = Self::Dead {
                 respawn_tick: tick + 100,
             }
         }

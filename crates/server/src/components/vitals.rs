@@ -17,14 +17,9 @@ impl Default for Absorption {
     }
 }
 
-#[derive(Copy, Clone, PartialEq, Debug)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Default)]
 pub struct Regeneration {
     /// This effect goes away on the tick with the value `end_tick`.
     pub end_tick: i64,
 }
 
-impl Default for Regeneration {
-    fn default() -> Self {
-        Self { end_tick: 0 }
-    }
-}

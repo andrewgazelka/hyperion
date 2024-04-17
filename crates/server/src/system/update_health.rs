@@ -21,7 +21,7 @@ const HUNGER_INTERVAL: i64 = 80;
 const REGENERATION_INTERVAL: i64 = 25;
 
 #[derive(Query)]
-struct UpdateHealthQuery<'a> {
+pub struct UpdateHealthQuery<'a> {
     prev_vitals: &'a mut Prev<Vitals>,
     vitals: &'a mut Vitals,
 }
