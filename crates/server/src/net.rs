@@ -195,7 +195,7 @@ fn offline_uuid(username: &str) -> anyhow::Result<Uuid> {
 
 mod encoder;
 
-#[derive(Component)]
+#[derive(Component, Debug)]
 pub struct LocalEncoder {
     /// The encoding buffer and logic
     enc: encoder::PacketEncoder,

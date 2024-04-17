@@ -1,6 +1,7 @@
 use std::{
     cell::UnsafeCell,
     ffi::c_void,
+    fmt::Debug,
     ops::{Deref, DerefMut},
     rc::Rc,
 };
@@ -52,6 +53,14 @@ struct BufferAllocatorInner {
 pub struct BufRef {
     index: u16,
     allocator: Rc<BufferAllocatorInner>,
+}
+
+impl Debug for BufRef {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("BufRef")
+            .field("index", &self.index)
+            .finish()
+    }
 }
 
 impl BufRef {
