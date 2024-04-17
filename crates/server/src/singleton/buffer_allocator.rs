@@ -12,9 +12,9 @@ use libc::iovec;
 
 use crate::net::ServerDef;
 
-const COUNT: usize = 1024;
+const COUNT: usize = 8;
 
-const BUFFER_SIZE: usize = 1024 * 1024;
+const BUFFER_SIZE: usize = 1024 * 1024 * 4;
 
 #[derive(Component)]
 pub struct BufferAllocator {
@@ -91,16 +91,16 @@ impl DerefMut for BufRef {
 }
 
 impl BufferAllocatorInner {
-    #[allow(
-        clippy::large_stack_frames,
-        reason = "todo probs remove somehow but idk how"
-    )]
     fn new(server_def: &mut impl ServerDef) -> Self {
         let available = std::array::from_fn(|i| i as u16);
 
-        let buffers: Box<_> = (0..COUNT)
-            .map(|_| UnsafeCell::new(ArrayVec::new()))
-            .collect();
+        let mut buffers = Vec::new();
+
+        for _ in 0..COUNT {
+            buffers.push(UnsafeCell::new(ArrayVec::new()));
+        }
+
+        let buffers = buffers.into_boxed_slice();
 
         let iovecs = buffers
             .iter()
