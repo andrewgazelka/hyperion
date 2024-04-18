@@ -46,12 +46,4 @@ impl Global {
             keep_alive_timeout: Duration::from_secs(20),
         }
     }
-
-    pub fn set_needs_realloc(&self) {
-        self.needs_realloc.get_rayon_local().set(true);
-    }
-
-    pub fn get_needs_realloc(&mut self) -> bool {
-        self.needs_realloc.get_all_locals().iter().any(Cell::get)
-    }
 }

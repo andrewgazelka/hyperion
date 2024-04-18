@@ -16,18 +16,23 @@ use crate::{
 pub fn egress(
     _: Receiver<Egress>,
     mut server: Single<&mut Server>,
-    players: Fetcher<(&Packets, &Fd)>,
-    broadcast: Single<&Broadcast>,
-    encoders: Fetcher<(&IoBuf, &Fd, &LoginState)>,
+    mut players: Fetcher<(&mut Packets, &Fd)>,
+    mut broadcast: Single<&mut Broadcast>,
     mut global: Single<&mut Global>,
 ) {
-    let items = encoders.iter().map(|(encoder, fd, state)| RefreshItems {
-        local: encoder.buf(),
+    let local_items = players.iter_mut().map(|(pkts, fd)| RefreshItems {
+        write: pkts.to_write(),
         fd: *fd,
-        broadcast: *state == LoginState::Play,
     });
 
-    server.write_all(&mut global, &broadcast_buf, items);
+    server.write_all(&mut global, broadcast.to_write(), local_items);
 
     server.submit_events();
+
+    // now clear
+    broadcast.clear();
+
+    for (pkts, ..) in &mut players {
+        pkts.clear();
+    }
 }

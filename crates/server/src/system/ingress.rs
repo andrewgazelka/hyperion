@@ -28,7 +28,7 @@ use crate::{
     events::{
         AttackEntity, Gametick, InitEntity, KickPlayer, KillAllEntities, PlayerInit, SwingArm,
     },
-    net::{Fd, IoBuf, MINECRAFT_VERSION, PROTOCOL_VERSION},
+    net::{Fd, IoBuf, Packets, MINECRAFT_VERSION, PROTOCOL_VERSION},
     singleton::player_id_lookup::PlayerIdLookup,
     system::ingress::player_packet_buffer::DecodeBuffer,
 };
@@ -41,6 +41,7 @@ pub type IngressSender<'a> = Sender<
         Insert<DecodeBuffer>,
         Insert<IoBuf>,
         Insert<Fd>,
+        Insert<Packets>,
         PlayerInit,
         Despawn,
         KickPlayer,
@@ -57,16 +58,15 @@ pub fn ingress(
     _: Receiver<Gametick>,
     mut fd_lookup: Single<&mut FdLookup>,
     mut global: Single<&mut Global>,
-    id_lookup: Single<&PlayerIdLookup>,
     mut server: Single<&mut Server>,
-    buffers: Single<&mut BufferAllocator>,
     mut players: Fetcher<(
         &mut LoginState,
         &mut DecodeBuffer,
-        &mut IoBuf,
+        &mut Packets,
         &Fd,
         Option<&mut FullEntityPose>,
     )>,
+    mut io: Single<&mut IoBuf>,
     mut sender: IngressSender,
 ) {
     server
@@ -76,14 +76,10 @@ pub fn ingress(
                 sender.insert(new_player, LoginState::Handshake);
                 sender.insert(new_player, DecodeBuffer::default());
 
-                let buffer = buffers.obtain().unwrap();
-
-                sender.insert(new_player, IoBuf::default());
+                sender.insert(new_player, Packets::default());
                 sender.insert(new_player, fd);
 
                 fd_lookup.insert(fd, new_player);
-
-                global.set_needs_realloc();
 
                 info!("got a player with fd {:?}", fd);
             }
@@ -99,7 +95,7 @@ pub fn ingress(
             ServerEvent::RecvData { fd, data } => {
                 trace!("got data: {data:?}");
                 let id = *fd_lookup.get(&fd).expect("player with fd not found");
-                let (login_state, decoder, encoder, _, mut pose) =
+                let (login_state, decoder, packets, _, mut pose) =
                     players.get_mut(id).expect("player with fd not found");
 
                 decoder.queue_slice(data);
@@ -108,7 +104,7 @@ pub fn ingress(
                     match *login_state {
                         LoginState::Handshake => process_handshake(login_state, &frame).unwrap(),
                         LoginState::Status => {
-                            process_status(login_state, &frame, encoder, &global).unwrap();
+                            process_status(login_state, &frame, packets, &mut io).unwrap();
                         }
                         LoginState::Terminate => {
                             // todo: does this properly terminate the connection? I don't think so probably
@@ -123,9 +119,10 @@ pub fn ingress(
                                 id,
                                 login_state,
                                 &frame,
-                                encoder,
+                                packets,
                                 decoder,
                                 &global,
+                                &mut io,
                                 &mut sender,
                             )
                             .unwrap();
@@ -150,6 +147,8 @@ fn process_handshake(login_state: &mut LoginState, packet: &PacketFrame) -> anyh
 
     let handshake: packets::handshaking::HandshakeC2s = packet.decode()?;
 
+    info!("received handshake: {:?}", handshake);
+
     // todo: check version is correct
 
     match handshake.next_state {
@@ -168,9 +167,10 @@ fn process_login(
     id: EntityId,
     login_state: &mut LoginState,
     packet: &PacketFrame,
-    encoder: &mut IoBuf,
+    packets: &mut Packets,
     decoder: &mut DecodeBuffer,
     global: &Global,
+    io: &mut IoBuf,
     sender: &mut IngressSender,
 ) -> anyhow::Result<()> {
     debug_assert!(*login_state == LoginState::Login);
@@ -186,9 +186,8 @@ fn process_login(
         threshold: VarInt(global.shared.compression_level.0),
     };
 
-    encoder.append(&pkt, global)?;
+    packets.append_pre_compression_packet(&pkt, io)?;
 
-    encoder.set_compression(global.shared.compression_level);
     decoder.set_compression(global.shared.compression_level);
 
     let pkt = login::LoginSuccessS2c {
@@ -199,7 +198,7 @@ fn process_login(
         properties: Cow::default(),
     };
 
-    encoder.append(&pkt, global)?;
+    packets.append(&pkt, io)?;
 
     let username = Box::from(username);
 
@@ -219,8 +218,8 @@ fn process_login(
 fn process_status(
     login_state: &mut LoginState,
     packet: &PacketFrame,
-    encoder: &mut IoBuf,
-    global: &Global,
+    packets: &mut Packets,
+    io: &mut IoBuf,
 ) -> anyhow::Result<()> {
     debug_assert!(*login_state == LoginState::Status);
 
@@ -248,15 +247,14 @@ fn process_status(
             let send = packets::status::QueryResponseS2c { json: &json };
 
             info!("sent query response: {query_request:?}");
-
-            encoder.append(&send, global)?;
-
+            //
+            packets.append_pre_compression_packet(&send, io)?;
             // we send this right away so our ping looks better
-            let send = packets::status::QueryPongS2c { payload: 123 };
-            encoder.append(&send, global)?;
+            // let send = packets::status::QueryPongS2c { payload: 123 };
+            // packets.append_pre_compression_packet(&send, io)?;
 
             // short circuit
-            *login_state = LoginState::Terminate;
+            // *login_state = LoginState::Terminate;
         }
 
         packets::status::QueryPingC2s::ID => {
@@ -266,7 +264,7 @@ fn process_status(
 
             let send = packets::status::QueryPongS2c { payload };
 
-            encoder.append(&send, global)?;
+            packets.append_pre_compression_packet(&send, io)?;
 
             info!("sent query response: {query_ping:?}");
             *login_state = LoginState::Terminate;

@@ -30,7 +30,7 @@ use crate::{
     components::Vitals,
     events::{Egress, Gametick, StatsEvent},
     global::Global,
-    net::{Server, ServerDef},
+    net::{Broadcast, IoBuf, Server, ServerDef},
     singleton::{
         fd_lookup::FdLookup, player_aabb_lookup::PlayerBoundingBoxes,
         player_id_lookup::PlayerIdLookup, player_uuid_lookup::PlayerUuidLookup, ring::Ring,
@@ -159,8 +159,11 @@ impl Game {
         let server = world.spawn();
         let mut server_def = Server::new(address)?;
 
-        let buffer_alloc = world.spawn();
-        world.insert(buffer_alloc, Ring::new(&mut server_def));
+        let io_id = world.spawn();
+        let mut io = IoBuf::new(shared.compression_level);
+        io.buf_mut().register(&mut server_def);
+
+        world.insert(io_id, io);
         world.insert(server, server_def);
 
         world.add_handler(system::ingress);
@@ -207,8 +210,8 @@ impl Game {
         let fd_lookup = world.spawn();
         world.insert(fd_lookup, FdLookup::default());
 
-        let encoder = world.spawn();
-        world.insert(encoder, BroadcastBuf::new(shared.compression_level));
+        let broadcast = world.spawn();
+        world.insert(broadcast, Broadcast::default());
 
         let mut game = Self {
             shared,

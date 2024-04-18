@@ -5,14 +5,15 @@ use valence_protocol::VarInt;
 use crate::{
     components::{MinecraftEntity, Player},
     events::KillAllEntities,
-    net::Broadcast,
+    net::{Broadcast, IoBuf},
 };
 
 #[instrument(skip_all)]
 pub fn kill_all(
     _r: ReceiverMut<KillAllEntities>,
     entities: Fetcher<(EntityId, &MinecraftEntity, Not<&Player>)>,
-    broadcast: Single<&mut Broadcast>,
+    mut broadcast: Single<&mut Broadcast>,
+    mut io: Single<&mut IoBuf>,
     mut s: Sender<Despawn>,
 ) {
     let ids = entities.iter().map(|(id, ..)| id).collect::<Vec<_>>();
@@ -22,11 +23,7 @@ pub fn kill_all(
 
     let despawn_packet = valence_protocol::packets::play::EntitiesDestroyS2c { entity_ids };
 
-    broadcast
-        .0
-        .get_round_robin()
-        .append_packet(&despawn_packet)
-        .unwrap();
+    broadcast.append(&despawn_packet, &mut io).unwrap();
 
     for id in ids {
         s.send(Despawn(id));

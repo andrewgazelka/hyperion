@@ -1,14 +1,16 @@
 use std::io::Write;
 
 use libc::iovec;
+use tracing::{debug, info};
 
 use crate::net::ServerDef;
 
 // todo: see if it makes sense to use MaybeUninit
 #[derive(Debug)]
-pub struct Ring<const N: usize> {
-    data: [u8; N],
+pub struct Ring {
+    data: Box<[u8]>, // sad we have to box this so no stackoverflow
     head: usize,
+    max_len: usize,
 }
 
 pub trait McBuf {
@@ -18,42 +20,45 @@ pub trait McBuf {
     fn append(&mut self, data: &[u8]);
 }
 
-impl<const N: usize> McBuf for Ring<N> {
+impl McBuf for Ring {
     fn len_until_end(&self) -> usize {
-        N - self.head
+        self.max_len - self.head
     }
 
     fn get_contiguous(&mut self, len: usize) -> &mut [u8] {
-        debug_assert!(len <= N);
+        debug_assert!(len <= self.max_len);
 
-        if self.len_until_end() < len {
+        let len_until_end = self.len_until_end();
+        if len_until_end < len {
+            info!("rotating buffer because {len_until_end} < {len}");
             self.head = 0;
             &mut self.data[..len]
         } else {
             let start = self.head;
-            &mut self.data[start..self.head]
+            &mut self.data[start..start + len]
         }
     }
 
     /// **Does not advice head unless it needs to move to the beginning**
     fn advance(&mut self, len: usize) {
-        debug_assert!(len <= N);
-        self.head = (self.head + len) % N;
+        debug_assert!(len <= self.max_len);
+        self.head = (self.head + len) % self.max_len;
     }
 
     fn append(&mut self, data: &[u8]) {
-        debug_assert!(data.len() <= N);
+        debug_assert!(data.len() <= self.max_len);
         let len = data.len();
         self.get_contiguous(len).copy_from_slice(data);
         self.advance(len);
     }
 }
 
-impl<const N: usize> Ring<N> {
-    pub fn new() -> Self {
+impl Ring {
+    pub fn new(max_len: usize) -> Self {
         Self {
-            data: [0; N],
+            data: vec![0; max_len].into_boxed_slice(),
             head: 0,
+            max_len,
         }
     }
 

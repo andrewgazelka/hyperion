@@ -1,9 +1,7 @@
-use std::{
-    ffi::c_void,
-    io::{Cursor, Read},
-};
+use std::io::{Cursor, Read};
 
 use anyhow::ensure;
+use tracing::{info, trace};
 use valence_protocol::{CompressionThreshold, Encode, Packet, VarInt};
 
 use crate::{
@@ -29,9 +27,10 @@ impl std::fmt::Debug for PacketEncoder {
 // but ehhhh not doing this now we are referncing data which lives the duration of the program
 // todo: bench if repr packed worth it (on old processors often slows down.
 // Modern processors packed can actually be faster because cache locality)
+#[derive(Debug)]
 #[repr(packed)]
 pub struct PacketWriteInfo {
-    pub start_ptr: *const c_void,
+    pub start_ptr: *const u8,
     pub len: u32,
 }
 
@@ -75,7 +74,7 @@ impl PacketEncoder {
 
         pkt.encode_with_id(&mut cursor)?;
 
-        let data_len = cursor.position() as usize;
+        let data_len = cursor.position() as usize - data_write_start as usize;
 
         if has_compression && data_len > self.threshold.0.unsigned_abs() as usize {
             use flate2::{bufread::ZlibEncoder, Compression};
@@ -112,18 +111,19 @@ impl PacketEncoder {
 
             let compressed_len = self.compress_buf.len();
 
-            let buffer_len = (data_write_start as usize + compressed_len);
+            let end_len = data_write_start as usize + compressed_len;
 
             let slice = cursor.into_inner();
 
-            slice[data_write_start as usize..buffer_len].copy_from_slice(&self.compress_buf);
+            slice[data_write_start as usize..end_len].copy_from_slice(&self.compress_buf);
 
-            let entire_slice = &slice[metadata_start_idx as usize..buffer_len];
+            let entire_slice = &slice[metadata_start_idx as usize..end_len];
 
             let start_ptr = entire_slice.as_ptr();
             let len = entire_slice.len();
 
-            buf.advance(buffer_len);
+            trace!("advancing by {end_len}");
+            buf.advance(end_len);
 
             return Ok(PacketWriteInfo {
                 start_ptr: start_ptr.cast(),
@@ -147,19 +147,20 @@ impl PacketEncoder {
 
         let slice = cursor.into_inner();
 
-        let buffer_len = (data_write_start as usize + packet_len);
+        let end_len = data_write_start as usize + data_len;
 
-        let entire_slice = &slice[metadata_start_idx as usize..buffer_len];
+        let entire_slice = &slice[metadata_start_idx as usize..end_len];
 
         let start_ptr = entire_slice.as_ptr();
         let len = entire_slice.len();
 
-        buf.advance(buffer_len);
+        trace!("advancing by {end_len}");
+        buf.advance(end_len);
 
-        return Ok(PacketWriteInfo {
+        Ok(PacketWriteInfo {
             start_ptr: start_ptr.cast(),
             len: len as u32,
-        });
+        })
     }
 
     pub fn set_compression(&mut self, threshold: CompressionThreshold) {

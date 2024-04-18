@@ -10,6 +10,7 @@ use derive_more::{Deref, DerefMut, From};
 use evenio::prelude::Component;
 use libc::iovec;
 use sha2::Digest;
+use tracing::info;
 use valence_protocol::{uuid::Uuid, CompressionThreshold, Encode, VarInt};
 
 use crate::{
@@ -121,7 +122,7 @@ impl ServerDef for Server {
 
 #[repr(packed)]
 pub struct RefreshItems<'a> {
-    pub write: &'a mut [PacketWriteInfo],
+    pub write: &'a [PacketWriteInfo],
     pub fd: Fd,
 }
 
@@ -207,28 +208,40 @@ const S2C_BUFFER_SIZE: usize = 1024 * 1024 * NUM_PLAYERS;
 pub struct IoBuf {
     /// The encoding buffer and logic
     enc: encoder::PacketEncoder,
-    buf: Ring<MAX_PACKET_SIZE>,
+    buf: Ring,
 }
 
-impl Default for IoBuf {
-    fn default() -> Self {
+impl IoBuf {
+    pub fn new(threshold: CompressionThreshold) -> Self {
         Self {
-            enc: encoder::PacketEncoder::new(CompressionThreshold(-1)),
-            buf: Ring::new(),
+            enc: encoder::PacketEncoder::new(threshold),
+            buf: Ring::new(S2C_BUFFER_SIZE),
         }
+    }
+
+    pub fn buf_mut(&mut self) -> &mut Ring {
+        &mut self.buf
     }
 }
 
 /// This is useful for the ECS so we can use Single<&mut Broadcast> instead of having to use a marker struct
-#[derive(Component, From, Deref, DerefMut)]
+#[derive(Component, From, Deref, DerefMut, Default)]
 pub struct Broadcast(Packets);
 
-#[derive(Component)]
+#[derive(Component, Default)]
 pub struct Packets {
     to_write: Vec<PacketWriteInfo>,
 }
 
 impl Packets {
+    pub fn to_write(&self) -> &[PacketWriteInfo] {
+        &self.to_write
+    }
+
+    pub fn clear(&mut self) {
+        self.to_write.clear();
+    }
+
     pub fn append_pre_compression_packet<P>(
         &mut self,
         pkt: &P,
@@ -242,6 +255,8 @@ impl Packets {
         buf.enc.set_compression(CompressionThreshold::DEFAULT);
 
         let result = buf.enc.append_packet(pkt, &mut buf.buf)?;
+
+        info!("appended packet: {result:?}");
         self.to_write.push(result);
 
         // reset

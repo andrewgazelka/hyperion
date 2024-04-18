@@ -359,13 +359,13 @@ impl<T, const N: usize> Array3d for [T; N] {
     }
 }
 
-pub fn send_keep_alive(encoder: &mut IoBuf, global: &Global) -> anyhow::Result<()> {
+pub fn send_keep_alive(packets: &mut Packets, io: &mut IoBuf) -> anyhow::Result<()> {
     let pkt = play::KeepAliveS2c {
         // The ID can be set to zero because it doesn't matter
         id: 0,
     };
 
-    encoder.append(&pkt, global)?;
+    packets.append(&pkt, io)?;
 
     Ok(())
 }

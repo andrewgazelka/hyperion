@@ -23,7 +23,6 @@ use super::RefreshItems;
 use crate::{
     global::Global,
     net::{encoder::PacketWriteInfo, Fd, ServerDef, ServerEvent},
-    singleton::buffer_allocator::BufRef,
 };
 
 /// Default MiB/s threshold before we start to limit the sending of some packets.
@@ -286,17 +285,18 @@ impl ServerDef for LinuxServer {
             let fd = fd.0;
 
             for elem in write {
-                let PacketWriteInfo { start_ptr, len } = elem;
+                let PacketWriteInfo { start_ptr, len } = *elem;
 
+                info!("writing packet: {start_ptr:?}, {len}");
                 self.write_raw(fd, start_ptr, len, 0);
             }
 
-            // send broadcasts later
-            for elem in broadcast {
-                let PacketWriteInfo { start_ptr, len } = elem;
-
-                self.write_raw(fd, start_ptr, len, 0);
-            }
+            // // send broadcasts later
+            // for elem in broadcast {
+            //     let PacketWriteInfo { start_ptr, len } = *elem;
+            //
+            //     self.write_raw(fd, start_ptr, len, 0);
+            // }
         });
     }
 

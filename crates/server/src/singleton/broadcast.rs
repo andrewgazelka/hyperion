@@ -2,15 +2,10 @@
 
 // https://stackoverflow.com/a/61681112/4889030
 // https://matklad.github.io/2020/10/03/fast-thread-locals-in-rust.html
-use std::cell::Cell;
 
-use evenio::prelude::Component;
-use rayon::iter::IntoParallelRefMutIterator;
 pub use rayon::iter::ParallelIterator;
-use rayon_local::RayonLocal;
-use tracing::trace;
 use uuid::Uuid;
-use valence_protocol::{math::Vec2, CompressionThreshold, Encode, Packet, PacketEncoder};
+use valence_protocol::math::Vec2;
 
 /// A definition of whether a packet is always required or can be dropped.
 ///
