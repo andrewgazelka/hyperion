@@ -184,6 +184,7 @@ impl ServerDef for LinuxServer {
         }
 
         for event in completion {
+            let result = event.result();
             match event.user_data() {
                 0 => {
                     if event.flags() & IORING_CQE_F_MORE == 0 {
@@ -191,22 +192,22 @@ impl ServerDef for LinuxServer {
                         Self::request_accept(&mut submission);
                     }
 
-                    if event.result() < 0 {
-                        error!("there was an error in accept: {}", event.result());
+                    if result < 0 {
+                        error!("there was an error in accept: {}", result);
+                        return Err(std::io::Error::from_raw_os_error(-result));
                     } else {
-                        let fd = Fixed(event.result() as u32);
+                        let fd = Fixed(result as u32);
                         Self::request_recv(&mut submission, fd);
                         f(ServerEvent::AddPlayer { fd: Fd(fd) });
                     }
                 }
                 write if write & SEND_MARKER != 0 => {
                     let fd = Fixed((write & !SEND_MARKER) as u32);
-                    let result = event.result();
 
                     match result.cmp(&0) {
                         cmp::Ordering::Less => {
                             error!("there was an error in write: {}", result);
-                            return Err(std::io::Error::last_os_error());
+                            return Err(std::io::Error::from_raw_os_error(-result));
                         }
                         cmp::Ordering::Equal => {
                             // A result of 0 indicates that the client closed the connection gracefully
@@ -223,7 +224,7 @@ impl ServerDef for LinuxServer {
                 }
                 read if read & RECV_MARKER != 0 => {
                     let fd = Fixed((read & !RECV_MARKER) as u32);
-                    let disconnected = event.result() == 0;
+                    let disconnected = result == 0;
 
                     if event.flags() & IORING_CQE_F_MORE == 0 && !disconnected {
                         trace!("socket recv rerequested");
@@ -233,12 +234,12 @@ impl ServerDef for LinuxServer {
                     if disconnected {
                         info!("disconnected during recv");
                         f(ServerEvent::RemovePlayer { fd: Fd(fd) });
-                    } else if event.result() < 0 {
+                    } else if result < 0 {
                         // -104
-                        error!("there was an error in recv: {}", event.result());
-                        return Err(std::io::Error::last_os_error());
+                        error!("there was an error in recv: {}", result);
+                        return Err(std::io::Error::from_raw_os_error(-result));
                     } else {
-                        let bytes_received = event.result() as usize;
+                        let bytes_received = result as usize;
                         let buffer_id =
                             buffer_select(event.flags()).expect("there should be a buffer");
                         assert!((buffer_id as usize) < C2S_RING_BUFFER_COUNT);
