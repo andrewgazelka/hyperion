@@ -9,6 +9,7 @@ use std::{
 use arrayvec::ArrayVec;
 use evenio::prelude::Component;
 use libc::iovec;
+use thiserror::Error;
 
 use crate::net::ServerDef;
 
@@ -26,11 +27,19 @@ pub struct BufferAllocator {
 unsafe impl Send for BufferAllocator {}
 unsafe impl Sync for BufferAllocator {}
 
-impl BufferAllocator {
-    pub fn obtain(&self) -> Option<BufRef> {
-        let index = unsafe { &mut *self.inner.available.get() }.pop()?;
+#[derive(Error, Debug)]
+pub enum BufferAllocatorError {
+    #[error("no more buffers available")]
+    NoMoreBuffers,
+}
 
-        Some(BufRef {
+impl BufferAllocator {
+    pub fn obtain(&self) -> Result<BufRef, BufferAllocatorError> {
+        let index = unsafe { &mut *self.inner.available.get() }
+            .pop()
+            .ok_or(BufferAllocatorError::NoMoreBuffers)?;
+
+        Ok(BufRef {
             index,
             allocator: self.inner.clone(),
         })
