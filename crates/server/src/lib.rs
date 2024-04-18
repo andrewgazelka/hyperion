@@ -245,7 +245,6 @@ impl Game {
         let duration = duration.mul_f64(0.8);
 
         if duration.as_millis() > 47 {
-            trace!("duration is long");
             return Some(Duration::from_millis(47));
         }
 
@@ -311,7 +310,7 @@ impl Game {
             let mean_1_second = arr.slice(s![..20]).mean().unwrap();
             let mean_5_seconds = arr.slice(s![..100]).mean().unwrap();
 
-            debug!("ms / tick: {mean_1_second:.2}ms");
+            trace!("ms / tick: {mean_1_second:.2}ms");
 
             self.world.send(StatsEvent {
                 ms_per_tick_mean_1s: mean_1_second,

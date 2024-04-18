@@ -195,11 +195,10 @@ impl ServerDef for LinuxServer {
                     if result < 0 {
                         error!("there was an error in accept: {}", result);
                         return Err(std::io::Error::from_raw_os_error(-result));
-                    } else {
-                        let fd = Fixed(result as u32);
-                        Self::request_recv(&mut submission, fd);
-                        f(ServerEvent::AddPlayer { fd: Fd(fd) });
                     }
+                    let fd = Fixed(result as u32);
+                    Self::request_recv(&mut submission, fd);
+                    f(ServerEvent::AddPlayer { fd: Fd(fd) });
                 }
                 write if write & SEND_MARKER != 0 => {
                     let fd = Fixed((write & !SEND_MARKER) as u32);

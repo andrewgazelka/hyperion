@@ -654,8 +654,8 @@ fn inner(encoder: &mut PacketEncoder) -> anyhow::Result<()> {
         block_light_arrays: Cow::Borrowed(&[]),
     };
 
-    for x in -16..=16 {
-        for z in -16..=16 {
+    for x in -16..16 {
+        for z in -16..16 {
             pkt.pos = ChunkPos::new(x, z);
             encoder.append_packet(&pkt)?;
         }
