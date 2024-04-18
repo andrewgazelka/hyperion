@@ -5,7 +5,7 @@ use evenio::{
 use tracing::instrument;
 use valence_protocol::{packets::play, VarInt, Velocity};
 
-use crate::{components::EntityReaction, events::Gametick, global::Global, net::LocalEncoder};
+use crate::{components::EntityReaction, events::Gametick, global::Global, net::IoBuf};
 
 fn vel_m_per_tick(input: glam::Vec3) -> Velocity {
     let input = input * 8000.0;
@@ -17,7 +17,7 @@ fn vel_m_per_tick(input: glam::Vec3) -> Velocity {
 pub fn generate_egress_packets(
     _: Receiver<Gametick>,
     global: Single<&Global>,
-    mut connections: Fetcher<(&mut LocalEncoder, &mut EntityReaction)>,
+    mut connections: Fetcher<(&mut IoBuf, &mut EntityReaction)>,
 ) {
     connections.iter_mut().for_each(|(encoder, reaction)| {
         if reaction.velocity.x.abs() > 0.01 || reaction.velocity.z.abs() > 0.01 {

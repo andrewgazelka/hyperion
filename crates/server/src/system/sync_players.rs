@@ -4,8 +4,7 @@ use valence_protocol::{packets::play, VarInt};
 use valence_text::{Color, IntoText};
 
 use crate::{
-    components::FullEntityPose, events::Gametick, global::Global, net::LocalEncoder, tracker::Prev,
-    Vitals,
+    components::FullEntityPose, events::Gametick, global::Global, net::IoBuf, tracker::Prev, Vitals,
 };
 
 const HURT_SOUND: VarInt = VarInt(1018); // represents 1019
@@ -20,7 +19,7 @@ pub struct SyncPlayersQuery<'a> {
     pose: &'a FullEntityPose,
     prev_vitals: &'a mut Prev<Vitals>,
     vitals: &'a mut Vitals,
-    encoder: &'a mut LocalEncoder,
+    encoder: &'a mut IoBuf,
 }
 
 #[instrument(skip_all)]

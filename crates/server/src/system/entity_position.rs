@@ -6,7 +6,8 @@ use valence_protocol::{packets::play, ByteAngle, VarInt};
 use crate::{
     components::{FullEntityPose, Uuid},
     events::Gametick,
-    singleton::broadcast::{BroadcastBuf, PacketMetadata, PacketNecessity},
+    net::{Broadcast, Packets},
+    singleton::broadcast::{PacketMetadata, PacketNecessity},
 };
 
 #[derive(Query, Debug)]
@@ -29,7 +30,7 @@ pub struct PositionSyncMetadata {
 pub fn sync_entity_position(
     _: Receiver<Gametick>,
     mut entities: Fetcher<EntityQuery>,
-    broadcast: Single<&BroadcastBuf>,
+    broadcast: Single<&Broadcast>,
 ) {
     entities.iter_mut().for_each(|query| {
         let EntityQuery {
@@ -143,7 +144,7 @@ pub enum EntityMovement {
 }
 
 impl EntityMovement {
-    fn write_packets(&self, id: EntityId, broadcast: &BroadcastBuf, metadata: PacketMetadata) {
+    fn write_packets(&self, id: EntityId, broadcast: &Packets, metadata: PacketMetadata) {
         #[expect(
             clippy::cast_possible_wrap,
             reason = "wrapping is okay in this scenario"

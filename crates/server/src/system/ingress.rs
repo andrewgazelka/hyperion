@@ -28,8 +28,8 @@ use crate::{
     events::{
         AttackEntity, Gametick, InitEntity, KickPlayer, KillAllEntities, PlayerInit, SwingArm,
     },
-    net::{Fd, LocalEncoder, MINECRAFT_VERSION, PROTOCOL_VERSION},
-    singleton::{buffer_allocator::BufferAllocator, player_id_lookup::PlayerIdLookup},
+    net::{Fd, IoBuf, MINECRAFT_VERSION, PROTOCOL_VERSION},
+    singleton::player_id_lookup::PlayerIdLookup,
     system::ingress::player_packet_buffer::DecodeBuffer,
 };
 
@@ -39,7 +39,7 @@ pub type IngressSender<'a> = Sender<
         Spawn,
         Insert<LoginState>,
         Insert<DecodeBuffer>,
-        Insert<LocalEncoder>,
+        Insert<IoBuf>,
         Insert<Fd>,
         PlayerInit,
         Despawn,
@@ -63,18 +63,12 @@ pub fn ingress(
     mut players: Fetcher<(
         &mut LoginState,
         &mut DecodeBuffer,
-        &mut LocalEncoder,
+        &mut IoBuf,
         &Fd,
         Option<&mut FullEntityPose>,
     )>,
     mut sender: IngressSender,
 ) {
-    // clear encoders:todo: kinda jank
-    // todo: ADDING THIS MAKES 100ms ping and without it is 0ms??? what
-    for (_, _, encoder, ..) in &mut players {
-        encoder.clear();
-    }
-
     server
         .drain(|event| match event {
             ServerEvent::AddPlayer { fd } => {
@@ -84,7 +78,7 @@ pub fn ingress(
 
                 let buffer = buffers.obtain().unwrap();
 
-                sender.insert(new_player, LocalEncoder::new(buffer));
+                sender.insert(new_player, IoBuf::default());
                 sender.insert(new_player, fd);
 
                 fd_lookup.insert(fd, new_player);
@@ -174,7 +168,7 @@ fn process_login(
     id: EntityId,
     login_state: &mut LoginState,
     packet: &PacketFrame,
-    encoder: &mut LocalEncoder,
+    encoder: &mut IoBuf,
     decoder: &mut DecodeBuffer,
     global: &Global,
     sender: &mut IngressSender,
@@ -225,7 +219,7 @@ fn process_login(
 fn process_status(
     login_state: &mut LoginState,
     packet: &PacketFrame,
-    encoder: &mut LocalEncoder,
+    encoder: &mut IoBuf,
     global: &Global,
 ) -> anyhow::Result<()> {
     debug_assert!(*login_state == LoginState::Status);

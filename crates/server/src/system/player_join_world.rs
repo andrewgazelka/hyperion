@@ -35,11 +35,8 @@ use crate::{
     config,
     events::PlayerJoinWorld,
     global::Global,
-    net::LocalEncoder,
-    singleton::{
-        broadcast::BroadcastBuf, player_id_lookup::PlayerIdLookup,
-        player_uuid_lookup::PlayerUuidLookup,
-    },
+    net::{Broadcast, IoBuf, Packets},
+    singleton::{player_id_lookup::PlayerIdLookup, player_uuid_lookup::PlayerUuidLookup},
     system::init_entity::spawn_packet,
 };
 
@@ -56,7 +53,7 @@ pub(crate) struct PlayerJoinWorldQuery<'a> {
     id: EntityId,
     uuid: &'a Uuid,
     pose: &'a FullEntityPose,
-    encoder: &'a mut LocalEncoder,
+    packets: &'a mut Packets,
     name: &'a InGameName,
     _player: With<&'static Player>,
 }
@@ -79,7 +76,8 @@ pub fn player_join_world(
     players: Fetcher<PlayerQuery>,
     mut uuid_lookup: Single<&mut PlayerUuidLookup>,
     mut id_lookup: Single<&mut PlayerIdLookup>,
-    mut broadcast: Single<&mut BroadcastBuf>,
+    mut broadcast: Single<&mut Broadcast>,
+    mut io: Single<&mut IoBuf>,
 ) {
     static CACHED_DATA: once_cell::sync::OnceCell<bytes::Bytes> = once_cell::sync::OnceCell::new();
 
@@ -97,8 +95,6 @@ pub fn player_join_world(
     });
 
     info!("got cached data");
-
-    let mut broadcast = broadcast.get_round_robin();
 
     let query = r.query;
 
@@ -157,21 +153,21 @@ pub fn player_join_world(
         overlay: false,
     };
 
-    broadcast.append_packet(&text).unwrap();
+    broadcast.append(&text, &mut io).unwrap();
 
-    let encoder = query.encoder;
+    let local = query.packets;
 
-    encoder.append_raw(cached_data, &global).unwrap();
+    local.append_raw(&cached_data, &mut io).unwrap();
 
     info!("appending cached data");
 
-    encoder
+    local
         .append(
             &crate::packets::def::EntityEquipmentUpdateS2c {
                 entity_id: VarInt(0),
                 equipment: Cow::Borrowed(&equipment),
             },
-            &global,
+            &mut io,
         )
         .unwrap();
 
@@ -185,11 +181,11 @@ pub fn player_join_world(
         entries: Cow::Borrowed(entries),
     };
 
-    broadcast.append_packet(&info).unwrap();
+    broadcast.append(&info, &mut io).unwrap();
 
     for entity in entities {
         let pkt = spawn_packet(entity.id, *entity.uuid, entity.pose);
-        encoder.append(&pkt, &global).unwrap();
+        local.append(&pkt, &mut io).unwrap();
     }
 
     // todo: cache
@@ -212,7 +208,7 @@ pub fn player_join_world(
         .map(|query| &***query.name) // todo: lol
         .collect();
 
-    encoder
+    local
         .append(
             &play::TeamS2c {
                 team_name: "no_tag",
@@ -220,41 +216,44 @@ pub fn player_join_world(
                     entities: player_names,
                 },
             },
-            &global,
+            &mut io,
         )
         .unwrap();
 
     let current_name = query.name;
 
     broadcast
-        .append_packet(&play::TeamS2c {
-            team_name: "no_tag",
-            mode: Mode::AddEntities {
-                entities: vec![current_name],
+        .append(
+            &play::TeamS2c {
+                team_name: "no_tag",
+                mode: Mode::AddEntities {
+                    entities: vec![current_name],
+                },
             },
-        })
+            &mut io,
+        )
         .unwrap();
 
-    encoder
+    local
         .append(
             &play::PlayerListS2c {
                 actions,
                 entries: Cow::Owned(entries),
             },
-            &global,
+            &mut io,
         )
         .unwrap();
 
     let tick = global.tick;
     let time_of_day = tick % 24000;
 
-    encoder
+    local
         .append(
             &play::WorldTimeUpdateS2c {
                 world_age: tick,
                 time_of_day,
             },
-            &global,
+            &mut io,
         )
         .unwrap();
 
@@ -274,13 +273,13 @@ pub fn player_join_world(
             pitch: ByteAngle::from_degrees(pose.pitch),
         };
 
-        encoder.append(&pkt, &global).unwrap();
+        local.append(&pkt, &mut io).unwrap();
 
         let pkt = crate::packets::def::EntityEquipmentUpdateS2c {
             entity_id,
             equipment: Cow::Borrowed(&equipment),
         };
-        encoder.append(&pkt, &global).unwrap();
+        local.append(&pkt, &mut io).unwrap();
     }
 
     global
@@ -297,7 +296,7 @@ pub fn player_join_world(
         pitch: ByteAngle::from_degrees(query.pose.pitch),
     };
 
-    encoder
+    local
         .append(
             &play::PlayerPositionLookS2c {
                 position: query.pose.position.as_dvec3(),
@@ -306,11 +305,11 @@ pub fn player_join_world(
                 flags: PlayerPositionLookFlags::default(),
                 teleport_id: 1.into(),
             },
-            &global,
+            &mut io,
         )
         .unwrap();
 
-    broadcast.append_packet(&spawn_player).unwrap();
+    broadcast.append(&spawn_player, &mut io).unwrap();
 
     info!("Player {} joined the world", query.name);
 }
@@ -360,7 +359,7 @@ impl<T, const N: usize> Array3d for [T; N] {
     }
 }
 
-pub fn send_keep_alive(encoder: &mut LocalEncoder, global: &Global) -> anyhow::Result<()> {
+pub fn send_keep_alive(encoder: &mut IoBuf, global: &Global) -> anyhow::Result<()> {
     let pkt = play::KeepAliveS2c {
         // The ID can be set to zero because it doesn't matter
         id: 0,

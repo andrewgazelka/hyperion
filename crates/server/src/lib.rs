@@ -32,9 +32,8 @@ use crate::{
     global::Global,
     net::{Server, ServerDef},
     singleton::{
-        broadcast::BroadcastBuf, buffer_allocator::BufferAllocator, fd_lookup::FdLookup,
-        player_aabb_lookup::PlayerBoundingBoxes, player_id_lookup::PlayerIdLookup,
-        player_uuid_lookup::PlayerUuidLookup,
+        fd_lookup::FdLookup, player_aabb_lookup::PlayerBoundingBoxes,
+        player_id_lookup::PlayerIdLookup, player_uuid_lookup::PlayerUuidLookup, ring::Ring,
     },
 };
 
@@ -161,7 +160,7 @@ impl Game {
         let mut server_def = Server::new(address)?;
 
         let buffer_alloc = world.spawn();
-        world.insert(buffer_alloc, BufferAllocator::new(&mut server_def));
+        world.insert(buffer_alloc, Ring::new(&mut server_def));
         world.insert(server, server_def);
 
         world.add_handler(system::ingress);

@@ -31,7 +31,7 @@ use crate::{
     },
     events::{AttackEntity, InitEntity, KillAllEntities, SwingArm},
     global::Global,
-    net::LocalEncoder,
+    net::IoBuf,
     singleton::player_id_lookup::PlayerIdLookup,
     system::IngressSender,
     Vitals,

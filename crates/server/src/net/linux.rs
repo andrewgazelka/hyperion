@@ -19,10 +19,10 @@ use io_uring::{
 use libc::iovec;
 use tracing::{error, info, trace, warn};
 
-use super::RefreshItem;
+use super::RefreshItems;
 use crate::{
     global::Global,
-    net::{Fd, ServerDef, ServerEvent},
+    net::{encoder::PacketWriteInfo, Fd, ServerDef, ServerEvent},
     singleton::buffer_allocator::BufRef,
 };
 
@@ -277,34 +277,25 @@ impl ServerDef for LinuxServer {
     fn write_all<'a>(
         &mut self,
         global: &mut Global,
-        broadcast_buf: &'a BufRef,
-        writers: impl Iterator<Item = RefreshItem<'a>>,
+        broadcast: &'a [PacketWriteInfo],
+        writers: impl Iterator<Item = RefreshItems<'a>>,
     ) {
         writers.for_each(|item| {
-            let RefreshItem {
-                local,
-                fd,
-                broadcast,
-            } = item;
+            let RefreshItems { write, fd } = item;
 
             let fd = fd.0;
 
-            let local_len = local.len();
-            if local_len != 0 {
-                let location = local.as_ptr();
-                let idx = local.index();
-                let len = local_len as u32;
+            for elem in write {
+                let PacketWriteInfo { start_ptr, len } = elem;
 
-                self.write_raw(fd, location, len, idx);
+                self.write_raw(fd, start_ptr, len, 0);
             }
 
-            let broadcast_len = broadcast_buf.len();
-            if broadcast_len != 0 && broadcast {
-                let location = broadcast_buf.as_ptr();
-                let idx = broadcast_buf.index();
-                let len = broadcast_len as u32;
+            // send broadcasts later
+            for elem in broadcast {
+                let PacketWriteInfo { start_ptr, len } = elem;
 
-                self.write_raw(fd, location, len, idx);
+                self.write_raw(fd, start_ptr, len, 0);
             }
         });
     }

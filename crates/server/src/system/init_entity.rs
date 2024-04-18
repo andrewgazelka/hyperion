@@ -13,8 +13,7 @@ use crate::{
     components::{EntityReaction, FullEntityPose, MinecraftEntity, RunningSpeed, Uuid},
     events::InitEntity,
     global::Global,
-    net::LocalEncoder,
-    singleton::broadcast::BroadcastBuf,
+    net::{Broadcast, IoBuf, Packets},
     system::entity_position::PositionSyncMetadata,
 };
 
@@ -54,7 +53,8 @@ pub fn init_entity(
         Insert<EntityReaction>,
         Spawn,
     )>,
-    mut broadcast: Single<&mut BroadcastBuf>,
+    mut io: Single<&mut IoBuf>,
+    mut broadcast: Single<&mut Broadcast>,
 ) {
     let event = r.event;
 
@@ -73,11 +73,7 @@ pub fn init_entity(
 
     let pkt = spawn_packet(id, uuid, &pose);
 
-    // for encoder in encoders {
-    //     encoder.append(&pkt, &global).unwrap();
-    // }
-
-    broadcast.get_round_robin().append_packet(&pkt).unwrap();
+    broadcast.append(&pkt, &mut io).unwrap();
 }
 
 fn generate_running_speed() -> RunningSpeed {

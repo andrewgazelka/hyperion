@@ -7,7 +7,7 @@ use crate::{
     components::KeepAlive,
     events::{Gametick, KickPlayer},
     global::Global,
-    net::LocalEncoder,
+    net::IoBuf,
     system::player_join_world::send_keep_alive,
 };
 
@@ -15,7 +15,7 @@ use crate::{
 pub fn keep_alive(
     _: Receiver<Gametick>,
     global: Single<&Global>,
-    mut fetcher: Fetcher<(EntityId, &mut KeepAlive, &mut LocalEncoder)>,
+    mut fetcher: Fetcher<(EntityId, &mut KeepAlive, &mut IoBuf)>,
     mut s: Sender<KickPlayer>,
 ) {
     fetcher.iter_mut().for_each(|(id, keep_alive, encoder)| {

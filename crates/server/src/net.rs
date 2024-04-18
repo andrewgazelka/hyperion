@@ -6,14 +6,17 @@ use std::{
 };
 
 use anyhow::Context;
-use arrayvec::CapacityError;
-use bytes::Buf;
+use derive_more::{Deref, DerefMut, From};
 use evenio::prelude::Component;
 use libc::iovec;
 use sha2::Digest;
-use valence_protocol::{uuid::Uuid, CompressionThreshold, Encode};
+use valence_protocol::{uuid::Uuid, CompressionThreshold, Encode, VarInt};
 
-use crate::{global::Global, singleton::buffer_allocator::BufRef};
+use crate::{
+    global::Global,
+    net::encoder::PacketWriteInfo,
+    singleton::ring::{McBuf, Ring},
+};
 
 #[cfg(target_os = "linux")]
 mod linux;
@@ -109,17 +112,17 @@ impl ServerDef for Server {
     fn write_all<'a>(
         &mut self,
         global: &mut Global,
-        broadcast: &'a BufRef,
-        writers: impl Iterator<Item = RefreshItem<'a>>,
+        broadcast: &'a [PacketWriteInfo],
+        writers: impl Iterator<Item = RefreshItems<'a>>,
     ) {
         self.server.write_all(global, broadcast, writers);
     }
 }
 
-pub struct RefreshItem<'a> {
-    pub local: &'a BufRef,
+#[repr(packed)]
+pub struct RefreshItems<'a> {
+    pub write: &'a mut [PacketWriteInfo],
     pub fd: Fd,
-    pub broadcast: bool,
 }
 
 pub trait ServerDef {
@@ -134,8 +137,8 @@ pub trait ServerDef {
     fn write_all<'a>(
         &mut self,
         global: &mut Global,
-        broadcast: &'a BufRef,
-        writers: impl Iterator<Item = RefreshItem<'a>>,
+        broadcast: &'a [PacketWriteInfo],
+        writers: impl Iterator<Item = RefreshItems<'a>>,
     );
 
     fn submit_events(&mut self);
@@ -162,8 +165,8 @@ impl ServerDef for NotImplemented {
     fn write_all<'a>(
         &mut self,
         global: &mut Global,
-        broadcast: &'a BufRef,
-        writers: impl Iterator<Item = RefreshItem<'a>>,
+        broadcast: &'a [PacketWriteInfo],
+        writers: impl Iterator<Item = RefreshItems<'a>>,
     ) {
         unimplemented!("not implemented; use Linux")
     }
@@ -178,6 +181,8 @@ pub const PROTOCOL_VERSION: i32 = 763;
 
 /// The maximum number of bytes that can be sent in a single packet.
 pub const MAX_PACKET_SIZE: usize = 0x001F_FFFF;
+
+pub const MAX_PACKET_LEN_SIZE: usize = VarInt::MAX_SIZE;
 
 /// The stringified name of the Minecraft version this library currently
 /// targets.
@@ -195,46 +200,67 @@ fn offline_uuid(username: &str) -> anyhow::Result<Uuid> {
 
 mod encoder;
 
+const NUM_PLAYERS: usize = 1024;
+const S2C_BUFFER_SIZE: usize = 1024 * 1024 * NUM_PLAYERS;
+
 #[derive(Component, Debug)]
-pub struct LocalEncoder {
+pub struct IoBuf {
     /// The encoding buffer and logic
     enc: encoder::PacketEncoder,
+    buf: Ring<MAX_PACKET_SIZE>,
 }
 
-// TODO: REMOVE
-unsafe impl Send for LocalEncoder {}
-unsafe impl Sync for LocalEncoder {}
-
-impl LocalEncoder {
-    pub fn clear(&mut self) {
-        self.enc.buf.clear();
+impl Default for IoBuf {
+    fn default() -> Self {
+        Self {
+            enc: encoder::PacketEncoder::new(CompressionThreshold(-1)),
+            buf: Ring::new(),
+        }
     }
+}
 
-    /// Encode a packet.
-    pub fn append<P>(&mut self, pkt: &P, _global: &Global) -> anyhow::Result<()>
+/// This is useful for the ECS so we can use Single<&mut Broadcast> instead of having to use a marker struct
+#[derive(Component, From, Deref, DerefMut)]
+pub struct Broadcast(Packets);
+
+#[derive(Component)]
+pub struct Packets {
+    to_write: Vec<PacketWriteInfo>,
+}
+
+impl Packets {
+    pub fn append_pre_compression_packet<P>(
+        &mut self,
+        pkt: &P,
+        buf: &mut IoBuf,
+    ) -> anyhow::Result<()>
     where
         P: valence_protocol::Packet + Encode,
     {
-        self.enc.append_packet(pkt)?;
+        let compression = buf.enc.compression_threshold();
+        // none
+        buf.enc.set_compression(CompressionThreshold::DEFAULT);
+
+        let result = buf.enc.append_packet(pkt, &mut buf.buf)?;
+        self.to_write.push(result);
+
+        // reset
+        buf.enc.set_compression(compression);
 
         Ok(())
     }
 
-    pub fn set_compression(&mut self, compression_level: CompressionThreshold) {
-        self.enc.set_compression(compression_level);
+    pub fn append<P>(&mut self, pkt: &P, buf: &mut IoBuf) -> anyhow::Result<()>
+    where
+        P: valence_protocol::Packet + Encode,
+    {
+        let result = buf.enc.append_packet(pkt, &mut buf.buf)?;
+        self.to_write.push(result);
+        Ok(())
     }
 
-    pub fn new(buffer: BufRef) -> Self {
-        Self {
-            enc: encoder::PacketEncoder::new(CompressionThreshold(-1), buffer),
-        }
-    }
-
-    pub const fn buf(&self) -> &BufRef {
-        &self.enc.buf
-    }
-
-    pub fn append_raw(&mut self, bytes: &[u8], _global: &Global) -> Result<(), CapacityError> {
-        self.enc.buf.try_extend_from_slice(bytes)
+    pub fn append_raw(&mut self, data: &[u8], buf: &mut IoBuf) -> anyhow::Result<()> {
+        buf.buf.append(data);
+        Ok(())
     }
 }

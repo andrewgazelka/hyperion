@@ -5,8 +5,7 @@ use valence_protocol::{packets::play, VarInt};
 use crate::{
     components::{EntityReaction, FullEntityPose, ImmuneStatus, Player, Vitals},
     events::AttackEntity,
-    net::LocalEncoder,
-    singleton::broadcast::BroadcastBuf,
+    net::{Broadcast, IoBuf, Packets},
 };
 
 #[derive(Query)]
@@ -14,7 +13,7 @@ pub struct AttackQuery<'a> {
     id: EntityId,
     pose: &'a FullEntityPose,
     reaction: &'a mut EntityReaction,
-    encoder: &'a mut LocalEncoder,
+    packets: &'a mut Packets,
     immunity: &'a mut ImmuneStatus,
     vitals: &'a mut Vitals,
     _player: With<&'static Player>,
@@ -24,13 +23,14 @@ pub struct AttackQuery<'a> {
 pub fn pkt_attack(
     global: Single<&crate::global::Global>,
     attack: Receiver<AttackEntity, AttackQuery>,
-    mut broadcast: Single<&mut BroadcastBuf>,
+    mut broadcast: Single<&mut Broadcast>,
+    mut io: Single<&mut IoBuf>,
 ) {
     let AttackQuery {
         id: entity_id,
         pose,
         reaction,
-        encoder,
+        packets,
         immunity,
         vitals,
         _player,
@@ -51,14 +51,11 @@ pub fn pkt_attack(
         source_pos: None,
     };
 
-    broadcast
-        .get_round_robin()
-        .append_packet(&damage_broadcast)
-        .unwrap();
+    broadcast.append(&damage_broadcast, &mut io).unwrap();
 
     // local is id 0
     damage_broadcast.entity_id = VarInt(0);
-    encoder.append(&damage_broadcast, &global).unwrap();
+    packets.append(&damage_broadcast, &mut io).unwrap();
 
     let this = pose.position;
     let other = event.from_pos;

@@ -11,13 +11,13 @@ use crate::{
     components::Uuid,
     events::KickPlayer,
     global::Global,
-    net::LocalEncoder,
+    net::IoBuf,
     singleton::{player_id_lookup::PlayerIdLookup, player_uuid_lookup::PlayerUuidLookup},
 };
 
 #[instrument(skip_all)]
 pub fn player_kick(
-    r: Receiver<KickPlayer, (EntityId, &Uuid, &mut LocalEncoder)>,
+    r: Receiver<KickPlayer, (EntityId, &Uuid, &mut IoBuf)>,
     global: Single<&Global>,
     mut uuid_lookup: Single<&mut PlayerUuidLookup>,
     mut id_lookup: Single<&mut PlayerIdLookup>,

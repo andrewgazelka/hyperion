@@ -2,10 +2,17 @@ use evenio::prelude::*;
 use tracing::instrument;
 use valence_protocol::text::IntoText;
 
-use crate::{events::StatsEvent, singleton::broadcast::BroadcastBuf};
+use crate::{
+    events::StatsEvent,
+    net::{Broadcast, IoBuf},
+};
 
 #[instrument(skip_all, level = "trace")]
-pub fn stats_message(r: Receiver<StatsEvent>, mut broadcast: Single<&mut BroadcastBuf>) {
+pub fn stats_message(
+    r: Receiver<StatsEvent>,
+    mut broadcast: Single<&mut Broadcast>,
+    mut io: Single<&mut IoBuf>,
+) {
     let StatsEvent {
         ms_per_tick_mean_1s,
         ms_per_tick_mean_5s,
@@ -17,5 +24,5 @@ pub fn stats_message(r: Receiver<StatsEvent>, mut broadcast: Single<&mut Broadca
         action_bar_text: message.into_cow_text(),
     };
 
-    broadcast.get_round_robin().append_packet(&packet).unwrap();
+    broadcast.append(&packet, &mut io).unwrap();
 }
