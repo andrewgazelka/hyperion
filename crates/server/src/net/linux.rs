@@ -280,7 +280,11 @@ impl ServerDef for LinuxServer {
         writers: impl Iterator<Item = RefreshItems<'a>>,
     ) {
         writers.for_each(|item| {
-            let RefreshItems { write, fd } = item;
+            let RefreshItems {
+                write,
+                fd,
+                broadcast: do_broadcast,
+            } = item;
 
             let fd = fd.0;
 
@@ -292,11 +296,15 @@ impl ServerDef for LinuxServer {
             }
 
             // // send broadcasts later
-            // for elem in broadcast {
-            //     let PacketWriteInfo { start_ptr, len } = *elem;
-            //
-            //     self.write_raw(fd, start_ptr, len, 0);
-            // }
+            if do_broadcast {
+                for elem in broadcast {
+                    let PacketWriteInfo { start_ptr, len } = *elem;
+
+                    info!("writing broadcast packet: {start_ptr:?}, {len}");
+
+                    self.write_raw(fd, start_ptr, len, 0);
+                }
+            }
         });
     }
 

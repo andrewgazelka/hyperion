@@ -127,8 +127,18 @@ pub fn ingress(
                             )
                             .unwrap();
                         }
-                        LoginState::TransitioningPlay | LoginState::Play => {
-                            *login_state = LoginState::Play;
+                        LoginState::TransitioningPlay { .. } | LoginState::Play => {
+                            if let LoginState::TransitioningPlay {
+                                packets_to_transition,
+                            } = login_state
+                            {
+                                if *packets_to_transition == 0 {
+                                    *login_state = LoginState::Play;
+                                } else {
+                                    *packets_to_transition -= 1;
+                                }
+                            }
+
                             if let Some(pose) = &mut pose {
                                 crate::packets::switch(frame, &global, &mut sender, pose).unwrap();
                             }
@@ -203,7 +213,9 @@ fn process_login(
     let username = Box::from(username);
 
     // todo: impl rest
-    *login_state = LoginState::TransitioningPlay;
+    *login_state = LoginState::TransitioningPlay {
+        packets_to_transition: 5,
+    };
 
     sender.send(PlayerInit {
         entity: id,

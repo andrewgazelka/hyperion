@@ -151,7 +151,7 @@ impl Game {
 
         let shared = Arc::new(global::Shared {
             player_count: AtomicU32::new(0),
-            compression_level: CompressionThreshold(256),
+            compression_level: CompressionThreshold(-1),
         });
 
         let mut world = World::new();

@@ -76,7 +76,7 @@ pub fn player_join_world(
     players: Fetcher<PlayerQuery>,
     mut uuid_lookup: Single<&mut PlayerUuidLookup>,
     mut id_lookup: Single<&mut PlayerIdLookup>,
-    mut broadcast: Single<&mut Broadcast>,
+    // mut broadcast: Single<&mut Broadcast>,
     mut io: Single<&mut IoBuf>,
 ) {
     static CACHED_DATA: once_cell::sync::OnceCell<bytes::Bytes> = once_cell::sync::OnceCell::new();
@@ -153,11 +153,11 @@ pub fn player_join_world(
         overlay: false,
     };
 
-    broadcast.append(&text, &mut io).unwrap();
+    // broadcast.append(&text, &mut io).unwrap();
 
     let local = query.packets;
 
-    local.append_raw(&cached_data, &mut io).unwrap();
+    local.append_raw(cached_data, &mut io);
 
     info!("appending cached data");
 
@@ -181,7 +181,7 @@ pub fn player_join_world(
         entries: Cow::Borrowed(entries),
     };
 
-    broadcast.append(&info, &mut io).unwrap();
+    // broadcast.append(&info, &mut io).unwrap();
 
     for entity in entities {
         let pkt = spawn_packet(entity.id, *entity.uuid, entity.pose);
@@ -222,17 +222,17 @@ pub fn player_join_world(
 
     let current_name = query.name;
 
-    broadcast
-        .append(
-            &play::TeamS2c {
-                team_name: "no_tag",
-                mode: Mode::AddEntities {
-                    entities: vec![current_name],
-                },
-            },
-            &mut io,
-        )
-        .unwrap();
+    // broadcast
+    //     .append(
+    //         &play::TeamS2c {
+    //             team_name: "no_tag",
+    //             mode: Mode::AddEntities {
+    //                 entities: vec![current_name],
+    //             },
+    //         },
+    //         &mut io,
+    //     )
+    //     .unwrap();
 
     local
         .append(
@@ -309,7 +309,7 @@ pub fn player_join_world(
         )
         .unwrap();
 
-    broadcast.append(&spawn_player, &mut io).unwrap();
+    // broadcast.append(&spawn_player, &mut io).unwrap();
 
     info!("Player {} joined the world", query.name);
 }

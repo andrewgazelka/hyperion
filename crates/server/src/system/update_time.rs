@@ -10,7 +10,7 @@ use crate::{
 #[instrument(skip_all, level = "trace")]
 pub fn update_time(
     _: ReceiverMut<Gametick>,
-    mut broadcast: Single<&mut Broadcast>,
+    // mut broadcast: Single<&mut Broadcast>,
     mut global: Single<&mut Global>,
     mut io: Single<&mut IoBuf>,
 ) {
@@ -24,7 +24,7 @@ pub fn update_time(
             time_of_day,
         };
 
-        broadcast.append(&pkt, &mut io).unwrap();
+        // broadcast.append(&pkt, &mut io).unwrap();
     }
 
     // update the tick

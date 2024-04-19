@@ -54,7 +54,7 @@ pub fn init_entity(
         Spawn,
     )>,
     mut io: Single<&mut IoBuf>,
-    mut broadcast: Single<&mut Broadcast>,
+    // mut broadcast: Single<&mut Broadcast>,
 ) {
     let event = r.event;
 
@@ -73,7 +73,7 @@ pub fn init_entity(
 
     let pkt = spawn_packet(id, uuid, &pose);
 
-    broadcast.append(&pkt, &mut io).unwrap();
+    // broadcast.append(&pkt, &mut io).unwrap();
 }
 
 fn generate_running_speed() -> RunningSpeed {

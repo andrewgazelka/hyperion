@@ -17,7 +17,9 @@ pub trait McBuf {
     fn len_until_end(&self) -> usize;
     fn get_contiguous(&mut self, len: usize) -> &mut [u8];
     fn advance(&mut self, len: usize);
-    fn append(&mut self, data: &[u8]);
+
+    /// Returns a pointer to the first byte of the appended data.
+    fn append(&mut self, data: &[u8]) -> *const u8;
 }
 
 impl McBuf for Ring {
@@ -45,11 +47,14 @@ impl McBuf for Ring {
         self.head = (self.head + len) % self.max_len;
     }
 
-    fn append(&mut self, data: &[u8]) {
+    fn append(&mut self, data: &[u8]) -> *const u8 {
         debug_assert!(data.len() <= self.max_len);
         let len = data.len();
-        self.get_contiguous(len).copy_from_slice(data);
+        let contiguous = self.get_contiguous(len);
+        contiguous.copy_from_slice(data);
+        let ptr = contiguous.as_ptr();
         self.advance(len);
+        ptr
     }
 }
 

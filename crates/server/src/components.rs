@@ -35,7 +35,10 @@ pub enum LoginState {
     Handshake,
     Status,
     Login,
-    TransitioningPlay,
+    TransitioningPlay {
+        // todo: remove this is a hack
+        packets_to_transition: usize,
+    },
     Play,
     Terminate,
 }

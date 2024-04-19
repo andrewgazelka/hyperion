@@ -9,17 +9,10 @@ use crate::{
     singleton::ring::McBuf,
 };
 
+#[derive(Debug)]
 pub struct PacketEncoder {
     compress_buf: Vec<u8>,
     threshold: CompressionThreshold,
-}
-
-impl std::fmt::Debug for PacketEncoder {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("PacketEncoder")
-            .field("threshold", &self.threshold)
-            .finish()
-    }
 }
 
 // todo:
@@ -38,7 +31,7 @@ unsafe impl Send for PacketWriteInfo {}
 unsafe impl Sync for PacketWriteInfo {}
 
 impl PacketEncoder {
-    pub fn new(threshold: CompressionThreshold) -> Self {
+    pub const fn new(threshold: CompressionThreshold) -> Self {
         Self {
             compress_buf: Vec::new(),
             threshold,

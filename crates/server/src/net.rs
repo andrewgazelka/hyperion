@@ -11,7 +11,7 @@ use evenio::prelude::Component;
 use libc::iovec;
 use sha2::Digest;
 use tracing::info;
-use valence_protocol::{uuid::Uuid, CompressionThreshold, Encode, VarInt};
+use valence_protocol::{encode::PacketWriter, uuid::Uuid, CompressionThreshold, Encode, VarInt};
 
 use crate::{
     global::Global,
@@ -120,10 +120,10 @@ impl ServerDef for Server {
     }
 }
 
-#[repr(packed)]
 pub struct RefreshItems<'a> {
     pub write: &'a [PacketWriteInfo],
     pub fd: Fd,
+    pub broadcast: bool,
 }
 
 pub trait ServerDef {
@@ -256,7 +256,7 @@ impl Packets {
 
         let result = buf.enc.append_packet(pkt, &mut buf.buf)?;
 
-        info!("appended packet: {result:?}");
+        let name = P::NAME;
         self.to_write.push(result);
 
         // reset
@@ -270,12 +270,20 @@ impl Packets {
         P: valence_protocol::Packet + Encode,
     {
         let result = buf.enc.append_packet(pkt, &mut buf.buf)?;
+        let name = P::NAME;
+
         self.to_write.push(result);
         Ok(())
     }
 
-    pub fn append_raw(&mut self, data: &[u8], buf: &mut IoBuf) -> anyhow::Result<()> {
-        buf.buf.append(data);
-        Ok(())
+    pub fn append_raw(&mut self, data: &[u8], buf: &mut IoBuf) {
+        let start_ptr = buf.buf.append(data);
+
+        let writer = PacketWriteInfo {
+            start_ptr,
+            len: data.len() as u32,
+        };
+
+        self.to_write.push(writer);
     }
 }
