@@ -5,7 +5,7 @@ use std::{
     cell::UnsafeCell,
     cmp,
     marker::PhantomData,
-    net::{TcpListener, ToSocketAddrs},
+    net::{SocketAddr, ToSocketAddrs},
     os::fd::AsRawFd,
     sync::atomic::{AtomicU16, Ordering},
     time::Duration,
@@ -17,6 +17,7 @@ use io_uring::{
     cqueue::buffer_select, squeue, squeue::SubmissionQueue, types::BufRingEntry, IoUring,
 };
 use libc::iovec;
+use socket2::Socket;
 use tracing::{error, info, trace, warn};
 
 use super::RefreshItems;
@@ -35,6 +36,8 @@ const COMPLETION_QUEUE_SIZE: u32 = 32768;
 const SUBMISSION_QUEUE_SIZE: u32 = 32768;
 const IO_URING_FILE_COUNT: u32 = 32768;
 const C2S_RING_BUFFER_COUNT: usize = 16384;
+const LISTEN_BACKLOG: libc::c_int = 128;
+const SEND_BUFFER_SIZE: usize = 128 * 1024 * 1024;
 
 /// Size of each buffer in bytes
 const C2S_RING_BUFFER_LEN: usize = 4096;
@@ -76,12 +79,14 @@ fn alloc_zeroed_page_aligned<T>(len: usize) -> *mut T {
 }
 
 pub struct LinuxServer {
-    listener: TcpListener,
+    listener: Socket,
     uring: IoUring,
 
     c2s_buffer: *mut [UnsafeCell<u8>; C2S_RING_BUFFER_LEN],
     c2s_local_tail: u16,
     c2s_shared_tail: *const AtomicU16,
+
+    pending_writes: usize,
 
     /// Make Listener !Send and !Sync to let io_uring assume that it'll only be accessed by 1
     /// thread
@@ -94,9 +99,19 @@ unsafe impl Sync for LinuxServer {}
 
 impl ServerDef for LinuxServer {
     fn new(address: impl ToSocketAddrs) -> anyhow::Result<Self> {
-        let listener = TcpListener::bind(address)?;
+        let Some(address) = address.to_socket_addrs()?.next() else {
+            anyhow::bail!("no addresses specified")
+        };
+        let domain = match address {
+            SocketAddr::V4(_) => socket2::Domain::IPV4,
+            SocketAddr::V6(_) => socket2::Domain::IPV6,
+        };
 
-        let addr = listener.local_addr()?;
+        let listener = Socket::new(domain, socket2::Type::STREAM, None)?;
+        listener.set_nonblocking(true)?;
+        listener.set_send_buffer_size(SEND_BUFFER_SIZE)?;
+        listener.bind(&address.into())?;
+        listener.listen(LISTEN_BACKLOG)?;
 
         // TODO: Try to use defer taskrun
         let mut uring = IoUring::builder()
@@ -168,95 +183,119 @@ impl ServerDef for LinuxServer {
             c2s_buffer,
             c2s_local_tail: tail,
             c2s_shared_tail: tail_addr,
+            pending_writes: 0,
             phantom: PhantomData,
         })
     }
 
     fn drain(&mut self, mut f: impl FnMut(ServerEvent)) -> std::io::Result<()> {
-        let (_, mut submission, mut completion) = self.uring.split();
-        completion.sync();
-        if completion.overflow() > 0 {
-            error!(
-                "the io_uring completion queue overflowed, and some connection errors are likely \
-                 to occur; consider increasing COMPLETION_QUEUE_SIZE to avoid this"
-            );
-        }
+        loop {
+            let (mut submitter, mut submission, mut completion) = self.uring.split();
+            completion.sync();
+            if completion.overflow() > 0 {
+                error!(
+                    "the io_uring completion queue overflowed, and some connection errors are \
+                     likely to occur; consider increasing COMPLETION_QUEUE_SIZE to avoid this"
+                );
+            }
 
-        for event in completion {
-            let result = event.result();
-            match event.user_data() {
-                0 => {
-                    if event.flags() & IORING_CQE_F_MORE == 0 {
-                        warn!("multishot accept rerequested");
-                        Self::request_accept(&mut submission);
-                    }
-
-                    if result < 0 {
-                        error!("there was an error in accept: {}", result);
-                        return Err(std::io::Error::from_raw_os_error(-result));
-                    }
-                    let fd = Fixed(result as u32);
-                    Self::request_recv(&mut submission, fd);
-                    f(ServerEvent::AddPlayer { fd: Fd(fd) });
-                }
-                write if write & SEND_MARKER != 0 => {
-                    let fd = Fixed((write & !SEND_MARKER) as u32);
-
-                    match result.cmp(&0) {
-                        cmp::Ordering::Less => {
-                            error!("there was an error in write: {}", result);
-                            return Err(std::io::Error::from_raw_os_error(-result));
+            for event in completion {
+                let result = event.result();
+                match event.user_data() {
+                    0 => {
+                        if event.flags() & IORING_CQE_F_MORE == 0 {
+                            warn!("multishot accept rerequested");
+                            Self::request_accept(&mut submission);
                         }
-                        cmp::Ordering::Equal => {
-                            // A result of 0 indicates that the client closed the connection gracefully
 
-                            info!("disconnected during send");
-                            f(ServerEvent::RemovePlayer { fd: Fd(fd) });
-                            // Perform any necessary cleanup for the disconnected client
+                        if result < 0 {
+                            error!("there was an error in accept: {}", result);
                         }
-                        cmp::Ordering::Greater => {
-                            // Write operation completed successfully
-                            trace!("successful write response");
-                        }
-                    }
-                }
-                read if read & RECV_MARKER != 0 => {
-                    let fd = Fixed((read & !RECV_MARKER) as u32);
-                    let disconnected = result == 0;
-
-                    if event.flags() & IORING_CQE_F_MORE == 0 && !disconnected {
-                        trace!("socket recv rerequested");
+                        let fd = Fixed(result as u32);
                         Self::request_recv(&mut submission, fd);
+                        f(ServerEvent::AddPlayer { fd: Fd(fd) });
                     }
+                    1 => {
+                        if result < 0 {
+                            error!("there was an error in socket shutdown: {}", result);
+                        }
+                    }
+                    write if write & SEND_MARKER != 0 => {
+                        let fd = Fixed((write & !SEND_MARKER) as u32);
 
-                    if disconnected {
-                        info!("disconnected during recv");
-                        f(ServerEvent::RemovePlayer { fd: Fd(fd) });
-                    } else if result < 0 {
-                        // -104
-                        error!("there was an error in recv: {}", result);
-                        return Err(std::io::Error::from_raw_os_error(-result));
-                    } else {
-                        let bytes_received = result as usize;
-                        let buffer_id =
-                            buffer_select(event.flags()).expect("there should be a buffer");
-                        assert!((buffer_id as usize) < C2S_RING_BUFFER_COUNT);
-                        // TODO: this is probably very unsafe
-                        let buffer = unsafe {
-                            *(self.c2s_buffer.add(buffer_id as usize)
-                                as *const [u8; C2S_RING_BUFFER_LEN])
-                        };
-                        let buffer = &buffer[..bytes_received];
-                        self.c2s_local_tail = self.c2s_local_tail.wrapping_add(1);
-                        f(ServerEvent::RecvData {
-                            fd: Fd(fd),
-                            data: buffer,
-                        });
+                        self.pending_writes -= 1;
+
+                        match result.cmp(&0) {
+                            cmp::Ordering::Less => {
+                                error!(
+                                    "there was an error in write, shutting down socket: {}",
+                                    result
+                                );
+                                Self::shutdown(&mut submission, fd);
+                            }
+                            cmp::Ordering::Equal => {
+                                // This should never happen as long as write is never passed an empty buffer:
+                                // https://stackoverflow.com/questions/5656628/what-should-i-do-when-writefd-buf-count-returns-0
+                                panic!("write returned 0 which should not be possible");
+                            }
+                            cmp::Ordering::Greater => {
+                                // Write operation completed successfully
+                                // TODO: Check that write wasn't truncated
+                                trace!("successful write response");
+                            }
+                        }
+                    }
+                    read if read & RECV_MARKER != 0 => {
+                        let fd = Fixed((read & !RECV_MARKER) as u32);
+                        let disconnected = result == 0;
+
+                        if event.flags() & IORING_CQE_F_MORE == 0 && !disconnected {
+                            trace!("socket recv rerequested");
+                            Self::request_recv(&mut submission, fd);
+                        }
+
+                        if disconnected {
+                            info!("disconnected during recv");
+                            f(ServerEvent::RemovePlayer { fd: Fd(fd) });
+                        } else if result < 0 {
+                            // -104
+                            error!("there was an error in recv: {}", result);
+                        } else {
+                            let bytes_received = result as usize;
+                            let buffer_id =
+                                buffer_select(event.flags()).expect("there should be a buffer");
+                            assert!((buffer_id as usize) < C2S_RING_BUFFER_COUNT);
+                            // TODO: this is probably very unsafe
+                            let buffer = unsafe {
+                                *(self.c2s_buffer.add(buffer_id as usize)
+                                    as *const [u8; C2S_RING_BUFFER_LEN])
+                            };
+                            let buffer = &buffer[..bytes_received];
+                            self.c2s_local_tail = self.c2s_local_tail.wrapping_add(1);
+                            f(ServerEvent::RecvData {
+                                fd: Fd(fd),
+                                data: buffer,
+                            });
+                        }
+                    }
+                    _ => {
+                        panic!("unexpected event: {event:?}");
                     }
                 }
-                _ => {
-                    panic!("unexpected event: {event:?}");
-                }
+            }
+
+            if self.pending_writes == 0 {
+                break;
+            } else {
+                let start = std::time::Instant::now();
+                // Wait for another event to finish and then check if all writes are finished by
+                // looping. Waiting in here should have a negligible impact since all writes should
+                // be nonblocking.
+                submitter.submit_and_wait(1)?;
+                warn!(
+                    "{:?} was spent waiting for another event since there's pending writes",
+                    start.elapsed()
+                );
             }
         }
 
@@ -367,15 +406,27 @@ impl LinuxServer {
         }
     }
 
+    fn shutdown(submission: &mut SubmissionQueue, fd: Fixed) {
+        unsafe {
+            Self::push_entry(
+                submission,
+                &io_uring::opcode::Shutdown::new(fd, libc::SHUT_RDWR)
+                    .build()
+                    .user_data(1),
+            );
+        }
+    }
+
     pub fn write_raw(&mut self, fd: Fixed, buf: *const u8, len: u32, buf_index: u16) {
+        self.pending_writes += 1;
         unsafe {
             Self::push_entry(
                 &mut self.uring.submission(),
                 &io_uring::opcode::WriteFixed::new(fd, buf, len, buf_index)
                     .build()
-                    // IO_LINK allows adjacent fd writes to be sequential which is SUPER important to make
+                    // IO_HARDLINK allows adjacent fd writes to be sequential which is SUPER important to make
                     // sure things get written in the right (or at least deterministic) order
-                    .flags(squeue::Flags::IO_LINK)
+                    .flags(squeue::Flags::IO_HARDLINK)
                     .user_data((fd.0 as u64) | SEND_MARKER),
             );
         }
