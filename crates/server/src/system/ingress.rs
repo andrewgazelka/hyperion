@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use anyhow::Context;
 
 use evenio::{
     event::{Despawn, Insert, Receiver, Sender, Spawn},
@@ -6,6 +7,7 @@ use evenio::{
     prelude::EntityId,
 };
 use serde_json::json;
+use sha2::Digest;
 use tracing::{info, instrument, trace, warn};
 use uuid::Uuid;
 use valence_protocol::{
@@ -29,7 +31,6 @@ use crate::{
         AttackEntity, Gametick, InitEntity, KickPlayer, KillAllEntities, PlayerInit, SwingArm,
     },
     net::{Fd, IoBuf, Packets, MINECRAFT_VERSION, PROTOCOL_VERSION},
-    singleton::player_id_lookup::PlayerIdLookup,
     system::ingress::player_packet_buffer::DecodeBuffer,
 };
 
@@ -57,7 +58,7 @@ pub type IngressSender<'a> = Sender<
 pub fn ingress(
     _: Receiver<Gametick>,
     mut fd_lookup: Single<&mut FdLookup>,
-    mut global: Single<&mut Global>,
+    global: Single<&mut Global>,
     mut server: Single<&mut Server>,
     mut players: Fetcher<(
         &mut LoginState,
@@ -173,6 +174,17 @@ fn process_handshake(login_state: &mut LoginState, packet: &PacketFrame) -> anyh
     Ok(())
 }
 
+/// Get a [`Uuid`] based on the given user's name.
+fn offline_uuid(username: &str) -> anyhow::Result<Uuid> {
+    let digest = sha2::Sha256::digest(username);
+
+    #[expect(clippy::indexing_slicing, reason = "sha256 is always 32 bytes")]
+        let slice = &digest[..16];
+
+    Uuid::from_slice(slice).context("failed to create uuid")
+}
+
+#[allow(clippy::too_many_arguments, reason = "todo del")]
 fn process_login(
     id: EntityId,
     login_state: &mut LoginState,
@@ -190,7 +202,7 @@ fn process_login(
     info!("received LoginHello for {username}");
 
     let username = username.0;
-    let uuid = Uuid::new_v4();
+    let uuid = offline_uuid(username)?;
 
     let pkt = LoginCompressionS2c {
         threshold: VarInt(global.shared.compression_level.0),

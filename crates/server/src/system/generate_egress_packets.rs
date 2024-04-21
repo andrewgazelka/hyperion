@@ -8,7 +8,6 @@ use valence_protocol::{packets::play, VarInt, Velocity};
 use crate::{
     components::EntityReaction,
     events::Gametick,
-    global::Global,
     net::{IoBuf, Packets},
 };
 

@@ -356,16 +356,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "broadcast"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "divan",
- "glam",
- "rand 0.8.5",
-]
-
-[[package]]
 name = "bumpalo"
 version = "3.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"

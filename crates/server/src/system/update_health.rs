@@ -5,7 +5,6 @@ use crate::{
     components::vitals::{Absorption, Regeneration},
     events::Gametick,
     global::Global,
-    tracker::Prev,
     Vitals,
 };
 
@@ -15,6 +14,7 @@ const HUNGER_INTERVAL: i64 = 80;
 
 /// Interval to regenerate half a heart from the regeneration potion effect measured in ticks. This
 /// assumes that all regeneration is at level 2, which is true since only golden apples are used.
+#[expect(unused, reason = "probably will be used in future")]
 const REGENERATION_INTERVAL: i64 = 25;
 
 #[derive(Query)]

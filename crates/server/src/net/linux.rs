@@ -379,7 +379,7 @@ impl ServerDef for LinuxServer {
             for elem in write {
                 let PacketWriteInfo { start_ptr, len } = *elem;
 
-                info!("writing packet: {start_ptr:?}, {len}");
+                trace!("writing packet: {start_ptr:?}, {len}");
                 self.write_raw(fd, start_ptr, len, 0);
             }
 
@@ -388,7 +388,7 @@ impl ServerDef for LinuxServer {
                 for elem in broadcast {
                     let PacketWriteInfo { start_ptr, len } = *elem;
 
-                    info!("writing broadcast packet: {start_ptr:?}, {len}");
+                    trace!("writing broadcast packet: {start_ptr:?}, {len}");
 
                     self.write_raw(fd, start_ptr, len, 0);
                 }

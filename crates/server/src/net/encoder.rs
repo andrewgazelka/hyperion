@@ -1,7 +1,7 @@
 use std::io::{Cursor, Read};
 
 use anyhow::ensure;
-use tracing::{info, trace};
+use tracing::trace;
 use valence_protocol::{CompressionThreshold, Encode, Packet, VarInt};
 
 use crate::{
@@ -20,7 +20,8 @@ pub struct PacketEncoder {
 // but ehhhh not doing this now we are referncing data which lives the duration of the program
 // todo: bench if repr packed worth it (on old processors often slows down.
 // Modern processors packed can actually be faster because cache locality)
-#[derive(Debug)]
+#[allow(unused, reason = "this is used in linux")]
+#[derive(Debug, Copy, Clone)]
 #[repr(packed)]
 pub struct PacketWriteInfo {
     pub start_ptr: *const u8,
@@ -38,7 +39,7 @@ impl PacketEncoder {
         }
     }
 
-    pub fn compression_threshold(&self) -> CompressionThreshold {
+    pub const fn compression_threshold(&self) -> CompressionThreshold {
         self.threshold
     }
 
@@ -52,7 +53,7 @@ impl PacketEncoder {
     {
         let has_compression = self.threshold.0 >= 0;
 
-        // having compression we have two [`VarInt`] headers
+        // having compression, we have two [`VarInt`] headers
         let data_write_start = if has_compression {
             MAX_PACKET_LEN_SIZE * 2
         } else {
@@ -132,23 +133,20 @@ impl PacketEncoder {
             "packet exceeds maximum length"
         );
 
-        let metadata_start_idx = data_write_start - packet_len_size as u64;
+        let inner = cursor.into_inner();
 
-        cursor.set_position(metadata_start_idx);
+        inner.copy_within(data_write_start as usize..data_write_start as usize + data_len, packet_len_size);
 
+        let mut cursor = Cursor::new(inner);
         VarInt(data_len as i32).encode(&mut cursor)?;
 
         let slice = cursor.into_inner();
-
-        let end_len = data_write_start as usize + data_len;
-
-        let entire_slice = &slice[metadata_start_idx as usize..end_len];
+        let entire_slice = &slice[..packet_len_size + data_len];
 
         let start_ptr = entire_slice.as_ptr();
         let len = entire_slice.len();
 
-        trace!("advancing by {end_len}");
-        buf.advance(end_len);
+        buf.advance(len);
 
         Ok(PacketWriteInfo {
             start_ptr: start_ptr.cast(),

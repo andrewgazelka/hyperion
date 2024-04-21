@@ -84,7 +84,7 @@ mod tests {
     #[test]
     fn test_init() {
         let local = RayonLocal::<i32>::init();
-        assert_eq!(local.thread_locals.len(), rayon::current_num_threads());
+        assert_eq!(local.thread_locals.len(), rayon::current_num_threads() + 1);
         assert!(local.thread_locals.iter().all(|&x| x == 0));
     }
 
@@ -114,7 +114,7 @@ mod tests {
 
         assert_eq!(
             local.thread_locals,
-            (0..rayon::current_num_threads())
+            (0..=rayon::current_num_threads()) // because + 1
                 .map(|i| i32::try_from(i).unwrap())
                 .collect()
         );

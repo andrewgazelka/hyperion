@@ -3,7 +3,6 @@
 // https://stackoverflow.com/a/61681112/4889030
 // https://matklad.github.io/2020/10/03/fast-thread-locals-in-rust.html
 
-pub use rayon::iter::ParallelIterator;
 use uuid::Uuid;
 use valence_protocol::math::Vec2;
 

@@ -1,19 +1,17 @@
 use evenio::{
     entity::EntityId,
     event::{Insert, Receiver, Sender, Spawn},
-    fetch::Fetcher,
     prelude::Single,
 };
 use generator::EntityType;
 use rand_distr::{Distribution, LogNormal};
-use tracing::{info, instrument};
+use tracing::instrument;
 use valence_protocol::{ByteAngle, VarInt, Velocity};
 
 use crate::{
     components::{EntityReaction, FullEntityPose, MinecraftEntity, RunningSpeed, Uuid},
     events::InitEntity,
-    global::Global,
-    net::{Broadcast, IoBuf, Packets},
+    net::{Broadcast, IoBuf},
     system::entity_position::PositionSyncMetadata,
 };
 
@@ -41,9 +39,6 @@ pub fn spawn_packet(
 #[instrument(skip_all)]
 pub fn init_entity(
     r: Receiver<InitEntity>,
-    // encoders: Fetcher<(&mut LocalEncoder)>,
-    global: Single<&Global>,
-
     mut s: Sender<(
         Insert<FullEntityPose>,
         Insert<PositionSyncMetadata>,
@@ -54,7 +49,7 @@ pub fn init_entity(
         Spawn,
     )>,
     mut io: Single<&mut IoBuf>,
-    // mut broadcast: Single<&mut Broadcast>,
+    mut broadcast: Single<&mut Broadcast>,
 ) {
     let event = r.event;
 
@@ -73,7 +68,7 @@ pub fn init_entity(
 
     let pkt = spawn_packet(id, uuid, &pose);
 
-    // broadcast.append(&pkt, &mut io).unwrap();
+    broadcast.append(&pkt, &mut io).unwrap();
 }
 
 fn generate_running_speed() -> RunningSpeed {

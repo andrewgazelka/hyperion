@@ -5,13 +5,10 @@ use std::{
     net::ToSocketAddrs,
 };
 
-use anyhow::Context;
 use derive_more::{Deref, DerefMut, From};
 use evenio::prelude::Component;
 use libc::iovec;
-use sha2::Digest;
-use tracing::info;
-use valence_protocol::{encode::PacketWriter, uuid::Uuid, CompressionThreshold, Encode, VarInt};
+use valence_protocol::{CompressionThreshold, Encode, VarInt};
 
 use crate::{
     global::Global,
@@ -120,6 +117,7 @@ impl ServerDef for Server {
     }
 }
 
+#[allow(unused, reason = "this is used on linux")]
 pub struct RefreshItems<'a> {
     pub write: &'a [PacketWriteInfo],
     pub fd: Fd,
@@ -165,9 +163,9 @@ impl ServerDef for NotImplemented {
 
     fn write_all<'a>(
         &mut self,
-        global: &mut Global,
-        broadcast: &'a [PacketWriteInfo],
-        writers: impl Iterator<Item = RefreshItems<'a>>,
+        _global: &mut Global,
+        _broadcast: &'a [PacketWriteInfo],
+        _writers: impl Iterator<Item = RefreshItems<'a>>,
     ) {
         unimplemented!("not implemented; use Linux")
     }
@@ -188,16 +186,6 @@ pub const MAX_PACKET_LEN_SIZE: usize = VarInt::MAX_SIZE;
 /// The stringified name of the Minecraft version this library currently
 /// targets.
 pub const MINECRAFT_VERSION: &str = "1.20.1";
-
-/// Get a [`Uuid`] based on the given user's name.
-fn offline_uuid(username: &str) -> anyhow::Result<Uuid> {
-    let digest = sha2::Sha256::digest(username);
-
-    #[expect(clippy::indexing_slicing, reason = "sha256 is always 32 bytes")]
-    let slice = &digest[..16];
-
-    Uuid::from_slice(slice).context("failed to create uuid")
-}
 
 mod encoder;
 
@@ -242,6 +230,18 @@ impl Packets {
         self.to_write.clear();
     }
 
+    fn push(&mut self, writer: PacketWriteInfo) {
+        if let Some(last) = self.to_write.last_mut() {
+            let start_pointer_if_contiguous = unsafe { last.start_ptr.add(last.len as usize) };
+            if start_pointer_if_contiguous == writer.start_ptr {
+                last.len += writer.len;
+                return;
+            }
+        }
+
+        self.to_write.push(writer);
+    }
+
     pub fn append_pre_compression_packet<P>(
         &mut self,
         pkt: &P,
@@ -256,8 +256,7 @@ impl Packets {
 
         let result = buf.enc.append_packet(pkt, &mut buf.buf)?;
 
-        let name = P::NAME;
-        self.to_write.push(result);
+        self.push(result);
 
         // reset
         buf.enc.set_compression(compression);
@@ -270,9 +269,8 @@ impl Packets {
         P: valence_protocol::Packet + Encode,
     {
         let result = buf.enc.append_packet(pkt, &mut buf.buf)?;
-        let name = P::NAME;
 
-        self.to_write.push(result);
+        self.push(result);
         Ok(())
     }
 
@@ -284,6 +282,104 @@ impl Packets {
             len: data.len() as u32,
         };
 
-        self.to_write.push(writer);
+        self.push(writer);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use valence_protocol::{packets::login::LoginHelloC2s, Bounded};
+
+    use super::*;
+
+    #[test]
+    fn test_append_pre_compression_packet() {
+        let mut buf = IoBuf::new(CompressionThreshold::DEFAULT);
+        let mut packets = Packets::default();
+
+        let pkt = LoginHelloC2s {
+            username: Bounded::default(),
+            profile_id: None,
+        };
+
+        packets
+            .append_pre_compression_packet(&pkt, &mut buf)
+            .unwrap();
+
+        assert_eq!(packets.to_write().len(), 1);
+
+        let len = packets.to_write()[0].len;
+
+        assert_eq!(len, 4); // Packet length for an empty LoginHelloC2s
+    }
+    #[test]
+    fn test_append_packet() {
+        let mut buf = IoBuf::new(CompressionThreshold::DEFAULT);
+        let mut packets = Packets::default();
+
+        let pkt = LoginHelloC2s {
+            username: Bounded::default(),
+            profile_id: None,
+        };
+
+        packets.append(&pkt, &mut buf).unwrap();
+
+        assert_eq!(packets.to_write().len(), 1);
+        let len = packets.to_write()[0].len;
+        assert_eq!(len, 4); // Packet length for an empty LoginHelloC2s
+    }
+
+    #[test]
+    fn test_append_raw() {
+        let mut buf = IoBuf::new(CompressionThreshold::DEFAULT);
+        let mut packets = Packets::default();
+
+        let data = b"Hello, world!";
+        packets.append_raw(data, &mut buf);
+
+        assert_eq!(packets.to_write().len(), 1);
+
+        let len = packets.to_write()[0].len;
+        assert_eq!(len, data.len() as u32);
+    }
+
+    #[test]
+    fn test_clear() {
+        let mut buf = IoBuf::new(CompressionThreshold::DEFAULT);
+        let mut packets = Packets::default();
+
+        let pkt = LoginHelloC2s {
+            username: Bounded::default(),
+            profile_id: None,
+        };
+
+        packets.append(&pkt, &mut buf).unwrap();
+        assert_eq!(packets.to_write().len(), 1);
+
+        packets.clear();
+        assert_eq!(packets.to_write().len(), 0);
+    }
+
+    #[test]
+    fn test_contiguous_packets() {
+        let mut buf = IoBuf::new(CompressionThreshold::DEFAULT);
+        let mut packets = Packets::default();
+
+        let pkt1 = LoginHelloC2s {
+            username: Bounded::default(),
+            profile_id: None,
+        };
+        let pkt2 = LoginHelloC2s {
+            username: Bounded::default(),
+            profile_id: None,
+        };
+
+        packets.append_pre_compression_packet(&pkt1, &mut buf).unwrap();
+        packets.append_pre_compression_packet(&pkt2, &mut buf).unwrap();
+
+        assert_eq!(packets.to_write().len(), 1);
+
+        let len = packets.to_write()[0].len;
+        assert_eq!(len, 8); // Combined length of both packets
     }
 }

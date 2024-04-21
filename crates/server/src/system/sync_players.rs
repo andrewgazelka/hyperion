@@ -4,7 +4,6 @@ use valence_protocol::{packets::play, VarInt};
 use valence_text::{Color, IntoText};
 
 use crate::{
-    components::FullEntityPose,
     events::Gametick,
     global::Global,
     net::{IoBuf, Packets},
@@ -12,8 +11,11 @@ use crate::{
     Vitals,
 };
 
+#[allow(dead_code, reason = "todo")]
 const HURT_SOUND: VarInt = VarInt(1018); // represents 1019
 const REGENERATION: VarInt = VarInt(10);
+
+#[allow(dead_code, reason = "todo")]
 const ABSORPTION: VarInt = VarInt(22);
 const SURVIVAL: f32 = 0.0;
 const SPECTATOR: f32 = 3.0;
@@ -21,7 +23,6 @@ const SPECTATOR: f32 = 3.0;
 #[derive(Query)]
 pub struct SyncPlayersQuery<'a> {
     id: EntityId,
-    pose: &'a FullEntityPose,
     prev_vitals: &'a mut Prev<Vitals>,
     vitals: &'a mut Vitals,
     packets: &'a mut Packets,

@@ -31,7 +31,7 @@ pub fn sync_entity_position(
     _: Receiver<Gametick>,
     mut entities: Fetcher<EntityQuery>,
     mut io: Single<&mut IoBuf>,
-    // mut broadcast: Single<&mut Broadcast>,
+    mut broadcast: Single<&mut Broadcast>,
 ) {
     entities.iter_mut().for_each(|query| {
         let EntityQuery {
@@ -112,7 +112,7 @@ pub fn sync_entity_position(
             exclude_player: Some(uuid.0),
         };
 
-        // movement.write_packets(id, &mut broadcast, metadata, &mut io);
+        movement.write_packets(id, &mut broadcast, metadata, &mut io);
 
         if let EntityMovement::Teleport { .. } = movement {
             sync_meta.rounding_error = Vec3::ZERO;
@@ -148,7 +148,7 @@ impl EntityMovement {
     fn write_packets(
         &self,
         id: EntityId,
-        // broadcast: &mut Broadcast,
+        broadcast: &mut Broadcast,
         _metadata: PacketMetadata,
         io: &mut IoBuf,
     ) {
@@ -175,8 +175,8 @@ impl EntityMovement {
                     head_yaw: yaw,
                 };
 
-                // broadcast.append(&pos, io).unwrap();
-                // broadcast.append(&look, io).unwrap();
+                broadcast.append(&pos, io).unwrap();
+                broadcast.append(&look, io).unwrap();
             }
             Self::Position { delta } => {
                 let pos = play::MoveRelativeS2c {
@@ -185,7 +185,7 @@ impl EntityMovement {
                     on_ground: false,
                 };
 
-                // broadcast.append(&pos, io).unwrap();
+                broadcast.append(&pos, io).unwrap();
             }
             Self::Rotation { pitch, yaw } => {
                 let pos = play::RotateS2c {
@@ -200,8 +200,8 @@ impl EntityMovement {
                     head_yaw: yaw,
                 };
 
-                // broadcast.append(&pos, io).unwrap();
-                // broadcast.append(&look, io).unwrap();
+                broadcast.append(&pos, io).unwrap();
+                broadcast.append(&look, io).unwrap();
             }
             Self::Teleport { pos, pitch, yaw } => {
                 let pos = play::EntityPositionS2c {
@@ -217,8 +217,8 @@ impl EntityMovement {
                     head_yaw: yaw,
                 };
 
-                // broadcast.append(&pos, io).unwrap();
-                // broadcast.append(&look, io).unwrap();
+                broadcast.append(&pos, io).unwrap();
+                broadcast.append(&look, io).unwrap();
             }
             Self::None => {}
         }

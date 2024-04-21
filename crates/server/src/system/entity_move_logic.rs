@@ -1,10 +1,9 @@
 use evenio::{
-    entity::EntityId,
     event::Receiver,
     fetch::{Fetcher, Single},
     query::{Query, With},
 };
-use tracing::{info, instrument};
+use tracing::{instrument};
 use valence_protocol::math::{Vec2, Vec3};
 
 use crate::{

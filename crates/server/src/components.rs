@@ -43,9 +43,6 @@ pub enum LoginState {
     Terminate,
 }
 
-#[derive(Component)]
-pub struct HasInvincibility(pub bool);
-
 #[derive(Copy, Clone, PartialEq, Debug, Component)]
 pub enum Vitals {
     /// If the player is alive

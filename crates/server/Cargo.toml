@@ -32,7 +32,6 @@ generator.workspace = true
 
 chunk.workspace = true
 
-
 # no secure alloc
 sha2 = "0.10.8"
 itertools = "0.12.1"
@@ -111,5 +110,4 @@ allow_attributes_without_reason = "deny"
 [build-dependencies]
 rustc_version = "0.4.0"
 #missing_docs_in_private_items = "warn"
-
 

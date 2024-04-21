@@ -24,7 +24,7 @@ use ndarray::s;
 use signal_hook::iterator::Signals;
 use singleton::bounding_box;
 use spin::Lazy;
-use tracing::{debug, error, info, instrument, trace, warn};
+use tracing::{error, info, instrument, trace, warn};
 use valence_protocol::CompressionThreshold;
 
 use crate::{
@@ -34,7 +34,7 @@ use crate::{
     net::{Broadcast, IoBuf, Server, ServerDef},
     singleton::{
         fd_lookup::FdLookup, player_aabb_lookup::PlayerBoundingBoxes,
-        player_id_lookup::PlayerIdLookup, player_uuid_lookup::PlayerUuidLookup, ring::Ring,
+        player_id_lookup::PlayerIdLookup, player_uuid_lookup::PlayerUuidLookup,
     },
 };
 
