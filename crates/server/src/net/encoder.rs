@@ -28,6 +28,7 @@ pub struct PacketWriteInfo {
 }
 
 impl PacketWriteInfo {
+    #[allow(dead_code, reason = "nice for unit tests")]
     const unsafe fn as_slice(&self) -> &[u8] {
         std::slice::from_raw_parts(self.start_ptr, self.len as usize)
     }
@@ -86,7 +87,7 @@ where
 }
 
 impl PacketEncoder {
-    pub fn new(threshold: CompressionThreshold, compression: Compression) -> Self {
+    pub const fn new(threshold: CompressionThreshold, compression: Compression) -> Self {
         Self {
             threshold,
             compression,
@@ -118,7 +119,7 @@ impl PacketEncoder {
 
         let data_len = end_data_position_exclusive - data_write_start;
 
-        if data_len > self.threshold.0.unsigned_abs() as u64 {
+        if data_len > u64::from(self.threshold.0.unsigned_abs()) {
             let slice = cursor.into_inner();
 
             let scratch = scratch.obtain();
@@ -202,8 +203,8 @@ mod tests {
         let valence_encoder_res = hex::encode(valence_encoder_res);
 
         // add 0x
-        let encoder_res = format!("0x{}", encoder_res);
-        let valence_encoder_res = format!("0x{}", valence_encoder_res);
+        let encoder_res = format!("0x{encoder_res}");
+        let valence_encoder_res = format!("0x{valence_encoder_res}");
 
         assert_eq!(encoder_res, valence_encoder_res);
     }

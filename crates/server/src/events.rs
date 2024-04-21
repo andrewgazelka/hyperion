@@ -78,6 +78,10 @@ pub struct StatsEvent<'a, 'b> {
 }
 
 // todo: REMOVE
+#[expect(
+    clippy::non_send_fields_in_send_ty,
+    reason = "this will be removed in the future"
+)]
 unsafe impl<'a, 'b> Send for StatsEvent<'a, 'b> {}
 unsafe impl<'a, 'b> Sync for StatsEvent<'a, 'b> {}
 
@@ -88,8 +92,15 @@ pub struct Scratch<A: Allocator = std::alloc::Global> {
 }
 
 impl Scratch {
-    pub fn new() -> Self {
+    #[must_use]
+    pub const fn new() -> Self {
         Self { inner: Vec::new() }
+    }
+}
+
+impl Default for Scratch {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -143,6 +154,10 @@ pub struct Gametick<'a, 'b> {
 }
 
 // todo: REMOVE
+#[expect(
+    clippy::non_send_fields_in_send_ty,
+    reason = "this will be removed in the future"
+)]
 unsafe impl<'a, 'b> Send for Gametick<'a, 'b> {}
 unsafe impl<'a, 'b> Sync for Gametick<'a, 'b> {}
 

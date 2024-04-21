@@ -8,7 +8,7 @@ use std::{
 use derive_more::{Deref, DerefMut, From};
 use evenio::prelude::Component;
 use libc::iovec;
-use valence_protocol::{CompressionThreshold, Encode, VarInt};
+use valence_protocol::{CompressionThreshold, Encode};
 
 use crate::{
     events::ScratchBuffer,
@@ -182,8 +182,6 @@ pub const PROTOCOL_VERSION: i32 = 763;
 /// The maximum number of bytes that can be sent in a single packet.
 pub const MAX_PACKET_SIZE: usize = 0x001F_FFFF;
 
-pub const MAX_PACKET_LEN_SIZE: usize = VarInt::MAX_SIZE;
-
 /// The stringified name of the Minecraft version this library currently
 /// targets.
 pub const MINECRAFT_VERSION: &str = "1.20.1";
@@ -298,9 +296,9 @@ impl Packets {
 mod tests {
     use bumpalo::Bump;
     use valence_protocol::{packets::login::LoginHelloC2s, Bounded};
-    use crate::events::Scratch;
 
     use super::*;
+    use crate::events::Scratch;
 
     #[test]
     fn test_append_pre_compression_packet() {

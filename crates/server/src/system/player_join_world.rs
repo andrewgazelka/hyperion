@@ -80,10 +80,10 @@ pub fn player_join_world(
     mut broadcast: Single<&mut Broadcast>,
     mut io: Single<&mut IoBuf>,
 ) {
+    static CACHED_DATA: once_cell::sync::OnceCell<bytes::Bytes> = once_cell::sync::OnceCell::new();
+
     // todo: remove
     let mut scratch = Scratch::new();
-
-    static CACHED_DATA: once_cell::sync::OnceCell<bytes::Bytes> = once_cell::sync::OnceCell::new();
 
     let compression_level = global.0.shared.compression_level;
 
