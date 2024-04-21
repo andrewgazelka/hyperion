@@ -2,17 +2,14 @@
 
 use std::{
     alloc::{alloc, dealloc, handle_alloc_error, Layout},
-    cell::UnsafeCell,
     cmp,
     iter::TrustedLen,
     marker::PhantomData,
     net::{SocketAddr, ToSocketAddrs},
     os::fd::AsRawFd,
     sync::atomic::{AtomicU16, Ordering},
-    time::Duration,
 };
 
-use bytes::Bytes;
 pub use io_uring::types::Fixed;
 use io_uring::{
     cqueue::buffer_select, squeue, squeue::SubmissionQueue, types::BufRingEntry, IoUring,
@@ -26,12 +23,6 @@ use crate::{
     global::Global,
     net::{encoder::PacketWriteInfo, Fd, ServerDef, ServerEvent},
 };
-
-/// Default MiB/s threshold before we start to limit the sending of some packets.
-const DEFAULT_SPEED: u32 = 1024 * 1024;
-
-/// The maximum number of buffers a vectored write can have.
-const MAX_VECTORED_WRITE_BUFS: usize = 16;
 
 const COMPLETION_QUEUE_SIZE: u32 = 32768;
 const SUBMISSION_QUEUE_SIZE: u32 = 32768;
@@ -48,16 +39,10 @@ const C2S_BUFFER_GROUP_ID: u16 = 0;
 
 const IORING_CQE_F_MORE: u32 = 1 << 1;
 
-/// How long we wait from when we get the first buffer to when we start sending all of the ones we have collected.
-/// This is closely related to [`MAX_VECTORED_WRITE_BUFS`].
-const WRITE_DELAY: Duration = Duration::from_millis(1);
-
-/// How much we expand our read buffer each time a packet is too large.
-const READ_BUF_SIZE: usize = 4096;
-
 fn page_size() -> usize {
     // SAFETY: This is valid
-    unsafe { libc::sysconf(libc::_SC_PAGESIZE) as usize }
+    let page_size = unsafe { libc::sysconf(libc::_SC_PAGESIZE) };
+    usize::try_from(page_size).expect("page size is too large")
 }
 
 struct PageAlignedMemory<T> {
@@ -109,7 +94,8 @@ impl<T> PageAlignedMemory<T> {
         Self { data, layout }
     }
 
-    fn as_mut_ptr(&self) -> *mut T {
+    #[expect(dead_code, reason = "this is not used")]
+    const fn as_mut_ptr(&self) -> *mut T {
         self.data
     }
 }
@@ -124,7 +110,9 @@ impl<T> Drop for PageAlignedMemory<T> {
 }
 
 pub struct LinuxServer {
+    #[expect(dead_code, reason = "this is used so there is no drop")]
     listener: Socket,
+
     uring: IoUring,
 
     /// The underlying data should never be accessed directly as a slice because the kernel could modify some
@@ -137,17 +125,18 @@ pub struct LinuxServer {
     /// is needed because registered buffers must be valid until unregistered or the uring is dropped.
     c2s_buffer_entries: PageAlignedMemory<BufRingEntry>,
 
-    /// Value of c2s_buffer_entries tail, which is synched occasionally with the kernel
+    /// Value of `c2s_buffer_entries` tail, which is synched occasionally with the kernel
     c2s_local_tail: u16,
 
     pending_writes: usize,
 
-    /// Make Listener !Send and !Sync to let io_uring assume that it'll only be accessed by 1
+    /// Make Listener !Send and !Sync to let `io_uring` assume that it'll only be accessed by 1
     /// thread
     phantom: PhantomData<*const ()>,
 }
 
 // TODO: REMOVE
+#[expect(clippy::non_send_fields_in_send_ty, reason = "this is not a send type")]
 unsafe impl Send for LinuxServer {}
 unsafe impl Sync for LinuxServer {}
 
@@ -234,7 +223,7 @@ impl ServerDef for LinuxServer {
     /// `f` should never panic
     fn drain(&mut self, mut f: impl FnMut(ServerEvent)) -> std::io::Result<()> {
         loop {
-            let (mut submitter, mut submission, mut completion) = self.uring.split();
+            let (submitter, mut submission, mut completion) = self.uring.split();
             completion.sync();
             if completion.overflow() > 0 {
                 error!(
@@ -254,7 +243,10 @@ impl ServerDef for LinuxServer {
 
                         if result < 0 {
                             error!("there was an error in accept: {}", result);
+                            continue;
                         }
+
+                        #[expect(clippy::cast_sign_loss, reason = "we are checking if < 0")]
                         let fd = Fixed(result as u32);
                         Self::request_recv(&mut submission, fd);
                         f(ServerEvent::AddPlayer { fd: Fd(fd) });
@@ -304,7 +296,9 @@ impl ServerDef for LinuxServer {
                         } else if result < 0 {
                             // -104
                             error!("there was an error in recv: {}", result);
+                            continue;
                         } else {
+                            #[expect(clippy::cast_sign_loss, reason = "we are checking if < 0")]
                             let bytes_received = result as usize;
                             let buffer_id =
                                 buffer_select(event.flags()).expect("there should be a buffer");
@@ -331,17 +325,16 @@ impl ServerDef for LinuxServer {
 
             if self.pending_writes == 0 {
                 break;
-            } else {
-                let start = std::time::Instant::now();
-                // Wait for another event to finish and then check if all writes are finished by
-                // looping. Waiting in here should have a negligible impact since all writes should
-                // be nonblocking.
-                submitter.submit_and_wait(1)?;
-                warn!(
-                    "{:?} was spent waiting for another event since there's pending writes",
-                    start.elapsed()
-                );
             }
+            let start = std::time::Instant::now();
+            // Wait for another event to finish and then check if all writes are finished by
+            // looping. Waiting in here should have a negligible impact since all writes should
+            // be nonblocking.
+            submitter.submit_and_wait(1)?;
+            warn!(
+                "{:?} was spent waiting for another event since there's pending writes",
+                start.elapsed()
+            );
         }
 
         // SAFETY: This is the first entry of the buffer ring
@@ -363,7 +356,7 @@ impl ServerDef for LinuxServer {
     /// Impl with local sends BEFORE broadcasting
     fn write_all<'a>(
         &mut self,
-        global: &mut Global,
+        _global: &mut Global,
         broadcast: &'a [PacketWriteInfo],
         writers: impl Iterator<Item = RefreshItems<'a>>,
     ) {
@@ -450,7 +443,7 @@ impl LinuxServer {
                 submission,
                 &io_uring::opcode::RecvMulti::new(fd, C2S_BUFFER_GROUP_ID)
                     .build()
-                    .user_data((fd.0 as u64) | RECV_MARKER),
+                    .user_data(u64::from(fd.0) | RECV_MARKER),
             );
         }
     }
@@ -476,11 +469,12 @@ impl LinuxServer {
                     // IO_HARDLINK allows adjacent fd writes to be sequential which is SUPER important to make
                     // sure things get written in the right (or at least deterministic) order
                     .flags(squeue::Flags::IO_HARDLINK)
-                    .user_data((fd.0 as u64) | SEND_MARKER),
+                    .user_data(u64::from(fd.0) | SEND_MARKER),
             );
         }
     }
 
+    #[expect(dead_code, reason = "this is not used")]
     pub fn cancel(&mut self, cancel_builder: io_uring::types::CancelBuilder) {
         self.uring
             .submitter()
@@ -497,6 +491,7 @@ impl LinuxServer {
 
     /// All requests in the submission queue must be finished or cancelled, or else this function
     /// will hang indefinetely.
+    #[expect(dead_code, reason = "this is not used")]
     pub fn unregister_buffers(&mut self) {
         self.uring.submitter().unregister_buffers().unwrap();
     }
