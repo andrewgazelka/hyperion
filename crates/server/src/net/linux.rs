@@ -41,7 +41,7 @@ const LISTEN_BACKLOG: libc::c_int = 128;
 const SEND_BUFFER_SIZE: usize = 128 * 1024 * 1024;
 
 /// Size of each buffer in bytes
-const C2S_RING_BUFFER_LEN: usize = 4096;
+const C2S_RING_BUFFER_LEN: usize = 64;
 
 const LISTENER_FIXED_FD: Fixed = Fixed(0);
 const C2S_BUFFER_GROUP_ID: u16 = 0;
