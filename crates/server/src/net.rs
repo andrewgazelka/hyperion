@@ -298,6 +298,7 @@ impl Packets {
 mod tests {
     use bumpalo::Bump;
     use valence_protocol::{packets::login::LoginHelloC2s, Bounded};
+    use crate::events::Scratch;
 
     use super::*;
 

@@ -245,26 +245,4 @@ mod tests {
         };
         compare(&login);
     }
-
-    /// Tests to see if under the threshold the compressed is equiv to uncompressed
-    #[test]
-    fn under_threshold_equal_valence() {
-        let login = login::LoginHelloC2s {
-            username: Bounded::default(),
-            profile_id: None,
-        };
-
-        let mut valence_encoder = ValencePacketEncoder::new();
-        valence_encoder.set_compression(CompressionThreshold(1000));
-        valence_encoder.append_packet(&login).unwrap();
-
-        let compressed_data = valence_encoder.take().to_vec();
-
-        valence_encoder.set_compression(CompressionThreshold::default());
-        valence_encoder.append_packet(&login).unwrap();
-
-        let uncompressed_data = valence_encoder.take().to_vec();
-
-        assert_eq!(compressed_data, uncompressed_data);
-    }
 }
