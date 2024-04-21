@@ -73,6 +73,7 @@ io-uring = "0.6.3"
 [dev-dependencies]
 divan = "0.1.14"
 rust-mc-bot.workspace = true
+rustc_version = "0.4.0"
 tango-bench = "0.4.0"
 
 [[bench]]
@@ -106,6 +107,9 @@ suspicious = "deny"
 # restriction
 #allow_attributes = "deny"
 allow_attributes_without_reason = "deny"
+
+[build-dependencies]
+rustc_version = "0.4.0"
 #missing_docs_in_private_items = "warn"
 
 

@@ -2160,6 +2160,7 @@ dependencies = [
  "rayon",
  "rayon-local",
  "rust-mc-bot",
+ "rustc_version",
  "serde",
  "serde_json",
  "sha2",
