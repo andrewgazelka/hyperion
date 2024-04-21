@@ -5,7 +5,7 @@ use evenio::{
 };
 use generator::EntityType;
 use rand_distr::{Distribution, LogNormal};
-use tracing::{info, instrument};
+use tracing::instrument;
 use valence_protocol::{ByteAngle, VarInt, Velocity};
 
 use crate::{
@@ -25,8 +25,6 @@ pub fn spawn_packet(
 ) -> valence_protocol::packets::play::EntitySpawnS2c {
     #[expect(clippy::cast_possible_wrap, reason = "wrapping is ok in this case")]
     let entity_id = VarInt(id.index().0 as i32);
-
-    info!("spawn packet for zombie with id {entity_id:?} pose {pose:?}");
 
     valence_protocol::packets::play::EntitySpawnS2c {
         entity_id,
