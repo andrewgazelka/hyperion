@@ -15,8 +15,13 @@ use std::str::FromStr;
 
 use anyhow::{bail, ensure};
 use bvh::aabb::Aabb;
-use evenio::{entity::EntityId, query::Query};
+use evenio::{
+    entity::EntityId,
+    fetch::Fetcher,
+    query::{Query, With},
+};
 use tracing::{debug, info};
+use tracing_subscriber::filter::targets;
 use valence_protocol::{
     decode::PacketFrame,
     math::Vec3,
@@ -32,7 +37,7 @@ use crate::{
     events::{AttackEntity, InitEntity, KillAllEntities, SwingArm},
     global::Global,
     net::LocalEncoder,
-    singleton::player_id_lookup::PlayerIdLookup,
+    singleton::player_id_lookup::{self, EntityIdLookup},
     system::IngressSender,
     Vitals,
 };
@@ -298,7 +303,7 @@ fn chat_command(
 
 fn player_interact_entity(
     mut data: &[u8],
-    id_lookup: &PlayerIdLookup,
+    id_lookup: &EntityIdLookup,
     from_pos: Vec3,
     sender: &mut IngressSender,
 ) -> anyhow::Result<()> {
@@ -332,8 +337,9 @@ pub fn switch(
     raw: PacketFrame,
     global: &Global,
     sender: &mut IngressSender,
-    pose: &mut FullEntityPose,
-    // query: PacketSwitchQuery,
+    player_pose: &mut FullEntityPose,
+    id_lookup: &EntityIdLookup,
+    //  query: PacketSwitchQuery,
 ) -> anyhow::Result<()> {
     let packet_id = raw.id;
     let data = raw.body;
@@ -344,18 +350,18 @@ pub fn switch(
         // play::TeleportConfirmC2s::ID => confirm_teleport(data),
         // // play::ClientSettingsC2s::ID => client_settings(data, player)?,
         // play::CustomPayloadC2s::ID => custom_payload(data),
-        play::FullC2s::ID => full(data, pose)?,
-        play::PositionAndOnGroundC2s::ID => position_and_on_ground(data, pose)?,
-        play::LookAndOnGroundC2s::ID => look_and_on_ground(data, pose)?,
+        play::FullC2s::ID => full(data, player_pose)?,
+        play::PositionAndOnGroundC2s::ID => position_and_on_ground(data, player_pose)?,
+        play::LookAndOnGroundC2s::ID => look_and_on_ground(data, player_pose)?,
         // play::ClientCommandC2s::ID => player_command(data),
         // play::UpdatePlayerAbilitiesC2s::ID => update_player_abilities(data)?,
         // play::UpdateSelectedSlotC2s::ID => update_selected_slot(data)?,
-        // play::PlayerInteractEntityC2s::ID => {
-        //     player_interact_entity(data, id_lookup, query.pose.position, sender)?;
-        // }
+        play::PlayerInteractEntityC2s::ID => {
+            player_interact_entity(data, id_lookup, player_pose.position, sender)?;
+        }
         // play::KeepAliveC2s::ID => keep_alive(query.keep_alive)?,
         play::CommandExecutionC2s::ID => {
-            chat_command(data, global, pose, sender)?;
+            chat_command(data, global, player_pose, sender)?;
         }
         _ => {
             // info!("unknown packet id: 0x{:02X}", packet_id)

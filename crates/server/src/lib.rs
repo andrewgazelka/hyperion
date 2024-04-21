@@ -33,7 +33,7 @@ use crate::{
     net::{Server, ServerDef},
     singleton::{
         broadcast::BroadcastBuf, buffer_allocator::BufferAllocator, fd_lookup::FdLookup,
-        player_aabb_lookup::PlayerBoundingBoxes, player_id_lookup::PlayerIdLookup,
+        player_aabb_lookup::PlayerBoundingBoxes, player_id_lookup::EntityIdLookup,
         player_uuid_lookup::PlayerUuidLookup,
     },
 };
@@ -179,7 +179,10 @@ impl Game {
         world.add_handler(system::rebuild_player_location);
         world.add_handler(system::player_detect_mob_hits);
 
-        world.add_handler(system::pkt_attack);
+        world.add_handler(system::check_immunity);
+        world.add_handler(system::pkt_attack_player);
+        world.add_handler(system::pkt_attack_entity);
+
         world.add_handler(system::pkt_hand_swing);
 
         world.add_handler(system::generate_egress_packets);
@@ -200,7 +203,7 @@ impl Game {
         world.insert(uuid_lookup, PlayerUuidLookup::default());
 
         let player_id_lookup = world.spawn();
-        world.insert(player_id_lookup, PlayerIdLookup::default());
+        world.insert(player_id_lookup, EntityIdLookup::default());
 
         let player_location_lookup = world.spawn();
         world.insert(player_location_lookup, PlayerBoundingBoxes::default());

@@ -29,7 +29,7 @@ use crate::{
         AttackEntity, Gametick, InitEntity, KickPlayer, KillAllEntities, PlayerInit, SwingArm,
     },
     net::{Fd, LocalEncoder, MINECRAFT_VERSION, PROTOCOL_VERSION},
-    singleton::{buffer_allocator::BufferAllocator, player_id_lookup::PlayerIdLookup},
+    singleton::{buffer_allocator::BufferAllocator, player_id_lookup::EntityIdLookup},
     system::ingress::player_packet_buffer::DecodeBuffer,
 };
 
@@ -56,8 +56,8 @@ pub type IngressSender<'a> = Sender<
 pub fn ingress(
     _: Receiver<Gametick>,
     mut fd_lookup: Single<&mut FdLookup>,
-    mut global: Single<&mut Global>,
-    id_lookup: Single<&PlayerIdLookup>,
+    global: Single<&mut Global>,
+    id_lookup: Single<&EntityIdLookup>,
     mut server: Single<&mut Server>,
     buffers: Single<&mut BufferAllocator>,
     mut players: Fetcher<(
@@ -138,7 +138,8 @@ pub fn ingress(
                     LoginState::TransitioningPlay | LoginState::Play => {
                         *login_state = LoginState::Play;
                         if let Some(pose) = &mut pose {
-                            crate::packets::switch(frame, &global, &mut sender, pose).unwrap();
+                            crate::packets::switch(frame, &global, &mut sender, pose, &id_lookup)
+                                .unwrap();
                         }
                     }
                 }
