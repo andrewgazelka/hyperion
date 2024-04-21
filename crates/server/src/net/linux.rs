@@ -1,9 +1,10 @@
 //! All the networking related code.
 
 use std::{
-    alloc::{alloc_zeroed, handle_alloc_error, Layout},
+    alloc::{alloc, dealloc, handle_alloc_error, Layout},
     cell::UnsafeCell,
     cmp,
+    iter::TrustedLen,
     marker::PhantomData,
     net::{SocketAddr, ToSocketAddrs},
     os::fd::AsRawFd,
@@ -59,32 +60,85 @@ fn page_size() -> usize {
     unsafe { libc::sysconf(libc::_SC_PAGESIZE) as usize }
 }
 
-fn alloc_zeroed_page_aligned<T>(len: usize) -> *mut T {
-    assert!(len > 0);
-    let page_size = page_size();
-    let type_layout = Layout::new::<T>();
-    assert!(type_layout.align() <= page_size);
-    assert!(type_layout.size() > 0);
+struct PageAlignedMemory<T> {
+    data: *mut T,
+    layout: Layout,
+}
 
-    let layout = Layout::from_size_align(len * type_layout.size(), page_size).unwrap();
+impl<T> PageAlignedMemory<T> {
+    fn from_iter(iter: impl TrustedLen<Item = T>) -> Self {
+        let len = iter
+            .size_hint()
+            .1
+            .expect("iterator doesn't have a known size");
+        assert!(len > 0);
+        let page_size = page_size();
+        let type_layout = Layout::new::<T>();
+        assert!(type_layout.align() <= page_size);
+        assert!(type_layout.size() > 0);
 
-    // SAFETY: len is nonzero and T is not zero sized
-    let data = unsafe { alloc_zeroed(layout) };
+        let layout = Layout::from_size_align(
+            type_layout
+                .size()
+                .checked_mul(len)
+                .expect("allocation size is too large"),
+            page_size,
+        )
+        .unwrap();
 
-    if data.is_null() {
-        handle_alloc_error(layout);
+        // SAFETY: len is nonzero and T is not zero sized
+        let data = unsafe { alloc(layout) };
+
+        if data.is_null() {
+            handle_alloc_error(layout);
+        }
+
+        let data: *mut T = data.cast();
+
+        // Initialize the memory
+        for (index, value) in iter.enumerate() {
+            // SAFETY: index is guaranteed to be within bounds because TrustedLen guarantees
+            // correctness and the amount of data from TrustedLen was allocated
+            let value_ptr = unsafe { data.add(index) };
+            // SAFETY: value_ptr is valid
+            unsafe {
+                value_ptr.write(value);
+            }
+        }
+
+        Self { data, layout }
     }
 
-    data.cast()
+    fn as_mut_ptr(&self) -> *mut T {
+        self.data
+    }
+}
+
+impl<T> Drop for PageAlignedMemory<T> {
+    fn drop(&mut self) {
+        // SAFETY: data and layout should be valid
+        unsafe {
+            dealloc(self.data.cast(), self.layout);
+        }
+    }
 }
 
 pub struct LinuxServer {
     listener: Socket,
     uring: IoUring,
 
-    c2s_buffer: *mut [UnsafeCell<u8>; C2S_RING_BUFFER_LEN],
+    /// The underlying data should never be accessed directly as a slice because the kernel could modify some
+    /// buffers while a reference to the data is held, which would cause undefined behavior. In
+    /// addition, this field must be declared after uring so that the uring is dropped first. This
+    /// is needed because registered buffers must be valid until unregistered or the uring is dropped.
+    c2s_buffer: Vec<[u8; C2S_RING_BUFFER_LEN]>,
+
+    /// This field must be declared after uring so that the uring is dropped first. This
+    /// is needed because registered buffers must be valid until unregistered or the uring is dropped.
+    c2s_buffer_entries: PageAlignedMemory<BufRingEntry>,
+
+    /// Value of c2s_buffer_entries tail, which is synched occasionally with the kernel
     c2s_local_tail: u16,
-    c2s_shared_tail: *const AtomicU16,
 
     pending_writes: usize,
 
@@ -130,46 +184,35 @@ impl ServerDef for LinuxServer {
         );
 
         // Create the c2s buffer
-        let c2s_buffer = alloc_zeroed_page_aligned::<[UnsafeCell<u8>; C2S_RING_BUFFER_LEN]>(
-            C2S_RING_BUFFER_COUNT,
-        );
-        let buffer_ring = alloc_zeroed_page_aligned::<BufRingEntry>(C2S_RING_BUFFER_COUNT);
-        {
-            let c2s_buffer =
-                unsafe { std::slice::from_raw_parts(c2s_buffer, C2S_RING_BUFFER_COUNT) };
-
-            // SAFETY: Buffer count is smaller than the entry count, BufRingEntry is initialized with
-            // zero, and the underlying will not be mutated during the loop
-            let buffer_ring =
-                unsafe { std::slice::from_raw_parts_mut(buffer_ring, C2S_RING_BUFFER_COUNT) };
-
-            for (buffer_id, buffer) in buffer_ring.into_iter().enumerate() {
-                let underlying_data = &c2s_buffer[buffer_id];
-                buffer.set_addr(underlying_data.as_ptr() as u64);
-                buffer.set_len(underlying_data.len() as u32);
-                buffer.set_bid(buffer_id as u16);
-            }
-        }
+        let c2s_buffer = vec![[0u8; C2S_RING_BUFFER_LEN]; C2S_RING_BUFFER_COUNT];
+        let c2s_buffer_entries = PageAlignedMemory::from_iter(c2s_buffer.iter().enumerate().map(
+            |(buffer_id, buffer)| {
+                // SAFETY: BufRingEntry is valid in the all-zero byte-pattern.
+                let mut entry = unsafe { std::mem::zeroed::<BufRingEntry>() };
+                entry.set_addr(buffer.as_ptr() as u64);
+                entry.set_len(buffer.len() as u32);
+                entry.set_bid(buffer_id as u16);
+                entry
+            },
+        ));
 
         let tail = C2S_RING_BUFFER_COUNT as u16;
 
         // Update the tail
         // SAFETY: This is the first entry of the buffer ring
-        let tail_addr = unsafe { BufRingEntry::tail(buffer_ring) };
+        let tail_addr = unsafe { BufRingEntry::tail(c2s_buffer_entries.data) };
 
-        // SAFETY: tail_addr doesn't need to be atomic since it hasn't been passed to the kernel
+        // SAFETY: tail_addr can be set without an atomic since it hasn't been passed to the kernel
         // yet
         unsafe {
             *tail_addr.cast_mut() = tail;
         }
 
-        let tail_addr: *const AtomicU16 = tail_addr.cast();
-
         // Register the buffer ring
-        // SAFETY: buffer_ring is valid to write to for C2S_RING_BUFFER_COUNT BufRingEntry structs
+        // SAFETY: c2s_buffer_entries is valid to write to for C2S_RING_BUFFER_COUNT BufRingEntry structs
         unsafe {
             submitter.register_buf_ring(
-                buffer_ring as u64,
+                c2s_buffer_entries.data as u64,
                 C2S_RING_BUFFER_COUNT as u16,
                 C2S_BUFFER_GROUP_ID,
             )?;
@@ -181,13 +224,14 @@ impl ServerDef for LinuxServer {
             listener,
             uring,
             c2s_buffer,
+            c2s_buffer_entries,
             c2s_local_tail: tail,
-            c2s_shared_tail: tail_addr,
             pending_writes: 0,
             phantom: PhantomData,
         })
     }
 
+    /// `f` should never panic
     fn drain(&mut self, mut f: impl FnMut(ServerEvent)) -> std::io::Result<()> {
         loop {
             let (mut submitter, mut submission, mut completion) = self.uring.split();
@@ -236,7 +280,7 @@ impl ServerDef for LinuxServer {
                             cmp::Ordering::Equal => {
                                 // This should never happen as long as write is never passed an empty buffer:
                                 // https://stackoverflow.com/questions/5656628/what-should-i-do-when-writefd-buf-count-returns-0
-                                panic!("write returned 0 which should not be possible");
+                                unreachable!("write returned 0 which should not be possible");
                             }
                             cmp::Ordering::Greater => {
                                 // Write operation completed successfully
@@ -265,12 +309,13 @@ impl ServerDef for LinuxServer {
                             let buffer_id =
                                 buffer_select(event.flags()).expect("there should be a buffer");
                             assert!((buffer_id as usize) < C2S_RING_BUFFER_COUNT);
-                            // TODO: this is probably very unsafe
-                            let buffer = unsafe {
-                                *(self.c2s_buffer.add(buffer_id as usize)
-                                    as *const [u8; C2S_RING_BUFFER_LEN])
-                            };
-                            let buffer = &buffer[..bytes_received];
+                            // SAFETY: as_mut_ptr doesn't take a reference to the slice in c2s_buffer.
+                            // buffer_id is in bounds of c2s_buffer, so all the
+                            // safety requirements for add is met.
+                            let buffer_ptr =
+                                unsafe { self.c2s_buffer.as_mut_ptr().add(buffer_id as usize) };
+                            // SAFETY: buffer_id is in bounds, so buffer_ptr is valid
+                            let buffer = unsafe { &(*buffer_ptr)[..bytes_received] };
                             self.c2s_local_tail = self.c2s_local_tail.wrapping_add(1);
                             f(ServerEvent::RecvData {
                                 fd: Fd(fd),
@@ -299,9 +344,13 @@ impl ServerDef for LinuxServer {
             }
         }
 
-        // SAFETY: c2s_shared_tail is valid
+        // SAFETY: This is the first entry of the buffer ring
+        let tail_addr = unsafe { BufRingEntry::tail(self.c2s_buffer_entries.data) };
+        // Casting it into an atomic is needed since the kernel is also reading the tail
+        let tail_addr: *const AtomicU16 = tail_addr.cast();
+        // SAFETY: tail_addr is valid
         unsafe {
-            (*self.c2s_shared_tail).store(self.c2s_local_tail, Ordering::Relaxed);
+            (*tail_addr).store(self.c2s_local_tail, Ordering::Relaxed);
         }
 
         Ok(())

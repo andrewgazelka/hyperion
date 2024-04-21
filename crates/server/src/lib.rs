@@ -4,6 +4,7 @@
 #![feature(type_alias_impl_trait)]
 #![feature(lint_reasons)]
 #![feature(io_error_more)]
+#![feature(trusted_len)]
 #![expect(clippy::type_complexity, reason = "evenio uses a lot of complex types")]
 
 mod chunk;
