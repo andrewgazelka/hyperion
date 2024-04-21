@@ -4,9 +4,8 @@ use tracing::instrument;
 use crate::{
     events::Gametick,
     global::Global,
-    net::{IoBuf},
+    net::{Broadcast, IoBuf},
 };
-use crate::net::Broadcast;
 
 #[instrument(skip_all, level = "trace")]
 pub fn update_time(

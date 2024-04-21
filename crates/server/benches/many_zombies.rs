@@ -11,7 +11,11 @@ use std::net::SocketAddr;
 
 use bvh::aabb::Aabb;
 use divan::Bencher;
-use server::{FullEntityPose, Game, InitEntity, Targetable};
+use server::{
+    components::{AiTargetable, FullEntityPose},
+    events::InitEntity,
+    Game,
+};
 use valence_protocol::math::Vec3;
 
 fn main() {
@@ -78,7 +82,7 @@ fn world_bench(bencher: Bencher, thread_count: usize) {
         pitch: 0.0,
     });
 
-    world.insert(id, Targetable);
+    world.insert(id, AiTargetable);
 
     bencher.counter(TICKS).bench_local(|| {
         pool.install(|| {

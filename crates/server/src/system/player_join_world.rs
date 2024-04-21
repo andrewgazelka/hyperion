@@ -35,11 +35,10 @@ use crate::{
     config,
     events::PlayerJoinWorld,
     global::Global,
-    net::{IoBuf, Packets},
+    net::{Broadcast, IoBuf, Packets},
     singleton::{player_id_lookup::PlayerIdLookup, player_uuid_lookup::PlayerUuidLookup},
     system::init_entity::spawn_packet,
 };
-use crate::net::Broadcast;
 
 #[derive(Query, Debug)]
 pub(crate) struct EntityQuery<'a> {

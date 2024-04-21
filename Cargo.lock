@@ -2126,7 +2126,6 @@ name = "server"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "arrayvec",
  "bvh",
  "bytes",
  "chunk",
@@ -2148,7 +2147,6 @@ dependencies = [
  "rand 0.8.5",
  "rand_distr",
  "rayon",
- "rayon-local",
  "rust-mc-bot",
  "rustc_version",
  "serde",
@@ -2159,7 +2157,6 @@ dependencies = [
  "spin",
  "spin_sleep",
  "tango-bench",
- "thiserror",
  "toml",
  "tracing",
  "tracing-flame",

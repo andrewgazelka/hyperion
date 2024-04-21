@@ -3,7 +3,6 @@ use tracing::info;
 
 use crate::net::ServerDef;
 
-
 // todo: see if it makes sense to use MaybeUninit
 #[derive(Debug)]
 pub struct Ring {

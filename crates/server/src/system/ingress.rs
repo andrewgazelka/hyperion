@@ -1,6 +1,6 @@
 use std::borrow::Cow;
-use anyhow::Context;
 
+use anyhow::Context;
 use evenio::{
     event::{Despawn, Insert, Receiver, Sender, Spawn},
     fetch::{Fetcher, Single},
@@ -179,7 +179,7 @@ fn offline_uuid(username: &str) -> anyhow::Result<Uuid> {
     let digest = sha2::Sha256::digest(username);
 
     #[expect(clippy::indexing_slicing, reason = "sha256 is always 32 bytes")]
-        let slice = &digest[..16];
+    let slice = &digest[..16];
 
     Uuid::from_slice(slice).context("failed to create uuid")
 }

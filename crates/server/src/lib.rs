@@ -38,8 +38,8 @@ use crate::{
     },
 };
 
-mod components;
-mod events;
+pub mod components;
+pub mod events;
 
 mod global;
 mod net;

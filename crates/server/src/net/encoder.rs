@@ -135,7 +135,10 @@ impl PacketEncoder {
 
         let inner = cursor.into_inner();
 
-        inner.copy_within(data_write_start as usize..data_write_start as usize + data_len, packet_len_size);
+        inner.copy_within(
+            data_write_start as usize..data_write_start as usize + data_len,
+            packet_len_size,
+        );
 
         let mut cursor = Cursor::new(inner);
         VarInt(data_len as i32).encode(&mut cursor)?;

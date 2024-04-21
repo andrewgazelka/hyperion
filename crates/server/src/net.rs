@@ -374,8 +374,12 @@ mod tests {
             profile_id: None,
         };
 
-        packets.append_pre_compression_packet(&pkt1, &mut buf).unwrap();
-        packets.append_pre_compression_packet(&pkt2, &mut buf).unwrap();
+        packets
+            .append_pre_compression_packet(&pkt1, &mut buf)
+            .unwrap();
+        packets
+            .append_pre_compression_packet(&pkt2, &mut buf)
+            .unwrap();
 
         assert_eq!(packets.to_write().len(), 1);
 
