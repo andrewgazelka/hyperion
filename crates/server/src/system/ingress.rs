@@ -2,9 +2,9 @@ use std::borrow::Cow;
 
 use anyhow::Context;
 use evenio::{
-    event::{Despawn, Insert, Receiver, Sender, Spawn},
+    event::{Despawn, Insert, Sender, Spawn},
     fetch::{Fetcher, Single},
-    prelude::EntityId,
+    prelude::{EntityId, ReceiverMut},
 };
 use serde_json::json;
 use sha2::Digest;
@@ -28,7 +28,8 @@ mod player_packet_buffer;
 use crate::{
     components::{FullEntityPose, LoginState},
     events::{
-        AttackEntity, Gametick, InitEntity, KickPlayer, KillAllEntities, PlayerInit, SwingArm,
+        AttackEntity, Gametick, InitEntity, KickPlayer, KillAllEntities, PlayerInit, ScratchBuffer,
+        SwingArm,
     },
     net::{Fd, IoBuf, Packets, MINECRAFT_VERSION, PROTOCOL_VERSION},
     system::ingress::player_packet_buffer::DecodeBuffer,
@@ -56,7 +57,7 @@ pub type IngressSender<'a> = Sender<
 // The `Receiver<Tick>` parameter tells our handler to listen for the `Tick` event.
 #[instrument(skip_all, level = "trace")]
 pub fn ingress(
-    _: Receiver<Gametick>,
+    gametick: ReceiverMut<Gametick>,
     mut fd_lookup: Single<&mut FdLookup>,
     global: Single<&mut Global>,
     mut server: Single<&mut Server>,
@@ -70,6 +71,11 @@ pub fn ingress(
     mut io: Single<&mut IoBuf>,
     mut sender: IngressSender,
 ) {
+    let mut gametick = gametick.event;
+
+    // todo why &mut * needed
+    let scratch = &mut *gametick.scratch;
+
     server
         .drain(|event| match event {
             ServerEvent::AddPlayer { fd } => {
@@ -105,7 +111,7 @@ pub fn ingress(
                     match *login_state {
                         LoginState::Handshake => process_handshake(login_state, &frame).unwrap(),
                         LoginState::Status => {
-                            process_status(login_state, &frame, packets, &mut io).unwrap();
+                            process_status(login_state, &frame, packets, scratch, &mut io).unwrap();
                         }
                         LoginState::Terminate => {
                             // todo: does this properly terminate the connection? I don't think so probably
@@ -124,6 +130,7 @@ pub fn ingress(
                                 decoder,
                                 &global,
                                 &mut io,
+                                scratch,
                                 &mut sender,
                             )
                             .unwrap();
@@ -193,6 +200,7 @@ fn process_login(
     decoder: &mut DecodeBuffer,
     global: &Global,
     io: &mut IoBuf,
+    scratch: &mut impl ScratchBuffer,
     sender: &mut IngressSender,
 ) -> anyhow::Result<()> {
     debug_assert!(*login_state == LoginState::Login);
@@ -208,7 +216,7 @@ fn process_login(
         threshold: VarInt(global.shared.compression_level.0),
     };
 
-    packets.append_pre_compression_packet(&pkt, io)?;
+    packets.append_pre_compression_packet(&pkt, io, scratch)?;
 
     decoder.set_compression(global.shared.compression_level);
 
@@ -220,7 +228,7 @@ fn process_login(
         properties: Cow::default(),
     };
 
-    packets.append(&pkt, io)?;
+    packets.append(&pkt, io, scratch)?;
 
     let username = Box::from(username);
 
@@ -243,6 +251,7 @@ fn process_status(
     login_state: &mut LoginState,
     packet: &PacketFrame,
     packets: &mut Packets,
+    scratch: &mut impl ScratchBuffer,
     io: &mut IoBuf,
 ) -> anyhow::Result<()> {
     debug_assert!(*login_state == LoginState::Status);
@@ -272,7 +281,7 @@ fn process_status(
 
             info!("sent query response: {query_request:?}");
             //
-            packets.append_pre_compression_packet(&send, io)?;
+            packets.append_pre_compression_packet(&send, io, scratch)?;
             // we send this right away so our ping looks better
             // let send = packets::status::QueryPongS2c { payload: 123 };
             // packets.append_pre_compression_packet(&send, io)?;
@@ -288,7 +297,7 @@ fn process_status(
 
             let send = packets::status::QueryPongS2c { payload };
 
-            packets.append_pre_compression_packet(&send, io)?;
+            packets.append_pre_compression_packet(&send, io, scratch)?;
 
             info!("sent query response: {query_ping:?}");
             *login_state = LoginState::Terminate;

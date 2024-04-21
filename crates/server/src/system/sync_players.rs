@@ -30,12 +30,16 @@ pub struct SyncPlayersQuery<'a> {
 
 #[instrument(skip_all)]
 pub fn sync_players(
-    _r: Receiver<Gametick>,
+    gametick: ReceiverMut<Gametick>,
     global: Single<&Global>,
     mut fetcher: Fetcher<SyncPlayersQuery>,
     mut io: Single<&mut IoBuf>,
 ) {
     let tick = global.tick;
+
+    let mut gametick = gametick.event;
+
+    let scratch = &mut *gametick.scratch;
 
     fetcher.iter_mut().for_each(|query| {
         let entity_id = VarInt(query.id.index().0 as i32);
@@ -68,6 +72,7 @@ pub fn sync_players(
                             food_saturation: 5.0,
                         },
                         &mut io,
+                        scratch,
                     );
                 }
 
@@ -99,6 +104,7 @@ pub fn sync_players(
                             factor_codec: None,
                         },
                         &mut io,
+                        scratch,
                     );
                 }
             }
@@ -109,6 +115,7 @@ pub fn sync_players(
                         value: SPECTATOR,
                     },
                     &mut io,
+                    scratch,
                 );
                 // The title is repeatedly sent so it doesn't fade away after a few seconds
                 let _ = packets.append(
@@ -116,6 +123,7 @@ pub fn sync_players(
                         title_text: "YOU DIED!".into_text().color(Color::RED).into(),
                     },
                     &mut io,
+                    scratch,
                 );
 
                 let seconds_remaining = (*respawn_tick - tick) as f32 / 20.0;
@@ -127,6 +135,7 @@ pub fn sync_players(
                             .into(),
                     },
                     &mut io,
+                    scratch,
                 );
 
                 // packets
@@ -144,13 +153,14 @@ pub fn sync_players(
                 //     .unwrap();
             }
             (Vitals::Dead { .. }, Vitals::Alive { health, .. }) => {
-                let _ = packets.append(&play::ClearTitleS2c { reset: true }, &mut io);
+                let _ = packets.append(&play::ClearTitleS2c { reset: true }, &mut io, scratch);
                 let _ = packets.append(
                     &play::GameStateChangeS2c {
                         kind: play::game_state_change_s2c::GameEventKind::ChangeGameMode,
                         value: SURVIVAL,
                     },
                     &mut io,
+                    scratch,
                 );
                 let _ = packets.append(
                     &play::HealthUpdateS2c {
@@ -159,6 +169,7 @@ pub fn sync_players(
                         food_saturation: 5.0,
                     },
                     &mut io,
+                    scratch,
                 );
                 // TODO: Update absorption and regeneration
             }
@@ -172,6 +183,7 @@ pub fn sync_players(
                             .into(),
                     },
                     &mut io,
+                    scratch,
                 );
             }
         }

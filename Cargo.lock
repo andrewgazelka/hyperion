@@ -1119,6 +1119,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d231dfb89cfffdbc30e7fc41579ed6066ad03abda9e567ccafae602b97ec5024"
 
 [[package]]
+name = "hex"
+version = "0.4.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
+
+[[package]]
 name = "hmac"
 version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2126,6 +2132,8 @@ name = "server"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "arrayvec",
+ "bumpalo",
  "bvh",
  "bytes",
  "chunk",
@@ -2133,10 +2141,12 @@ dependencies = [
  "derive_more 0.99.17",
  "divan",
  "evenio",
+ "fastrand 2.0.2",
  "flate2",
  "fxhash",
  "generator 0.1.0",
  "glam",
+ "hex",
  "io-uring",
  "itertools 0.12.1",
  "libc",

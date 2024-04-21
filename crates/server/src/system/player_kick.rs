@@ -9,7 +9,7 @@ use valence_protocol::{
 
 use crate::{
     components::Uuid,
-    events::KickPlayer,
+    events::{KickPlayer, Scratch},
     global::Global,
     net::{IoBuf, Packets},
     singleton::{player_id_lookup::PlayerIdLookup, player_uuid_lookup::PlayerUuidLookup},
@@ -34,12 +34,15 @@ pub fn player_kick(
 
     let reason = reason.into_text().color(Color::RED);
 
+    // todo: remove
+    let mut scratch = Scratch::new();
     packets
         .append(
             &play::DisconnectS2c {
                 reason: reason.into(),
             },
             &mut io,
+            &mut scratch,
         )
         .unwrap();
 

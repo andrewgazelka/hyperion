@@ -1,8 +1,11 @@
+use std::{alloc::Allocator, fmt::Debug};
+
+use bumpalo::Bump;
 use evenio::{entity::EntityId, event::Event};
 use glam::Vec3;
 use valence_protocol::Hand;
 
-use crate::components::FullEntityPose;
+use crate::{components::FullEntityPose, net::MAX_PACKET_SIZE};
 
 /// Initialize a Minecraft entity (like a zombie) with a given pose.
 #[derive(Event)]
@@ -64,16 +67,84 @@ pub struct AttackEntity {
 pub struct KillAllEntities;
 
 /// An event when server stats are updated.
-#[derive(Event, Copy, Clone)]
-pub struct StatsEvent {
+#[derive(Event)]
+pub struct StatsEvent<'a, 'b> {
     /// The number of milliseconds per tick in the last second.
     pub ms_per_tick_mean_1s: f64,
     /// The number of milliseconds per tick in the last 5 seconds.
     pub ms_per_tick_mean_5s: f64,
+
+    pub scratch: &'b mut BumpScratch<'a>,
 }
 
+// todo: REMOVE
+unsafe impl<'a, 'b> Send for StatsEvent<'a, 'b> {}
+unsafe impl<'a, 'b> Sync for StatsEvent<'a, 'b> {}
+
+// todo: naming? this seems bad
+#[derive(Debug)]
+pub struct Scratch<A: Allocator = std::alloc::Global> {
+    inner: Vec<u8, A>,
+}
+
+impl Scratch {
+    pub fn new() -> Self {
+        Self { inner: Vec::new() }
+    }
+}
+
+/// Nice for getting a buffer that can be used for intermediate work
+///
+/// Guarantees:
+/// - every single time [`ScratchBuffer::obtain`] is called, the buffer will be cleared before returning
+/// - the buffer has capacity of at least `MAX_PACKET_SIZE`
+pub trait ScratchBuffer: sealed::Sealed + Debug {
+    type Allocator: Allocator;
+    fn obtain(&mut self) -> &mut Vec<u8, Self::Allocator>;
+}
+
+mod sealed {
+    pub trait Sealed {}
+}
+
+impl<A: Allocator + Debug> sealed::Sealed for Scratch<A> {}
+
+impl<A: Allocator + Debug> ScratchBuffer for Scratch<A> {
+    type Allocator = A;
+
+    fn obtain(&mut self) -> &mut Vec<u8, Self::Allocator> {
+        &mut self.inner
+    }
+}
+
+pub type BumpScratch<'a> = Scratch<&'a Bump>;
+
+impl<'a> From<&'a Bump> for BumpScratch<'a> {
+    fn from(bump: &'a Bump) -> Self {
+        Self {
+            inner: Vec::with_capacity_in(MAX_PACKET_SIZE, bump),
+        }
+    }
+}
+
+impl<'a> BumpScratch<'a> {
+    pub fn obtain(&mut self) -> &mut Vec<u8, &'a Bump> {
+        // clear scratch before we get
+        self.inner.clear();
+        &mut self.inner
+    }
+}
+
+// todo: why need two life times?
 #[derive(Event)]
-pub struct Gametick;
+pub struct Gametick<'a, 'b> {
+    pub bump: &'a Bump,
+    pub scratch: &'b mut BumpScratch<'a>,
+}
+
+// todo: REMOVE
+unsafe impl<'a, 'b> Send for Gametick<'a, 'b> {}
+unsafe impl<'a, 'b> Sync for Gametick<'a, 'b> {}
 
 /// An event that is sent when it is time to send packets to clients.
 #[derive(Event)]

@@ -4,7 +4,7 @@ use valence_protocol::VarInt;
 
 use crate::{
     components::{MinecraftEntity, Player},
-    events::KillAllEntities,
+    events::{KillAllEntities, Scratch},
     net::{Broadcast, IoBuf},
 };
 
@@ -23,7 +23,11 @@ pub fn kill_all(
 
     let despawn_packet = valence_protocol::packets::play::EntitiesDestroyS2c { entity_ids };
 
-    broadcast.append(&despawn_packet, &mut io).unwrap();
+    // todo: use shared scratch if possible
+    let mut scratch = Scratch::new();
+    broadcast
+        .append(&despawn_packet, &mut io, &mut scratch)
+        .unwrap();
 
     for id in ids {
         s.send(Despawn(id));

@@ -3,7 +3,7 @@ use tracing::instrument;
 use valence_protocol::{packets::play, Hand, VarInt};
 
 use crate::{
-    events::SwingArm,
+    events::{Scratch, SwingArm},
     net::{Broadcast, IoBuf},
 };
 
@@ -27,5 +27,6 @@ pub fn pkt_hand_swing(
         animation,
     };
 
-    broadcast.append(&pkt, &mut io).unwrap();
+    let mut scratch = Scratch::new();
+    broadcast.append(&pkt, &mut io, &mut scratch).unwrap();
 }

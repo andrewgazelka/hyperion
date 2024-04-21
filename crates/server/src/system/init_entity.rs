@@ -10,7 +10,7 @@ use valence_protocol::{ByteAngle, VarInt, Velocity};
 
 use crate::{
     components::{EntityReaction, FullEntityPose, MinecraftEntity, RunningSpeed, Uuid},
-    events::InitEntity,
+    events::{InitEntity, Scratch},
     net::{Broadcast, IoBuf},
     system::entity_position::PositionSyncMetadata,
 };
@@ -68,7 +68,9 @@ pub fn init_entity(
 
     let pkt = spawn_packet(id, uuid, &pose);
 
-    broadcast.append(&pkt, &mut io).unwrap();
+    // todo: use shared scratch if possible
+    let mut scratch = Scratch::new();
+    broadcast.append(&pkt, &mut io, &mut scratch).unwrap();
 }
 
 fn generate_running_speed() -> RunningSpeed {

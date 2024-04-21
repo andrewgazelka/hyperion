@@ -61,6 +61,8 @@ clap = { version = "4.5.4", features = ["derive"] }
 fxhash = "0.2.1"
 derive_more = "0.99.17"
 socket2 = "0.5.6"
+arrayvec = "0.7.4"
+bumpalo = { version = "3.16.0", features = ["allocator_api"] }
 
 
 [target.'cfg(target_os = "linux")'.dependencies]
@@ -68,6 +70,8 @@ io-uring = "0.6.3"
 
 [dev-dependencies]
 divan = "0.1.14"
+fastrand = "2.0.2"
+hex = "0.4.3"
 rust-mc-bot.workspace = true
 rustc_version = "0.4.0"
 tango-bench = "0.4.0"

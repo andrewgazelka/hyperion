@@ -11,7 +11,7 @@ pub struct Ring {
     max_len: usize,
 }
 
-pub trait McBuf {
+pub trait Buf {
     fn len_until_end(&self) -> usize;
     fn get_contiguous(&mut self, len: usize) -> &mut [u8];
     fn advance(&mut self, len: usize);
@@ -20,13 +20,18 @@ pub trait McBuf {
     fn append(&mut self, data: &[u8]) -> *const u8;
 }
 
-impl McBuf for Ring {
+impl Buf for Ring {
     fn len_until_end(&self) -> usize {
         self.max_len - self.head
     }
 
     fn get_contiguous(&mut self, len: usize) -> &mut [u8] {
-        debug_assert!(len <= self.max_len);
+        debug_assert!(
+            len <= self.max_len,
+            "requested contiguous length of {} exceeds max_len of {}",
+            len,
+            self.max_len
+        );
 
         let len_until_end = self.len_until_end();
         if len_until_end < len {

@@ -4,7 +4,7 @@ use valence_protocol::{packets::play, VarInt};
 
 use crate::{
     components::{EntityReaction, FullEntityPose, ImmuneStatus, Player, Vitals},
-    events::AttackEntity,
+    events::{AttackEntity, Scratch},
     net::{Broadcast, IoBuf, Packets},
 };
 
@@ -51,11 +51,16 @@ pub fn pkt_attack(
         source_pos: None,
     };
 
-    broadcast.append(&damage_broadcast, &mut io).unwrap();
+    let mut scratch = Scratch::new();
+    broadcast
+        .append(&damage_broadcast, &mut io, &mut scratch)
+        .unwrap();
 
     // local is id 0
     damage_broadcast.entity_id = VarInt(0);
-    packets.append(&damage_broadcast, &mut io).unwrap();
+    packets
+        .append(&damage_broadcast, &mut io, &mut scratch)
+        .unwrap();
 
     let this = pose.position;
     let other = event.from_pos;

@@ -11,9 +11,10 @@ use libc::iovec;
 use valence_protocol::{CompressionThreshold, Encode, VarInt};
 
 use crate::{
+    events::ScratchBuffer,
     global::Global,
     net::encoder::PacketWriteInfo,
-    singleton::ring::{McBuf, Ring},
+    singleton::ring::{Buf, Ring},
 };
 
 #[cfg(target_os = "linux")]
@@ -202,7 +203,7 @@ pub struct IoBuf {
 impl IoBuf {
     pub fn new(threshold: CompressionThreshold) -> Self {
         Self {
-            enc: encoder::PacketEncoder::new(threshold),
+            enc: encoder::PacketEncoder::new(threshold, flate2::Compression::new(4)),
             buf: Ring::new(S2C_BUFFER_SIZE),
         }
     }
@@ -216,6 +217,7 @@ impl IoBuf {
 #[derive(Component, From, Deref, DerefMut, Default)]
 pub struct Broadcast(Packets);
 
+/// Stores indices of packets
 #[derive(Component, Default)]
 pub struct Packets {
     to_write: Vec<PacketWriteInfo>,
@@ -246,6 +248,7 @@ impl Packets {
         &mut self,
         pkt: &P,
         buf: &mut IoBuf,
+        scratch: &mut impl ScratchBuffer,
     ) -> anyhow::Result<()>
     where
         P: valence_protocol::Packet + Encode,
@@ -254,7 +257,7 @@ impl Packets {
         // none
         buf.enc.set_compression(CompressionThreshold::DEFAULT);
 
-        let result = buf.enc.append_packet(pkt, &mut buf.buf)?;
+        let result = buf.enc.append_packet(pkt, &mut buf.buf, scratch)?;
 
         self.push(result);
 
@@ -264,11 +267,16 @@ impl Packets {
         Ok(())
     }
 
-    pub fn append<P>(&mut self, pkt: &P, buf: &mut IoBuf) -> anyhow::Result<()>
+    pub fn append<P>(
+        &mut self,
+        pkt: &P,
+        buf: &mut IoBuf,
+        scratch: &mut impl ScratchBuffer,
+    ) -> anyhow::Result<()>
     where
         P: valence_protocol::Packet + Encode,
     {
-        let result = buf.enc.append_packet(pkt, &mut buf.buf)?;
+        let result = buf.enc.append_packet(pkt, &mut buf.buf, scratch)?;
 
         self.push(result);
         Ok(())
@@ -288,6 +296,7 @@ impl Packets {
 
 #[cfg(test)]
 mod tests {
+    use bumpalo::Bump;
     use valence_protocol::{packets::login::LoginHelloC2s, Bounded};
 
     use super::*;
@@ -302,8 +311,11 @@ mod tests {
             profile_id: None,
         };
 
+        let bump = Bump::new();
+        let mut scratch = Scratch::from(&bump);
+
         packets
-            .append_pre_compression_packet(&pkt, &mut buf)
+            .append_pre_compression_packet(&pkt, &mut buf, &mut scratch)
             .unwrap();
 
         assert_eq!(packets.to_write().len(), 1);
@@ -322,7 +334,9 @@ mod tests {
             profile_id: None,
         };
 
-        packets.append(&pkt, &mut buf).unwrap();
+        let bump = Bump::new();
+        let mut scratch = Scratch::from(&bump);
+        packets.append(&pkt, &mut buf, &mut scratch).unwrap();
 
         assert_eq!(packets.to_write().len(), 1);
         let len = packets.to_write()[0].len;
@@ -353,7 +367,10 @@ mod tests {
             profile_id: None,
         };
 
-        packets.append(&pkt, &mut buf).unwrap();
+        let bump = Bump::new();
+        let mut scratch = Scratch::from(&bump);
+
+        packets.append(&pkt, &mut buf, &mut scratch).unwrap();
         assert_eq!(packets.to_write().len(), 1);
 
         packets.clear();
@@ -374,11 +391,14 @@ mod tests {
             profile_id: None,
         };
 
+        let bump = Bump::new();
+        let mut scratch = Scratch::from(&bump);
+
         packets
-            .append_pre_compression_packet(&pkt1, &mut buf)
+            .append_pre_compression_packet(&pkt1, &mut buf, &mut scratch)
             .unwrap();
         packets
-            .append_pre_compression_packet(&pkt2, &mut buf)
+            .append_pre_compression_packet(&pkt2, &mut buf, &mut scratch)
             .unwrap();
 
         assert_eq!(packets.to_write().len(), 1);

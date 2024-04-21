@@ -5,6 +5,9 @@
 #![feature(lint_reasons)]
 #![feature(io_error_more)]
 #![feature(trusted_len)]
+#![feature(allocator_api)]
+#![feature(read_buf)]
+#![feature(core_io_borrowed_buf)]
 #![expect(clippy::type_complexity, reason = "evenio uses a lot of complex types")]
 
 mod chunk;
@@ -29,7 +32,7 @@ use valence_protocol::CompressionThreshold;
 
 use crate::{
     components::Vitals,
-    events::{Egress, Gametick, StatsEvent},
+    events::{BumpScratch, Egress, Gametick, StatsEvent},
     global::Global,
     net::{Broadcast, IoBuf, Server, ServerDef},
     singleton::{
@@ -288,7 +291,14 @@ impl Game {
 
         self.last_ticks.push_back(now);
 
-        self.world.send(Gametick);
+        let bump = bumpalo::Bump::new();
+
+        let mut scratch = events::Scratch::from(&bump);
+
+        self.world.send(Gametick {
+            bump: &bump,
+            scratch: &mut scratch, // todo: any problem with ref vs val
+        });
         self.world.send(Egress);
 
         #[expect(
@@ -297,12 +307,11 @@ impl Game {
                       (~52 days)"
         )]
         let ms = now.elapsed().as_nanos() as f64 / 1_000_000.0;
-        self.update_tick_stats(ms);
-        // info!("Tick took: {:02.8}ms", ms);
+        self.update_tick_stats(ms, &mut scratch);
     }
 
     #[instrument(skip(self))]
-    fn update_tick_stats(&mut self, ms: f64) {
+    fn update_tick_stats(&mut self, ms: f64, scratch: &mut BumpScratch) {
         self.last_ms_per_tick.push_back(ms);
 
         if self.last_ms_per_tick.len() > MSPT_HISTORY_SIZE {
@@ -318,6 +327,7 @@ impl Game {
             self.world.send(StatsEvent {
                 ms_per_tick_mean_1s: mean_1_second,
                 ms_per_tick_mean_5s: mean_5_seconds,
+                scratch,
             });
 
             self.last_ms_per_tick.pop_front();

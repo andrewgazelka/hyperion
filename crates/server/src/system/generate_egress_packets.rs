@@ -1,5 +1,5 @@
 use evenio::{
-    event::Receiver,
+    event::ReceiverMut,
     fetch::{Fetcher, Single},
 };
 use tracing::instrument;
@@ -19,10 +19,11 @@ fn vel_m_per_tick(input: glam::Vec3) -> Velocity {
 
 #[instrument(skip_all, level = "trace")]
 pub fn generate_egress_packets(
-    _: Receiver<Gametick>,
+    gametick: ReceiverMut<Gametick>,
     mut io: Single<&mut IoBuf>,
     mut connections: Fetcher<(&mut Packets, &mut EntityReaction)>,
 ) {
+    let mut gametick = gametick.event;
     connections.iter_mut().for_each(|(packets, reaction)| {
         if reaction.velocity.x.abs() > 0.01 || reaction.velocity.z.abs() > 0.01 {
             let vel = reaction.velocity;
@@ -36,6 +37,7 @@ pub fn generate_egress_packets(
                         velocity,
                     },
                     &mut io,
+                    gametick.scratch,
                 )
                 .unwrap();
         }
