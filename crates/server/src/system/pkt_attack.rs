@@ -29,10 +29,10 @@ pub struct AttackEntityQuery<'a> {
 // Check immunity of the entity being attacked
 pub fn check_immunity(
     global: Single<&crate::global::Global>,
-    attack: Receiver<AttackEntity, &ImmuneStatus>,
+    attack: ReceiverMut<AttackEntity, &ImmuneStatus>,
 ) {
     if attack.query.is_invincible(&global) {
-        return;
+        EventMut::take(attack.event);
     }
 }
 
@@ -83,6 +83,12 @@ pub fn pkt_attack_entity(
 
     let delta_x = other.x - this.x;
     let delta_z = other.z - this.z;
+
+    if delta_x.abs() < 0.01 && delta_z.abs() < 0.01 {
+        // todo: implement like vanilla
+        return;
+    }
+
     let dist_xz = delta_x.hypot(delta_z);
     let multiplier = 0.4;
 
