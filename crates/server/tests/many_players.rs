@@ -5,10 +5,10 @@ fn test_100_players() {
     use std::{
         net::SocketAddr,
         process::{Child, Command},
+        time::{Duration, Instant},
     };
 
     use server::Game;
-    use std::time::{Duration, Instant};
 
     const MS_PER_TICK: u64 = 50;
     const NUM_TICKS: u64 = 200; // 10 seconds
