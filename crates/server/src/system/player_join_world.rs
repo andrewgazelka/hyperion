@@ -33,13 +33,10 @@ use crate::{
     chunk::heightmap,
     components::{FullEntityPose, InGameName, MinecraftEntity, Player, Uuid},
     config,
-    events::PlayerJoinWorld,
+    events::{PlayerJoinWorld, Scratch, ScratchBuffer},
     global::Global,
-    net::LocalEncoder,
-    singleton::{
-        broadcast::BroadcastBuf, player_id_lookup::EntityIdLookup,
-        player_uuid_lookup::PlayerUuidLookup,
-    },
+    net::{Broadcast, IoBuf, Packets},
+    singleton::{player_id_lookup::EntityIdLookup, player_uuid_lookup::PlayerUuidLookup},
     system::init_entity::spawn_packet,
 };
 
@@ -56,7 +53,7 @@ pub(crate) struct PlayerJoinWorldQuery<'a> {
     id: EntityId,
     uuid: &'a Uuid,
     pose: &'a FullEntityPose,
-    encoder: &'a mut LocalEncoder,
+    packets: &'a mut Packets,
     name: &'a InGameName,
     _player: With<&'static Player>,
 }
@@ -71,6 +68,7 @@ pub(crate) struct PlayerQuery<'a> {
 }
 
 // todo: clean up player_join_world; the file is super super super long and hard to understand
+#[allow(clippy::too_many_arguments, reason = "todo")]
 #[instrument(skip_all)]
 pub fn player_join_world(
     r: Receiver<PlayerJoinWorld, PlayerJoinWorldQuery>,
@@ -79,9 +77,13 @@ pub fn player_join_world(
     players: Fetcher<PlayerQuery>,
     mut uuid_lookup: Single<&mut PlayerUuidLookup>,
     mut id_lookup: Single<&mut EntityIdLookup>,
-    mut broadcast: Single<&mut BroadcastBuf>,
+    mut broadcast: Single<&mut Broadcast>,
+    mut io: Single<&mut IoBuf>,
 ) {
     static CACHED_DATA: once_cell::sync::OnceCell<bytes::Bytes> = once_cell::sync::OnceCell::new();
+
+    // todo: remove
+    let mut scratch = Scratch::new();
 
     let compression_level = global.0.shared.compression_level;
 
@@ -97,8 +99,6 @@ pub fn player_join_world(
     });
 
     info!("got cached data");
-
-    let mut broadcast = broadcast.get_round_robin();
 
     let query = r.query;
 
@@ -157,21 +157,22 @@ pub fn player_join_world(
         overlay: false,
     };
 
-    broadcast.append_packet(&text).unwrap();
+    broadcast.append(&text, &mut io, &mut scratch).unwrap();
 
-    let encoder = query.encoder;
+    let local = query.packets;
 
-    encoder.append_raw(cached_data, &global).unwrap();
+    local.append_raw(cached_data, &mut io);
 
     info!("appending cached data");
 
-    encoder
+    local
         .append(
             &crate::packets::def::EntityEquipmentUpdateS2c {
                 entity_id: VarInt(0),
                 equipment: Cow::Borrowed(&equipment),
             },
-            &global,
+            &mut io,
+            &mut scratch,
         )
         .unwrap();
 
@@ -185,11 +186,11 @@ pub fn player_join_world(
         entries: Cow::Borrowed(entries),
     };
 
-    broadcast.append_packet(&info).unwrap();
+    broadcast.append(&info, &mut io, &mut scratch).unwrap();
 
     for entity in entities {
         let pkt = spawn_packet(entity.id, *entity.uuid, entity.pose);
-        encoder.append(&pkt, &global).unwrap();
+        local.append(&pkt, &mut io, &mut scratch).unwrap();
     }
 
     // todo: cache
@@ -212,7 +213,7 @@ pub fn player_join_world(
         .map(|query| &***query.name) // todo: lol
         .collect();
 
-    encoder
+    local
         .append(
             &play::TeamS2c {
                 team_name: "no_tag",
@@ -220,41 +221,48 @@ pub fn player_join_world(
                     entities: player_names,
                 },
             },
-            &global,
+            &mut io,
+            &mut scratch,
         )
         .unwrap();
 
     let current_name = query.name;
 
     broadcast
-        .append_packet(&play::TeamS2c {
-            team_name: "no_tag",
-            mode: Mode::AddEntities {
-                entities: vec![current_name],
+        .append(
+            &play::TeamS2c {
+                team_name: "no_tag",
+                mode: Mode::AddEntities {
+                    entities: vec![current_name],
+                },
             },
-        })
+            &mut io,
+            &mut scratch,
+        )
         .unwrap();
 
-    encoder
+    local
         .append(
             &play::PlayerListS2c {
                 actions,
                 entries: Cow::Owned(entries),
             },
-            &global,
+            &mut io,
+            &mut scratch,
         )
         .unwrap();
 
     let tick = global.tick;
     let time_of_day = tick % 24000;
 
-    encoder
+    local
         .append(
             &play::WorldTimeUpdateS2c {
                 world_age: tick,
                 time_of_day,
             },
-            &global,
+            &mut io,
+            &mut scratch,
         )
         .unwrap();
 
@@ -274,13 +282,13 @@ pub fn player_join_world(
             pitch: ByteAngle::from_degrees(pose.pitch),
         };
 
-        encoder.append(&pkt, &global).unwrap();
+        local.append(&pkt, &mut io, &mut scratch).unwrap();
 
         let pkt = crate::packets::def::EntityEquipmentUpdateS2c {
             entity_id,
             equipment: Cow::Borrowed(&equipment),
         };
-        encoder.append(&pkt, &global).unwrap();
+        local.append(&pkt, &mut io, &mut scratch).unwrap();
     }
 
     global
@@ -297,7 +305,7 @@ pub fn player_join_world(
         pitch: ByteAngle::from_degrees(query.pose.pitch),
     };
 
-    encoder
+    local
         .append(
             &play::PlayerPositionLookS2c {
                 position: query.pose.position.as_dvec3(),
@@ -306,11 +314,14 @@ pub fn player_join_world(
                 flags: PlayerPositionLookFlags::default(),
                 teleport_id: 1.into(),
             },
-            &global,
+            &mut io,
+            &mut scratch,
         )
         .unwrap();
 
-    broadcast.append_packet(&spawn_player).unwrap();
+    broadcast
+        .append(&spawn_player, &mut io, &mut scratch)
+        .unwrap();
 
     info!("Player {} joined the world", query.name);
 }
@@ -360,13 +371,17 @@ impl<T, const N: usize> Array3d for [T; N] {
     }
 }
 
-pub fn send_keep_alive(encoder: &mut LocalEncoder, global: &Global) -> anyhow::Result<()> {
+pub fn send_keep_alive(
+    packets: &mut Packets,
+    io: &mut IoBuf,
+    scratch: &mut impl ScratchBuffer,
+) -> anyhow::Result<()> {
     let pkt = play::KeepAliveS2c {
         // The ID can be set to zero because it doesn't matter
         id: 0,
     };
 
-    encoder.append(&pkt, global)?;
+    packets.append(&pkt, io, scratch)?;
 
     Ok(())
 }
@@ -654,8 +669,8 @@ fn inner(encoder: &mut PacketEncoder) -> anyhow::Result<()> {
         block_light_arrays: Cow::Borrowed(&[]),
     };
 
-    for x in -16..=16 {
-        for z in -16..=16 {
+    for x in -16..16 {
+        for z in -16..16 {
             pkt.pos = ChunkPos::new(x, z);
             encoder.append_packet(&pkt)?;
         }

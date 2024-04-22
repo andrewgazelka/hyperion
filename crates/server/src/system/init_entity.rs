@@ -5,16 +5,16 @@ use evenio::{
 };
 use generator::EntityType;
 use rand_distr::{Distribution, LogNormal};
-use tracing::{info, instrument};
+use tracing::instrument;
 use valence_protocol::{ByteAngle, VarInt, Velocity};
 
 use crate::{
     components::{
         EntityReaction, FullEntityPose, ImmuneStatus, MinecraftEntity, RunningSpeed, Uuid, Vitals,
     },
-    events::InitEntity,
-    global::Global,
-    singleton::{broadcast::BroadcastBuf, player_id_lookup::EntityIdLookup},
+    events::{InitEntity, Scratch},
+    net::{Broadcast, IoBuf},
+    singleton::player_id_lookup::EntityIdLookup,
     system::entity_position::PositionSyncMetadata,
 };
 
@@ -25,8 +25,6 @@ pub fn spawn_packet(
 ) -> valence_protocol::packets::play::EntitySpawnS2c {
     #[expect(clippy::cast_possible_wrap, reason = "wrapping is ok in this case")]
     let entity_id = VarInt(id.index().0 as i32);
-
-    info!("spawn packet for zombie with id {entity_id:?} pose {pose:?}");
 
     valence_protocol::packets::play::EntitySpawnS2c {
         entity_id,
@@ -44,8 +42,6 @@ pub fn spawn_packet(
 #[instrument(skip_all)]
 pub fn init_entity(
     r: Receiver<InitEntity>,
-    // encoders: Fetcher<(&mut LocalEncoder)>,
-    _global: Single<&Global>,
     mut id_lookup: Single<&mut EntityIdLookup>,
     mut s: Sender<(
         Insert<FullEntityPose>,
@@ -58,7 +54,8 @@ pub fn init_entity(
         Insert<ImmuneStatus>,
         Spawn,
     )>,
-    mut broadcast: Single<&mut BroadcastBuf>,
+    mut io: Single<&mut IoBuf>,
+    mut broadcast: Single<&mut Broadcast>,
 ) {
     let event = r.event;
 
@@ -81,11 +78,9 @@ pub fn init_entity(
 
     let pkt = spawn_packet(id, uuid, &pose);
 
-    // for encoder in encoders {
-    //     encoder.append(&pkt, &global).unwrap();
-    // }
-
-    broadcast.get_round_robin().append_packet(&pkt).unwrap();
+    // todo: use shared scratch if possible
+    let mut scratch = Scratch::new();
+    broadcast.append(&pkt, &mut io, &mut scratch).unwrap();
 }
 
 fn generate_running_speed() -> RunningSpeed {

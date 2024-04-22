@@ -9,21 +9,22 @@ use valence_protocol::{
 
 use crate::{
     components::Uuid,
-    events::KickPlayer,
+    events::{KickPlayer, Scratch},
     global::Global,
-    net::LocalEncoder,
+    net::{IoBuf, Packets},
     singleton::{player_id_lookup::EntityIdLookup, player_uuid_lookup::PlayerUuidLookup},
 };
 
 #[instrument(skip_all)]
 pub fn player_kick(
-    r: Receiver<KickPlayer, (EntityId, &Uuid, &mut LocalEncoder)>,
+    r: Receiver<KickPlayer, (EntityId, &Uuid, &mut Packets)>,
     global: Single<&Global>,
     mut uuid_lookup: Single<&mut PlayerUuidLookup>,
+    mut io: Single<&mut IoBuf>,
     mut id_lookup: Single<&mut EntityIdLookup>,
     mut s: Sender<Despawn>,
 ) {
-    let (id, uuid, encoder) = r.query;
+    let (id, uuid, packets) = r.query;
 
     uuid_lookup.remove(&uuid.0);
     // todo: also remove on socket close
@@ -33,12 +34,15 @@ pub fn player_kick(
 
     let reason = reason.into_text().color(Color::RED);
 
-    encoder
+    // todo: remove
+    let mut scratch = Scratch::new();
+    packets
         .append(
             &play::DisconnectS2c {
                 reason: reason.into(),
             },
-            &global,
+            &mut io,
+            &mut scratch,
         )
         .unwrap();
 

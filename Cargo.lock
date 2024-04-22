@@ -51,6 +51,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "alloca"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e5a7d05ea6aea7e9e64d25b9156ba2fee3fdd659e34e41063cd2fc7cd020d7f4"
+dependencies = [
+ "cc",
+]
+
+[[package]]
 name = "allocator-api2"
 version = "0.2.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -356,16 +365,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "broadcast"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "divan",
- "glam",
- "rand 0.8.5",
-]
-
-[[package]]
 name = "bumpalo"
 version = "3.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -386,7 +385,7 @@ dependencies = [
  "plotters-bitmap",
  "rand 0.8.5",
  "rayon",
- "tango-bench",
+ "tango-bench 0.4.0",
  "tracing-subscriber",
 ]
 
@@ -1127,6 +1126,12 @@ name = "hermit-abi"
 version = "0.3.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d231dfb89cfffdbc30e7fc41579ed6066ad03abda9e567ccafae602b97ec5024"
+
+[[package]]
+name = "hex"
+version = "0.4.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
 
 [[package]]
 name = "hmac"
@@ -2136,7 +2141,7 @@ name = "server"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "arrayvec",
+ "bumpalo",
  "bvh",
  "bytes",
  "chunk",
@@ -2144,10 +2149,12 @@ dependencies = [
  "derive_more 0.99.17",
  "divan",
  "evenio",
+ "fastrand 2.0.2",
  "flate2",
  "fxhash",
  "generator 0.1.0",
  "glam",
+ "hex",
  "io-uring",
  "itertools 0.12.1",
  "libc",
@@ -2158,15 +2165,16 @@ dependencies = [
  "rand 0.8.5",
  "rand_distr",
  "rayon",
- "rayon-local",
  "rust-mc-bot",
+ "rustc_version",
  "serde",
  "serde_json",
  "sha2",
  "signal-hook",
+ "socket2",
  "spin",
  "spin_sleep",
- "tango-bench",
+ "tango-bench 0.5.0",
  "toml",
  "tracing",
  "tracing-flame",
@@ -2248,6 +2256,16 @@ name = "smallvec"
 version = "1.13.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3c5e1a9a646d36c3599cd173a41282daf47c44583ad367b8e6837255952e5c67"
+
+[[package]]
+name = "socket2"
+version = "0.5.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "05ffd9c0a93b7543e062e759284fcf5f5e3b098501104bfbdde4d404db792871"
+dependencies = [
+ "libc",
+ "windows-sys 0.52.0",
+]
 
 [[package]]
 name = "spin"
@@ -2352,6 +2370,27 @@ version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c081a4735b0f1254057400184235014c11846f80f7ca0c8ccb8a04f174fc23ea"
 dependencies = [
+ "anyhow",
+ "clap",
+ "colorz",
+ "glob-match",
+ "goblin",
+ "libloading",
+ "log",
+ "num-traits",
+ "rand 0.8.5",
+ "scroll",
+ "tempfile",
+ "thiserror",
+]
+
+[[package]]
+name = "tango-bench"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3e79d9e491b718fb52bb2052726a0e66fe89a31cc6979fe58c72c73f058c279e"
+dependencies = [
+ "alloca",
  "anyhow",
  "clap",
  "colorz",

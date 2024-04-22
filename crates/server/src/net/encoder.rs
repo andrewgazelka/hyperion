@@ -1,127 +1,289 @@
-use std::io::Read;
+use std::io::{Cursor, Write};
 
 use anyhow::ensure;
-use arrayvec::CapacityError;
+use flate2::{bufread::ZlibEncoder, Compression};
 use valence_protocol::{CompressionThreshold, Encode, Packet, VarInt};
 
-use crate::{net::MAX_PACKET_SIZE, singleton::buffer_allocator::BufRef};
+mod util;
 
+use crate::{events::ScratchBuffer, net::MAX_PACKET_SIZE, singleton::ring::Buf};
+
+#[derive(Debug)]
 pub struct PacketEncoder {
-    pub buf: BufRef,
-    compress_buf: Vec<u8>,
     threshold: CompressionThreshold,
+    compression: Compression,
 }
 
-impl std::fmt::Debug for PacketEncoder {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("PacketEncoder")
-            .field("buf", &self.buf)
-            .field("threshold", &self.threshold)
-            .finish()
+// todo:
+// technically needs lifetimes to be write
+// but ehhhh not doing this now we are referncing data which lives the duration of the program
+// todo: bench if repr packed worth it (on old processors often slows down.
+// Modern processors packed can actually be faster because cache locality)
+#[allow(unused, reason = "this is used in linux")]
+#[derive(Debug, Copy, Clone)]
+#[repr(packed)]
+pub struct PacketWriteInfo {
+    pub start_ptr: *const u8,
+    pub len: u32,
+}
+
+impl PacketWriteInfo {
+    #[allow(dead_code, reason = "nice for unit tests")]
+    const unsafe fn as_slice(&self) -> &[u8] {
+        std::slice::from_raw_parts(self.start_ptr, self.len as usize)
     }
+}
+
+unsafe impl Send for PacketWriteInfo {}
+unsafe impl Sync for PacketWriteInfo {}
+
+pub fn append_packet_without_compression<P>(
+    pkt: &P,
+    buf: &mut impl Buf,
+) -> anyhow::Result<PacketWriteInfo>
+where
+    P: valence_protocol::Packet + Encode,
+{
+    let data_write_start = VarInt::MAX_SIZE as u64;
+    let slice = buf.get_contiguous(MAX_PACKET_SIZE);
+
+    let mut cursor = Cursor::new(slice);
+    cursor.set_position(data_write_start);
+
+    pkt.encode_with_id(&mut cursor)?;
+
+    let data_len = cursor.position() as usize - data_write_start as usize;
+
+    let packet_len_size = VarInt(data_len as i32).written_size();
+
+    let packet_len = packet_len_size + data_len;
+    ensure!(
+        packet_len <= MAX_PACKET_SIZE,
+        "packet exceeds maximum length"
+    );
+
+    let inner = cursor.into_inner();
+
+    inner.copy_within(
+        data_write_start as usize..data_write_start as usize + data_len,
+        packet_len_size,
+    );
+
+    let mut cursor = Cursor::new(inner);
+    VarInt(data_len as i32).encode(&mut cursor)?;
+
+    let slice = cursor.into_inner();
+    let entire_slice = &slice[..packet_len_size + data_len];
+
+    let start_ptr = entire_slice.as_ptr();
+    let len = entire_slice.len();
+
+    buf.advance(len);
+
+    Ok(PacketWriteInfo {
+        start_ptr: start_ptr.cast(),
+        len: len as u32,
+    })
 }
 
 impl PacketEncoder {
-    pub fn new(threshold: CompressionThreshold, buf: BufRef) -> Self {
+    pub const fn new(threshold: CompressionThreshold, compression: Compression) -> Self {
         Self {
-            buf,
-            compress_buf: Vec::new(),
             threshold,
+            compression,
         }
     }
 
-    pub fn append_raw(&mut self, data: &[u8]) -> Result<(), CapacityError> {
-        self.buf.try_extend_from_slice(data)
+    pub const fn compression_threshold(&self) -> CompressionThreshold {
+        self.threshold
     }
 
-    pub fn append_packet<P>(&mut self, pkt: &P) -> anyhow::Result<()>
+    pub fn append_packet_with_compression<P>(
+        &mut self,
+        pkt: &P,
+        buf: &mut impl Buf,
+        scratch: &mut impl ScratchBuffer,
+    ) -> anyhow::Result<PacketWriteInfo>
+    where
+        P: valence_protocol::Packet + Encode,
+    {
+        const DATA_LEN_0_SIZE: usize = 1;
+
+        // + 1 because data len would be 0 if not compressed
+        let data_write_start = (VarInt::MAX_SIZE + DATA_LEN_0_SIZE) as u64;
+        let slice = buf.get_contiguous(MAX_PACKET_SIZE);
+
+        let mut cursor = Cursor::new(&mut slice[..]);
+        cursor.set_position(data_write_start);
+
+        pkt.encode_with_id(&mut cursor)?;
+
+        let end_data_position_exclusive = cursor.position();
+
+        let data_len = end_data_position_exclusive - data_write_start;
+
+        if data_len >= u64::from(self.threshold.0.unsigned_abs()) {
+            let scratch = scratch.obtain();
+
+            {
+                let data_slice =
+                    &mut slice[data_write_start as usize..end_data_position_exclusive as usize];
+                let data_slice_cursor = Cursor::new(data_slice);
+                let mut z = ZlibEncoder::new(data_slice_cursor, self.compression);
+                // todo: is see if there is a more efficient way to do this. probs chunking would help or something
+                // also this is a bit different than stdlib `default_read_to_end`.
+                // However, it is needed because we are using a custom allocator
+                util::read_to_end(&mut z, scratch)?;
+            }
+
+            let data_len = VarInt(data_len as u32 as i32);
+
+            let packet_len = data_len.written_size() + scratch.len();
+            let packet_len = VarInt(packet_len as u32 as i32);
+
+            let mut write = Cursor::new(&mut slice[..]);
+            packet_len.encode(&mut write)?;
+            data_len.encode(&mut write)?;
+            write.write_all(scratch)?;
+
+            let len = write.position();
+
+            let start_ptr = slice.as_ptr();
+            buf.advance(len as usize);
+
+            return Ok(PacketWriteInfo {
+                start_ptr,
+                len: len as u32,
+            });
+        }
+
+        let data_len_0 = VarInt(0);
+        let packet_len = VarInt(DATA_LEN_0_SIZE as i32 + data_len as u32 as i32); // packet_len.written_size();
+
+        let mut cursor = Cursor::new(&mut slice[..]);
+        packet_len.encode(&mut cursor)?;
+        data_len_0.encode(&mut cursor)?;
+
+        let pos = cursor.position();
+
+        slice.copy_within(
+            data_write_start as usize..end_data_position_exclusive as usize,
+            pos as usize,
+        );
+
+        let len = pos as u32 + (end_data_position_exclusive - data_write_start) as u32;
+
+        let start_ptr = slice.as_ptr();
+        buf.advance(len as usize);
+
+        Ok(PacketWriteInfo { start_ptr, len })
+    }
+
+    pub fn append_packet<P>(
+        &mut self,
+        pkt: &P,
+        buf: &mut impl Buf,
+        scratch: &mut impl ScratchBuffer,
+    ) -> anyhow::Result<PacketWriteInfo>
     where
         P: Packet + Encode,
     {
-        let start_len = self.buf.len();
+        let has_compression = self.threshold.0 >= 0;
 
-        pkt.encode_with_id(&mut *self.buf)?;
-
-        let data_len = self.buf.len() - start_len;
-
-        if self.threshold.0 >= 0 {
-            use flate2::{bufread::ZlibEncoder, Compression};
-
-            let threshold = self.threshold.0.unsigned_abs();
-
-            if data_len > threshold as usize {
-                let mut z = ZlibEncoder::new(&self.buf[start_len..], Compression::new(4));
-
-                self.compress_buf.clear();
-
-                let data_len_size = VarInt(data_len as i32).written_size();
-
-                let packet_len = data_len_size + z.read_to_end(&mut self.compress_buf)?;
-
-                ensure!(
-                    packet_len <= MAX_PACKET_SIZE,
-                    "packet exceeds maximum length"
-                );
-
-                drop(z);
-
-                self.buf.truncate(start_len);
-
-                VarInt(packet_len as i32).encode(&mut *self.buf)?;
-                VarInt(data_len as i32).encode(&mut *self.buf)?;
-                self.buf.try_extend_from_slice(&self.compress_buf)?;
-            } else {
-                let data_len_size = 1;
-                let packet_len = data_len_size + data_len;
-
-                ensure!(
-                    packet_len <= MAX_PACKET_SIZE,
-                    "packet exceeds maximum length"
-                );
-
-                let packet_len_size = VarInt(packet_len as i32).written_size();
-
-                let data_prefix_len = packet_len_size + data_len_size;
-
-                for _ in 0..data_prefix_len {
-                    self.buf.push(0);
-                }
-
-                self.buf
-                    .copy_within(start_len..start_len + data_len, start_len + data_prefix_len);
-
-                let mut front = &mut self.buf[start_len..];
-
-                VarInt(packet_len as i32).encode(&mut front)?;
-                // Zero for no compression on this packet.
-                VarInt(0).encode(front)?;
-            }
-
-            return Ok(());
+        if has_compression {
+            self.append_packet_with_compression(pkt, buf, scratch)
+        } else {
+            append_packet_without_compression(pkt, buf)
         }
-
-        let packet_len = data_len;
-
-        ensure!(
-            packet_len <= MAX_PACKET_SIZE,
-            "packet exceeds maximum length"
-        );
-
-        let packet_len_size = VarInt(packet_len as i32).written_size();
-
-        for _ in 0..packet_len_size {
-            self.buf.push(0);
-        }
-        self.buf
-            .copy_within(start_len..start_len + data_len, start_len + packet_len_size);
-
-        let front = &mut self.buf[start_len..];
-        VarInt(packet_len as i32).encode(front)?;
-
-        Ok(())
     }
 
     pub fn set_compression(&mut self, threshold: CompressionThreshold) {
         self.threshold = threshold;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use bumpalo::Bump;
+    use flate2::Compression;
+    use valence_protocol::{
+        packets::login, Bounded, CompressionThreshold, Encode, Packet,
+        PacketEncoder as ValencePacketEncoder,
+    };
+
+    use crate::{
+        events::Scratch,
+        net::{encoder::PacketEncoder, MAX_PACKET_SIZE},
+        singleton::ring::Ring,
+    };
+
+    fn compare_pkt<P: Packet + Encode>(packet: &P, compression: CompressionThreshold) {
+        let mut large_ring = Ring::new(MAX_PACKET_SIZE * 2);
+
+        let mut encoder = PacketEncoder::new(compression, Compression::new(4));
+
+        let bump = Bump::new();
+        let mut scratch = Scratch::from(&bump);
+        let encoder_res = encoder
+            .append_packet(packet, &mut large_ring, &mut scratch)
+            .unwrap();
+
+        let mut valence_encoder = ValencePacketEncoder::new();
+        valence_encoder.set_compression(compression);
+        valence_encoder.append_packet(packet).unwrap();
+
+        let encoder_res = unsafe { encoder_res.as_slice() };
+
+        let valence_encoder_res = valence_encoder.take().to_vec();
+
+        // to slice
+        let valence_encoder_res = valence_encoder_res.as_slice();
+
+        let encoder_res = hex::encode(encoder_res);
+        let valence_encoder_res = hex::encode(valence_encoder_res);
+
+        // add 0x
+        let encoder_res = format!("0x{encoder_res}");
+        let valence_encoder_res = format!("0x{valence_encoder_res}");
+
+        assert_eq!(encoder_res, valence_encoder_res);
+    }
+
+    #[test]
+    fn test_uncompressed() {
+        fn compare<P: Packet + Encode>(packet: &P) {
+            compare_pkt(packet, CompressionThreshold::default());
+        }
+
+        let login = login::LoginHelloC2s {
+            username: Bounded::default(),
+            profile_id: None,
+        };
+        compare(&login);
+
+        let login = login::LoginHelloC2s {
+            username: Bounded("Emerald_Explorer"),
+            profile_id: None,
+        };
+        compare(&login);
+    }
+
+    #[test]
+    fn test_compressed() {
+        fn compare<P: Packet + Encode>(packet: &P) {
+            compare_pkt(packet, CompressionThreshold(10));
+        }
+
+        let login = login::LoginHelloC2s {
+            username: Bounded::default(),
+            profile_id: None,
+        };
+        compare(&login);
+
+        let login = login::LoginHelloC2s {
+            username: Bounded("Emerald_Explorer"),
+            profile_id: None,
+        };
+        compare(&login);
     }
 }

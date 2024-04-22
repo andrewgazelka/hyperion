@@ -4,15 +4,14 @@ use valence_protocol::{packets::play, VarInt};
 
 use crate::{
     components::{EntityReaction, FullEntityPose, ImmuneStatus, Player, Vitals},
-    events::AttackEntity,
-    net::LocalEncoder,
-    singleton::broadcast::BroadcastBuf,
+    events::{AttackEntity, Scratch},
+    net::{Broadcast, IoBuf, Packets},
 };
 
 #[derive(Query)]
 pub struct AttackPlayerQuery<'a> {
     id: EntityId,
-    encoder: &'a mut LocalEncoder,
+    packets: &'a mut Packets,
     _player: With<&'static Player>,
 }
 
@@ -21,8 +20,8 @@ pub struct AttackEntityQuery<'a> {
     id: EntityId,
     pose: &'a FullEntityPose,
     reaction: &'a mut EntityReaction,
-    vitals: &'a mut Vitals,
     immunity: &'a mut ImmuneStatus,
+    vitals: &'a mut Vitals,
 }
 
 #[instrument(skip_all, level = "trace")]
@@ -39,19 +38,23 @@ pub fn check_immunity(
 /// send Packet to player encoder
 #[instrument(skip_all, level = "trace")]
 pub fn pkt_attack_player(
-    global: Single<&crate::global::Global>,
+    mut io: Single<&mut IoBuf>,
     attack: Receiver<AttackEntity, AttackPlayerQuery>,
 ) {
     let AttackPlayerQuery {
         id: entity_id,
-        encoder,
+        packets,
         _player,
     } = attack.query;
 
     let mut damage_broadcast = get_package(entity_id);
     // local is id 0
     damage_broadcast.entity_id = VarInt(0);
-    encoder.append(&damage_broadcast, &global).unwrap();
+    let mut scratch = Scratch::new();
+
+    packets
+        .append(&damage_broadcast, &mut io, &mut scratch)
+        .unwrap();
 }
 
 /// Handle Damage and knockback
@@ -59,7 +62,8 @@ pub fn pkt_attack_player(
 pub fn pkt_attack_entity(
     global: Single<&crate::global::Global>,
     attack: Receiver<AttackEntity, AttackEntityQuery>,
-    mut broadcast: Single<&mut BroadcastBuf>,
+    mut broadcast: Single<&mut Broadcast>,
+    mut io: Single<&mut IoBuf>,
 ) {
     let AttackEntityQuery {
         id: entity_id,
@@ -71,9 +75,9 @@ pub fn pkt_attack_entity(
 
     let damage_broadcast = get_package(entity_id);
 
+    let mut scratch = Scratch::new();
     broadcast
-        .get_round_robin()
-        .append_packet(&damage_broadcast)
+        .append(&damage_broadcast, &mut io, &mut scratch)
         .unwrap();
 
     let event = attack.event;

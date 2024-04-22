@@ -5,15 +5,17 @@ use std::{
     net::ToSocketAddrs,
 };
 
-use anyhow::Context;
-use arrayvec::CapacityError;
-use bytes::Buf;
+use derive_more::{Deref, DerefMut, From};
 use evenio::prelude::Component;
 use libc::iovec;
-use sha2::Digest;
-use valence_protocol::{uuid::Uuid, CompressionThreshold, Encode};
+use valence_protocol::{CompressionThreshold, Encode};
 
-use crate::{global::Global, singleton::buffer_allocator::BufRef};
+use crate::{
+    events::ScratchBuffer,
+    global::Global,
+    net::encoder::PacketWriteInfo,
+    singleton::ring::{Buf, Ring},
+};
 
 #[cfg(target_os = "linux")]
 mod linux;
@@ -93,8 +95,8 @@ impl ServerDef for Server {
         }
     }
 
-    fn drain(&mut self, f: impl FnMut(ServerEvent)) {
-        self.server.drain(f);
+    fn drain(&mut self, f: impl FnMut(ServerEvent)) -> std::io::Result<()> {
+        self.server.drain(f)
     }
 
     fn allocate_buffers(&mut self, buffers: &[iovec]) {
@@ -109,15 +111,16 @@ impl ServerDef for Server {
     fn write_all<'a>(
         &mut self,
         global: &mut Global,
-        broadcast: &'a BufRef,
-        writers: impl Iterator<Item = RefreshItem<'a>>,
+        broadcast: &'a [PacketWriteInfo],
+        writers: impl Iterator<Item = RefreshItems<'a>>,
     ) {
         self.server.write_all(global, broadcast, writers);
     }
 }
 
-pub struct RefreshItem<'a> {
-    pub local: &'a BufRef,
+#[allow(unused, reason = "this is used on linux")]
+pub struct RefreshItems<'a> {
+    pub write: &'a [PacketWriteInfo],
     pub fd: Fd,
     pub broadcast: bool,
 }
@@ -126,7 +129,7 @@ pub trait ServerDef {
     fn new(address: impl ToSocketAddrs) -> anyhow::Result<Self>
     where
         Self: Sized;
-    fn drain(&mut self, f: impl FnMut(ServerEvent));
+    fn drain(&mut self, f: impl FnMut(ServerEvent)) -> std::io::Result<()>;
 
     // todo:make unsafe
     fn allocate_buffers(&mut self, buffers: &[iovec]);
@@ -134,8 +137,8 @@ pub trait ServerDef {
     fn write_all<'a>(
         &mut self,
         global: &mut Global,
-        broadcast: &'a BufRef,
-        writers: impl Iterator<Item = RefreshItem<'a>>,
+        broadcast: &'a [PacketWriteInfo],
+        writers: impl Iterator<Item = RefreshItems<'a>>,
     );
 
     fn submit_events(&mut self);
@@ -151,7 +154,7 @@ impl ServerDef for NotImplemented {
         unimplemented!("not implemented; use Linux")
     }
 
-    fn drain(&mut self, _f: impl FnMut(ServerEvent)) {
+    fn drain(&mut self, _f: impl FnMut(ServerEvent)) -> std::io::Result<()> {
         unimplemented!("not implemented; use Linux")
     }
 
@@ -161,9 +164,9 @@ impl ServerDef for NotImplemented {
 
     fn write_all<'a>(
         &mut self,
-        global: &mut Global,
-        broadcast: &'a BufRef,
-        writers: impl Iterator<Item = RefreshItem<'a>>,
+        _global: &mut Global,
+        _broadcast: &'a [PacketWriteInfo],
+        _writers: impl Iterator<Item = RefreshItems<'a>>,
     ) {
         unimplemented!("not implemented; use Linux")
     }
@@ -183,58 +186,223 @@ pub const MAX_PACKET_SIZE: usize = 0x001F_FFFF;
 /// targets.
 pub const MINECRAFT_VERSION: &str = "1.20.1";
 
-/// Get a [`Uuid`] based on the given user's name.
-fn offline_uuid(username: &str) -> anyhow::Result<Uuid> {
-    let digest = sha2::Sha256::digest(username);
-
-    #[expect(clippy::indexing_slicing, reason = "sha256 is always 32 bytes")]
-    let slice = &digest[..16];
-
-    Uuid::from_slice(slice).context("failed to create uuid")
-}
-
 mod encoder;
 
+const NUM_PLAYERS: usize = 1024;
+const S2C_BUFFER_SIZE: usize = 1024 * 1024 * NUM_PLAYERS;
+
 #[derive(Component, Debug)]
-pub struct LocalEncoder {
+pub struct IoBuf {
     /// The encoding buffer and logic
     enc: encoder::PacketEncoder,
+    buf: Ring,
 }
 
-// TODO: REMOVE
-unsafe impl Send for LocalEncoder {}
-unsafe impl Sync for LocalEncoder {}
-
-impl LocalEncoder {
-    pub fn clear(&mut self) {
-        self.enc.buf.clear();
+impl IoBuf {
+    pub fn new(threshold: CompressionThreshold) -> Self {
+        Self {
+            enc: encoder::PacketEncoder::new(threshold, flate2::Compression::new(4)),
+            buf: Ring::new(S2C_BUFFER_SIZE),
+        }
     }
 
-    /// Encode a packet.
-    pub fn append<P>(&mut self, pkt: &P, _global: &Global) -> anyhow::Result<()>
+    pub fn buf_mut(&mut self) -> &mut Ring {
+        &mut self.buf
+    }
+}
+
+/// This is useful for the ECS so we can use Single<&mut Broadcast> instead of having to use a marker struct
+#[derive(Component, From, Deref, DerefMut, Default)]
+pub struct Broadcast(Packets);
+
+/// Stores indices of packets
+#[derive(Component, Default)]
+pub struct Packets {
+    to_write: Vec<PacketWriteInfo>,
+}
+
+impl Packets {
+    pub fn to_write(&self) -> &[PacketWriteInfo] {
+        &self.to_write
+    }
+
+    pub fn clear(&mut self) {
+        self.to_write.clear();
+    }
+
+    fn push(&mut self, writer: PacketWriteInfo) {
+        if let Some(last) = self.to_write.last_mut() {
+            let start_pointer_if_contiguous = unsafe { last.start_ptr.add(last.len as usize) };
+            if start_pointer_if_contiguous == writer.start_ptr {
+                last.len += writer.len;
+                return;
+            }
+        }
+
+        self.to_write.push(writer);
+    }
+
+    pub fn append_pre_compression_packet<P>(
+        &mut self,
+        pkt: &P,
+        buf: &mut IoBuf,
+        scratch: &mut impl ScratchBuffer,
+    ) -> anyhow::Result<()>
     where
         P: valence_protocol::Packet + Encode,
     {
-        self.enc.append_packet(pkt)?;
+        let compression = buf.enc.compression_threshold();
+        // none
+        buf.enc.set_compression(CompressionThreshold::DEFAULT);
+
+        let result = buf.enc.append_packet(pkt, &mut buf.buf, scratch)?;
+
+        self.push(result);
+
+        // reset
+        buf.enc.set_compression(compression);
 
         Ok(())
     }
 
-    pub fn set_compression(&mut self, compression_level: CompressionThreshold) {
-        self.enc.set_compression(compression_level);
+    pub fn append<P>(
+        &mut self,
+        pkt: &P,
+        buf: &mut IoBuf,
+        scratch: &mut impl ScratchBuffer,
+    ) -> anyhow::Result<()>
+    where
+        P: valence_protocol::Packet + Encode,
+    {
+        let result = buf.enc.append_packet(pkt, &mut buf.buf, scratch)?;
+
+        self.push(result);
+        Ok(())
     }
 
-    pub fn new(buffer: BufRef) -> Self {
-        Self {
-            enc: encoder::PacketEncoder::new(CompressionThreshold(-1), buffer),
-        }
+    pub fn append_raw(&mut self, data: &[u8], buf: &mut IoBuf) {
+        let start_ptr = buf.buf.append(data);
+
+        let writer = PacketWriteInfo {
+            start_ptr,
+            len: data.len() as u32,
+        };
+
+        self.push(writer);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use bumpalo::Bump;
+    use valence_protocol::{packets::login::LoginHelloC2s, Bounded};
+
+    use super::*;
+    use crate::events::Scratch;
+
+    #[test]
+    fn test_append_pre_compression_packet() {
+        let mut buf = IoBuf::new(CompressionThreshold::DEFAULT);
+        let mut packets = Packets::default();
+
+        let pkt = LoginHelloC2s {
+            username: Bounded::default(),
+            profile_id: None,
+        };
+
+        let bump = Bump::new();
+        let mut scratch = Scratch::from(&bump);
+
+        packets
+            .append_pre_compression_packet(&pkt, &mut buf, &mut scratch)
+            .unwrap();
+
+        assert_eq!(packets.to_write().len(), 1);
+
+        let len = packets.to_write()[0].len;
+
+        assert_eq!(len, 4); // Packet length for an empty LoginHelloC2s
+    }
+    #[test]
+    fn test_append_packet() {
+        let mut buf = IoBuf::new(CompressionThreshold::DEFAULT);
+        let mut packets = Packets::default();
+
+        let pkt = LoginHelloC2s {
+            username: Bounded::default(),
+            profile_id: None,
+        };
+
+        let bump = Bump::new();
+        let mut scratch = Scratch::from(&bump);
+        packets.append(&pkt, &mut buf, &mut scratch).unwrap();
+
+        assert_eq!(packets.to_write().len(), 1);
+        let len = packets.to_write()[0].len;
+        assert_eq!(len, 4); // Packet length for an empty LoginHelloC2s
     }
 
-    pub const fn buf(&self) -> &BufRef {
-        &self.enc.buf
+    #[test]
+    fn test_append_raw() {
+        let mut buf = IoBuf::new(CompressionThreshold::DEFAULT);
+        let mut packets = Packets::default();
+
+        let data = b"Hello, world!";
+        packets.append_raw(data, &mut buf);
+
+        assert_eq!(packets.to_write().len(), 1);
+
+        let len = packets.to_write()[0].len;
+        assert_eq!(len, data.len() as u32);
     }
 
-    pub fn append_raw(&mut self, bytes: &[u8], _global: &Global) -> Result<(), CapacityError> {
-        self.enc.buf.try_extend_from_slice(bytes)
+    #[test]
+    fn test_clear() {
+        let mut buf = IoBuf::new(CompressionThreshold::DEFAULT);
+        let mut packets = Packets::default();
+
+        let pkt = LoginHelloC2s {
+            username: Bounded::default(),
+            profile_id: None,
+        };
+
+        let bump = Bump::new();
+        let mut scratch = Scratch::from(&bump);
+
+        packets.append(&pkt, &mut buf, &mut scratch).unwrap();
+        assert_eq!(packets.to_write().len(), 1);
+
+        packets.clear();
+        assert_eq!(packets.to_write().len(), 0);
+    }
+
+    #[test]
+    fn test_contiguous_packets() {
+        let mut buf = IoBuf::new(CompressionThreshold::DEFAULT);
+        let mut packets = Packets::default();
+
+        let pkt1 = LoginHelloC2s {
+            username: Bounded::default(),
+            profile_id: None,
+        };
+        let pkt2 = LoginHelloC2s {
+            username: Bounded::default(),
+            profile_id: None,
+        };
+
+        let bump = Bump::new();
+        let mut scratch = Scratch::from(&bump);
+
+        packets
+            .append_pre_compression_packet(&pkt1, &mut buf, &mut scratch)
+            .unwrap();
+        packets
+            .append_pre_compression_packet(&pkt2, &mut buf, &mut scratch)
+            .unwrap();
+
+        assert_eq!(packets.to_write().len(), 1);
+
+        let len = packets.to_write()[0].len;
+        assert_eq!(len, 8); // Combined length of both packets
     }
 }

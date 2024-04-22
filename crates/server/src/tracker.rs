@@ -1,3 +1,5 @@
+#![expect(unused, reason = "probably will be used in future")]
+
 //! See [Delta] for more information.
 
 use derive_more::{Deref, DerefMut, From};
