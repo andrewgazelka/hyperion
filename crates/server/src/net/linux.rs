@@ -352,12 +352,12 @@ impl ServerDef for LinuxServer {
 
             let fd = fd.0;
 
-            info!("writing to fd {fd:?} count {}", write.len());
-
-            for elem in write {
+            for elem in write.iter() {
                 let PacketWriteInfo { start_ptr, len } = *elem;
                 self.write_raw(fd, start_ptr, len, 0);
             }
+
+            write.clear();
         });
     }
 

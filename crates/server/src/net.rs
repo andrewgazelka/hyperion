@@ -9,7 +9,6 @@ use std::{
 use derive_more::{Deref, DerefMut, From};
 use evenio::prelude::Component;
 use libc::iovec;
-use tracing::info;
 use valence_protocol::{CompressionThreshold, Encode};
 
 use crate::{
@@ -121,7 +120,7 @@ impl ServerDef for Server {
 
 #[allow(unused, reason = "this is used on linux")]
 pub struct RefreshItems<'a> {
-    pub write: &'a VecDeque<PacketWriteInfo>,
+    pub write: &'a mut VecDeque<PacketWriteInfo>,
     pub fd: Fd,
 }
 
@@ -225,6 +224,7 @@ impl Packets {
         &mut self.to_write
     }
 
+    #[allow(dead_code, reason = "this will probably be used in the future")]
     pub const fn get_write(&self) -> &VecDeque<PacketWriteInfo> {
         &self.to_write
     }
@@ -234,15 +234,19 @@ impl Packets {
     }
 
     pub fn set_successfully_sent(&mut self) {
-        debug_assert!(self.number_sending > 0, "somehow number sending is 0 even though we just marked a successful send");
-        
-        info!("successfully sent {} packets", self.number_sending);
-        
+        debug_assert!(
+            self.number_sending > 0,
+            "somehow number sending is 0 even though we just marked a successful send"
+        );
+
         self.number_sending -= 1;
     }
 
     pub fn prepare_for_send(&mut self) {
-        debug_assert!(self.number_sending == 0, "number sending is not 0 even though we are preparing for send");
+        debug_assert!(
+            self.number_sending == 0,
+            "number sending is not 0 even though we are preparing for send"
+        );
         let count = self.to_write.len();
         self.number_sending = count;
     }
@@ -338,9 +342,9 @@ mod tests {
             .append_pre_compression_packet(&pkt, &mut buf, &mut scratch)
             .unwrap();
 
-        assert_eq!(packets.to_write().len(), 1);
+        assert_eq!(packets.get_write().len(), 1);
 
-        let len = packets.to_write()[0].len;
+        let len = packets.get_write()[0].len;
 
         assert_eq!(len, 4); // Packet length for an empty LoginHelloC2s
     }
@@ -358,8 +362,8 @@ mod tests {
         let mut scratch = Scratch::from(&bump);
         packets.append(&pkt, &mut buf, &mut scratch).unwrap();
 
-        assert_eq!(packets.to_write().len(), 1);
-        let len = packets.to_write()[0].len;
+        assert_eq!(packets.get_write().len(), 1);
+        let len = packets.get_write()[0].len;
         assert_eq!(len, 4); // Packet length for an empty LoginHelloC2s
     }
 
@@ -371,9 +375,9 @@ mod tests {
         let data = b"Hello, world!";
         packets.append_raw(data, &mut buf);
 
-        assert_eq!(packets.to_write().len(), 1);
+        assert_eq!(packets.get_write().len(), 1);
 
-        let len = packets.to_write()[0].len;
+        let len = packets.get_write()[0].len;
         assert_eq!(len, data.len() as u32);
     }
 
@@ -391,10 +395,10 @@ mod tests {
         let mut scratch = Scratch::from(&bump);
 
         packets.append(&pkt, &mut buf, &mut scratch).unwrap();
-        assert_eq!(packets.to_write().len(), 1);
+        assert_eq!(packets.get_write().len(), 1);
 
         packets.clear();
-        assert_eq!(packets.to_write().len(), 0);
+        assert_eq!(packets.get_write().len(), 0);
     }
 
     #[test]
@@ -421,9 +425,9 @@ mod tests {
             .append_pre_compression_packet(&pkt2, &mut buf, &mut scratch)
             .unwrap();
 
-        assert_eq!(packets.to_write().len(), 1);
+        assert_eq!(packets.get_write().len(), 1);
 
-        let len = packets.to_write()[0].len;
+        let len = packets.get_write()[0].len;
         assert_eq!(len, 8); // Combined length of both packets
     }
 }
