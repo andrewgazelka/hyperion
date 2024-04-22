@@ -279,6 +279,8 @@ impl ServerDef for LinuxServer {
                                 // Write operation completed successfully
                                 // TODO: Check that write wasn't truncated
                                 trace!("successful write response");
+
+                                f(ServerEvent::SentData { fd: Fd(fd) });
                             }
                         }
                     }
@@ -358,7 +360,6 @@ impl ServerDef for LinuxServer {
     fn write_all<'a>(
         &mut self,
         _global: &mut Global,
-        broadcast: &'a [PacketWriteInfo],
         writers: impl Iterator<Item = RefreshItems<'a>>,
     ) {
         writers.for_each(|item| {

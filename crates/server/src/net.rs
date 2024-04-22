@@ -1,6 +1,7 @@
 //! All the networking related code.
 
 use std::{
+    collections::VecDeque,
     hash::{Hash, Hasher},
     net::ToSocketAddrs,
 };
@@ -65,6 +66,7 @@ pub enum ServerEvent<'a> {
     AddPlayer { fd: Fd },
     RemovePlayer { fd: Fd },
     RecvData { fd: Fd, data: &'a [u8] },
+    SentData { fd: Fd },
 }
 
 pub struct Server {
@@ -110,16 +112,15 @@ impl ServerDef for Server {
     fn write_all<'a>(
         &mut self,
         global: &mut Global,
-        broadcast: &'a [PacketWriteInfo],
         writers: impl Iterator<Item = RefreshItems<'a>>,
     ) {
-        self.server.write_all(global, broadcast, writers);
+        self.server.write_all(global, writers);
     }
 }
 
 #[allow(unused, reason = "this is used on linux")]
 pub struct RefreshItems<'a> {
-    pub write: &'a [PacketWriteInfo],
+    pub write: &'a VecDeque<PacketWriteInfo>,
     pub fd: Fd,
     pub broadcast: bool,
 }
@@ -136,7 +137,6 @@ pub trait ServerDef {
     fn write_all<'a>(
         &mut self,
         global: &mut Global,
-        broadcast: &'a [PacketWriteInfo],
         writers: impl Iterator<Item = RefreshItems<'a>>,
     );
 
@@ -164,7 +164,6 @@ impl ServerDef for NotImplemented {
     fn write_all<'a>(
         &mut self,
         _global: &mut Global,
-        _broadcast: &'a [PacketWriteInfo],
         _writers: impl Iterator<Item = RefreshItems<'a>>,
     ) {
         unimplemented!("not implemented; use Linux")
@@ -217,12 +216,21 @@ pub struct Broadcast(Packets);
 /// Stores indices of packets
 #[derive(Component, Default)]
 pub struct Packets {
-    to_write: Vec<PacketWriteInfo>,
+    to_write: VecDeque<PacketWriteInfo>,
+    can_send: bool,
 }
 
 impl Packets {
-    pub fn to_write(&self) -> &[PacketWriteInfo] {
-        &self.to_write
+    pub fn get_write(&mut self) -> &mut VecDeque<PacketWriteInfo> {
+        &mut self.to_write
+    }
+
+    pub fn can_send(&self) -> bool {
+        self.can_send
+    }
+
+    pub fn set_sending(&mut self) {
+        self.can_send = false;
     }
 
     pub fn clear(&mut self) {
@@ -230,7 +238,7 @@ impl Packets {
     }
 
     fn push(&mut self, writer: PacketWriteInfo) {
-        if let Some(last) = self.to_write.last_mut() {
+        if let Some(last) = self.to_write.back_mut() {
             let start_pointer_if_contiguous = unsafe { last.start_ptr.add(last.len as usize) };
             if start_pointer_if_contiguous == writer.start_ptr {
                 last.len += writer.len;
@@ -238,7 +246,7 @@ impl Packets {
             }
         }
 
-        self.to_write.push(writer);
+        self.to_write.push_back(writer);
     }
 
     pub fn append_pre_compression_packet<P>(

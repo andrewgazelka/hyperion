@@ -18,25 +18,29 @@ pub fn egress(
     mut broadcast: Single<&mut Broadcast>,
     mut global: Single<&mut Global>,
 ) {
-    let local_items = players
-        .iter_mut()
-        .map(|(pkts, fd, login_state)| RefreshItems {
-            write: pkts.to_write(),
-            fd: *fd,
-            broadcast: *login_state == LoginState::Play,
-        });
+    let local_items =
+        players
+            .iter_mut()
+            .filter(|(pkts, ..)| pkts.can_send())
+            .map(|(pkts, fd, login_state)| RefreshItems {
+                write: pkts.get_write(),
+                fd: *fd,
+                broadcast: *login_state == LoginState::Play,
+            });
 
     let mut event = r.event;
     let server = &mut *event.server;
 
     server.write_all(&mut global, broadcast.to_write(), local_items);
-
     server.submit_events();
 
     // now clear
     broadcast.clear();
 
     for (pkts, ..) in &mut players {
-        pkts.clear();
+        if pkts.can_send() {
+            pkts.set_sending();
+            pkts.clear();
+        }
     }
 }
