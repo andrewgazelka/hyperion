@@ -67,7 +67,6 @@ pub enum ServerEvent<'a> {
     RecvData { fd: Fd, data: &'a [u8] },
 }
 
-#[derive(Component)]
 pub struct Server {
     #[cfg(target_os = "linux")]
     server: linux::LinuxServer,

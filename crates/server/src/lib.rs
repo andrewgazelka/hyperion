@@ -308,7 +308,9 @@ impl Game {
             bump: &bump,
             scratch: &mut scratch, // todo: any problem with ref vs val
         });
-        self.world.send(Egress);
+
+        let server = &mut self.server;
+        self.world.send(Egress { server });
 
         #[expect(
             clippy::cast_precision_loss,

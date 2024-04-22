@@ -6,6 +6,7 @@ use glam::Vec3;
 use valence_protocol::Hand;
 
 use crate::{components::FullEntityPose, net::MAX_PACKET_SIZE};
+use crate::net::Server;
 
 /// Initialize a Minecraft entity (like a zombie) with a given pose.
 #[derive(Event)]
@@ -163,4 +164,6 @@ unsafe impl<'a, 'b> Sync for Gametick<'a, 'b> {}
 
 /// An event that is sent when it is time to send packets to clients.
 #[derive(Event)]
-pub struct Egress;
+pub struct Egress<'a> {
+    pub server: &'a mut Server,
+}

@@ -1,5 +1,5 @@
 use evenio::{
-    event::Receiver,
+    event::ReceiverMut,
     fetch::{Fetcher, Single},
 };
 use tracing::instrument;
@@ -8,13 +8,12 @@ use crate::{
     components::LoginState,
     events::Egress,
     global::Global,
-    net::{Broadcast, Fd, Packets, RefreshItems, Server, ServerDef},
+    net::{Broadcast, Fd, Packets, RefreshItems, ServerDef},
 };
 
 #[instrument(skip_all, level = "trace")]
 pub fn egress(
-    _: Receiver<Egress>,
-    mut server: Single<&mut Server>,
+    r: ReceiverMut<Egress>,
     mut players: Fetcher<(&mut Packets, &Fd, &LoginState)>,
     mut broadcast: Single<&mut Broadcast>,
     mut global: Single<&mut Global>,
@@ -26,6 +25,9 @@ pub fn egress(
             fd: *fd,
             broadcast: *login_state == LoginState::Play,
         });
+
+    let mut event = r.event;
+    let server = &mut *event.server;
 
     server.write_all(&mut global, broadcast.to_write(), local_items);
 
