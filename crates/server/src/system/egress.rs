@@ -18,6 +18,15 @@ pub fn egress(
     mut broadcast: Single<&mut Broadcast>,
     mut global: Single<&mut Global>,
 ) {
+    // todo: idk how inefficient this is
+    for (pkts, fd, login_state) in &mut players {
+        for &mut broadcast_write in broadcast.get_write() {
+            if *login_state == LoginState::Play {
+                pkts.get_write().push_back(broadcast_write);
+            }
+        }
+    }
+
     let local_items =
         players
             .iter_mut()
@@ -31,7 +40,7 @@ pub fn egress(
     let mut event = r.event;
     let server = &mut *event.server;
 
-    server.write_all(&mut global, broadcast.to_write(), local_items);
+    server.write_all(&mut global, local_items);
     server.submit_events();
 
     // now clear

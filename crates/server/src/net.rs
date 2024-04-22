@@ -225,8 +225,12 @@ impl Packets {
         &mut self.to_write
     }
 
-    pub fn can_send(&self) -> bool {
+    pub const fn can_send(&self) -> bool {
         self.can_send
+    }
+
+    pub fn set_successfully_sent(&mut self) {
+        self.can_send = true;
     }
 
     pub fn set_sending(&mut self) {

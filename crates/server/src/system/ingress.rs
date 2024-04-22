@@ -2,7 +2,7 @@ use std::borrow::Cow;
 
 use anyhow::Context;
 use evenio::{
-    event::{Despawn, Event, Insert, Sender, Spawn},
+    event::{Despawn, Event, Insert, Receiver, Sender, Spawn},
     fetch::{Fetcher, Single},
     prelude::{EntityId, ReceiverMut},
     world::World,
@@ -74,6 +74,11 @@ pub struct RecvData<'a, 'b, 'c> {
     scratch: &'b mut BumpScratch<'a>,
 }
 
+#[derive(Event)]
+pub struct SendData {
+    fd: Fd,
+}
+
 // todo: remove
 #[expect(
     clippy::non_send_fields_in_send_ty,
@@ -93,6 +98,9 @@ pub fn generate_ingress_events(world: &mut World, server: &mut Server, scratch: 
             }
             ServerEvent::RecvData { fd, data } => {
                 world.send(RecvData { fd, data, scratch });
+            }
+            ServerEvent::SentData { fd } => {
+                world.send(SendData { fd });
             }
         })
         .unwrap();
@@ -142,6 +150,36 @@ pub fn remove_player(
     sender.despawn(id);
 
     info!("removed a player with fd {:?}", fd);
+}
+
+// The `Receiver<Tick>` parameter tells our handler to listen for the `Tick` event.
+#[instrument(skip_all, level = "trace")]
+#[allow(clippy::too_many_arguments, reason = "todo")]
+pub fn sent_data(
+    r: Receiver<SendData>,
+    mut players: Fetcher<&mut Packets>,
+    fd_lookup: Single<&FdLookup>,
+) {
+    let event = r.event;
+
+    let fd = event.fd;
+    let Some(id) = fd_lookup.get(&fd) else {
+        warn!(
+            "tried to get id for fd {:?} but it seemed to already be removed",
+            fd
+        );
+        return;
+    };
+
+    let Ok(pkts) = players.get_mut(*id) else {
+        warn!(
+            "tried to get pkts for id {:?} but it seemed to already be removed",
+            id
+        );
+        return;
+    };
+
+    pkts.set_successfully_sent();
 }
 
 pub fn recv_data(
