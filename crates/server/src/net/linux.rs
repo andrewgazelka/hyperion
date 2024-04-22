@@ -223,7 +223,7 @@ impl ServerDef for LinuxServer {
     /// `f` should never panic
     #[instrument(skip_all, level = "trace")]
     fn drain(&mut self, mut f: impl FnMut(ServerEvent)) -> std::io::Result<()> {
-        let (submitter, mut submission, mut completion) = self.uring.split();
+        let (_submitter, mut submission, mut completion) = self.uring.split();
         completion.sync();
         if completion.overflow() > 0 {
             error!(

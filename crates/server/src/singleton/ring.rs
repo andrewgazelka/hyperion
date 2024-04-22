@@ -1,5 +1,5 @@
 use libc::iovec;
-use tracing::info;
+use tracing::warn;
 
 use crate::net::ServerDef;
 
@@ -35,7 +35,7 @@ impl Buf for Ring {
 
         let len_until_end = self.len_until_end();
         if len_until_end < len {
-            info!("rotating buffer because {len_until_end} < {len}");
+            warn!("rotating buffer because {len_until_end} < {len}");
             self.head = 0;
             &mut self.data[..len]
         } else {
