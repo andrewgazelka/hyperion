@@ -5,8 +5,10 @@ use evenio::{entity::EntityId, event::Event};
 use glam::Vec3;
 use valence_protocol::Hand;
 
-use crate::{components::FullEntityPose, net::MAX_PACKET_SIZE};
-use crate::net::Server;
+use crate::{
+    components::FullEntityPose,
+    net::{Server, MAX_PACKET_SIZE},
+};
 
 /// Initialize a Minecraft entity (like a zombie) with a given pose.
 #[derive(Event)]

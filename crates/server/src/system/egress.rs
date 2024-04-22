@@ -19,10 +19,10 @@ pub fn egress(
     mut global: Single<&mut Global>,
 ) {
     // todo: idk how inefficient this is
-    for (pkts, fd, login_state) in &mut players {
-        for &mut broadcast_write in broadcast.get_write() {
+    for (pkts, _, login_state) in &mut players {
+        for &mut broadcast_write in broadcast.get_write_mut() {
             if *login_state == LoginState::Play {
-                pkts.get_write().push_back(broadcast_write);
+                pkts.get_write_mut().push_back(broadcast_write);
             }
         }
     }
@@ -31,10 +31,12 @@ pub fn egress(
         players
             .iter_mut()
             .filter(|(pkts, ..)| pkts.can_send())
-            .map(|(pkts, fd, login_state)| RefreshItems {
-                write: pkts.get_write(),
-                fd: *fd,
-                broadcast: *login_state == LoginState::Play,
+            .map(|(pkts, fd, _)| {
+                pkts.set_sending(); // todo: should we not do this in a map for clarity?
+                RefreshItems {
+                    write: pkts.get_write_mut(),
+                    fd: *fd,
+                }
             });
 
     let mut event = r.event;
@@ -45,11 +47,4 @@ pub fn egress(
 
     // now clear
     broadcast.clear();
-
-    for (pkts, ..) in &mut players {
-        if pkts.can_send() {
-            pkts.set_sending();
-            pkts.clear();
-        }
-    }
 }

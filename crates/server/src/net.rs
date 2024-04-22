@@ -122,7 +122,6 @@ impl ServerDef for Server {
 pub struct RefreshItems<'a> {
     pub write: &'a VecDeque<PacketWriteInfo>,
     pub fd: Fd,
-    pub broadcast: bool,
 }
 
 pub trait ServerDef {
@@ -214,19 +213,32 @@ impl IoBuf {
 pub struct Broadcast(Packets);
 
 /// Stores indices of packets
-#[derive(Component, Default)]
+#[derive(Component)]
 pub struct Packets {
     to_write: VecDeque<PacketWriteInfo>,
     can_send: bool,
 }
 
+impl Default for Packets {
+    fn default() -> Self {
+        Self {
+            to_write: VecDeque::new(),
+            can_send: true,
+        }
+    }
+}
+
 impl Packets {
-    pub fn get_write(&mut self) -> &mut VecDeque<PacketWriteInfo> {
+    pub fn get_write_mut(&mut self) -> &mut VecDeque<PacketWriteInfo> {
         &mut self.to_write
     }
 
-    pub const fn can_send(&self) -> bool {
-        self.can_send
+    pub const fn get_write(&self) -> &VecDeque<PacketWriteInfo> {
+        &self.to_write
+    }
+
+    pub fn can_send(&self) -> bool {
+        self.can_send && !self.to_write.is_empty()
     }
 
     pub fn set_successfully_sent(&mut self) {

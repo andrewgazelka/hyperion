@@ -155,7 +155,7 @@ pub fn remove_player(
 // The `Receiver<Tick>` parameter tells our handler to listen for the `Tick` event.
 #[instrument(skip_all, level = "trace")]
 #[allow(clippy::too_many_arguments, reason = "todo")]
-pub fn sent_data(
+pub fn send_data(
     r: Receiver<SendData>,
     mut players: Fetcher<&mut Packets>,
     fd_lookup: Single<&FdLookup>,
