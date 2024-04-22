@@ -1,4 +1,4 @@
-use std::io::Cursor;
+use std::io::{Cursor, Write};
 
 use anyhow::ensure;
 use flate2::{bufread::ZlibEncoder, Compression};
@@ -107,10 +107,13 @@ impl PacketEncoder {
     where
         P: valence_protocol::Packet + Encode,
     {
-        let data_write_start = (VarInt::MAX_SIZE * 2) as u64;
+        const DATA_LEN_0_SIZE: usize = 1;
+
+        // + 1 because data len would be 0 if not compressed
+        let data_write_start = (VarInt::MAX_SIZE + DATA_LEN_0_SIZE) as u64;
         let slice = buf.get_contiguous(MAX_PACKET_SIZE);
 
-        let mut cursor = Cursor::new(slice);
+        let mut cursor = Cursor::new(&mut slice[..]);
         cursor.set_position(data_write_start);
 
         pkt.encode_with_id(&mut cursor)?;
@@ -119,9 +122,7 @@ impl PacketEncoder {
 
         let data_len = end_data_position_exclusive - data_write_start;
 
-        if data_len > u64::from(self.threshold.0.unsigned_abs()) {
-            let slice = cursor.into_inner();
-
+        if data_len >= u64::from(self.threshold.0.unsigned_abs()) {
             let scratch = scratch.obtain();
 
             {
@@ -134,9 +135,48 @@ impl PacketEncoder {
                 // However, it is needed because we are using a custom allocator
                 util::read_to_end(&mut z, scratch)?;
             }
+
+            let data_len = VarInt(data_len as u32 as i32);
+
+            let packet_len = data_len.written_size() + scratch.len();
+            let packet_len = VarInt(packet_len as u32 as i32);
+
+            let mut write = Cursor::new(&mut slice[..]);
+            packet_len.encode(&mut write)?;
+            data_len.encode(&mut write)?;
+            write.write_all(scratch)?;
+
+            let len = write.position();
+
+            let start_ptr = slice.as_ptr();
+            buf.advance(len as usize);
+
+            return Ok(PacketWriteInfo {
+                start_ptr,
+                len: len as u32,
+            });
         }
 
-        todo!()
+        let data_len_0 = VarInt(0);
+        let packet_len = VarInt(DATA_LEN_0_SIZE as i32 + data_len as u32 as i32); // packet_len.written_size();
+
+        let mut cursor = Cursor::new(&mut slice[..]);
+        packet_len.encode(&mut cursor)?;
+        data_len_0.encode(&mut cursor)?;
+
+        let pos = cursor.position();
+
+        slice.copy_within(
+            data_write_start as usize..end_data_position_exclusive as usize,
+            pos as usize,
+        );
+
+        let len = pos as u32 + (end_data_position_exclusive - data_write_start) as u32;
+
+        let start_ptr = slice.as_ptr();
+        buf.advance(len as usize);
+
+        Ok(PacketWriteInfo { start_ptr, len })
     }
 
     pub fn append_packet<P>(

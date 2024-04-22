@@ -73,7 +73,7 @@ fastrand = "2.0.2"
 hex = "0.4.3"
 rust-mc-bot.workspace = true
 rustc_version = "0.4.0"
-tango-bench = "0.4.0"
+tango-bench = "0.5.0"
 
 [[bench]]
 name = "many_zombies"
