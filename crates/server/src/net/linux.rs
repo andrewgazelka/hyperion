@@ -379,8 +379,6 @@ impl ServerDef for LinuxServer {
                 self.write_raw(fd, start_ptr, len, 0);
             }
 
-
-
             let mut broadcast_count = 0;
             // // send broadcasts later
             if do_broadcast {
@@ -394,7 +392,10 @@ impl ServerDef for LinuxServer {
                 }
             }
 
-            info!("wrote {} local packets and {} broadcast packets", local, broadcast_count);
+            info!(
+                "wrote {} local packets and {} broadcast packets",
+                local, broadcast_count
+            );
         });
     }
 

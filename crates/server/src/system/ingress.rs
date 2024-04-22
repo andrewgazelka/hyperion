@@ -2,9 +2,10 @@ use std::borrow::Cow;
 
 use anyhow::Context;
 use evenio::{
-    event::{Despawn, Insert, Sender, Spawn},
+    event::{Despawn, Event, Insert, Sender, Spawn},
     fetch::{Fetcher, Single},
     prelude::{EntityId, ReceiverMut},
+    world::World,
 };
 use serde_json::json;
 use sha2::Digest;
@@ -55,6 +56,38 @@ pub type IngressSender<'a> = Sender<
     ),
 >;
 
+#[derive(Event)]
+struct AddPlayer {
+    fd: Fd,
+}
+
+#[derive(Event)]
+struct RemovePlayer {
+    fd: Fd,
+}
+
+#[derive(Event)]
+struct RecvData<'a> {
+    pub fd: Fd,
+    data: &'a [u8],
+}
+
+pub fn generate_events(world: &mut World, server: &mut Server) {
+    server
+        .drain(|event| match event {
+            ServerEvent::AddPlayer { fd } => {
+                world.send(AddPlayer { fd });
+            }
+            ServerEvent::RemovePlayer { fd } => {
+                world.send(RemovePlayer { fd });
+            }
+            ServerEvent::RecvData { fd, data } => {
+                world.send(RecvData { fd, data });
+            }
+        })
+        .unwrap();
+}
+
 // The `Receiver<Tick>` parameter tells our handler to listen for the `Tick` event.
 #[instrument(skip_all, level = "trace")]
 #[allow(clippy::too_many_arguments, reason = "todo")]
@@ -95,7 +128,10 @@ pub fn ingress(
             }
             ServerEvent::RemovePlayer { fd } => {
                 let Some(id) = fd_lookup.remove(&fd) else {
-                    warn!("tried to remove player with fd {:?} but it seemed to already be removed", fd);
+                    warn!(
+                        "tried to remove player with fd {:?} but it seemed to already be removed",
+                        fd
+                    );
                     return;
                 };
 
@@ -109,7 +145,7 @@ pub fn ingress(
                     warn!("got data for fd that is not in the fd lookup: {fd:?}");
                     return;
                 };
-                
+
                 let (login_state, decoder, packets, _, mut pose) =
                     players.get_mut(id).expect("player with fd not found");
 
