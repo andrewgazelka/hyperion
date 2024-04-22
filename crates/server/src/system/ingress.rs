@@ -95,6 +95,7 @@ pub fn ingress(
             }
             ServerEvent::RemovePlayer { fd } => {
                 let Some(id) = fd_lookup.remove(&fd) else {
+                    warn!("tried to remove player with fd {:?} but it seemed to already be removed", fd);
                     return;
                 };
 
@@ -104,7 +105,11 @@ pub fn ingress(
             }
             ServerEvent::RecvData { fd, data } => {
                 trace!("got data: {data:?}");
-                let id = *fd_lookup.get(&fd).expect("player with fd not found");
+                let Some(&id) = fd_lookup.get(&fd) else {
+                    warn!("got data for fd that is not in the fd lookup: {fd:?}");
+                    return;
+                };
+                
                 let (login_state, decoder, packets, _, mut pose) =
                     players.get_mut(id).expect("player with fd not found");
 

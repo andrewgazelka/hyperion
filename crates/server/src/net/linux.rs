@@ -16,7 +16,7 @@ use io_uring::{
 };
 use libc::iovec;
 use socket2::Socket;
-use tracing::{error, info, trace, warn};
+use tracing::{error, info, instrument, trace, warn};
 
 use super::RefreshItems;
 use crate::{
@@ -221,6 +221,7 @@ impl ServerDef for LinuxServer {
     }
 
     /// `f` should never panic
+    #[instrument(skip_all, level = "trace")]
     fn drain(&mut self, mut f: impl FnMut(ServerEvent)) -> std::io::Result<()> {
         loop {
             let (submitter, mut submission, mut completion) = self.uring.split();
@@ -369,13 +370,18 @@ impl ServerDef for LinuxServer {
 
             let fd = fd.0;
 
+            let mut local = 0;
             for elem in write {
+                local += 1;
                 let PacketWriteInfo { start_ptr, len } = *elem;
 
                 trace!("writing packet: {start_ptr:?}, {len}");
                 self.write_raw(fd, start_ptr, len, 0);
             }
 
+
+
+            let mut broadcast_count = 0;
             // // send broadcasts later
             if do_broadcast {
                 for elem in broadcast {
@@ -384,8 +390,11 @@ impl ServerDef for LinuxServer {
                     trace!("writing broadcast packet: {start_ptr:?}, {len}");
 
                     self.write_raw(fd, start_ptr, len, 0);
+                    broadcast_count += 1;
                 }
             }
+
+            info!("wrote {} local packets and {} broadcast packets", local, broadcast_count);
         });
     }
 
