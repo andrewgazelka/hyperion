@@ -9,6 +9,7 @@ use std::{
 use derive_more::{Deref, DerefMut, From};
 use evenio::prelude::Component;
 use libc::iovec;
+use tracing::info;
 use valence_protocol::{CompressionThreshold, Encode};
 
 use crate::{
@@ -213,19 +214,10 @@ impl IoBuf {
 pub struct Broadcast(Packets);
 
 /// Stores indices of packets
-#[derive(Component)]
+#[derive(Component, Default)]
 pub struct Packets {
     to_write: VecDeque<PacketWriteInfo>,
-    can_send: bool,
-}
-
-impl Default for Packets {
-    fn default() -> Self {
-        Self {
-            to_write: VecDeque::new(),
-            can_send: true,
-        }
-    }
+    number_sending: usize,
 }
 
 impl Packets {
@@ -238,15 +230,21 @@ impl Packets {
     }
 
     pub fn can_send(&self) -> bool {
-        self.can_send && !self.to_write.is_empty()
+        self.number_sending == 0 && !self.to_write.is_empty()
     }
 
     pub fn set_successfully_sent(&mut self) {
-        self.can_send = true;
+        debug_assert!(self.number_sending > 0, "somehow number sending is 0 even though we just marked a successful send");
+        
+        info!("successfully sent {} packets", self.number_sending);
+        
+        self.number_sending -= 1;
     }
 
-    pub fn set_sending(&mut self) {
-        self.can_send = false;
+    pub fn prepare_for_send(&mut self) {
+        debug_assert!(self.number_sending == 0, "number sending is not 0 even though we are preparing for send");
+        let count = self.to_write.len();
+        self.number_sending = count;
     }
 
     pub fn clear(&mut self) {

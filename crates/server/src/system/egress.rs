@@ -32,7 +32,7 @@ pub fn egress(
             .iter_mut()
             .filter(|(pkts, ..)| pkts.can_send())
             .map(|(pkts, fd, _)| {
-                pkts.set_sending(); // todo: should we not do this in a map for clarity?
+                pkts.prepare_for_send(); // todo: should we not do this in a map for clarity?
                 RefreshItems {
                     write: pkts.get_write_mut(),
                     fd: *fd,
