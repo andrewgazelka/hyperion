@@ -8,7 +8,7 @@ fn test_100_players() {
     };
 
     use server::Game;
-    use time::{Duration, Instant};
+    use std::time::{Duration, Instant};
 
     const MS_PER_TICK: u64 = 50;
     const NUM_TICKS: u64 = 200; // 10 seconds
@@ -18,7 +18,7 @@ fn test_100_players() {
     fn spawn_bots(port: u16) -> Child {
         let child = Command::new("rust-mc-bot")
             .arg(format!("127.0.0.1:{port}"))
-            .arg(crate::PLAYER_COUNT.to_string())
+            .arg(PLAYER_COUNT.to_string())
             .spawn()
             .expect("failed to start worker process");
 
