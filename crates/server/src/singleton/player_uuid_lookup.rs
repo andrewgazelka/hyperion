@@ -23,6 +23,7 @@ impl PlayerUuidLookup {
     }
 
     /// Get the entity id of a player.
+    #[expect(unused, reason = "probably will be used in future")]
     pub fn get(&self, uuid: &Uuid) -> Option<&EntityId> {
         self.inner.get(uuid)
     }

@@ -1,27 +1,29 @@
-use std::{
-    net::SocketAddr,
-    process::{Child, Command},
-    time::{Duration, Instant},
-};
-
-use server::Game;
-
-const PLAYER_COUNT: u32 = 100;
-
-fn spawn_bots(port: u16) -> Child {
-    let child = Command::new("rust-mc-bot")
-        .arg(format!("127.0.0.1:{port}"))
-        .arg(PLAYER_COUNT.to_string())
-        .spawn()
-        .expect("failed to start worker process");
-
-    child
-}
-
+// only on linux
+#[cfg(target_os = "linux")]
 #[test]
 fn test_100_players() {
+    use std::{
+        net::SocketAddr,
+        process::{Child, Command},
+        time::{Duration, Instant},
+    };
+
+    use server::Game;
+
     const MS_PER_TICK: u64 = 50;
     const NUM_TICKS: u64 = 200; // 10 seconds
+
+    const PLAYER_COUNT: u32 = 100;
+
+    fn spawn_bots(port: u16) -> Child {
+        let child = Command::new("rust-mc-bot")
+            .arg(format!("127.0.0.1:{port}"))
+            .arg(PLAYER_COUNT.to_string())
+            .spawn()
+            .expect("failed to start worker process");
+
+        child
+    }
 
     // init tracing
     tracing_subscriber::fmt().try_init().unwrap();

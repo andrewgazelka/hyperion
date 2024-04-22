@@ -5,8 +5,9 @@ use valence_protocol::{packets::play, ByteAngle, VarInt};
 
 use crate::{
     components::{FullEntityPose, Uuid},
-    events::Gametick,
-    singleton::broadcast::{BroadcastBuf, PacketMetadata, PacketNecessity},
+    events::{Gametick, ScratchBuffer},
+    net::{Broadcast, IoBuf},
+    singleton::broadcast::{PacketMetadata, PacketNecessity},
 };
 
 #[derive(Query, Debug)]
@@ -27,10 +28,14 @@ pub struct PositionSyncMetadata {
 
 #[instrument(skip_all, level = "trace")]
 pub fn sync_entity_position(
-    _: Receiver<Gametick>,
+    gametick: ReceiverMut<Gametick>,
     mut entities: Fetcher<EntityQuery>,
-    broadcast: Single<&BroadcastBuf>,
+    mut io: Single<&mut IoBuf>,
+    mut broadcast: Single<&mut Broadcast>,
 ) {
+    let mut gametick = gametick.event;
+    let scratch = &mut *gametick.scratch;
+
     entities.iter_mut().for_each(|query| {
         let EntityQuery {
             id,
@@ -110,7 +115,7 @@ pub fn sync_entity_position(
             exclude_player: Some(uuid.0),
         };
 
-        movement.write_packets(id, &broadcast, metadata);
+        movement.write_packets(id, &mut broadcast, metadata, scratch, &mut io);
 
         if let EntityMovement::Teleport { .. } = movement {
             sync_meta.rounding_error = Vec3::ZERO;
@@ -143,7 +148,14 @@ pub enum EntityMovement {
 }
 
 impl EntityMovement {
-    fn write_packets(&self, id: EntityId, broadcast: &BroadcastBuf, metadata: PacketMetadata) {
+    fn write_packets(
+        &self,
+        id: EntityId,
+        broadcast: &mut Broadcast,
+        _metadata: PacketMetadata,
+        scratch: &mut impl ScratchBuffer,
+        io: &mut IoBuf,
+    ) {
         #[expect(
             clippy::cast_possible_wrap,
             reason = "wrapping is okay in this scenario"
@@ -167,8 +179,8 @@ impl EntityMovement {
                     head_yaw: yaw,
                 };
 
-                broadcast.append(&pos, metadata).unwrap();
-                broadcast.append(&look, metadata).unwrap();
+                broadcast.append(&pos, io, scratch).unwrap();
+                broadcast.append(&look, io, scratch).unwrap();
             }
             Self::Position { delta } => {
                 let pos = play::MoveRelativeS2c {
@@ -177,7 +189,7 @@ impl EntityMovement {
                     on_ground: false,
                 };
 
-                broadcast.append(&pos, metadata).unwrap();
+                broadcast.append(&pos, io, scratch).unwrap();
             }
             Self::Rotation { pitch, yaw } => {
                 let pos = play::RotateS2c {
@@ -192,8 +204,8 @@ impl EntityMovement {
                     head_yaw: yaw,
                 };
 
-                broadcast.append(&pos, metadata).unwrap();
-                broadcast.append(&look, metadata).unwrap();
+                broadcast.append(&pos, io, scratch).unwrap();
+                broadcast.append(&look, io, scratch).unwrap();
             }
             Self::Teleport { pos, pitch, yaw } => {
                 let pos = play::EntityPositionS2c {
@@ -209,8 +221,8 @@ impl EntityMovement {
                     head_yaw: yaw,
                 };
 
-                broadcast.append(&pos, metadata).unwrap();
-                broadcast.append(&look, metadata).unwrap();
+                broadcast.append(&pos, io, scratch).unwrap();
+                broadcast.append(&look, io, scratch).unwrap();
             }
             Self::None => {}
         }

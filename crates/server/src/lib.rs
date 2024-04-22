@@ -4,6 +4,10 @@
 #![feature(type_alias_impl_trait)]
 #![feature(lint_reasons)]
 #![feature(io_error_more)]
+#![feature(trusted_len)]
+#![feature(allocator_api)]
+#![feature(read_buf)]
+#![feature(core_io_borrowed_buf)]
 #![expect(clippy::type_complexity, reason = "evenio uses a lot of complex types")]
 
 mod chunk;
@@ -23,23 +27,22 @@ use ndarray::s;
 use signal_hook::iterator::Signals;
 use singleton::bounding_box;
 use spin::Lazy;
-use tracing::{debug, error, info, instrument, trace, warn};
+use tracing::{error, info, instrument, trace, warn};
 use valence_protocol::CompressionThreshold;
 
 use crate::{
     components::Vitals,
-    events::{Egress, Gametick, StatsEvent},
+    events::{BumpScratch, Egress, Gametick, StatsEvent},
     global::Global,
-    net::{Server, ServerDef},
+    net::{Broadcast, IoBuf, Server, ServerDef},
     singleton::{
-        broadcast::BroadcastBuf, buffer_allocator::BufferAllocator, fd_lookup::FdLookup,
-        player_aabb_lookup::PlayerBoundingBoxes, player_id_lookup::PlayerIdLookup,
-        player_uuid_lookup::PlayerUuidLookup,
+        fd_lookup::FdLookup, player_aabb_lookup::PlayerBoundingBoxes,
+        player_id_lookup::PlayerIdLookup, player_uuid_lookup::PlayerUuidLookup,
     },
 };
 
-mod components;
-mod events;
+pub mod components;
+pub mod events;
 
 mod global;
 mod net;
@@ -160,8 +163,11 @@ impl Game {
         let server = world.spawn();
         let mut server_def = Server::new(address)?;
 
-        let buffer_alloc = world.spawn();
-        world.insert(buffer_alloc, BufferAllocator::new(&mut server_def));
+        let io_id = world.spawn();
+        let mut io = IoBuf::new(shared.compression_level);
+        io.buf_mut().register(&mut server_def);
+
+        world.insert(io_id, io);
         world.insert(server, server_def);
 
         world.add_handler(system::ingress);
@@ -208,8 +214,8 @@ impl Game {
         let fd_lookup = world.spawn();
         world.insert(fd_lookup, FdLookup::default());
 
-        let encoder = world.spawn();
-        world.insert(encoder, BroadcastBuf::new(shared.compression_level));
+        let broadcast = world.spawn();
+        world.insert(broadcast, Broadcast::default());
 
         let mut game = Self {
             shared,
@@ -245,7 +251,6 @@ impl Game {
         let duration = duration.mul_f64(0.8);
 
         if duration.as_millis() > 47 {
-            trace!("duration is long");
             return Some(Duration::from_millis(47));
         }
 
@@ -286,7 +291,14 @@ impl Game {
 
         self.last_ticks.push_back(now);
 
-        self.world.send(Gametick);
+        let bump = bumpalo::Bump::new();
+
+        let mut scratch = events::Scratch::from(&bump);
+
+        self.world.send(Gametick {
+            bump: &bump,
+            scratch: &mut scratch, // todo: any problem with ref vs val
+        });
         self.world.send(Egress);
 
         #[expect(
@@ -295,12 +307,11 @@ impl Game {
                       (~52 days)"
         )]
         let ms = now.elapsed().as_nanos() as f64 / 1_000_000.0;
-        self.update_tick_stats(ms);
-        // info!("Tick took: {:02.8}ms", ms);
+        self.update_tick_stats(ms, &mut scratch);
     }
 
     #[instrument(skip(self))]
-    fn update_tick_stats(&mut self, ms: f64) {
+    fn update_tick_stats(&mut self, ms: f64, scratch: &mut BumpScratch) {
         self.last_ms_per_tick.push_back(ms);
 
         if self.last_ms_per_tick.len() > MSPT_HISTORY_SIZE {
@@ -311,11 +322,12 @@ impl Game {
             let mean_1_second = arr.slice(s![..20]).mean().unwrap();
             let mean_5_seconds = arr.slice(s![..100]).mean().unwrap();
 
-            debug!("ms / tick: {mean_1_second:.2}ms");
+            trace!("ms / tick: {mean_1_second:.2}ms");
 
             self.world.send(StatsEvent {
                 ms_per_tick_mean_1s: mean_1_second,
                 ms_per_tick_mean_5s: mean_5_seconds,
+                scratch,
             });
 
             self.last_ms_per_tick.pop_front();

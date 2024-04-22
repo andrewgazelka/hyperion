@@ -1,103 +1,160 @@
 //! All the networking related code.
 
 use std::{
-    alloc::{alloc_zeroed, handle_alloc_error, Layout},
-    cell::UnsafeCell,
+    alloc::{alloc, dealloc, handle_alloc_error, Layout},
     cmp,
+    iter::TrustedLen,
     marker::PhantomData,
-    net::{TcpListener, ToSocketAddrs},
+    net::{SocketAddr, ToSocketAddrs},
     os::fd::AsRawFd,
     sync::atomic::{AtomicU16, Ordering},
-    time::Duration,
 };
 
-use bytes::Bytes;
 pub use io_uring::types::Fixed;
 use io_uring::{
     cqueue::buffer_select, squeue, squeue::SubmissionQueue, types::BufRingEntry, IoUring,
 };
 use libc::iovec;
+use socket2::Socket;
 use tracing::{error, info, trace, warn};
 
-use super::RefreshItem;
+use super::RefreshItems;
 use crate::{
     global::Global,
-    net::{Fd, ServerDef, ServerEvent},
-    singleton::buffer_allocator::BufRef,
+    net::{encoder::PacketWriteInfo, Fd, ServerDef, ServerEvent},
 };
-
-/// Default MiB/s threshold before we start to limit the sending of some packets.
-const DEFAULT_SPEED: u32 = 1024 * 1024;
-
-/// The maximum number of buffers a vectored write can have.
-const MAX_VECTORED_WRITE_BUFS: usize = 16;
 
 const COMPLETION_QUEUE_SIZE: u32 = 32768;
 const SUBMISSION_QUEUE_SIZE: u32 = 32768;
 const IO_URING_FILE_COUNT: u32 = 32768;
 const C2S_RING_BUFFER_COUNT: usize = 16384;
+const LISTEN_BACKLOG: libc::c_int = 128;
+const SEND_BUFFER_SIZE: usize = 128 * 1024 * 1024;
 
 /// Size of each buffer in bytes
-const C2S_RING_BUFFER_LEN: usize = 4096;
+const C2S_RING_BUFFER_LEN: usize = 64;
 
 const LISTENER_FIXED_FD: Fixed = Fixed(0);
 const C2S_BUFFER_GROUP_ID: u16 = 0;
 
 const IORING_CQE_F_MORE: u32 = 1 << 1;
 
-/// How long we wait from when we get the first buffer to when we start sending all of the ones we have collected.
-/// This is closely related to [`MAX_VECTORED_WRITE_BUFS`].
-const WRITE_DELAY: Duration = Duration::from_millis(1);
-
-/// How much we expand our read buffer each time a packet is too large.
-const READ_BUF_SIZE: usize = 4096;
-
 fn page_size() -> usize {
     // SAFETY: This is valid
-    unsafe { libc::sysconf(libc::_SC_PAGESIZE) as usize }
+    let page_size = unsafe { libc::sysconf(libc::_SC_PAGESIZE) };
+    usize::try_from(page_size).expect("page size is too large")
 }
 
-fn alloc_zeroed_page_aligned<T>(len: usize) -> *mut T {
-    assert!(len > 0);
-    let page_size = page_size();
-    let type_layout = Layout::new::<T>();
-    assert!(type_layout.align() <= page_size);
-    assert!(type_layout.size() > 0);
+struct PageAlignedMemory<T> {
+    data: *mut T,
+    layout: Layout,
+}
 
-    let layout = Layout::from_size_align(len * type_layout.size(), page_size).unwrap();
+impl<T> PageAlignedMemory<T> {
+    fn from_iter(iter: impl TrustedLen<Item = T>) -> Self {
+        let len = iter
+            .size_hint()
+            .1
+            .expect("iterator doesn't have a known size");
+        assert!(len > 0);
+        let page_size = page_size();
+        let type_layout = Layout::new::<T>();
+        assert!(type_layout.align() <= page_size);
+        assert!(type_layout.size() > 0);
 
-    // SAFETY: len is nonzero and T is not zero sized
-    let data = unsafe { alloc_zeroed(layout) };
+        let layout = Layout::from_size_align(
+            type_layout
+                .size()
+                .checked_mul(len)
+                .expect("allocation size is too large"),
+            page_size,
+        )
+        .unwrap();
 
-    if data.is_null() {
-        handle_alloc_error(layout);
+        // SAFETY: len is nonzero and T is not zero sized
+        let data = unsafe { alloc(layout) };
+
+        if data.is_null() {
+            handle_alloc_error(layout);
+        }
+
+        let data: *mut T = data.cast();
+
+        // Initialize the memory
+        for (index, value) in iter.enumerate() {
+            // SAFETY: index is guaranteed to be within bounds because TrustedLen guarantees
+            // correctness and the amount of data from TrustedLen was allocated
+            let value_ptr = unsafe { data.add(index) };
+            // SAFETY: value_ptr is valid
+            unsafe {
+                value_ptr.write(value);
+            }
+        }
+
+        Self { data, layout }
     }
 
-    data.cast()
+    #[expect(dead_code, reason = "this is not used")]
+    const fn as_mut_ptr(&self) -> *mut T {
+        self.data
+    }
+}
+
+impl<T> Drop for PageAlignedMemory<T> {
+    fn drop(&mut self) {
+        // SAFETY: data and layout should be valid
+        unsafe {
+            dealloc(self.data.cast(), self.layout);
+        }
+    }
 }
 
 pub struct LinuxServer {
-    listener: TcpListener,
+    #[expect(dead_code, reason = "this is used so there is no drop")]
+    listener: Socket,
+
     uring: IoUring,
 
-    c2s_buffer: *mut [UnsafeCell<u8>; C2S_RING_BUFFER_LEN],
-    c2s_local_tail: u16,
-    c2s_shared_tail: *const AtomicU16,
+    /// The underlying data should never be accessed directly as a slice because the kernel could modify some
+    /// buffers while a reference to the data is held, which would cause undefined behavior. In
+    /// addition, this field must be declared after uring so that the uring is dropped first. This
+    /// is needed because registered buffers must be valid until unregistered or the uring is dropped.
+    c2s_buffer: Vec<[u8; C2S_RING_BUFFER_LEN]>,
 
-    /// Make Listener !Send and !Sync to let io_uring assume that it'll only be accessed by 1
+    /// This field must be declared after uring so that the uring is dropped first. This
+    /// is needed because registered buffers must be valid until unregistered or the uring is dropped.
+    c2s_buffer_entries: PageAlignedMemory<BufRingEntry>,
+
+    /// Value of `c2s_buffer_entries` tail, which is synched occasionally with the kernel
+    c2s_local_tail: u16,
+
+    pending_writes: usize,
+
+    /// Make Listener !Send and !Sync to let `io_uring` assume that it'll only be accessed by 1
     /// thread
     phantom: PhantomData<*const ()>,
 }
 
 // TODO: REMOVE
+#[expect(clippy::non_send_fields_in_send_ty, reason = "this is not a send type")]
 unsafe impl Send for LinuxServer {}
 unsafe impl Sync for LinuxServer {}
 
 impl ServerDef for LinuxServer {
     fn new(address: impl ToSocketAddrs) -> anyhow::Result<Self> {
-        let listener = TcpListener::bind(address)?;
+        let Some(address) = address.to_socket_addrs()?.next() else {
+            anyhow::bail!("no addresses specified")
+        };
+        let domain = match address {
+            SocketAddr::V4(_) => socket2::Domain::IPV4,
+            SocketAddr::V6(_) => socket2::Domain::IPV6,
+        };
 
-        let addr = listener.local_addr()?;
+        let listener = Socket::new(domain, socket2::Type::STREAM, None)?;
+        listener.set_nonblocking(true)?;
+        listener.set_send_buffer_size(SEND_BUFFER_SIZE)?;
+        listener.bind(&address.into())?;
+        listener.listen(LISTEN_BACKLOG)?;
 
         // TODO: Try to use defer taskrun
         let mut uring = IoUring::builder()
@@ -116,46 +173,35 @@ impl ServerDef for LinuxServer {
         );
 
         // Create the c2s buffer
-        let c2s_buffer = alloc_zeroed_page_aligned::<[UnsafeCell<u8>; C2S_RING_BUFFER_LEN]>(
-            C2S_RING_BUFFER_COUNT,
-        );
-        let buffer_ring = alloc_zeroed_page_aligned::<BufRingEntry>(C2S_RING_BUFFER_COUNT);
-        {
-            let c2s_buffer =
-                unsafe { std::slice::from_raw_parts(c2s_buffer, C2S_RING_BUFFER_COUNT) };
-
-            // SAFETY: Buffer count is smaller than the entry count, BufRingEntry is initialized with
-            // zero, and the underlying will not be mutated during the loop
-            let buffer_ring =
-                unsafe { std::slice::from_raw_parts_mut(buffer_ring, C2S_RING_BUFFER_COUNT) };
-
-            for (buffer_id, buffer) in buffer_ring.into_iter().enumerate() {
-                let underlying_data = &c2s_buffer[buffer_id];
-                buffer.set_addr(underlying_data.as_ptr() as u64);
-                buffer.set_len(underlying_data.len() as u32);
-                buffer.set_bid(buffer_id as u16);
-            }
-        }
+        let c2s_buffer = vec![[0u8; C2S_RING_BUFFER_LEN]; C2S_RING_BUFFER_COUNT];
+        let c2s_buffer_entries = PageAlignedMemory::from_iter(c2s_buffer.iter().enumerate().map(
+            |(buffer_id, buffer)| {
+                // SAFETY: BufRingEntry is valid in the all-zero byte-pattern.
+                let mut entry = unsafe { std::mem::zeroed::<BufRingEntry>() };
+                entry.set_addr(buffer.as_ptr() as u64);
+                entry.set_len(buffer.len() as u32);
+                entry.set_bid(buffer_id as u16);
+                entry
+            },
+        ));
 
         let tail = C2S_RING_BUFFER_COUNT as u16;
 
         // Update the tail
         // SAFETY: This is the first entry of the buffer ring
-        let tail_addr = unsafe { BufRingEntry::tail(buffer_ring) };
+        let tail_addr = unsafe { BufRingEntry::tail(c2s_buffer_entries.data) };
 
-        // SAFETY: tail_addr doesn't need to be atomic since it hasn't been passed to the kernel
+        // SAFETY: tail_addr can be set without an atomic since it hasn't been passed to the kernel
         // yet
         unsafe {
             *tail_addr.cast_mut() = tail;
         }
 
-        let tail_addr: *const AtomicU16 = tail_addr.cast();
-
         // Register the buffer ring
-        // SAFETY: buffer_ring is valid to write to for C2S_RING_BUFFER_COUNT BufRingEntry structs
+        // SAFETY: c2s_buffer_entries is valid to write to for C2S_RING_BUFFER_COUNT BufRingEntry structs
         unsafe {
             submitter.register_buf_ring(
-                buffer_ring as u64,
+                c2s_buffer_entries.data as u64,
                 C2S_RING_BUFFER_COUNT as u16,
                 C2S_BUFFER_GROUP_ID,
             )?;
@@ -167,98 +213,140 @@ impl ServerDef for LinuxServer {
             listener,
             uring,
             c2s_buffer,
+            c2s_buffer_entries,
             c2s_local_tail: tail,
-            c2s_shared_tail: tail_addr,
+            pending_writes: 0,
             phantom: PhantomData,
         })
     }
 
-    fn drain(&mut self, mut f: impl FnMut(ServerEvent)) {
-        let (_, mut submission, mut completion) = self.uring.split();
-        completion.sync();
-        if completion.overflow() > 0 {
-            error!(
-                "the io_uring completion queue overflowed, and some connection errors are likely \
-                 to occur; consider increasing COMPLETION_QUEUE_SIZE to avoid this"
-            );
-        }
+    /// `f` should never panic
+    fn drain(&mut self, mut f: impl FnMut(ServerEvent)) -> std::io::Result<()> {
+        loop {
+            let (submitter, mut submission, mut completion) = self.uring.split();
+            completion.sync();
+            if completion.overflow() > 0 {
+                error!(
+                    "the io_uring completion queue overflowed, and some connection errors are \
+                     likely to occur; consider increasing COMPLETION_QUEUE_SIZE to avoid this"
+                );
+            }
 
-        for event in completion {
-            match event.user_data() {
-                0 => {
-                    if event.flags() & IORING_CQE_F_MORE == 0 {
-                        warn!("multishot accept rerequested");
-                        Self::request_accept(&mut submission);
-                    }
+            for event in completion {
+                let result = event.result();
+                match event.user_data() {
+                    0 => {
+                        if event.flags() & IORING_CQE_F_MORE == 0 {
+                            warn!("multishot accept rerequested");
+                            Self::request_accept(&mut submission);
+                        }
 
-                    if event.result() < 0 {
-                        error!("there was an error in accept: {}", event.result());
-                    } else {
-                        let fd = Fixed(event.result() as u32);
+                        if result < 0 {
+                            error!("there was an error in accept: {}", result);
+                            continue;
+                        }
+
+                        #[expect(clippy::cast_sign_loss, reason = "we are checking if < 0")]
+                        let fd = Fixed(result as u32);
                         Self::request_recv(&mut submission, fd);
                         f(ServerEvent::AddPlayer { fd: Fd(fd) });
                     }
-                }
-                write if write & SEND_MARKER != 0 => {
-                    let fd = Fixed((write & !SEND_MARKER) as u32);
-                    let result = event.result();
-
-                    match result.cmp(&0) {
-                        cmp::Ordering::Less => {
-                            error!("there was an error in write: {}", result);
+                    1 => {
+                        if result < 0 {
+                            error!("there was an error in socket shutdown: {}", result);
                         }
-                        cmp::Ordering::Equal => {
-                            // A result of 0 indicates that the client closed the connection gracefully
+                    }
+                    write if write & SEND_MARKER != 0 => {
+                        let fd = Fixed((write & !SEND_MARKER) as u32);
+
+                        self.pending_writes -= 1;
+
+                        match result.cmp(&0) {
+                            cmp::Ordering::Less => {
+                                error!(
+                                    "there was an error in write, shutting down socket: {}",
+                                    result
+                                );
+                                Self::shutdown(&mut submission, fd);
+                            }
+                            cmp::Ordering::Equal => {
+                                // This should never happen as long as write is never passed an empty buffer:
+                                // https://stackoverflow.com/questions/5656628/what-should-i-do-when-writefd-buf-count-returns-0
+                                unreachable!("write returned 0 which should not be possible");
+                            }
+                            cmp::Ordering::Greater => {
+                                // Write operation completed successfully
+                                // TODO: Check that write wasn't truncated
+                                trace!("successful write response");
+                            }
+                        }
+                    }
+                    read if read & RECV_MARKER != 0 => {
+                        let fd = Fixed((read & !RECV_MARKER) as u32);
+                        let disconnected = result == 0;
+
+                        if event.flags() & IORING_CQE_F_MORE == 0 && !disconnected {
+                            trace!("socket recv rerequested");
+                            Self::request_recv(&mut submission, fd);
+                        }
+
+                        if disconnected {
+                            info!("disconnected during recv");
                             f(ServerEvent::RemovePlayer { fd: Fd(fd) });
-                            // Perform any necessary cleanup for the disconnected client
+                        } else if result < 0 {
+                            // -104
+                            error!("there was an error in recv: {}", result);
+                            continue;
+                        } else {
+                            #[expect(clippy::cast_sign_loss, reason = "we are checking if < 0")]
+                            let bytes_received = result as usize;
+                            let buffer_id =
+                                buffer_select(event.flags()).expect("there should be a buffer");
+                            assert!((buffer_id as usize) < C2S_RING_BUFFER_COUNT);
+                            // SAFETY: as_mut_ptr doesn't take a reference to the slice in c2s_buffer.
+                            // buffer_id is in bounds of c2s_buffer, so all the
+                            // safety requirements for add is met.
+                            let buffer_ptr =
+                                unsafe { self.c2s_buffer.as_mut_ptr().add(buffer_id as usize) };
+                            // SAFETY: buffer_id is in bounds, so buffer_ptr is valid
+                            let buffer = unsafe { &(*buffer_ptr)[..bytes_received] };
+                            self.c2s_local_tail = self.c2s_local_tail.wrapping_add(1);
+                            f(ServerEvent::RecvData {
+                                fd: Fd(fd),
+                                data: buffer,
+                            });
                         }
-                        cmp::Ordering::Greater => {
-                            // Write operation completed successfully
-                            trace!("successful write response");
-                        }
                     }
-                }
-                read if read & RECV_MARKER != 0 => {
-                    let fd = Fixed((read & !RECV_MARKER) as u32);
-                    let disconnected = event.result() == 0;
-
-                    if event.flags() & IORING_CQE_F_MORE == 0 && !disconnected {
-                        trace!("socket recv rerequested");
-                        Self::request_recv(&mut submission, fd);
+                    _ => {
+                        panic!("unexpected event: {event:?}");
                     }
-
-                    if disconnected {
-                        f(ServerEvent::RemovePlayer { fd: Fd(fd) });
-                    } else if event.result() < 0 {
-                        error!("there was an error in recv: {}", event.result());
-                    } else {
-                        let bytes_received = event.result() as usize;
-                        let buffer_id =
-                            buffer_select(event.flags()).expect("there should be a buffer");
-                        assert!((buffer_id as usize) < C2S_RING_BUFFER_COUNT);
-                        // TODO: this is probably very unsafe
-                        let buffer = unsafe {
-                            *(self.c2s_buffer.add(buffer_id as usize)
-                                as *const [u8; C2S_RING_BUFFER_LEN])
-                        };
-                        let buffer = &buffer[..bytes_received];
-                        self.c2s_local_tail = self.c2s_local_tail.wrapping_add(1);
-                        f(ServerEvent::RecvData {
-                            fd: Fd(fd),
-                            data: buffer,
-                        });
-                    }
-                }
-                _ => {
-                    panic!("unexpected event: {event:?}");
                 }
             }
+
+            if self.pending_writes == 0 {
+                break;
+            }
+            let start = std::time::Instant::now();
+            // Wait for another event to finish and then check if all writes are finished by
+            // looping. Waiting in here should have a negligible impact since all writes should
+            // be nonblocking.
+            submitter.submit_and_wait(1)?;
+            warn!(
+                "{:?} was spent waiting for another event since there's pending writes",
+                start.elapsed()
+            );
         }
 
-        // SAFETY: c2s_shared_tail is valid
+        // SAFETY: This is the first entry of the buffer ring
+        let tail_addr = unsafe { BufRingEntry::tail(self.c2s_buffer_entries.data) };
+        // Casting it into an atomic is needed since the kernel is also reading the tail
+        let tail_addr: *const AtomicU16 = tail_addr.cast();
+        // SAFETY: tail_addr is valid
         unsafe {
-            (*self.c2s_shared_tail).store(self.c2s_local_tail, Ordering::Relaxed);
+            (*tail_addr).store(self.c2s_local_tail, Ordering::Relaxed);
         }
+
+        Ok(())
     }
 
     fn allocate_buffers(&mut self, buffers: &[iovec]) {
@@ -268,35 +356,35 @@ impl ServerDef for LinuxServer {
     /// Impl with local sends BEFORE broadcasting
     fn write_all<'a>(
         &mut self,
-        global: &mut Global,
-        broadcast_buf: &'a BufRef,
-        writers: impl Iterator<Item = RefreshItem<'a>>,
+        _global: &mut Global,
+        broadcast: &'a [PacketWriteInfo],
+        writers: impl Iterator<Item = RefreshItems<'a>>,
     ) {
         writers.for_each(|item| {
-            let RefreshItem {
-                local,
+            let RefreshItems {
+                write,
                 fd,
-                broadcast,
+                broadcast: do_broadcast,
             } = item;
 
             let fd = fd.0;
 
-            let local_len = local.len();
-            if local_len != 0 {
-                let location = local.as_ptr();
-                let idx = local.index();
-                let len = local_len as u32;
+            for elem in write {
+                let PacketWriteInfo { start_ptr, len } = *elem;
 
-                self.write_raw(fd, location, len, idx);
+                trace!("writing packet: {start_ptr:?}, {len}");
+                self.write_raw(fd, start_ptr, len, 0);
             }
 
-            let broadcast_len = broadcast_buf.len();
-            if broadcast_len != 0 && broadcast {
-                let location = broadcast_buf.as_ptr();
-                let idx = broadcast_buf.index();
-                let len = broadcast_len as u32;
+            // // send broadcasts later
+            if do_broadcast {
+                for elem in broadcast {
+                    let PacketWriteInfo { start_ptr, len } = *elem;
 
-                self.write_raw(fd, location, len, idx);
+                    trace!("writing broadcast packet: {start_ptr:?}, {len}");
+
+                    self.write_raw(fd, start_ptr, len, 0);
+                }
             }
         });
     }
@@ -355,25 +443,38 @@ impl LinuxServer {
                 submission,
                 &io_uring::opcode::RecvMulti::new(fd, C2S_BUFFER_GROUP_ID)
                     .build()
-                    .user_data((fd.0 as u64) | RECV_MARKER),
+                    .user_data(u64::from(fd.0) | RECV_MARKER),
+            );
+        }
+    }
+
+    fn shutdown(submission: &mut SubmissionQueue, fd: Fixed) {
+        unsafe {
+            Self::push_entry(
+                submission,
+                &io_uring::opcode::Shutdown::new(fd, libc::SHUT_RDWR)
+                    .build()
+                    .user_data(1),
             );
         }
     }
 
     pub fn write_raw(&mut self, fd: Fixed, buf: *const u8, len: u32, buf_index: u16) {
+        self.pending_writes += 1;
         unsafe {
             Self::push_entry(
                 &mut self.uring.submission(),
                 &io_uring::opcode::WriteFixed::new(fd, buf, len, buf_index)
                     .build()
-                    // IO_LINK allows adjacent fd writes to be sequential which is SUPER important to make
+                    // IO_HARDLINK allows adjacent fd writes to be sequential which is SUPER important to make
                     // sure things get written in the right (or at least deterministic) order
-                    .flags(squeue::Flags::IO_LINK)
-                    .user_data((fd.0 as u64) | SEND_MARKER),
+                    .flags(squeue::Flags::IO_HARDLINK)
+                    .user_data(u64::from(fd.0) | SEND_MARKER),
             );
         }
     }
 
+    #[expect(dead_code, reason = "this is not used")]
     pub fn cancel(&mut self, cancel_builder: io_uring::types::CancelBuilder) {
         self.uring
             .submitter()
@@ -390,6 +491,7 @@ impl LinuxServer {
 
     /// All requests in the submission queue must be finished or cancelled, or else this function
     /// will hang indefinetely.
+    #[expect(dead_code, reason = "this is not used")]
     pub fn unregister_buffers(&mut self) {
         self.uring.submitter().unregister_buffers().unwrap();
     }

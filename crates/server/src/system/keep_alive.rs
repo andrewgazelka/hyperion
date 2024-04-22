@@ -7,18 +7,22 @@ use crate::{
     components::KeepAlive,
     events::{Gametick, KickPlayer},
     global::Global,
-    net::LocalEncoder,
+    net::{IoBuf, Packets},
     system::player_join_world::send_keep_alive,
 };
 
 #[instrument(skip_all, level = "trace")]
 pub fn keep_alive(
-    _: Receiver<Gametick>,
+    gametick: ReceiverMut<Gametick>,
     global: Single<&Global>,
-    mut fetcher: Fetcher<(EntityId, &mut KeepAlive, &mut LocalEncoder)>,
+    mut io: Single<&mut IoBuf>,
+    mut fetcher: Fetcher<(EntityId, &mut KeepAlive, &mut Packets)>,
     mut s: Sender<KickPlayer>,
 ) {
-    fetcher.iter_mut().for_each(|(id, keep_alive, encoder)| {
+    let mut gametick = gametick.event;
+    let scratch = &mut *gametick.scratch;
+
+    fetcher.iter_mut().for_each(|(id, keep_alive, packets)| {
         let Some(sent) = &mut keep_alive.last_sent else {
             keep_alive.last_sent = Some(Instant::now());
             return;
@@ -40,7 +44,7 @@ pub fn keep_alive(
             *sent = Instant::now();
 
             // todo: handle and disconnect
-            send_keep_alive(encoder, &global).unwrap();
+            send_keep_alive(packets, &mut io, scratch).unwrap();
 
             trace!("keep alive");
         }

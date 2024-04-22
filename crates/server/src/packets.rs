@@ -31,7 +31,7 @@ use crate::{
     },
     events::{AttackEntity, InitEntity, KillAllEntities, SwingArm},
     global::Global,
-    net::LocalEncoder,
+    net::IoBuf,
     singleton::player_id_lookup::PlayerIdLookup,
     system::IngressSender,
     Vitals,
@@ -63,7 +63,9 @@ fn full(mut data: &[u8], full_entity_pose: &mut FullEntityPose) -> anyhow::Resul
     let position = position.as_vec3();
     let d_pos = position - full_entity_pose.position;
     if d_pos.length_squared() > MAX_SPEED.powi(2) {
-        bail!("Player is moving too fast max speed: {MAX_SPEED}");
+        // TODO: Add max speed check again. It currently doesn't work because the client is falling
+        // into the void until chunks load.
+        // bail!("Player is moving too fast max speed: {MAX_SPEED}");
     }
 
     // todo: analyze clustering

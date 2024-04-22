@@ -32,7 +32,6 @@ generator.workspace = true
 
 chunk.workspace = true
 
-
 # no secure alloc
 sha2 = "0.10.8"
 itertools = "0.12.1"
@@ -49,7 +48,6 @@ tracing-flame = "0.2.0"
 ndarray = "0.15.6"
 libc = "0.2.153"
 spin = "0.9.8"
-rayon-local.workspace = true
 serde = { version = "1.0.197", features = ["derive"] }
 toml = "0.8.12"
 bvh.workspace = true
@@ -59,10 +57,11 @@ spin_sleep = "1.2.0"
 tracing-tracy = { version = "0.11.0" , optional = true }
 no_denormals = "0.1.2"
 flate2 = { version = "1.0.28", features = ["zlib-ng"], default-features = false }
-arrayvec = "0.7.4"
 clap = { version = "4.5.4", features = ["derive"] }
 fxhash = "0.2.1"
 derive_more = "0.99.17"
+socket2 = "0.5.6"
+bumpalo = { version = "3.16.0", features = ["allocator_api"] }
 
 
 [target.'cfg(target_os = "linux")'.dependencies]
@@ -70,8 +69,11 @@ io-uring = "0.6.3"
 
 [dev-dependencies]
 divan = "0.1.14"
+fastrand = "2.0.2"
+hex = "0.4.3"
 rust-mc-bot.workspace = true
-tango-bench = "0.4.0"
+rustc_version = "0.4.0"
+tango-bench = "0.5.0"
 
 [[bench]]
 name = "many_zombies"
@@ -104,6 +106,8 @@ suspicious = "deny"
 # restriction
 #allow_attributes = "deny"
 allow_attributes_without_reason = "deny"
-#missing_docs_in_private_items = "warn"
 
+[build-dependencies]
+rustc_version = "0.4.0"
+#missing_docs_in_private_items = "warn"
 

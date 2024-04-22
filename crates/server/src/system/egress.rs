@@ -1,44 +1,40 @@
-use bytes::Bytes;
 use evenio::{
     event::Receiver,
     fetch::{Fetcher, Single},
 };
-use tracing::{info, instrument};
+use tracing::instrument;
 
 use crate::{
     components::LoginState,
     events::Egress,
     global::Global,
-    net::{Fd, LocalEncoder, RefreshItem, Server, ServerDef},
-    singleton::{
-        broadcast::BroadcastBuf,
-        buffer_allocator::{BufRef, BufferAllocator},
-    },
+    net::{Broadcast, Fd, Packets, RefreshItems, Server, ServerDef},
 };
 
 #[instrument(skip_all, level = "trace")]
 pub fn egress(
     _: Receiver<Egress>,
-    bufs: Single<&BufferAllocator>,
     mut server: Single<&mut Server>,
-    encoders: Fetcher<(&LocalEncoder, &Fd, &LoginState)>,
+    mut players: Fetcher<(&mut Packets, &Fd, &LoginState)>,
+    mut broadcast: Single<&mut Broadcast>,
     mut global: Single<&mut Global>,
-    mut broadcast: Single<&mut BroadcastBuf>,
 ) {
-    let mut broadcast_buf = bufs.obtain().unwrap();
-    broadcast_buf.clear();
+    let local_items = players
+        .iter_mut()
+        .map(|(pkts, fd, login_state)| RefreshItems {
+            write: pkts.to_write(),
+            fd: *fd,
+            broadcast: *login_state == LoginState::Play,
+        });
 
-    broadcast.drain(|bytes| {
-        broadcast_buf.try_extend_from_slice(&bytes).unwrap();
-    });
-
-    let items = encoders.iter().map(|(encoder, fd, state)| RefreshItem {
-        local: encoder.buf(),
-        fd: *fd,
-        broadcast: *state == LoginState::Play,
-    });
-
-    server.write_all(&mut global, &broadcast_buf, items);
+    server.write_all(&mut global, broadcast.to_write(), local_items);
 
     server.submit_events();
+
+    // now clear
+    broadcast.clear();
+
+    for (pkts, ..) in &mut players {
+        pkts.clear();
+    }
 }

@@ -35,13 +35,13 @@ pub enum LoginState {
     Handshake,
     Status,
     Login,
-    TransitioningPlay,
+    TransitioningPlay {
+        // todo: remove this is a hack
+        packets_to_transition: usize,
+    },
     Play,
     Terminate,
 }
-
-#[derive(Component)]
-pub struct HasInvincibility(pub bool);
 
 #[derive(Copy, Clone, PartialEq, Debug, Component)]
 pub enum Vitals {
@@ -76,6 +76,7 @@ pub struct ImmuneStatus {
 }
 
 impl ImmuneStatus {
+    #[must_use]
     pub const fn is_invincible(&self, global: &Global) -> bool {
         global.tick < self.until
     }
@@ -84,8 +85,8 @@ impl ImmuneStatus {
 impl Vitals {
     /// Heal the player by a given amount.
     pub fn heal(&mut self, amount: f32) {
-        assert!(amount.is_finite());
-        assert!(amount > 0.0);
+        debug_assert!(amount.is_finite());
+        debug_assert!(amount > 0.0);
 
         let Self::Alive { health, .. } = self else {
             return;
@@ -180,6 +181,7 @@ pub struct FullEntityPose {
 }
 
 impl FullEntityPose {
+    #[must_use]
     pub fn player() -> Self {
         let position = Vec3::new(0.0, 70.0, 0.0);
 
@@ -213,7 +215,7 @@ impl FullEntityPose {
 /// - We want to be able to detect collisions in parallel.
 /// - Since we are accessing bounding boxes in parallel,
 /// we need to be able to make sure the bounding boxes are immutable (unless we have something like a
-/// [`Arc`] or [`std::sync::RwLock`], but this is not efficient).
+/// [`std::sync::Arc`] or [`std::sync::RwLock`], but this is not efficient).
 /// - Therefore, we have an [`EntityReaction`] component which is used to store the reaction of an entity to collisions.
 /// - Later we can apply the reaction to the entity's [`FullEntityPose`] to move the entity.
 #[derive(Component, Default, Debug)]
