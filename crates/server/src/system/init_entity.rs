@@ -9,9 +9,12 @@ use tracing::instrument;
 use valence_protocol::{ByteAngle, VarInt, Velocity};
 
 use crate::{
-    components::{EntityReaction, FullEntityPose, MinecraftEntity, RunningSpeed, Uuid},
+    components::{
+        EntityReaction, FullEntityPose, ImmuneStatus, MinecraftEntity, RunningSpeed, Uuid, Vitals,
+    },
     events::{InitEntity, Scratch},
     net::{Broadcast, IoBuf},
+    singleton::player_id_lookup::EntityIdLookup,
     system::entity_position::PositionSyncMetadata,
 };
 
@@ -39,6 +42,7 @@ pub fn spawn_packet(
 #[instrument(skip_all)]
 pub fn init_entity(
     r: Receiver<InitEntity>,
+    mut id_lookup: Single<&mut EntityIdLookup>,
     mut s: Sender<(
         Insert<FullEntityPose>,
         Insert<PositionSyncMetadata>,
@@ -46,6 +50,8 @@ pub fn init_entity(
         Insert<Uuid>,
         Insert<RunningSpeed>,
         Insert<EntityReaction>,
+        Insert<Vitals>,
+        Insert<ImmuneStatus>,
         Spawn,
     )>,
     mut io: Single<&mut IoBuf>,
@@ -61,8 +67,12 @@ pub fn init_entity(
     s.insert(id, event.pose);
     s.insert(id, uuid);
     s.insert(id, EntityReaction::default());
+    s.insert(id, ImmuneStatus::default());
     s.insert(id, generate_running_speed());
     s.insert(id, PositionSyncMetadata::default());
+    s.insert(id, Vitals::ALIVE);
+
+    id_lookup.inner.insert(id.index().0 as i32, id);
 
     let pose = event.pose;
 

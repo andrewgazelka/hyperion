@@ -34,7 +34,7 @@ pub use init_entity::init_entity;
 pub use init_player::init_player;
 pub use keep_alive::keep_alive;
 pub use kill_all::kill_all;
-pub use pkt_attack::pkt_attack;
+pub use pkt_attack::{check_immunity, pkt_attack_entity, pkt_attack_player};
 pub use pkt_hand_swing::pkt_hand_swing;
 pub use player_detect_mob_hits::player_detect_mob_hits;
 pub use player_join_world::player_join_world;

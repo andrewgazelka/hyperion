@@ -5,7 +5,7 @@ use fxhash::FxHashMap;
 
 /// See [`crate::singleton::player_uuid_lookup`].
 #[derive(Component, Default, Debug)]
-pub struct PlayerIdLookup {
+pub struct EntityIdLookup {
     /// The UUID of all players
     pub inner: FxHashMap<i32, EntityId>,
 }

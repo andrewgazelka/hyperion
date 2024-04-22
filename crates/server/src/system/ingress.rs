@@ -32,6 +32,7 @@ use crate::{
         SwingArm,
     },
     net::{Fd, IoBuf, Packets, MINECRAFT_VERSION, PROTOCOL_VERSION},
+    singleton::player_id_lookup::EntityIdLookup,
     system::ingress::player_packet_buffer::DecodeBuffer,
 };
 
@@ -56,10 +57,12 @@ pub type IngressSender<'a> = Sender<
 
 // The `Receiver<Tick>` parameter tells our handler to listen for the `Tick` event.
 #[instrument(skip_all, level = "trace")]
+#[allow(clippy::too_many_arguments, reason = "todo")]
 pub fn ingress(
     gametick: ReceiverMut<Gametick>,
     mut fd_lookup: Single<&mut FdLookup>,
     global: Single<&mut Global>,
+    id_lookup: Single<&EntityIdLookup>,
     mut server: Single<&mut Server>,
     mut players: Fetcher<(
         &mut LoginState,
@@ -148,7 +151,14 @@ pub fn ingress(
                             }
 
                             if let Some(pose) = &mut pose {
-                                crate::packets::switch(frame, &global, &mut sender, pose).unwrap();
+                                crate::packets::switch(
+                                    frame,
+                                    &global,
+                                    &mut sender,
+                                    pose,
+                                    &id_lookup,
+                                )
+                                .unwrap();
                             }
                         }
                     }

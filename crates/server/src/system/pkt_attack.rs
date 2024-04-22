@@ -9,58 +9,78 @@ use crate::{
 };
 
 #[derive(Query)]
-pub struct AttackQuery<'a> {
+pub struct AttackPlayerQuery<'a> {
     id: EntityId,
-    pose: &'a FullEntityPose,
-    reaction: &'a mut EntityReaction,
     packets: &'a mut Packets,
-    immunity: &'a mut ImmuneStatus,
-    vitals: &'a mut Vitals,
     _player: With<&'static Player>,
 }
 
+#[derive(Query)]
+pub struct AttackEntityQuery<'a> {
+    id: EntityId,
+    pose: &'a FullEntityPose,
+    reaction: &'a mut EntityReaction,
+    immunity: &'a mut ImmuneStatus,
+    vitals: &'a mut Vitals,
+}
+
 #[instrument(skip_all, level = "trace")]
-pub fn pkt_attack(
+// Check immunity of the entity being attacked
+pub fn check_immunity(
     global: Single<&crate::global::Global>,
-    attack: Receiver<AttackEntity, AttackQuery>,
-    mut broadcast: Single<&mut Broadcast>,
-    mut io: Single<&mut IoBuf>,
+    attack: ReceiverMut<AttackEntity, &ImmuneStatus>,
 ) {
-    let AttackQuery {
+    if attack.query.is_invincible(&global) {
+        EventMut::take(attack.event);
+    }
+}
+
+/// send Packet to player encoder
+#[instrument(skip_all, level = "trace")]
+pub fn pkt_attack_player(
+    mut io: Single<&mut IoBuf>,
+    attack: Receiver<AttackEntity, AttackPlayerQuery>,
+) {
+    let AttackPlayerQuery {
         id: entity_id,
-        pose,
-        reaction,
         packets,
-        immunity,
-        vitals,
         _player,
     } = attack.query;
 
-    if immunity.is_invincible(&global) {
-        return;
-    }
+    let mut damage_broadcast = get_package(entity_id);
+    // local is id 0
+    damage_broadcast.entity_id = VarInt(0);
+    let mut scratch = Scratch::new();
 
-    let event = attack.event;
+    packets
+        .append(&damage_broadcast, &mut io, &mut scratch)
+        .unwrap();
+}
 
-    // todo
-    let mut damage_broadcast = play::EntityDamageS2c {
-        entity_id: VarInt(entity_id.index().0 as i32),
-        source_type_id: VarInt::default(),
-        source_cause_id: VarInt::default(),
-        source_direct_id: VarInt::default(),
-        source_pos: None,
-    };
+/// Handle Damage and knockback
+#[instrument(skip_all, level = "trace")]
+pub fn pkt_attack_entity(
+    global: Single<&crate::global::Global>,
+    attack: Receiver<AttackEntity, AttackEntityQuery>,
+    mut broadcast: Single<&mut Broadcast>,
+    mut io: Single<&mut IoBuf>,
+) {
+    let AttackEntityQuery {
+        id: entity_id,
+        pose,
+        reaction,
+        vitals,
+        immunity,
+    } = attack.query;
+
+    let damage_broadcast = get_package(entity_id);
 
     let mut scratch = Scratch::new();
     broadcast
         .append(&damage_broadcast, &mut io, &mut scratch)
         .unwrap();
 
-    // local is id 0
-    damage_broadcast.entity_id = VarInt(0);
-    packets
-        .append(&damage_broadcast, &mut io, &mut scratch)
-        .unwrap();
+    let event = attack.event;
 
     let this = pose.position;
     let other = event.from_pos;
@@ -88,4 +108,16 @@ pub fn pkt_attack(
     }
 
     vitals.hurt(&global, 1.0, immunity);
+}
+
+#[instrument(skip_all, level = "trace")]
+fn get_package(id: EntityId) -> play::EntityDamageS2c {
+    // todo
+    play::EntityDamageS2c {
+        entity_id: VarInt(id.index().0 as i32),
+        source_type_id: VarInt::default(),
+        source_cause_id: VarInt::default(),
+        source_direct_id: VarInt::default(),
+        source_pos: None,
+    }
 }

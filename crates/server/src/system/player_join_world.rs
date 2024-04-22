@@ -36,7 +36,7 @@ use crate::{
     events::{PlayerJoinWorld, Scratch, ScratchBuffer},
     global::Global,
     net::{Broadcast, IoBuf, Packets},
-    singleton::{player_id_lookup::PlayerIdLookup, player_uuid_lookup::PlayerUuidLookup},
+    singleton::{player_id_lookup::EntityIdLookup, player_uuid_lookup::PlayerUuidLookup},
     system::init_entity::spawn_packet,
 };
 
@@ -76,7 +76,7 @@ pub fn player_join_world(
     global: Single<&Global>,
     players: Fetcher<PlayerQuery>,
     mut uuid_lookup: Single<&mut PlayerUuidLookup>,
-    mut id_lookup: Single<&mut PlayerIdLookup>,
+    mut id_lookup: Single<&mut EntityIdLookup>,
     mut broadcast: Single<&mut Broadcast>,
     mut io: Single<&mut IoBuf>,
 ) {
