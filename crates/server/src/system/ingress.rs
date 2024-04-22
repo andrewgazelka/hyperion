@@ -29,8 +29,8 @@ mod player_packet_buffer;
 use crate::{
     components::{FullEntityPose, LoginState},
     events::{
-        AttackEntity, Gametick, InitEntity, KickPlayer, KillAllEntities, PlayerInit, ScratchBuffer,
-        SwingArm,
+        AttackEntity, BumpScratch, InitEntity, KickPlayer, KillAllEntities, PlayerInit,
+        ScratchBuffer, SwingArm,
     },
     net::{Fd, IoBuf, Packets, MINECRAFT_VERSION, PROTOCOL_VERSION},
     singleton::player_id_lookup::EntityIdLookup,
@@ -57,22 +57,32 @@ pub type IngressSender<'a> = Sender<
 >;
 
 #[derive(Event)]
-struct AddPlayer {
+pub struct AddPlayer {
     fd: Fd,
 }
 
 #[derive(Event)]
-struct RemovePlayer {
+pub struct RemovePlayer {
     fd: Fd,
 }
 
+// todo: do we really need three different lifetimes here?
 #[derive(Event)]
-struct RecvData<'a> {
-    pub fd: Fd,
-    data: &'a [u8],
+pub struct RecvData<'a, 'b, 'c> {
+    fd: Fd,
+    data: &'c [u8],
+    scratch: &'b mut BumpScratch<'a>,
 }
 
-pub fn generate_events(world: &mut World, server: &mut Server) {
+// todo: remove
+#[expect(
+    clippy::non_send_fields_in_send_ty,
+    reason = "todo we will remove this"
+)]
+unsafe impl<'a, 'b, 'c> Send for RecvData<'a, 'b, 'c> {}
+unsafe impl<'a, 'b, 'c> Sync for RecvData<'a, 'b, 'c> {}
+
+pub fn generate_ingress_events(world: &mut World, server: &mut Server, scratch: &mut BumpScratch) {
     server
         .drain(|event| match event {
             ServerEvent::AddPlayer { fd } => {
@@ -82,7 +92,7 @@ pub fn generate_events(world: &mut World, server: &mut Server) {
                 world.send(RemovePlayer { fd });
             }
             ServerEvent::RecvData { fd, data } => {
-                world.send(RecvData { fd, data });
+                world.send(RecvData { fd, data, scratch });
             }
         })
         .unwrap();
@@ -91,12 +101,54 @@ pub fn generate_events(world: &mut World, server: &mut Server) {
 // The `Receiver<Tick>` parameter tells our handler to listen for the `Tick` event.
 #[instrument(skip_all, level = "trace")]
 #[allow(clippy::too_many_arguments, reason = "todo")]
-pub fn ingress(
-    gametick: ReceiverMut<Gametick>,
+pub fn add_player(
+    r: ReceiverMut<AddPlayer>,
     mut fd_lookup: Single<&mut FdLookup>,
-    global: Single<&mut Global>,
-    id_lookup: Single<&EntityIdLookup>,
-    mut server: Single<&mut Server>,
+    mut sender: IngressSender,
+) {
+    let event = r.event;
+
+    let new_player = sender.spawn();
+    sender.insert(new_player, LoginState::Handshake);
+    sender.insert(new_player, DecodeBuffer::default());
+
+    sender.insert(new_player, Packets::default());
+    let fd = event.fd;
+    sender.insert(new_player, fd);
+
+    fd_lookup.insert(fd, new_player);
+    info!("got a player with fd {:?}", fd);
+}
+
+// The `Receiver<Tick>` parameter tells our handler to listen for the `Tick` event.
+#[instrument(skip_all, level = "trace")]
+#[allow(clippy::too_many_arguments, reason = "todo")]
+pub fn remove_player(
+    r: ReceiverMut<RemovePlayer>,
+    mut fd_lookup: Single<&mut FdLookup>,
+    mut sender: IngressSender,
+) {
+    let event = r.event;
+
+    let fd = event.fd;
+    let Some(id) = fd_lookup.remove(&fd) else {
+        warn!(
+            "tried to remove player with fd {:?} but it seemed to already be removed",
+            fd
+        );
+        return;
+    };
+
+    sender.despawn(id);
+
+    info!("removed a player with fd {:?}", fd);
+}
+
+pub fn recv_data(
+    r: ReceiverMut<RecvData>,
+    mut fd_lookup: Single<&mut FdLookup>,
+    mut sender: IngressSender,
+    global: Single<&Global>,
     mut players: Fetcher<(
         &mut LoginState,
         &mut DecodeBuffer,
@@ -104,109 +156,73 @@ pub fn ingress(
         &Fd,
         Option<&mut FullEntityPose>,
     )>,
+    id_lookup: Single<&EntityIdLookup>,
     mut io: Single<&mut IoBuf>,
-    mut sender: IngressSender,
 ) {
-    let mut gametick = gametick.event;
+    let mut event = r.event;
 
-    // todo why &mut * needed
-    let scratch = &mut *gametick.scratch;
+    let fd = event.fd;
+    let data = event.data;
+    // todo: again why do we need &mut * ... also seems to borrow the entire event sadly
+    let scratch = &mut *event.scratch;
 
-    server
-        .drain(|event| match event {
-            ServerEvent::AddPlayer { fd } => {
-                let new_player = sender.spawn();
-                sender.insert(new_player, LoginState::Handshake);
-                sender.insert(new_player, DecodeBuffer::default());
+    trace!("got data: {data:?}");
+    let Some(&id) = fd_lookup.get(&fd) else {
+        warn!("got data for fd that is not in the fd lookup: {fd:?}");
+        return;
+    };
 
-                sender.insert(new_player, Packets::default());
-                sender.insert(new_player, fd);
+    let (login_state, decoder, packets, _, mut pose) =
+        players.get_mut(id).expect("player with fd not found");
 
-                fd_lookup.insert(fd, new_player);
+    decoder.queue_slice(data);
 
-                info!("got a player with fd {:?}", fd);
+    while let Some(frame) = decoder.try_next_packet().unwrap() {
+        match *login_state {
+            LoginState::Handshake => process_handshake(login_state, &frame).unwrap(),
+            LoginState::Status => {
+                process_status(login_state, &frame, packets, scratch, &mut io).unwrap();
             }
-            ServerEvent::RemovePlayer { fd } => {
+            LoginState::Terminate => {
+                // todo: does this properly terminate the connection? I don't think so probably
                 let Some(id) = fd_lookup.remove(&fd) else {
-                    warn!(
-                        "tried to remove player with fd {:?} but it seemed to already be removed",
-                        fd
-                    );
                     return;
                 };
 
                 sender.despawn(id);
-
-                info!("removed a player with fd {:?}", fd);
             }
-            ServerEvent::RecvData { fd, data } => {
-                trace!("got data: {data:?}");
-                let Some(&id) = fd_lookup.get(&fd) else {
-                    warn!("got data for fd that is not in the fd lookup: {fd:?}");
-                    return;
-                };
-
-                let (login_state, decoder, packets, _, mut pose) =
-                    players.get_mut(id).expect("player with fd not found");
-
-                decoder.queue_slice(data);
-
-                while let Some(frame) = decoder.try_next_packet().unwrap() {
-                    match *login_state {
-                        LoginState::Handshake => process_handshake(login_state, &frame).unwrap(),
-                        LoginState::Status => {
-                            process_status(login_state, &frame, packets, scratch, &mut io).unwrap();
-                        }
-                        LoginState::Terminate => {
-                            // todo: does this properly terminate the connection? I don't think so probably
-                            let Some(id) = fd_lookup.remove(&fd) else {
-                                return;
-                            };
-
-                            sender.despawn(id);
-                        }
-                        LoginState::Login => {
-                            process_login(
-                                id,
-                                login_state,
-                                &frame,
-                                packets,
-                                decoder,
-                                &global,
-                                &mut io,
-                                scratch,
-                                &mut sender,
-                            )
-                            .unwrap();
-                        }
-                        LoginState::TransitioningPlay { .. } | LoginState::Play => {
-                            if let LoginState::TransitioningPlay {
-                                packets_to_transition,
-                            } = login_state
-                            {
-                                if *packets_to_transition == 0 {
-                                    *login_state = LoginState::Play;
-                                } else {
-                                    *packets_to_transition -= 1;
-                                }
-                            }
-
-                            if let Some(pose) = &mut pose {
-                                crate::packets::switch(
-                                    frame,
-                                    &global,
-                                    &mut sender,
-                                    pose,
-                                    &id_lookup,
-                                )
-                                .unwrap();
-                            }
-                        }
+            LoginState::Login => {
+                process_login(
+                    id,
+                    login_state,
+                    &frame,
+                    packets,
+                    decoder,
+                    &global,
+                    &mut io,
+                    scratch,
+                    &mut sender,
+                )
+                .unwrap();
+            }
+            LoginState::TransitioningPlay { .. } | LoginState::Play => {
+                if let LoginState::TransitioningPlay {
+                    packets_to_transition,
+                } = login_state
+                {
+                    if *packets_to_transition == 0 {
+                        *login_state = LoginState::Play;
+                    } else {
+                        *packets_to_transition -= 1;
                     }
                 }
+
+                if let Some(pose) = &mut pose {
+                    crate::packets::switch(frame, &global, &mut sender, pose, &id_lookup).unwrap();
+                }
             }
-        })
-        .unwrap();
+        }
+    }
 
     // this is important so broadcast order is not before player gets change to play
 }
