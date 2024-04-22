@@ -1,6 +1,7 @@
 //! All the networking related code.
 
 use std::{
+    collections::VecDeque,
     hash::{Hash, Hasher},
     net::ToSocketAddrs,
 };
@@ -65,9 +66,9 @@ pub enum ServerEvent<'a> {
     AddPlayer { fd: Fd },
     RemovePlayer { fd: Fd },
     RecvData { fd: Fd, data: &'a [u8] },
+    SentData { fd: Fd },
 }
 
-#[derive(Component)]
 pub struct Server {
     #[cfg(target_os = "linux")]
     server: linux::LinuxServer,
@@ -111,18 +112,16 @@ impl ServerDef for Server {
     fn write_all<'a>(
         &mut self,
         global: &mut Global,
-        broadcast: &'a [PacketWriteInfo],
         writers: impl Iterator<Item = RefreshItems<'a>>,
     ) {
-        self.server.write_all(global, broadcast, writers);
+        self.server.write_all(global, writers);
     }
 }
 
 #[allow(unused, reason = "this is used on linux")]
 pub struct RefreshItems<'a> {
-    pub write: &'a [PacketWriteInfo],
+    pub write: &'a mut VecDeque<PacketWriteInfo>,
     pub fd: Fd,
-    pub broadcast: bool,
 }
 
 pub trait ServerDef {
@@ -137,7 +136,6 @@ pub trait ServerDef {
     fn write_all<'a>(
         &mut self,
         global: &mut Global,
-        broadcast: &'a [PacketWriteInfo],
         writers: impl Iterator<Item = RefreshItems<'a>>,
     );
 
@@ -165,7 +163,6 @@ impl ServerDef for NotImplemented {
     fn write_all<'a>(
         &mut self,
         _global: &mut Global,
-        _broadcast: &'a [PacketWriteInfo],
         _writers: impl Iterator<Item = RefreshItems<'a>>,
     ) {
         unimplemented!("not implemented; use Linux")
@@ -218,12 +215,40 @@ pub struct Broadcast(Packets);
 /// Stores indices of packets
 #[derive(Component, Default)]
 pub struct Packets {
-    to_write: Vec<PacketWriteInfo>,
+    to_write: VecDeque<PacketWriteInfo>,
+    number_sending: usize,
 }
 
 impl Packets {
-    pub fn to_write(&self) -> &[PacketWriteInfo] {
+    pub fn get_write_mut(&mut self) -> &mut VecDeque<PacketWriteInfo> {
+        &mut self.to_write
+    }
+
+    #[allow(dead_code, reason = "this will probably be used in the future")]
+    pub const fn get_write(&self) -> &VecDeque<PacketWriteInfo> {
         &self.to_write
+    }
+
+    pub fn can_send(&self) -> bool {
+        self.number_sending == 0 && !self.to_write.is_empty()
+    }
+
+    pub fn set_successfully_sent(&mut self) {
+        debug_assert!(
+            self.number_sending > 0,
+            "somehow number sending is 0 even though we just marked a successful send"
+        );
+
+        self.number_sending -= 1;
+    }
+
+    pub fn prepare_for_send(&mut self) {
+        debug_assert!(
+            self.number_sending == 0,
+            "number sending is not 0 even though we are preparing for send"
+        );
+        let count = self.to_write.len();
+        self.number_sending = count;
     }
 
     pub fn clear(&mut self) {
@@ -231,7 +256,7 @@ impl Packets {
     }
 
     fn push(&mut self, writer: PacketWriteInfo) {
-        if let Some(last) = self.to_write.last_mut() {
+        if let Some(last) = self.to_write.back_mut() {
             let start_pointer_if_contiguous = unsafe { last.start_ptr.add(last.len as usize) };
             if start_pointer_if_contiguous == writer.start_ptr {
                 last.len += writer.len;
@@ -239,7 +264,7 @@ impl Packets {
             }
         }
 
-        self.to_write.push(writer);
+        self.to_write.push_back(writer);
     }
 
     pub fn append_pre_compression_packet<P>(
@@ -317,9 +342,9 @@ mod tests {
             .append_pre_compression_packet(&pkt, &mut buf, &mut scratch)
             .unwrap();
 
-        assert_eq!(packets.to_write().len(), 1);
+        assert_eq!(packets.get_write().len(), 1);
 
-        let len = packets.to_write()[0].len;
+        let len = packets.get_write()[0].len;
 
         assert_eq!(len, 4); // Packet length for an empty LoginHelloC2s
     }
@@ -337,8 +362,8 @@ mod tests {
         let mut scratch = Scratch::from(&bump);
         packets.append(&pkt, &mut buf, &mut scratch).unwrap();
 
-        assert_eq!(packets.to_write().len(), 1);
-        let len = packets.to_write()[0].len;
+        assert_eq!(packets.get_write().len(), 1);
+        let len = packets.get_write()[0].len;
         assert_eq!(len, 4); // Packet length for an empty LoginHelloC2s
     }
 
@@ -350,9 +375,9 @@ mod tests {
         let data = b"Hello, world!";
         packets.append_raw(data, &mut buf);
 
-        assert_eq!(packets.to_write().len(), 1);
+        assert_eq!(packets.get_write().len(), 1);
 
-        let len = packets.to_write()[0].len;
+        let len = packets.get_write()[0].len;
         assert_eq!(len, data.len() as u32);
     }
 
@@ -370,10 +395,10 @@ mod tests {
         let mut scratch = Scratch::from(&bump);
 
         packets.append(&pkt, &mut buf, &mut scratch).unwrap();
-        assert_eq!(packets.to_write().len(), 1);
+        assert_eq!(packets.get_write().len(), 1);
 
         packets.clear();
-        assert_eq!(packets.to_write().len(), 0);
+        assert_eq!(packets.get_write().len(), 0);
     }
 
     #[test]
@@ -400,9 +425,9 @@ mod tests {
             .append_pre_compression_packet(&pkt2, &mut buf, &mut scratch)
             .unwrap();
 
-        assert_eq!(packets.to_write().len(), 1);
+        assert_eq!(packets.get_write().len(), 1);
 
-        let len = packets.to_write()[0].len;
+        let len = packets.get_write()[0].len;
         assert_eq!(len, 8); // Combined length of both packets
     }
 }

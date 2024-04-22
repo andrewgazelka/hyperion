@@ -9,19 +9,11 @@
 
 //! <https://wiki.vg/index.php?title=Protocol&oldid=18375>
 
-pub mod def;
-
 use std::str::FromStr;
 
 use anyhow::{bail, ensure};
 use bvh::aabb::Aabb;
-use evenio::{
-    entity::EntityId,
-    fetch::Fetcher,
-    query::{Query, With},
-};
-use tracing::{debug, info};
-use tracing_subscriber::filter::targets;
+use evenio::query::Query;
 use valence_protocol::{
     decode::PacketFrame,
     math::Vec3,
@@ -30,17 +22,14 @@ use valence_protocol::{
 };
 
 use crate::{
-    components::{
-        vitals::{Absorption, Regeneration},
-        FullEntityPose, ImmuneStatus, KeepAlive,
-    },
-    events::{AttackEntity, InitEntity, KillAllEntities, SwingArm},
+    components::{FullEntityPose, KeepAlive},
+    events::{AttackEntity, InitEntity, KillAllEntities},
     global::Global,
-    net::IoBuf,
     singleton::player_id_lookup::EntityIdLookup,
-    system::IngressSender,
-    Vitals,
+    system::ingress::IngressSender,
 };
+
+pub mod def;
 
 const fn confirm_teleport(_pkt: &[u8]) {
     // ignore

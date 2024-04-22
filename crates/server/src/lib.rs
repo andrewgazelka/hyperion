@@ -39,6 +39,7 @@ use crate::{
         fd_lookup::FdLookup, player_aabb_lookup::PlayerBoundingBoxes,
         player_id_lookup::EntityIdLookup, player_uuid_lookup::PlayerUuidLookup,
     },
+    system::generate_ingress_events,
 };
 
 pub mod components;
@@ -106,6 +107,8 @@ pub struct Game {
     last_ms_per_tick: VecDeque<f64>,
     /// The tick of the game. This is incremented every 50 ms.
     tick_on: u64,
+
+    server: Server,
 }
 
 impl Game {
@@ -160,7 +163,6 @@ impl Game {
 
         let mut world = World::new();
 
-        let server = world.spawn();
         let mut server_def = Server::new(address)?;
 
         let io_id = world.spawn();
@@ -168,9 +170,12 @@ impl Game {
         io.buf_mut().register(&mut server_def);
 
         world.insert(io_id, io);
-        world.insert(server, server_def);
 
-        world.add_handler(system::ingress);
+        world.add_handler(system::ingress::add_player);
+        world.add_handler(system::ingress::remove_player);
+        world.add_handler(system::ingress::recv_data);
+        world.add_handler(system::ingress::send_data);
+
         world.add_handler(system::init_player);
         world.add_handler(system::player_join_world);
         world.add_handler(system::player_kick);
@@ -226,6 +231,7 @@ impl Game {
             last_ticks: VecDeque::default(),
             last_ms_per_tick: VecDeque::default(),
             tick_on: 0,
+            server: server_def,
         };
 
         game.last_ticks.push_back(Instant::now());
@@ -298,11 +304,15 @@ impl Game {
 
         let mut scratch = events::Scratch::from(&bump);
 
+        generate_ingress_events(&mut self.world, &mut self.server, &mut scratch);
+
         self.world.send(Gametick {
             bump: &bump,
             scratch: &mut scratch, // todo: any problem with ref vs val
         });
-        self.world.send(Egress);
+
+        let server = &mut self.server;
+        self.world.send(Egress { server });
 
         #[expect(
             clippy::cast_precision_loss,

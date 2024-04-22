@@ -16,7 +16,7 @@ use io_uring::{
 };
 use libc::iovec;
 use socket2::Socket;
-use tracing::{error, info, trace, warn};
+use tracing::{error, info, instrument, trace, warn};
 
 use super::RefreshItems;
 use crate::{
@@ -221,120 +221,108 @@ impl ServerDef for LinuxServer {
     }
 
     /// `f` should never panic
+    #[instrument(skip_all, level = "trace")]
     fn drain(&mut self, mut f: impl FnMut(ServerEvent)) -> std::io::Result<()> {
-        loop {
-            let (submitter, mut submission, mut completion) = self.uring.split();
-            completion.sync();
-            if completion.overflow() > 0 {
-                error!(
-                    "the io_uring completion queue overflowed, and some connection errors are \
-                     likely to occur; consider increasing COMPLETION_QUEUE_SIZE to avoid this"
-                );
-            }
+        let (_submitter, mut submission, mut completion) = self.uring.split();
+        completion.sync();
+        if completion.overflow() > 0 {
+            error!(
+                "the io_uring completion queue overflowed, and some connection errors are likely \
+                 to occur; consider increasing COMPLETION_QUEUE_SIZE to avoid this"
+            );
+        }
 
-            for event in completion {
-                let result = event.result();
-                match event.user_data() {
-                    0 => {
-                        if event.flags() & IORING_CQE_F_MORE == 0 {
-                            warn!("multishot accept rerequested");
-                            Self::request_accept(&mut submission);
-                        }
-
-                        if result < 0 {
-                            error!("there was an error in accept: {}", result);
-                            continue;
-                        }
-
-                        #[expect(clippy::cast_sign_loss, reason = "we are checking if < 0")]
-                        let fd = Fixed(result as u32);
-                        Self::request_recv(&mut submission, fd);
-                        f(ServerEvent::AddPlayer { fd: Fd(fd) });
+        for event in completion {
+            let result = event.result();
+            match event.user_data() {
+                0 => {
+                    if event.flags() & IORING_CQE_F_MORE == 0 {
+                        warn!("multishot accept rerequested");
+                        Self::request_accept(&mut submission);
                     }
-                    1 => {
-                        if result < 0 {
-                            error!("there was an error in socket shutdown: {}", result);
-                        }
+
+                    if result < 0 {
+                        error!("there was an error in accept: {}", result);
+                        continue;
                     }
-                    write if write & SEND_MARKER != 0 => {
-                        let fd = Fixed((write & !SEND_MARKER) as u32);
 
-                        self.pending_writes -= 1;
-
-                        match result.cmp(&0) {
-                            cmp::Ordering::Less => {
-                                error!(
-                                    "there was an error in write, shutting down socket: {}",
-                                    result
-                                );
-                                Self::shutdown(&mut submission, fd);
-                            }
-                            cmp::Ordering::Equal => {
-                                // This should never happen as long as write is never passed an empty buffer:
-                                // https://stackoverflow.com/questions/5656628/what-should-i-do-when-writefd-buf-count-returns-0
-                                unreachable!("write returned 0 which should not be possible");
-                            }
-                            cmp::Ordering::Greater => {
-                                // Write operation completed successfully
-                                // TODO: Check that write wasn't truncated
-                                trace!("successful write response");
-                            }
-                        }
-                    }
-                    read if read & RECV_MARKER != 0 => {
-                        let fd = Fixed((read & !RECV_MARKER) as u32);
-                        let disconnected = result == 0;
-
-                        if event.flags() & IORING_CQE_F_MORE == 0 && !disconnected {
-                            trace!("socket recv rerequested");
-                            Self::request_recv(&mut submission, fd);
-                        }
-
-                        if disconnected {
-                            info!("disconnected during recv");
-                            f(ServerEvent::RemovePlayer { fd: Fd(fd) });
-                        } else if result < 0 {
-                            // -104
-                            error!("there was an error in recv: {}", result);
-                            continue;
-                        } else {
-                            #[expect(clippy::cast_sign_loss, reason = "we are checking if < 0")]
-                            let bytes_received = result as usize;
-                            let buffer_id =
-                                buffer_select(event.flags()).expect("there should be a buffer");
-                            assert!((buffer_id as usize) < C2S_RING_BUFFER_COUNT);
-                            // SAFETY: as_mut_ptr doesn't take a reference to the slice in c2s_buffer.
-                            // buffer_id is in bounds of c2s_buffer, so all the
-                            // safety requirements for add is met.
-                            let buffer_ptr =
-                                unsafe { self.c2s_buffer.as_mut_ptr().add(buffer_id as usize) };
-                            // SAFETY: buffer_id is in bounds, so buffer_ptr is valid
-                            let buffer = unsafe { &(*buffer_ptr)[..bytes_received] };
-                            self.c2s_local_tail = self.c2s_local_tail.wrapping_add(1);
-                            f(ServerEvent::RecvData {
-                                fd: Fd(fd),
-                                data: buffer,
-                            });
-                        }
-                    }
-                    _ => {
-                        panic!("unexpected event: {event:?}");
+                    #[expect(clippy::cast_sign_loss, reason = "we are checking if < 0")]
+                    let fd = Fixed(result as u32);
+                    Self::request_recv(&mut submission, fd);
+                    f(ServerEvent::AddPlayer { fd: Fd(fd) });
+                }
+                1 => {
+                    if result < 0 {
+                        error!("there was an error in socket shutdown: {}", result);
                     }
                 }
-            }
+                write if write & SEND_MARKER != 0 => {
+                    let fd = Fixed((write & !SEND_MARKER) as u32);
 
-            if self.pending_writes == 0 {
-                break;
+                    self.pending_writes -= 1;
+
+                    match result.cmp(&0) {
+                        cmp::Ordering::Less => {
+                            error!(
+                                "there was an error in write, shutting down socket: {}",
+                                result
+                            );
+                            Self::shutdown(&mut submission, fd);
+                        }
+                        cmp::Ordering::Equal => {
+                            // This should never happen as long as write is never passed an empty buffer:
+                            // https://stackoverflow.com/questions/5656628/what-should-i-do-when-writefd-buf-count-returns-0
+                            unreachable!("write returned 0 which should not be possible");
+                        }
+                        cmp::Ordering::Greater => {
+                            // Write operation completed successfully
+                            // TODO: Check that write wasn't truncated
+                            trace!("successful write response");
+
+                            f(ServerEvent::SentData { fd: Fd(fd) });
+                        }
+                    }
+                }
+                read if read & RECV_MARKER != 0 => {
+                    let fd = Fixed((read & !RECV_MARKER) as u32);
+                    let disconnected = result == 0;
+
+                    if event.flags() & IORING_CQE_F_MORE == 0 && !disconnected {
+                        trace!("socket recv rerequested");
+                        Self::request_recv(&mut submission, fd);
+                    }
+
+                    if disconnected {
+                        info!("disconnected during recv");
+                        f(ServerEvent::RemovePlayer { fd: Fd(fd) });
+                    } else if result < 0 {
+                        // -104
+                        error!("there was an error in recv: {}", result);
+                        continue;
+                    } else {
+                        #[expect(clippy::cast_sign_loss, reason = "we are checking if < 0")]
+                        let bytes_received = result as usize;
+                        let buffer_id =
+                            buffer_select(event.flags()).expect("there should be a buffer");
+                        assert!((buffer_id as usize) < C2S_RING_BUFFER_COUNT);
+                        // SAFETY: as_mut_ptr doesn't take a reference to the slice in c2s_buffer.
+                        // buffer_id is in bounds of c2s_buffer, so all the
+                        // safety requirements for add is met.
+                        let buffer_ptr =
+                            unsafe { self.c2s_buffer.as_mut_ptr().add(buffer_id as usize) };
+                        // SAFETY: buffer_id is in bounds, so buffer_ptr is valid
+                        let buffer = unsafe { &(*buffer_ptr)[..bytes_received] };
+                        self.c2s_local_tail = self.c2s_local_tail.wrapping_add(1);
+                        f(ServerEvent::RecvData {
+                            fd: Fd(fd),
+                            data: buffer,
+                        });
+                    }
+                }
+                _ => {
+                    panic!("unexpected event: {event:?}");
+                }
             }
-            let start = std::time::Instant::now();
-            // Wait for another event to finish and then check if all writes are finished by
-            // looping. Waiting in here should have a negligible impact since all writes should
-            // be nonblocking.
-            submitter.submit_and_wait(1)?;
-            warn!(
-                "{:?} was spent waiting for another event since there's pending writes",
-                start.elapsed()
-            );
         }
 
         // SAFETY: This is the first entry of the buffer ring
@@ -357,35 +345,19 @@ impl ServerDef for LinuxServer {
     fn write_all<'a>(
         &mut self,
         _global: &mut Global,
-        broadcast: &'a [PacketWriteInfo],
         writers: impl Iterator<Item = RefreshItems<'a>>,
     ) {
         writers.for_each(|item| {
-            let RefreshItems {
-                write,
-                fd,
-                broadcast: do_broadcast,
-            } = item;
+            let RefreshItems { write, fd } = item;
 
             let fd = fd.0;
 
-            for elem in write {
+            for elem in write.iter() {
                 let PacketWriteInfo { start_ptr, len } = *elem;
-
-                trace!("writing packet: {start_ptr:?}, {len}");
                 self.write_raw(fd, start_ptr, len, 0);
             }
 
-            // // send broadcasts later
-            if do_broadcast {
-                for elem in broadcast {
-                    let PacketWriteInfo { start_ptr, len } = *elem;
-
-                    trace!("writing broadcast packet: {start_ptr:?}, {len}");
-
-                    self.write_raw(fd, start_ptr, len, 0);
-                }
-            }
+            write.clear();
         });
     }
 
