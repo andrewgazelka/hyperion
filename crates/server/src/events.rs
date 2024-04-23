@@ -127,6 +127,7 @@ impl<A: Allocator + Debug> ScratchBuffer for Scratch<A> {
     type Allocator = A;
 
     fn obtain(&mut self) -> &mut Vec<u8, Self::Allocator> {
+        self.inner.clear();
         &mut self.inner
     }
 }
@@ -138,14 +139,6 @@ impl<'a> From<&'a Bump> for BumpScratch<'a> {
         Self {
             inner: Vec::with_capacity_in(MAX_PACKET_SIZE, bump),
         }
-    }
-}
-
-impl<'a> BumpScratch<'a> {
-    pub fn obtain(&mut self) -> &mut Vec<u8, &'a Bump> {
-        // clear scratch before we get
-        self.inner.clear();
-        &mut self.inner
     }
 }
 
