@@ -27,12 +27,13 @@ use crate::{
 mod player_packet_buffer;
 
 use crate::{
-    components::{FullEntityPose, LoginState},
+    components::{FullEntityPose, ImmuneStatus, KeepAlive, LoginState, Vitals},
     events::{
         AttackEntity, BumpScratch, InitEntity, KickPlayer, KillAllEntities, PlayerInit,
         ScratchBuffer, SwingArm,
     },
     net::{Fd, IoBuf, Packets, MINECRAFT_VERSION, PROTOCOL_VERSION},
+    packets::PacketSwitchQuery,
     singleton::player_id_lookup::EntityIdLookup,
     system::ingress::player_packet_buffer::DecodeBuffer,
 };
@@ -193,6 +194,9 @@ pub fn recv_data(
         &mut Packets,
         &Fd,
         Option<&mut FullEntityPose>,
+        Option<&mut Vitals>,
+        Option<&mut KeepAlive>,
+        Option<&mut ImmuneStatus>,
     )>,
     id_lookup: Single<&EntityIdLookup>,
     mut io: Single<&mut IoBuf>,
@@ -210,7 +214,7 @@ pub fn recv_data(
         return;
     };
 
-    let (login_state, decoder, packets, _, mut pose) =
+    let (login_state, decoder, packets, _, mut pose, mut vitals, mut keep_alive, mut immunity) =
         players.get_mut(id).expect("player with fd not found");
 
     decoder.queue_slice(data);
@@ -255,8 +259,19 @@ pub fn recv_data(
                     }
                 }
 
-                if let Some(pose) = &mut pose {
-                    crate::packets::switch(frame, &global, &mut sender, pose, &id_lookup).unwrap();
+                if let Some((pose, vitals, keep_alive, immunity)) =
+                    itertools::izip!(&mut pose, &mut vitals, &mut keep_alive, &mut immunity).next()
+                {
+                    let mut query = PacketSwitchQuery {
+                        id,
+                        pose,
+                        vitals,
+                        keep_alive,
+                        immunity,
+                    };
+
+                    crate::packets::switch(frame, &global, &mut sender, &id_lookup, &mut query)
+                        .unwrap();
                 }
             }
         }

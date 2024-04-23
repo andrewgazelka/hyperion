@@ -13,7 +13,7 @@ use std::str::FromStr;
 
 use anyhow::{bail, ensure};
 use bvh::aabb::Aabb;
-use evenio::query::Query;
+use evenio::{entity::EntityId, query::Query};
 use valence_protocol::{
     decode::PacketFrame,
     math::Vec3,
@@ -22,8 +22,8 @@ use valence_protocol::{
 };
 
 use crate::{
-    components::{FullEntityPose, KeepAlive},
-    events::{AttackEntity, InitEntity, KillAllEntities},
+    components::{FullEntityPose, ImmuneStatus, KeepAlive, Vitals},
+    events::{AttackEntity, InitEntity, KillAllEntities, SwingArm},
     global::Global,
     singleton::player_id_lookup::EntityIdLookup,
     system::ingress::IngressSender,
@@ -273,24 +273,24 @@ fn chat_command(
     Ok(())
 }
 
-// fn hand_swing(
-//     mut data: &[u8],
-//     // query: &PacketSwitchQuery,
-//     sender: &mut IngressSender,
-// ) -> anyhow::Result<()> {
-//     let packet = play::HandSwingC2s::decode(&mut data)?;
-//
-//     let packet = packet.hand;
-//
-//     let event = SwingArm {
-//         target: query.id,
-//         hand: packet,
-//     };
-//
-//     sender.send(event);
-//
-//     Ok(())
-// }
+fn hand_swing(
+    mut data: &[u8],
+    query: &PacketSwitchQuery,
+    sender: &mut IngressSender,
+) -> anyhow::Result<()> {
+    let packet = play::HandSwingC2s::decode(&mut data)?;
+
+    let packet = packet.hand;
+
+    let event = SwingArm {
+        target: query.id,
+        hand: packet,
+    };
+
+    sender.send(event);
+
+    Ok(())
+}
 
 fn player_interact_entity(
     mut data: &[u8],
@@ -314,45 +314,42 @@ fn player_interact_entity(
     Ok(())
 }
 
-// #[derive(Query)]
-// pub struct PacketSwitchQuery<'a> {
-//     id: EntityId,
-//     pose: &'a mut FullEntityPose,
-//     vitals: &'a mut Vitals,
-//     encoder: &'a mut LocalEncoder,
-//     keep_alive: &'a mut KeepAlive,
-//     immunity: &'a mut ImmuneStatus,
-// }
-//
+pub struct PacketSwitchQuery<'a> {
+    pub id: EntityId,
+    pub pose: &'a mut FullEntityPose,
+    pub vitals: &'a mut Vitals,
+    pub keep_alive: &'a mut KeepAlive,
+    pub immunity: &'a mut ImmuneStatus,
+}
+
 pub fn switch(
     raw: PacketFrame,
     global: &Global,
     sender: &mut IngressSender,
-    player_pose: &mut FullEntityPose,
     id_lookup: &EntityIdLookup,
-    //  query: PacketSwitchQuery,
+    query: &mut PacketSwitchQuery,
 ) -> anyhow::Result<()> {
     let packet_id = raw.id;
     let data = raw.body;
     let data = &*data;
 
     match packet_id {
-        // play::HandSwingC2s::ID => hand_swing(data, &query, sender)?,
-        // play::TeleportConfirmC2s::ID => confirm_teleport(data),
-        // // play::ClientSettingsC2s::ID => client_settings(data, player)?,
+        play::HandSwingC2s::ID => hand_swing(data, query, sender)?,
+        play::TeleportConfirmC2s::ID => confirm_teleport(data),
+        // play::ClientSettingsC2s::ID => client_settings(data, player)?,
         // play::CustomPayloadC2s::ID => custom_payload(data),
-        play::FullC2s::ID => full(data, player_pose)?,
-        play::PositionAndOnGroundC2s::ID => position_and_on_ground(data, player_pose)?,
-        play::LookAndOnGroundC2s::ID => look_and_on_ground(data, player_pose)?,
+        play::FullC2s::ID => full(data, query.pose)?,
+        play::PositionAndOnGroundC2s::ID => position_and_on_ground(data, query.pose)?,
+        play::LookAndOnGroundC2s::ID => look_and_on_ground(data, query.pose)?,
         // play::ClientCommandC2s::ID => player_command(data),
         // play::UpdatePlayerAbilitiesC2s::ID => update_player_abilities(data)?,
         // play::UpdateSelectedSlotC2s::ID => update_selected_slot(data)?,
         play::PlayerInteractEntityC2s::ID => {
-            player_interact_entity(data, id_lookup, player_pose.position, sender)?;
+            player_interact_entity(data, id_lookup, query.pose.position, sender)?;
         }
         // play::KeepAliveC2s::ID => keep_alive(query.keep_alive)?,
         play::CommandExecutionC2s::ID => {
-            chat_command(data, global, player_pose, sender)?;
+            chat_command(data, global, query.pose, sender)?;
         }
         _ => {
             // info!("unknown packet id: 0x{:02X}", packet_id)
