@@ -174,7 +174,7 @@ impl Game {
         world.add_handler(system::ingress::add_player);
         world.add_handler(system::ingress::remove_player);
         world.add_handler(system::ingress::recv_data);
-        world.add_handler(system::ingress::send_data);
+        world.add_handler(system::ingress::sent_data);
 
         world.add_handler(system::init_player);
         world.add_handler(system::player_join_world);

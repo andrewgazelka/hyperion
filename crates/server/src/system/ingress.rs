@@ -76,7 +76,7 @@ pub struct RecvData<'a, 'b, 'c> {
 }
 
 #[derive(Event)]
-pub struct SendData {
+pub struct SentData {
     fd: Fd,
 }
 
@@ -101,7 +101,7 @@ pub fn generate_ingress_events(world: &mut World, server: &mut Server, scratch: 
                 world.send(RecvData { fd, data, scratch });
             }
             ServerEvent::SentData { fd } => {
-                world.send(SendData { fd });
+                world.send(SentData { fd });
             }
         })
         .unwrap();
@@ -156,8 +156,8 @@ pub fn remove_player(
 // The `Receiver<Tick>` parameter tells our handler to listen for the `Tick` event.
 #[instrument(skip_all, level = "trace")]
 #[allow(clippy::too_many_arguments, reason = "todo")]
-pub fn send_data(
-    r: Receiver<SendData>,
+pub fn sent_data(
+    r: Receiver<SentData>,
     mut players: Fetcher<&mut Packets>,
     fd_lookup: Single<&FdLookup>,
 ) {
@@ -219,6 +219,7 @@ pub fn recv_data(
 
     decoder.queue_slice(data);
 
+    // todo: error  on low compression: "decompressed packet length of 2 is <= the compression threshold of 2"
     while let Some(frame) = decoder.try_next_packet().unwrap() {
         match *login_state {
             LoginState::Handshake => process_handshake(login_state, &frame).unwrap(),

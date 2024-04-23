@@ -122,8 +122,12 @@ impl PacketEncoder {
 
         let data_len = end_data_position_exclusive - data_write_start;
 
-        if data_len >= u64::from(self.threshold.0.unsigned_abs()) {
+        let threshold = u64::from(self.threshold.0.unsigned_abs());
+
+        if data_len > threshold {
             let scratch = scratch.obtain();
+
+            debug_assert!(scratch.is_empty());
 
             {
                 let data_slice =
@@ -217,7 +221,7 @@ mod tests {
         singleton::ring::Ring,
     };
 
-    fn compare_pkt<P: Packet + Encode>(packet: &P, compression: CompressionThreshold) {
+    fn compare_pkt<P: Packet + Encode>(packet: &P, compression: CompressionThreshold, msg: &str) {
         let mut large_ring = Ring::new(MAX_PACKET_SIZE * 2);
 
         let mut encoder = PacketEncoder::new(compression, Compression::new(4));
@@ -246,44 +250,210 @@ mod tests {
         let encoder_res = format!("0x{encoder_res}");
         let valence_encoder_res = format!("0x{valence_encoder_res}");
 
-        assert_eq!(encoder_res, valence_encoder_res);
+        assert_eq!(encoder_res, valence_encoder_res, "{msg}");
+    }
+
+    fn compare_pkt2<P: Packet + Encode>(
+        packet1: &P,
+        packet2: &P,
+        compression: CompressionThreshold,
+        msg: &str,
+    ) {
+        let mut large_ring = Ring::new(MAX_PACKET_SIZE * 2);
+
+        let mut encoder = PacketEncoder::new(compression, Compression::new(4));
+
+        let bump = Bump::new();
+        let mut scratch = Scratch::from(&bump);
+
+        let encoder_res1 = encoder
+            .append_packet(packet1, &mut large_ring, &mut scratch)
+            .unwrap();
+
+        let mut valence_encoder = ValencePacketEncoder::new();
+        valence_encoder.set_compression(compression);
+        valence_encoder.append_packet(packet1).unwrap();
+
+        let encoder_res2 = encoder
+            .append_packet(packet2, &mut large_ring, &mut scratch)
+            .unwrap();
+
+        println!("encoder_res1: {encoder_res1:?}");
+        let encoder_res1 = unsafe { encoder_res1.as_slice() };
+        println!("encoder_res1: {encoder_res1:X?}");
+
+        valence_encoder.append_packet(packet2).unwrap();
+
+        println!("encoder_res2: {encoder_res2:?}");
+        let encoder_res2 = unsafe { encoder_res2.as_slice() };
+        println!("encoder_res2: {encoder_res2:X?}");
+
+        let combined_res = encoder_res1
+            .iter()
+            .chain(encoder_res2)
+            .copied()
+            .collect::<Vec<u8>>();
+
+        let valence_encoder_res = valence_encoder.take().to_vec();
+
+        // to slice
+        let valence_encoder_res = valence_encoder_res.as_slice();
+
+        let encoder_res = hex::encode(combined_res);
+        let valence_encoder_res = hex::encode(valence_encoder_res);
+
+        // add 0x
+        let encoder_res = format!("0x{encoder_res}");
+        let valence_encoder_res = format!("0x{valence_encoder_res}");
+
+        assert_eq!(encoder_res, valence_encoder_res, "{msg}");
     }
 
     #[test]
     fn test_uncompressed() {
-        fn compare<P: Packet + Encode>(packet: &P) {
-            compare_pkt(packet, CompressionThreshold::default());
+        fn compare<P: Packet + Encode>(packet: &P, msg: &str) {
+            compare_pkt(packet, CompressionThreshold::default(), msg);
         }
 
         let login = login::LoginHelloC2s {
             username: Bounded::default(),
             profile_id: None,
         };
-        compare(&login);
+        compare(&login, "Empty LoginHelloC2s");
 
         let login = login::LoginHelloC2s {
             username: Bounded("Emerald_Explorer"),
             profile_id: None,
         };
-        compare(&login);
+        compare(&login, "LoginHelloC2s with 'Emerald_Explorer'");
+    }
+
+    #[test]
+    fn test_compressed2() {
+        fn compare<P: Packet + Encode>(packet1: &P, packet2: &P, msg: &str) {
+            compare_pkt2(packet1, packet2, CompressionThreshold(2), msg);
+        }
+
+        fn random_name(input: &mut String) {
+            let length = fastrand::usize(..14);
+            for _ in 0..length {
+                let c = fastrand::alphanumeric();
+                input.push(c);
+            }
+        }
+
+        fastrand::seed(7);
+
+        let mut name1 = String::new();
+        let mut name2 = String::new();
+        for idx in 0..1000 {
+            random_name(&mut name1);
+            random_name(&mut name2);
+
+            let pkt1 = login::LoginHelloC2s {
+                username: Bounded(&name1),
+                profile_id: None,
+            };
+
+            let pkt2 = login::LoginHelloC2s {
+                username: Bounded(&name2),
+                profile_id: None,
+            };
+
+            compare(
+                &pkt1,
+                &pkt2,
+                &format!("LoginHelloC2s with '{name1}' and '{name2}' on idx {idx}"),
+            );
+
+            name1.clear();
+            name2.clear();
+        }
     }
 
     #[test]
     fn test_compressed() {
-        fn compare<P: Packet + Encode>(packet: &P) {
-            compare_pkt(packet, CompressionThreshold(10));
+        fn compare<P: Packet + Encode>(packet: &P, msg: &str) {
+            compare_pkt(packet, CompressionThreshold(10), msg);
+        }
+
+        fn random_name(input: &mut String) {
+            let length = fastrand::usize(..14);
+            for _ in 0..length {
+                let c = fastrand::alphanumeric();
+                input.push(c);
+            }
         }
 
         let login = login::LoginHelloC2s {
             username: Bounded::default(),
             profile_id: None,
         };
-        compare(&login);
+        compare(&login, "Empty LoginHelloC2s");
 
         let login = login::LoginHelloC2s {
             username: Bounded("Emerald_Explorer"),
             profile_id: None,
         };
-        compare(&login);
+        compare(&login, "LoginHelloC2s with 'Emerald_Explorer'");
+
+        fastrand::seed(7);
+
+        let mut name = String::new();
+        for _ in 0..1000 {
+            random_name(&mut name);
+
+            let pkt = login::LoginHelloC2s {
+                username: Bounded(&name),
+                profile_id: None,
+            };
+
+            compare(&pkt, &format!("LoginHelloC2s with '{name}'"));
+
+            name.clear();
+        }
+    }
+
+    #[test]
+    fn test_compressed_very_small_double() {
+        fn compare<P: Packet + Encode>(packet: &P, msg: &str) {
+            compare_pkt(packet, CompressionThreshold(2), msg);
+        }
+
+        fn random_name(input: &mut String) {
+            let length = fastrand::usize(..14);
+            for _ in 0..length {
+                let c = fastrand::alphanumeric();
+                input.push(c);
+            }
+        }
+
+        let login = login::LoginHelloC2s {
+            username: Bounded::default(),
+            profile_id: None,
+        };
+        compare(&login, "Empty LoginHelloC2s");
+
+        let login = login::LoginHelloC2s {
+            username: Bounded("Emerald_Explorer"),
+            profile_id: None,
+        };
+        compare(&login, "LoginHelloC2s with 'Emerald_Explorer'");
+
+        fastrand::seed(7);
+
+        let mut name = String::new();
+        for _ in 0..1000 {
+            random_name(&mut name);
+
+            let pkt = login::LoginHelloC2s {
+                username: Bounded(&name),
+                profile_id: None,
+            };
+
+            compare(&pkt, &format!("LoginHelloC2s with '{name}'"));
+
+            name.clear();
+        }
     }
 }

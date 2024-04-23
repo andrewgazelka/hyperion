@@ -268,6 +268,8 @@ impl ServerDef for LinuxServer {
                                 result
                             );
                             Self::shutdown(&mut submission, fd);
+
+                            f(ServerEvent::RemovePlayer { fd: Fd(fd) });
                         }
                         cmp::Ordering::Equal => {
                             // This should never happen as long as write is never passed an empty buffer:
