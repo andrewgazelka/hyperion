@@ -117,6 +117,7 @@ fn thread_count_pow2() -> usize {
 }
 
 impl<T: HasAabb + Send + Copy + Sync + Debug> Bvh<T> {
+    #[tracing::instrument(skip_all, fields(elements_len = elements.len()))]
     pub fn build<H: Heuristic>(mut elements: Vec<T>) -> Self {
         let max_threads = thread_count_pow2();
 

@@ -386,6 +386,7 @@ dependencies = [
  "rand 0.8.5",
  "rayon",
  "tango-bench 0.4.0",
+ "tracing",
  "tracing-subscriber",
 ]
 

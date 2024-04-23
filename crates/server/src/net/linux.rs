@@ -29,7 +29,7 @@ const SUBMISSION_QUEUE_SIZE: u32 = 32768;
 const IO_URING_FILE_COUNT: u32 = 32768;
 const C2S_RING_BUFFER_COUNT: usize = 16384;
 const LISTEN_BACKLOG: libc::c_int = 128;
-const SEND_BUFFER_SIZE: usize = 128 * 1024 * 1024;
+// const SEND_BUFFER_SIZE: usize = 128 * 1024 * 1024;
 
 /// Size of each buffer in bytes
 const C2S_RING_BUFFER_LEN: usize = 64;
@@ -152,7 +152,7 @@ impl ServerDef for LinuxServer {
 
         let listener = Socket::new(domain, socket2::Type::STREAM, None)?;
         listener.set_nonblocking(true)?;
-        listener.set_send_buffer_size(SEND_BUFFER_SIZE)?;
+        // listener.set_send_buffer_size(SEND_BUFFER_SIZE)?;
         listener.bind(&address.into())?;
         listener.listen(LISTEN_BACKLOG)?;
 
@@ -221,7 +221,7 @@ impl ServerDef for LinuxServer {
     }
 
     /// `f` should never panic
-    #[instrument(skip_all, level = "trace")]
+    #[instrument(skip_all, level = "trace", name = "iou-drain-events")]
     fn drain(&mut self, mut f: impl FnMut(ServerEvent)) -> std::io::Result<()> {
         let (_submitter, mut submission, mut completion) = self.uring.split();
         completion.sync();
