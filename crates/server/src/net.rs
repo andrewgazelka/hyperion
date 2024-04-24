@@ -9,6 +9,7 @@ use std::{
 use derive_more::{Deref, DerefMut, From};
 use evenio::prelude::Component;
 use libc::iovec;
+use libdeflater::CompressionLvl;
 use valence_protocol::{CompressionThreshold, Encode};
 
 use crate::{
@@ -106,10 +107,6 @@ impl ServerDef for Server {
         self.server.allocate_buffers(buffers);
     }
 
-    fn submit_events(&mut self) {
-        self.server.submit_events();
-    }
-
     /// Impl with local sends BEFORE broadcasting
     fn write_all<'a>(
         &mut self,
@@ -117,6 +114,10 @@ impl ServerDef for Server {
         writers: impl Iterator<Item = RefreshItems<'a>>,
     ) {
         self.server.write_all(global, writers);
+    }
+
+    fn submit_events(&mut self) {
+        self.server.submit_events();
     }
 }
 
@@ -178,14 +179,19 @@ impl ServerDef for NotImplemented {
 /// The Minecraft protocol version this library currently targets.
 pub const PROTOCOL_VERSION: i32 = 763;
 
+// todo: this is one off.. why?
+// pub const MAX_PACKET_SIZE: usize = 0x001F_FFFF;
 /// The maximum number of bytes that can be sent in a single packet.
-pub const MAX_PACKET_SIZE: usize = 0x001F_FFFF;
+pub const MAX_PACKET_SIZE: usize = valence_protocol::MAX_PACKET_SIZE as usize;
 
 /// The stringified name of the Minecraft version this library currently
 /// targets.
 pub const MINECRAFT_VERSION: &str = "1.20.1";
 
+mod decoder;
 mod encoder;
+
+pub use decoder::PacketDecoder;
 
 const NUM_PLAYERS: usize = 1024;
 const S2C_BUFFER_SIZE: usize = 1024 * 1024 * NUM_PLAYERS;
@@ -197,10 +203,14 @@ pub struct IoBuf {
     buf: Ring,
 }
 
+// todo: not valid we should remove
+unsafe impl Send for IoBuf {}
+unsafe impl Sync for IoBuf {}
+
 impl IoBuf {
-    pub fn new(threshold: CompressionThreshold) -> Self {
+    pub fn new(threshold: CompressionThreshold, level: CompressionLvl) -> Self {
         Self {
-            enc: encoder::PacketEncoder::new(threshold, flate2::Compression::new(4)),
+            enc: encoder::PacketEncoder::new(threshold, level),
             buf: Ring::new(S2C_BUFFER_SIZE),
         }
     }
@@ -329,7 +339,10 @@ mod tests {
 
     #[test]
     fn test_append_pre_compression_packet() {
-        let mut buf = IoBuf::new(CompressionThreshold::DEFAULT);
+        let mut buf = IoBuf::new(
+            CompressionThreshold::DEFAULT,
+            CompressionLvl::new(4).unwrap(),
+        );
         let mut packets = Packets::default();
 
         let pkt = LoginHelloC2s {
@@ -352,7 +365,10 @@ mod tests {
     }
     #[test]
     fn test_append_packet() {
-        let mut buf = IoBuf::new(CompressionThreshold::DEFAULT);
+        let mut buf = IoBuf::new(
+            CompressionThreshold::DEFAULT,
+            CompressionLvl::new(4).unwrap(),
+        );
         let mut packets = Packets::default();
 
         let pkt = LoginHelloC2s {
@@ -371,7 +387,10 @@ mod tests {
 
     #[test]
     fn test_append_raw() {
-        let mut buf = IoBuf::new(CompressionThreshold::DEFAULT);
+        let mut buf = IoBuf::new(
+            CompressionThreshold::DEFAULT,
+            CompressionLvl::new(4).unwrap(),
+        );
         let mut packets = Packets::default();
 
         let data = b"Hello, world!";
@@ -385,7 +404,10 @@ mod tests {
 
     #[test]
     fn test_clear() {
-        let mut buf = IoBuf::new(CompressionThreshold::DEFAULT);
+        let mut buf = IoBuf::new(
+            CompressionThreshold::DEFAULT,
+            CompressionLvl::new(4).unwrap(),
+        );
         let mut packets = Packets::default();
 
         let pkt = LoginHelloC2s {
@@ -405,7 +427,10 @@ mod tests {
 
     #[test]
     fn test_contiguous_packets() {
-        let mut buf = IoBuf::new(CompressionThreshold::DEFAULT);
+        let mut buf = IoBuf::new(
+            CompressionThreshold::DEFAULT,
+            CompressionLvl::new(4).unwrap(),
+        );
         let mut packets = Packets::default();
 
         let pkt1 = LoginHelloC2s {

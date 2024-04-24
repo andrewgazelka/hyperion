@@ -96,8 +96,9 @@ pub struct Scratch<A: Allocator = std::alloc::Global> {
 
 impl Scratch {
     #[must_use]
-    pub const fn new() -> Self {
-        Self { inner: Vec::new() }
+    pub fn new() -> Self {
+        let inner = Vec::with_capacity(MAX_PACKET_SIZE);
+        Self { inner }
     }
 }
 
@@ -109,10 +110,10 @@ impl Default for Scratch {
 
 /// Nice for getting a buffer that can be used for intermediate work
 ///
-/// Guarantees:
+/// # Safety
 /// - every single time [`ScratchBuffer::obtain`] is called, the buffer will be cleared before returning
 /// - the buffer has capacity of at least `MAX_PACKET_SIZE`
-pub trait ScratchBuffer: sealed::Sealed + Debug {
+pub unsafe trait ScratchBuffer: sealed::Sealed + Debug {
     type Allocator: Allocator;
     fn obtain(&mut self) -> &mut Vec<u8, Self::Allocator>;
 }
@@ -123,7 +124,7 @@ mod sealed {
 
 impl<A: Allocator + Debug> sealed::Sealed for Scratch<A> {}
 
-impl<A: Allocator + Debug> ScratchBuffer for Scratch<A> {
+unsafe impl<A: Allocator + Debug> ScratchBuffer for Scratch<A> {
     type Allocator = A;
 
     fn obtain(&mut self) -> &mut Vec<u8, Self::Allocator> {

@@ -5,6 +5,7 @@ use std::{
 };
 
 use evenio::component::Component;
+use libdeflater::CompressionLvl;
 use valence_protocol::CompressionThreshold;
 
 /// Shared data that is shared between the ECS framework and the IO thread.
@@ -12,7 +13,8 @@ pub struct Shared {
     /// realistically, we will never have more than 2^32 = 4,294,967,296 players
     pub player_count: AtomicU32,
     /// The compression level to use for the server.
-    pub compression_level: CompressionThreshold,
+    pub compression_threshold: CompressionThreshold,
+    pub compression_level: CompressionLvl,
 }
 
 /// See [`crate::global`].
