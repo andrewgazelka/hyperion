@@ -337,7 +337,10 @@ mod tests {
 
     #[test]
     fn test_append_pre_compression_packet() {
-        let mut buf = IoBuf::new(CompressionThreshold::DEFAULT, CompressionLvl::new(4).unwrap());
+        let mut buf = IoBuf::new(
+            CompressionThreshold::DEFAULT,
+            CompressionLvl::new(4).unwrap(),
+        );
         let mut packets = Packets::default();
 
         let pkt = LoginHelloC2s {
@@ -360,7 +363,10 @@ mod tests {
     }
     #[test]
     fn test_append_packet() {
-        let mut buf = IoBuf::new(CompressionThreshold::DEFAULT, CompressionLvl::new(4).unwrap());
+        let mut buf = IoBuf::new(
+            CompressionThreshold::DEFAULT,
+            CompressionLvl::new(4).unwrap(),
+        );
         let mut packets = Packets::default();
 
         let pkt = LoginHelloC2s {
@@ -379,7 +385,10 @@ mod tests {
 
     #[test]
     fn test_append_raw() {
-        let mut buf = IoBuf::new(CompressionThreshold::DEFAULT, CompressionLvl::new(4).unwrap());
+        let mut buf = IoBuf::new(
+            CompressionThreshold::DEFAULT,
+            CompressionLvl::new(4).unwrap(),
+        );
         let mut packets = Packets::default();
 
         let data = b"Hello, world!";
@@ -393,7 +402,10 @@ mod tests {
 
     #[test]
     fn test_clear() {
-        let mut buf = IoBuf::new(CompressionThreshold::DEFAULT, CompressionLvl::new(4).unwrap());
+        let mut buf = IoBuf::new(
+            CompressionThreshold::DEFAULT,
+            CompressionLvl::new(4).unwrap(),
+        );
         let mut packets = Packets::default();
 
         let pkt = LoginHelloC2s {
@@ -413,7 +425,10 @@ mod tests {
 
     #[test]
     fn test_contiguous_packets() {
-        let mut buf = IoBuf::new(CompressionThreshold::DEFAULT, CompressionLvl::new(4).unwrap());
+        let mut buf = IoBuf::new(
+            CompressionThreshold::DEFAULT,
+            CompressionLvl::new(4).unwrap(),
+        );
         let mut packets = Packets::default();
 
         let pkt1 = LoginHelloC2s {

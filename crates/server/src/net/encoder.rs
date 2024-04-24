@@ -224,6 +224,7 @@ impl PacketEncoder {
     }
 }
 
+// I do not think these tests are valid anymore because libdeflater is not one-to-one compression with flate2 (zlib)
 #[cfg(test)]
 mod tests {
     use bumpalo::Bump;
