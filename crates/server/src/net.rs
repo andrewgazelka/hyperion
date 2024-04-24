@@ -1,10 +1,6 @@
 //! All the networking related code.
 
-use std::{
-    collections::VecDeque,
-    hash::{Hash, Hasher},
-    net::ToSocketAddrs,
-};
+use std::{collections::VecDeque, hash::Hash, net::ToSocketAddrs};
 
 use derive_more::{Deref, DerefMut, From};
 use evenio::prelude::Component;
@@ -22,45 +18,14 @@ use crate::{
 #[cfg(target_os = "linux")]
 mod linux;
 
-#[derive(Debug, Copy, Clone, Component)]
+#[cfg(not(target_os = "linux"))]
+mod generic;
+
+#[derive(Debug, Copy, Clone, Component, PartialEq, Eq, Hash)]
 pub struct Fd(
     #[cfg(target_os = "linux")] linux::Fixed,
-    #[cfg(target_os = "macos")] (),
+    #[cfg(not(target_os = "linux"))] usize,
 );
-
-#[cfg(target_os = "linux")]
-impl Hash for Fd {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.0 .0.hash(state);
-    }
-}
-
-#[cfg(not(target_os = "linux"))]
-impl PartialEq for Fd {
-    fn eq(&self, _other: &Self) -> bool {
-        unimplemented!()
-    }
-}
-
-#[cfg(not(target_os = "linux"))]
-impl Eq for Fd {}
-
-#[cfg(not(target_os = "linux"))]
-impl Hash for Fd {
-    fn hash<H: Hasher>(&self, _state: &mut H) {
-        unimplemented!()
-    }
-}
-
-#[cfg(target_os = "linux")]
-impl PartialEq for Fd {
-    fn eq(&self, other: &Self) -> bool {
-        self.0 .0 == other.0 .0
-    }
-}
-
-#[cfg(target_os = "linux")]
-impl Eq for Fd {}
 
 #[allow(unused, reason = "these are used on linux")]
 pub enum ServerEvent<'a> {
@@ -74,7 +39,7 @@ pub struct Server {
     #[cfg(target_os = "linux")]
     server: linux::LinuxServer,
     #[cfg(not(target_os = "linux"))]
-    server: NotImplemented,
+    server: generic::GenericServer,
 }
 
 impl ServerDef for Server {
@@ -89,10 +54,10 @@ impl ServerDef for Server {
                 server: linux::LinuxServer::new(address)?,
             })
         }
-        #[cfg(target_os = "macos")]
+        #[cfg(not(target_os = "linux"))]
         {
             Ok(Self {
-                server: NotImplemented,
+                server: generic::GenericServer::new(address)?,
             })
         }
     }

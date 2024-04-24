@@ -64,10 +64,11 @@ socket2 = "0.5.6"
 bumpalo = { version = "3.16.0", features = ["allocator_api"] }
 libdeflater = "1.20.0"
 more-asserts = "0.3.1"
+mio = { version = "0.8.11", features = ["net", "os-poll"] }
 
 
 [target.'cfg(target_os = "linux")'.dependencies]
-io-uring = "0.6.3"
+io-uring = { git = "https://github.com/andrewgazelka/io-uring", branch = "feat-more-fixed-derive" }
 
 [dev-dependencies]
 divan = "0.1.14"
@@ -77,9 +78,9 @@ hex = "0.4.3"
 rustc_version = "0.4.0"
 tango-bench = "0.5.0"
 
-[[bench]]
-name = "many_zombies"
-harness = false
+#[[bench]]
+#name = "many_zombies"
+#harness = false
 
 #[[bench]]
 #name = "players"

@@ -44,7 +44,7 @@ pub struct PacketWriteInfo {
 
 impl PacketWriteInfo {
     #[allow(dead_code, reason = "nice for unit tests")]
-    const unsafe fn as_slice(&self) -> &[u8] {
+    pub const unsafe fn as_slice(&self) -> &[u8] {
         std::slice::from_raw_parts(self.start_ptr, self.len as usize)
     }
 }

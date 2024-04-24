@@ -163,3 +163,11 @@ unsafe impl<'a, 'b> Sync for Gametick<'a, 'b> {}
 pub struct Egress<'a> {
     pub server: &'a mut Server,
 }
+
+// todo: remove
+#[allow(
+    clippy::non_send_fields_in_send_ty,
+    reason = "this will be removed in the future"
+)]
+unsafe impl<'a> Send for Egress<'a> {}
+unsafe impl<'a> Sync for Egress<'a> {}

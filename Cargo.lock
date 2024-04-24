@@ -1242,9 +1242,8 @@ dependencies = [
 
 [[package]]
 name = "io-uring"
-version = "0.6.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a9febecd4aebbe9c7c23c8e536e966805fdf09944c8a915e7991ee51acb67087"
+version = "0.6.4"
+source = "git+https://github.com/andrewgazelka/io-uring?branch=feat-more-fixed-derive#4986009dc47fee5bfa2dce97b7901745b8877dca"
 dependencies = [
  "bitflags 1.3.2",
  "libc",
@@ -1458,6 +1457,18 @@ checksum = "9d811f3e15f28568be3407c8e7fdb6514c1cda3cb30683f15b6a1a1dc4ea14a7"
 dependencies = [
  "adler",
  "simd-adler32",
+]
+
+[[package]]
+name = "mio"
+version = "0.8.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a4a650543ca06a924e8b371db273b2756685faae30f8487da1b56505a8f78b0c"
+dependencies = [
+ "libc",
+ "log",
+ "wasi",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]
@@ -2132,6 +2143,7 @@ dependencies = [
  "itertools 0.12.1",
  "libc",
  "libdeflater",
+ "mio",
  "more-asserts",
  "ndarray",
  "no_denormals",
