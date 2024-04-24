@@ -40,7 +40,7 @@ impl Hash for Fd {
 #[cfg(not(target_os = "linux"))]
 impl PartialEq for Fd {
     fn eq(&self, _other: &Self) -> bool {
-        unimplemented!()
+        self.0 == 0
     }
 }
 
@@ -49,8 +49,8 @@ impl Eq for Fd {}
 
 #[cfg(not(target_os = "linux"))]
 impl Hash for Fd {
-    fn hash<H: Hasher>(&self, _state: &mut H) {
-        unimplemented!()
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.0.hash(state);
     }
 }
 
@@ -76,7 +76,7 @@ pub struct Server {
     #[cfg(target_os = "linux")]
     server: linux::LinuxServer,
     #[cfg(not(target_os = "linux"))]
-    server: NotImplemented,
+    server: generic::GenericServer,
 }
 
 impl ServerDef for Server {
@@ -91,10 +91,10 @@ impl ServerDef for Server {
                 server: linux::LinuxServer::new(address)?,
             })
         }
-        #[cfg(target_os = "macos")]
+        #[cfg(not(target_os = "linux"))]
         {
             Ok(Self {
-                server: NotImplemented,
+                server: generic::GenericServer::new(address)?,
             })
         }
     }

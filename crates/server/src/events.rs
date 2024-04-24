@@ -163,3 +163,7 @@ unsafe impl<'a, 'b> Sync for Gametick<'a, 'b> {}
 pub struct Egress<'a> {
     pub server: &'a mut Server,
 }
+
+// todo: remove
+unsafe impl<'a> Send for Egress<'a> {}
+unsafe impl<'a> Sync for Egress<'a> {}

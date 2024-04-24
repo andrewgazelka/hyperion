@@ -15,6 +15,7 @@ mod chunk;
 mod singleton;
 
 use std::{
+    backtrace::Backtrace,
     collections::VecDeque,
     net::ToSocketAddrs,
     sync::{atomic::AtomicU32, Arc},

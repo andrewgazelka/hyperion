@@ -1,10 +1,11 @@
 // You can run this example from the root of the mio repo:
 // cargo run --example tcp_server --features="os-poll net"
 use std::{
-    collections::HashMap,
+    hash::BuildHasherDefault,
     io::{self, Read, Write},
+    mem::MaybeUninit,
     net::ToSocketAddrs,
-    str::from_utf8,
+    time::Duration,
 };
 
 use anyhow::Context;
@@ -19,26 +20,22 @@ use tracing::warn;
 
 use crate::{
     global::Global,
-    net::{encoder::PacketWriteInfo, Fd, RefreshItems, ServerDef, ServerEvent},
+    net::{encoder::PacketWriteInfo, Fd, RefreshItems, ServerDef, ServerEvent, MAX_PACKET_SIZE},
 };
 
 // Setup some tokens to allow us to identify which event is for which socket.
 const SERVER: Token = Token(0);
 
-// Some data we'll send over the connection.
-const DATA: &[u8] = b"Hello world!\n";
-
 const EVENT_CAPACITY: usize = 128;
 
 struct ConnectionInfo {
-    to_write: Vec<PacketWriteInfo>,
-    connection: TcpStream,
+    pub to_write: Vec<PacketWriteInfo>,
+    pub connection: TcpStream,
 }
 
-struct GenericServer {
+pub struct GenericServer {
     poll: Poll,
     events: Events,
-    token_on: usize,
     server: TcpListener,
     ids: Ids,
     write_iovecs: Vec<iovec>,
@@ -79,13 +76,13 @@ impl ServerDef for GenericServer {
             .register(&mut server, SERVER, Interest::READABLE)?;
 
         // Map of `Token` -> `TcpStream`.
-        let connections = FxHashMap::new();
+        // todo: is there a more idiomatic way to do this?
+        let connections = FxHashMap::with_hasher(BuildHasherDefault::default());
 
         Ok(Self {
             poll,
             connections,
             events,
-            token_on: 1,
             ids: Ids { token_on: 1 },
             server,
             write_iovecs: vec![],
@@ -93,78 +90,94 @@ impl ServerDef for GenericServer {
     }
 
     fn drain(&mut self, mut f: impl FnMut(ServerEvent)) -> io::Result<()> {
-        let mut received_data = Vec::new();
+        // todo: this is a bit of a hack, is there a better number? probs dont want people sending more than this
+        let mut received_data = Vec::with_capacity(MAX_PACKET_SIZE * 2);
 
-        loop {
-            if let Err(err) = self.poll.poll(&mut self.events, None) {
-                if interrupted(&err) {
-                    continue;
-                }
-                return Err(err);
+        println!("start of loop");
+        // todo: fine tune ms amount... probably should be fine tuned with the amount of time left have to
+        // process the current tick
+        if let Err(err) = self
+            .poll
+            .poll(&mut self.events, Some(Duration::from_millis(10)))
+        {
+            if interrupted(&err) {
+                return Ok(());
             }
+            return Err(err);
+        }
 
-            for event in &self.events {
-                match event.token() {
-                    SERVER => loop {
-                        // Received an event for the TCP server socket, which
-                        // indicates we can accept an connection.
-                        let (mut connection, address) = match self.server.accept() {
-                            Ok((connection, address)) => (connection, address),
-                            Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
-                                // If we get a `WouldBlock` error we know our
-                                // listener has no more incoming connections queued,
-                                // so we can return to polling and wait for some
-                                // more.
-                                break;
-                            }
-                            Err(e) => {
-                                // If it was any other kind of error, something went
-                                // wrong and we terminate with an error.
-                                return Err(e);
-                            }
-                        };
-
-                        println!("Accepted connection from: {address}");
-
-                        let token = self.ids.generate_unique_token();
-                        self.poll.registry().register(
-                            &mut connection,
-                            token,
-                            Interest::READABLE.add(Interest::WRITABLE),
-                        )?;
-
-                        self.connections.insert(token.0, ConnectionInfo {
-                            to_write: vec![],
-                            connection
-                        });
-                    },
-                    token => {
-                        // Maybe received an event for a TCP connection.
-                        let done = if let Some(connection) = self.connections.get_mut(&token.0) {
-                            received_data.clear();
-                            handle_connection_event(
-                                &mut self.write_iovecs,
-                                self.poll.registry(),
-                                connection,
-                                event,
-                                &mut received_data,
-                                token,
-                                &mut f,
-                            )?
-                        } else {
-                            // Sporadic events happen, we can safely ignore them.
-                            false
-                        };
-                        if done {
-                            if let Some(mut connection) = self.connections.remove(&token) {
-                                self.poll.registry().deregister(&mut connection)?;
-                            }
-                            f(ServerEvent::RemovePlayer { fd: Fd(token.0) });
+        println!("events.......");
+        for event in &self.events {
+            println!("got event");
+            match event.token() {
+                SERVER => loop {
+                    println!("server loop");
+                    // Received an event for the TCP server socket, which
+                    // indicates we can accept an connection.
+                    let (mut connection, address) = match self.server.accept() {
+                        Ok((connection, address)) => (connection, address),
+                        Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
+                            // If we get a `WouldBlock` error we know our
+                            // listener has no more incoming connections queued,
+                            // so we can return to polling and wait for some
+                            // more.
+                            break;
                         }
+                        Err(e) => {
+                            // If it was any other kind of error, something went
+                            // wrong and we terminate with an error.
+                            return Err(e);
+                        }
+                    };
+
+                    println!("Accepted connection from: {address}");
+
+                    let token = self.ids.generate_unique_token();
+                    self.poll.registry().register(
+                        &mut connection,
+                        token,
+                        Interest::READABLE.add(Interest::WRITABLE),
+                    )?;
+
+                    self.connections.insert(token.0, ConnectionInfo {
+                        to_write: vec![],
+                        connection,
+                    });
+
+                    f(ServerEvent::AddPlayer { fd: Fd(token.0) });
+                },
+                token => {
+                    // Maybe received an event for a TCP connection.
+                    let done = if let Some(connection) = self.connections.get_mut(&token.0) {
+                        received_data.clear();
+                        handle_connection_event(
+                            self.poll.registry(),
+                            connection,
+                            event,
+                            &mut received_data,
+                            token,
+                            &mut f,
+                        )?
+                    } else {
+                        // Sporadic events happen, we can safely ignore them.
+                        false
+                    };
+                    if done {
+                        if let Some(mut connection) = self.connections.remove(&token.0) {
+                            self.poll
+                                .registry()
+                                .deregister(&mut connection.connection)?;
+                        }
+                        println!("removed connection");
+                        f(ServerEvent::RemovePlayer { fd: Fd(token.0) });
                     }
                 }
             }
+            println!("loop");
         }
+
+        println!("done events");
+        Ok(())
     }
 
     // todo: make unsafe
@@ -177,20 +190,25 @@ impl ServerDef for GenericServer {
 
     fn write_all<'a>(
         &mut self,
-        global: &mut Global,
+        _global: &mut Global,
         writers: impl Iterator<Item = RefreshItems<'a>>,
     ) {
         for writer in writers {
             let RefreshItems { write, fd } = writer;
 
-            let to_write = self.connections.entry(fd.0).or_default();
+            let Some(to_write) = self.connections.get_mut(&fd.0) else {
+                warn!("no connection for fd {fd:?}");
+                continue;
+            };
+
+            let to_write = &mut to_write.to_write;
+
             let (a, b) = write.as_slices();
 
             to_write.reserve(a.len() + b.len());
 
             to_write.extend_from_slice(a);
             to_write.extend_from_slice(b);
-
             write.clear();
         }
     }
@@ -200,15 +218,8 @@ impl ServerDef for GenericServer {
     }
 }
 
-fn next(current: &mut Token) -> Token {
-    let next = current.0;
-    current.0 += 1;
-    Token(next)
-}
-
 /// Returns `true` if the connection is done.
 fn handle_connection_event(
-    write_iovecs: &mut Vec<iovec>,
     registry: &Registry,
     info: &mut ConnectionInfo,
     event: &Event,
@@ -217,22 +228,20 @@ fn handle_connection_event(
     f: &mut impl FnMut(ServerEvent),
 ) -> io::Result<bool> {
     if event.is_writable() {
-        let data = Vec::new();
+        println!("writable event");
+        let mut data = Vec::new();
 
-        let iovec = write_iovecs.get_mut(0).unwrap();
-
-        for elem in info.to_write {
-            let x = elem.
-            iovec
+        for elem in &info.to_write {
+            data.extend_from_slice(unsafe { elem.as_slice() });
         }
 
         // We can (maybe) write to the connection.
-        match info.write(DATA) {
-            Ok(n) if n < DATA.len() => return Err(io::ErrorKind::WriteZero.into()),
+        match info.connection.write(&data) {
+            Ok(n) if n < data.len() => return Err(io::ErrorKind::WriteZero.into()),
             Ok(_) => {
                 // After we've written something we'll reregister the connection
                 // to only respond to readable events.
-                registry.reregister(info, event.token(), Interest::READABLE)?;
+                registry.reregister(&mut info.connection, event.token(), Interest::READABLE)?;
             }
             // Would block "errors" are the OS's way of saying that the
             // connection is not actually ready to perform this I/O operation.
@@ -247,18 +256,26 @@ fn handle_connection_event(
     }
 
     if event.is_readable() {
+        println!("readable event");
         let mut connection_closed = false;
         let mut bytes_read = 0;
         // We can (maybe) read from the connection.
+
+        // todo: remove setting 0's, just use MaybeUninit
+        received_data.resize(1024, 0);
+
         loop {
-            match info.read(&mut received_data[bytes_read..]) {
+            println!("start of read loop");
+            match info.connection.read(&mut received_data[bytes_read..]) {
                 Ok(0) => {
                     // Reading 0 bytes means the other side has closed the
                     // connection or is done writing, then so are we.
                     connection_closed = true;
+                    println!("got 0 bytes");
                     break;
                 }
                 Ok(n) => {
+                    println!("got {} bytes", n);
                     bytes_read += n;
                     if bytes_read == received_data.len() {
                         received_data.resize(received_data.len() + 1024, 0);
@@ -274,6 +291,7 @@ fn handle_connection_event(
         }
 
         if bytes_read != 0 {
+            println!("sending RecvData");
             let received_data = &received_data[..bytes_read];
             f(ServerEvent::RecvData {
                 fd: Fd(token.0),
