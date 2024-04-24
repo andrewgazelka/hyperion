@@ -220,7 +220,7 @@ pub fn recv_data(
     decoder.queue_slice(data);
 
     // todo: error  on low compression: "decompressed packet length of 2 is <= the compression threshold of 2"
-    while let Some(frame) = decoder.try_next_packet().unwrap() {
+    while let Some(frame) = decoder.try_next_packet(scratch).unwrap() {
         match *login_state {
             LoginState::Handshake => process_handshake(login_state, &frame).unwrap(),
             LoginState::Status => {

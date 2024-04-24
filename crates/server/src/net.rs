@@ -104,10 +104,6 @@ impl ServerDef for Server {
         self.server.allocate_buffers(buffers);
     }
 
-    fn submit_events(&mut self) {
-        self.server.submit_events();
-    }
-
     /// Impl with local sends BEFORE broadcasting
     fn write_all<'a>(
         &mut self,
@@ -115,6 +111,10 @@ impl ServerDef for Server {
         writers: impl Iterator<Item = RefreshItems<'a>>,
     ) {
         self.server.write_all(global, writers);
+    }
+
+    fn submit_events(&mut self) {
+        self.server.submit_events();
     }
 }
 
@@ -183,7 +183,10 @@ pub const MAX_PACKET_SIZE: usize = 0x001F_FFFF;
 /// targets.
 pub const MINECRAFT_VERSION: &str = "1.20.1";
 
+mod decoder;
 mod encoder;
+
+pub use decoder::PacketDecoder;
 
 const NUM_PLAYERS: usize = 1024;
 const S2C_BUFFER_SIZE: usize = 1024 * 1024 * NUM_PLAYERS;
