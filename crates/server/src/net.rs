@@ -24,7 +24,7 @@ mod generic;
 #[derive(Debug, Copy, Clone, Component, PartialEq, Eq, Hash)]
 pub struct Fd(
     #[cfg(target_os = "linux")] linux::Fixed,
-    #[cfg(target_os = "macos")] usize,
+    #[cfg(not(target_os = "linux"))] usize,
 );
 
 #[allow(unused, reason = "these are used on linux")]
