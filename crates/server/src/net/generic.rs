@@ -1,10 +1,8 @@
 // You can run this example from the root of the mio repo:
 // cargo run --example tcp_server --features="os-poll net"
 use std::{
-    collections::VecDeque,
     hash::BuildHasherDefault,
     io::{self, Read, Write},
-    mem::MaybeUninit,
     net::ToSocketAddrs,
     time::Duration,
 };
@@ -111,7 +109,7 @@ impl ServerDef for GenericServer {
                 SERVER => loop {
                     // Received an event for the TCP server socket, which
                     // indicates we can accept an connection.
-                    let (mut connection, address) = match self.server.accept() {
+                    let (mut connection, _) = match self.server.accept() {
                         Ok((connection, address)) => (connection, address),
                         Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
                             // If we get a `WouldBlock` error we know our

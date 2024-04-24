@@ -1,10 +1,6 @@
 //! All the networking related code.
 
-use std::{
-    collections::VecDeque,
-    hash::{Hash, Hasher},
-    net::ToSocketAddrs,
-};
+use std::{collections::VecDeque, hash::Hash, net::ToSocketAddrs};
 
 use derive_more::{Deref, DerefMut, From};
 use evenio::prelude::Component;

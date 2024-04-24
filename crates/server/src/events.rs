@@ -165,5 +165,6 @@ pub struct Egress<'a> {
 }
 
 // todo: remove
+#[expect(clippy::non_send_fields_in_send_ty, reason = "this will be removed in the future")]
 unsafe impl<'a> Send for Egress<'a> {}
 unsafe impl<'a> Sync for Egress<'a> {}
