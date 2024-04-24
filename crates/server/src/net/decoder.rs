@@ -1,10 +1,8 @@
-use std::io::Write;
-
 use anyhow::{bail, ensure, Context};
 use bytes::{Buf, BytesMut};
 use more_asserts::debug_assert_ge;
 use valence_protocol::{
-    decode::PacketFrame, var_int::VarIntDecodeError, CompressionThreshold, Decode, Packet, VarInt,
+    decode::PacketFrame, var_int::VarIntDecodeError, CompressionThreshold, Decode, VarInt,
     MAX_PACKET_SIZE,
 };
 
@@ -17,6 +15,7 @@ pub struct PacketDecoder {
 }
 
 impl PacketDecoder {
+    #[allow(dead_code, reason = "this might be used in the future")]
     pub fn new() -> Self {
         Self::default()
     }
@@ -38,6 +37,7 @@ impl PacketDecoder {
             "packet length of {packet_len} is out of bounds"
         );
 
+        #[expect(clippy::cast_sign_loss, reason = "we are checking if < 0")]
         if r.len() < packet_len as usize {
             // Not enough data arrived yet.
             return Ok(None);
@@ -47,9 +47,8 @@ impl PacketDecoder {
 
         let mut data;
 
+        #[expect(clippy::cast_sign_loss, reason = "we are checking if < 0")]
         if self.threshold.0 >= 0 {
-            use bytes::BufMut;
-
             r = &r[..packet_len as usize];
 
             let data_len = VarInt::decode(&mut r)?.0;
@@ -127,7 +126,8 @@ impl PacketDecoder {
         }))
     }
 
-    pub fn compression(&self) -> CompressionThreshold {
+    #[expect(dead_code, reason = "this might be used in the future")]
+    pub const fn compression(&self) -> CompressionThreshold {
         self.threshold
     }
 
@@ -135,7 +135,8 @@ impl PacketDecoder {
         self.threshold = threshold;
     }
 
-    pub fn queue_bytes(&mut self, mut bytes: BytesMut) {
+    #[expect(dead_code, reason = "this might be used in the future")]
+    pub fn queue_bytes(&mut self, bytes: BytesMut) {
         self.buf.unsplit(bytes);
     }
 
@@ -143,10 +144,12 @@ impl PacketDecoder {
         self.buf.extend_from_slice(bytes);
     }
 
+    #[expect(dead_code, reason = "this might be used in the future")]
     pub fn take_capacity(&mut self) -> BytesMut {
         self.buf.split_off(self.buf.len())
     }
 
+    #[expect(dead_code, reason = "this might be used in the future")]
     pub fn reserve(&mut self, additional: usize) {
         self.buf.reserve(additional);
     }
@@ -154,10 +157,9 @@ impl PacketDecoder {
 
 #[cfg(test)]
 mod tests {
-    use uuid::Uuid;
     use valence_protocol::{
         packets::{login, login::LoginHelloC2s},
-        Bounded, CompressionThreshold, Encode, Packet,
+        Bounded, CompressionThreshold,
     };
 
     use super::*;
@@ -174,10 +176,10 @@ mod tests {
         encoder.set_compression(threshold);
 
         encoder.append_packet(packet).unwrap();
-        let encoded = encoder.take();
+        let encoded_bytes = encoder.take();
 
-        valence_decoder.queue_slice(&encoded);
-        custom_decoder.queue_slice(&encoded);
+        valence_decoder.queue_slice(&encoded_bytes);
+        custom_decoder.queue_slice(&encoded_bytes);
 
         let mut scratch = Scratch::new();
 
@@ -202,11 +204,14 @@ mod tests {
             "Packet body mismatch for {msg}"
         );
 
-        let valence_decoded: LoginHelloC2s = valence_frame.decode().unwrap();
-        let custom_decoded: LoginHelloC2s = custom_frame.decode().unwrap();
+        let valence_decoded_pkt: LoginHelloC2s = valence_frame.decode().unwrap();
+        let custom_decoded_pkt: LoginHelloC2s = custom_frame.decode().unwrap();
 
-        assert_eq!(valence_decoded.profile_id, custom_decoded.profile_id);
-        assert_eq!(valence_decoded.username, custom_decoded.username);
+        assert_eq!(
+            valence_decoded_pkt.profile_id,
+            custom_decoded_pkt.profile_id
+        );
+        assert_eq!(valence_decoded_pkt.username, custom_decoded_pkt.username);
     }
 
     #[test]
