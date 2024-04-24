@@ -13,8 +13,6 @@ members = [
     "crates/rayon-local",
     "crates/server",
 ]
-
-[profile.dev]
 #opt-level = 1
 
 [profile.dev.package."*"]
@@ -45,8 +43,6 @@ bvh = { path = "crates/bvh" }
 chunk = { path = "crates/chunk" }
 generator = { path = "crates/generator" }
 generator-build = { path = "crates/generator-build" }
-rayon-local = { path = "crates/rayon-local" }
-rust-mc-bot = { git = "https://github.com/andrewgazelka/rust-mc-bot", branch = "optimize" }
 glam = "0.26.0"
 
 # todo: re-enable rayon

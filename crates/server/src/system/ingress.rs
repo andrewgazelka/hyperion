@@ -220,7 +220,7 @@ pub fn recv_data(
     decoder.queue_slice(data);
 
     // todo: error  on low compression: "decompressed packet length of 2 is <= the compression threshold of 2"
-    while let Some(frame) = decoder.try_next_packet().unwrap() {
+    while let Some(frame) = decoder.try_next_packet(scratch).unwrap() {
         match *login_state {
             LoginState::Handshake => process_handshake(login_state, &frame).unwrap(),
             LoginState::Status => {
@@ -334,12 +334,12 @@ fn process_login(
     let uuid = offline_uuid(username)?;
 
     let pkt = LoginCompressionS2c {
-        threshold: VarInt(global.shared.compression_level.0),
+        threshold: VarInt(global.shared.compression_threshold.0),
     };
 
     packets.append_pre_compression_packet(&pkt, io, scratch)?;
 
-    decoder.set_compression(global.shared.compression_level);
+    decoder.set_compression(global.shared.compression_threshold);
 
     let pkt = login::LoginSuccessS2c {
         uuid,

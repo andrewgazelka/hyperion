@@ -1,17 +1,28 @@
-use std::io::{Cursor, Write};
+use std::{
+    fmt::Debug,
+    io::{Cursor, Write},
+    mem::MaybeUninit,
+};
 
 use anyhow::ensure;
-use flate2::{bufread::ZlibEncoder, Compression};
+use libdeflater::CompressionLvl;
 use valence_protocol::{CompressionThreshold, Encode, Packet, VarInt};
-
-mod util;
 
 use crate::{events::ScratchBuffer, net::MAX_PACKET_SIZE, singleton::ring::Buf};
 
-#[derive(Debug)]
+mod util;
+
 pub struct PacketEncoder {
     threshold: CompressionThreshold,
-    compression: Compression,
+    compressor: libdeflater::Compressor,
+}
+
+impl Debug for PacketEncoder {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PacketEncoder")
+            .field("threshold", &self.threshold)
+            .finish()
+    }
 }
 
 // todo:
@@ -87,10 +98,11 @@ where
 }
 
 impl PacketEncoder {
-    pub const fn new(threshold: CompressionThreshold, compression: Compression) -> Self {
+    pub fn new(threshold: CompressionThreshold, compression: CompressionLvl) -> Self {
+        let compressor = libdeflater::Compressor::new(compression);
         Self {
             threshold,
-            compression,
+            compressor,
         }
     }
 
@@ -125,15 +137,25 @@ impl PacketEncoder {
         let threshold = u64::from(self.threshold.0.unsigned_abs());
 
         if data_len > threshold {
-            let mut scratch = scratch.obtain();
+            let scratch = scratch.obtain();
 
             debug_assert!(scratch.is_empty());
 
+            let data_slice =
+                &mut slice[data_write_start as usize..end_data_position_exclusive as usize];
+
             {
-                let data_slice =
-                    &mut slice[data_write_start as usize..end_data_position_exclusive as usize];
-                let data_slice_cursor = Cursor::new(data_slice);
-                zstd::stream::copy_encode(data_slice_cursor, &mut scratch, 9)?;
+                // todo: I think this kinda safe maybe??? ... lol. well I know at least scratch is always large enough
+                let written = {
+                    let scratch = scratch.spare_capacity_mut();
+                    let scratch = unsafe { MaybeUninit::slice_assume_init_mut(scratch) };
+
+                    self.compressor.zlib_compress(data_slice, scratch)?
+                };
+
+                unsafe {
+                    scratch.set_len(scratch.len() + written);
+                }
             }
 
             let data_len = VarInt(data_len as u32 as i32);
@@ -205,7 +227,7 @@ impl PacketEncoder {
 #[cfg(test)]
 mod tests {
     use bumpalo::Bump;
-    use flate2::Compression;
+    use libdeflater::CompressionLvl;
     use valence_protocol::{
         packets::login, Bounded, CompressionThreshold, Encode, Packet,
         PacketEncoder as ValencePacketEncoder,
@@ -220,7 +242,7 @@ mod tests {
     fn compare_pkt<P: Packet + Encode>(packet: &P, compression: CompressionThreshold, msg: &str) {
         let mut large_ring = Ring::new(MAX_PACKET_SIZE * 2);
 
-        let mut encoder = PacketEncoder::new(compression, Compression::new(4));
+        let mut encoder = PacketEncoder::new(compression, CompressionLvl::new(4).unwrap());
 
         let bump = Bump::new();
         let mut scratch = Scratch::from(&bump);
@@ -257,7 +279,7 @@ mod tests {
     ) {
         let mut large_ring = Ring::new(MAX_PACKET_SIZE * 2);
 
-        let mut encoder = PacketEncoder::new(compression, Compression::new(4));
+        let mut encoder = PacketEncoder::new(compression, CompressionLvl::new(4).unwrap());
 
         let bump = Bump::new();
         let mut scratch = Scratch::from(&bump);
