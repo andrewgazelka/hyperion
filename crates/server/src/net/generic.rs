@@ -1,0 +1,298 @@
+// You can run this example from the root of the mio repo:
+// cargo run --example tcp_server --features="os-poll net"
+use std::{
+    collections::HashMap,
+    io::{self, Read, Write},
+    net::ToSocketAddrs,
+    str::from_utf8,
+};
+
+use anyhow::Context;
+use fxhash::FxHashMap;
+use libc::iovec;
+use mio::{
+    event::Event,
+    net::{TcpListener, TcpStream},
+    Events, Interest, Poll, Registry, Token,
+};
+use tracing::warn;
+
+use crate::{
+    global::Global,
+    net::{encoder::PacketWriteInfo, Fd, RefreshItems, ServerDef, ServerEvent},
+};
+
+// Setup some tokens to allow us to identify which event is for which socket.
+const SERVER: Token = Token(0);
+
+// Some data we'll send over the connection.
+const DATA: &[u8] = b"Hello world!\n";
+
+const EVENT_CAPACITY: usize = 128;
+
+struct ConnectionInfo {
+    to_write: Vec<PacketWriteInfo>,
+    connection: TcpStream,
+}
+
+struct GenericServer {
+    poll: Poll,
+    events: Events,
+    token_on: usize,
+    server: TcpListener,
+    ids: Ids,
+    write_iovecs: Vec<iovec>,
+    connections: FxHashMap<usize, ConnectionInfo>,
+}
+
+struct Ids {
+    token_on: usize,
+}
+
+impl Ids {
+    fn generate_unique_token(&mut self) -> Token {
+        let next = self.token_on;
+        self.token_on += 1;
+        Token(next)
+    }
+}
+
+impl ServerDef for GenericServer {
+    fn new(address: impl ToSocketAddrs) -> anyhow::Result<Self>
+    where
+        Self: Sized,
+    {
+        // todo: will this use kqueue on macOS? I hope it will 🥲
+        let poll = Poll::new()?;
+        // Create storage for events.
+        let events = Events::with_capacity(EVENT_CAPACITY);
+
+        let address = address
+            .to_socket_addrs()?
+            .next()
+            .context("could not get first address")?;
+
+        let mut server = TcpListener::bind(address)?;
+
+        // Register the server with poll we can receive events for it.
+        poll.registry()
+            .register(&mut server, SERVER, Interest::READABLE)?;
+
+        // Map of `Token` -> `TcpStream`.
+        let connections = FxHashMap::new();
+
+        Ok(Self {
+            poll,
+            connections,
+            events,
+            token_on: 1,
+            ids: Ids { token_on: 1 },
+            server,
+            write_iovecs: vec![],
+        })
+    }
+
+    fn drain(&mut self, mut f: impl FnMut(ServerEvent)) -> io::Result<()> {
+        let mut received_data = Vec::new();
+
+        loop {
+            if let Err(err) = self.poll.poll(&mut self.events, None) {
+                if interrupted(&err) {
+                    continue;
+                }
+                return Err(err);
+            }
+
+            for event in &self.events {
+                match event.token() {
+                    SERVER => loop {
+                        // Received an event for the TCP server socket, which
+                        // indicates we can accept an connection.
+                        let (mut connection, address) = match self.server.accept() {
+                            Ok((connection, address)) => (connection, address),
+                            Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
+                                // If we get a `WouldBlock` error we know our
+                                // listener has no more incoming connections queued,
+                                // so we can return to polling and wait for some
+                                // more.
+                                break;
+                            }
+                            Err(e) => {
+                                // If it was any other kind of error, something went
+                                // wrong and we terminate with an error.
+                                return Err(e);
+                            }
+                        };
+
+                        println!("Accepted connection from: {address}");
+
+                        let token = self.ids.generate_unique_token();
+                        self.poll.registry().register(
+                            &mut connection,
+                            token,
+                            Interest::READABLE.add(Interest::WRITABLE),
+                        )?;
+
+                        self.connections.insert(token.0, ConnectionInfo {
+                            to_write: vec![],
+                            connection
+                        });
+                    },
+                    token => {
+                        // Maybe received an event for a TCP connection.
+                        let done = if let Some(connection) = self.connections.get_mut(&token.0) {
+                            received_data.clear();
+                            handle_connection_event(
+                                &mut self.write_iovecs,
+                                self.poll.registry(),
+                                connection,
+                                event,
+                                &mut received_data,
+                                token,
+                                &mut f,
+                            )?
+                        } else {
+                            // Sporadic events happen, we can safely ignore them.
+                            false
+                        };
+                        if done {
+                            if let Some(mut connection) = self.connections.remove(&token) {
+                                self.poll.registry().deregister(&mut connection)?;
+                            }
+                            f(ServerEvent::RemovePlayer { fd: Fd(token.0) });
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // todo: make unsafe
+    fn allocate_buffers(&mut self, buffers: &[iovec]) {
+        if !self.write_iovecs.is_empty() {
+            warn!("iovecs are not empty");
+        }
+        self.write_iovecs = buffers.to_vec();
+    }
+
+    fn write_all<'a>(
+        &mut self,
+        global: &mut Global,
+        writers: impl Iterator<Item = RefreshItems<'a>>,
+    ) {
+        for writer in writers {
+            let RefreshItems { write, fd } = writer;
+
+            let to_write = self.connections.entry(fd.0).or_default();
+            let (a, b) = write.as_slices();
+
+            to_write.reserve(a.len() + b.len());
+
+            to_write.extend_from_slice(a);
+            to_write.extend_from_slice(b);
+
+            write.clear();
+        }
+    }
+
+    fn submit_events(&mut self) {
+        // todo
+    }
+}
+
+fn next(current: &mut Token) -> Token {
+    let next = current.0;
+    current.0 += 1;
+    Token(next)
+}
+
+/// Returns `true` if the connection is done.
+fn handle_connection_event(
+    write_iovecs: &mut Vec<iovec>,
+    registry: &Registry,
+    info: &mut ConnectionInfo,
+    event: &Event,
+    received_data: &mut Vec<u8>,
+    token: Token,
+    f: &mut impl FnMut(ServerEvent),
+) -> io::Result<bool> {
+    if event.is_writable() {
+        let data = Vec::new();
+
+        let iovec = write_iovecs.get_mut(0).unwrap();
+
+        for elem in info.to_write {
+            let x = elem.
+            iovec
+        }
+
+        // We can (maybe) write to the connection.
+        match info.write(DATA) {
+            Ok(n) if n < DATA.len() => return Err(io::ErrorKind::WriteZero.into()),
+            Ok(_) => {
+                // After we've written something we'll reregister the connection
+                // to only respond to readable events.
+                registry.reregister(info, event.token(), Interest::READABLE)?;
+            }
+            // Would block "errors" are the OS's way of saying that the
+            // connection is not actually ready to perform this I/O operation.
+            Err(ref err) if would_block(err) => {}
+            // Got interrupted (how rude!), we'll try again.
+            Err(ref err) if interrupted(err) => {
+                return handle_connection_event(registry, info, event, received_data, token, f)
+            }
+            // Other errors we'll consider fatal.
+            Err(err) => return Err(err),
+        }
+    }
+
+    if event.is_readable() {
+        let mut connection_closed = false;
+        let mut bytes_read = 0;
+        // We can (maybe) read from the connection.
+        loop {
+            match info.read(&mut received_data[bytes_read..]) {
+                Ok(0) => {
+                    // Reading 0 bytes means the other side has closed the
+                    // connection or is done writing, then so are we.
+                    connection_closed = true;
+                    break;
+                }
+                Ok(n) => {
+                    bytes_read += n;
+                    if bytes_read == received_data.len() {
+                        received_data.resize(received_data.len() + 1024, 0);
+                    }
+                }
+                // Would block "errors" are the OS's way of saying that the
+                // connection is not actually ready to perform this I/O operation.
+                Err(ref err) if would_block(err) => break,
+                Err(ref err) if interrupted(err) => continue,
+                // Other errors we'll consider fatal.
+                Err(err) => return Err(err),
+            }
+        }
+
+        if bytes_read != 0 {
+            let received_data = &received_data[..bytes_read];
+            f(ServerEvent::RecvData {
+                fd: Fd(token.0),
+                data: received_data,
+            });
+        }
+
+        if connection_closed {
+            return Ok(true);
+        }
+    }
+
+    Ok(false)
+}
+
+fn would_block(err: &io::Error) -> bool {
+    err.kind() == io::ErrorKind::WouldBlock
+}
+
+fn interrupted(err: &io::Error) -> bool {
+    err.kind() == io::ErrorKind::Interrupted
+}

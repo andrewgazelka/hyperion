@@ -2159,6 +2159,7 @@ dependencies = [
  "io-uring",
  "itertools 0.12.1",
  "libc",
+ "mio",
  "ndarray",
  "no_denormals",
  "once_cell",

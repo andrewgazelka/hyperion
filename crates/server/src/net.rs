@@ -21,10 +21,12 @@ use crate::{
 #[cfg(target_os = "linux")]
 mod linux;
 
+mod generic;
+
 #[derive(Debug, Copy, Clone, Component)]
 pub struct Fd(
     #[cfg(target_os = "linux")] linux::Fixed,
-    #[cfg(target_os = "macos")] (),
+    #[cfg(target_os = "macos")] usize,
 );
 
 #[cfg(target_os = "linux")]
