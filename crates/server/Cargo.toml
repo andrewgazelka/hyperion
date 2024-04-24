@@ -62,6 +62,8 @@ fxhash = "0.2.1"
 derive_more = "0.99.17"
 socket2 = "0.5.6"
 bumpalo = { version = "3.16.0", features = ["allocator_api"] }
+libdeflater = "1.20.0"
+more-asserts = "0.3.1"
 
 
 [target.'cfg(target_os = "linux")'.dependencies]
@@ -71,7 +73,7 @@ io-uring = "0.6.3"
 divan = "0.1.14"
 fastrand = "2.0.2"
 hex = "0.4.3"
-rust-mc-bot.workspace = true
+#rust-mc-bot.workspace = true
 rustc_version = "0.4.0"
 tango-bench = "0.5.0"
 
@@ -79,9 +81,9 @@ tango-bench = "0.5.0"
 name = "many_zombies"
 harness = false
 
-[[bench]]
-name = "players"
-harness = false
+#[[bench]]
+#name = "players"
+#harness = false
 
 [lints.rust]
 #missing_docs= "warn"

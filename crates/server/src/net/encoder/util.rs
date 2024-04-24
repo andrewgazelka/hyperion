@@ -3,6 +3,7 @@ use std::{
     io::{BorrowedBuf, Read},
 };
 
+#[allow(dead_code, reason = "this might be used in the future")]
 pub fn read_to_end<R: Read + ?Sized, A: Allocator>(
     r: &mut R,
     buf: &mut Vec<u8, A>,
@@ -11,7 +12,7 @@ pub fn read_to_end<R: Read + ?Sized, A: Allocator>(
 
     loop {
         if buf.capacity() == buf.len() {
-            let to_reserve = (buf.len()).max(MIN_CAPACITY);
+            let to_reserve = buf.len().max(MIN_CAPACITY);
 
             buf.reserve(to_reserve);
         }

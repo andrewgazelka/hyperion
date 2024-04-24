@@ -8,6 +8,7 @@
 #![feature(allocator_api)]
 #![feature(read_buf)]
 #![feature(core_io_borrowed_buf)]
+#![feature(maybe_uninit_slice)]
 #![expect(clippy::type_complexity, reason = "evenio uses a lot of complex types")]
 
 mod chunk;
@@ -23,6 +24,7 @@ use std::{
 use anyhow::Context;
 use evenio::prelude::*;
 use libc::{getrlimit, setrlimit, RLIMIT_NOFILE};
+use libdeflater::CompressionLvl;
 use ndarray::s;
 use signal_hook::iterator::Signals;
 use singleton::bounding_box;
@@ -158,7 +160,9 @@ impl Game {
 
         let shared = Arc::new(global::Shared {
             player_count: AtomicU32::new(0),
-            compression_level: CompressionThreshold(256),
+            compression_threshold: CompressionThreshold(256),
+            compression_level: CompressionLvl::new(12)
+                .map_err(|_| anyhow::anyhow!("failed to create compression level"))?,
         });
 
         let mut world = World::new();
@@ -166,7 +170,7 @@ impl Game {
         let mut server_def = Server::new(address)?;
 
         let io_id = world.spawn();
-        let mut io = IoBuf::new(shared.compression_level);
+        let mut io = IoBuf::new(shared.compression_threshold, shared.compression_level);
         io.buf_mut().register(&mut server_def);
 
         world.insert(io_id, io);

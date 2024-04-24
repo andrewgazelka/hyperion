@@ -85,7 +85,7 @@ pub fn player_join_world(
     // todo: remove
     let mut scratch = Scratch::new();
 
-    let compression_level = global.0.shared.compression_level;
+    let compression_level = global.0.shared.compression_threshold;
 
     let cached_data = CACHED_DATA.get_or_init(|| {
         let mut encoder = PacketEncoder::new();
