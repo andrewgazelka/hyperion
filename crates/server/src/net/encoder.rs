@@ -125,7 +125,7 @@ impl PacketEncoder {
         let threshold = u64::from(self.threshold.0.unsigned_abs());
 
         if data_len > threshold {
-            let scratch = scratch.obtain();
+            let mut scratch = scratch.obtain();
 
             debug_assert!(scratch.is_empty());
 
@@ -133,11 +133,7 @@ impl PacketEncoder {
                 let data_slice =
                     &mut slice[data_write_start as usize..end_data_position_exclusive as usize];
                 let data_slice_cursor = Cursor::new(data_slice);
-                let mut z = ZlibEncoder::new(data_slice_cursor, self.compression);
-                // todo: is see if there is a more efficient way to do this. probs chunking would help or something
-                // also this is a bit different than stdlib `default_read_to_end`.
-                // However, it is needed because we are using a custom allocator
-                util::read_to_end(&mut z, scratch)?;
+                zstd::stream::copy_encode(data_slice_cursor, &mut scratch, 9)?;
             }
 
             let data_len = VarInt(data_len as u32 as i32);

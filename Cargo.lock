@@ -2185,6 +2185,7 @@ dependencies = [
  "valence_protocol",
  "valence_registry",
  "valence_text",
+ "zstd 0.13.1",
 ]
 
 [[package]]
