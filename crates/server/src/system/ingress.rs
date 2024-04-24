@@ -403,9 +403,11 @@ fn process_status(
             info!("sent query response: {query_request:?}");
             //
             packets.append_pre_compression_packet(&send, io, scratch)?;
+
+            // send pong
             // we send this right away so our ping looks better
             // let send = packets::status::QueryPongS2c { payload: 123 };
-            // packets.append_pre_compression_packet(&send, io)?;
+            // packets.append_pre_compression_packet(&send, io, scratch)?;
 
             // short circuit
             // *login_state = LoginState::Terminate;
@@ -420,7 +422,7 @@ fn process_status(
 
             packets.append_pre_compression_packet(&send, io, scratch)?;
 
-            info!("sent query response: {query_ping:?}");
+            info!("sent query pong: {query_ping:?}");
             *login_state = LoginState::Terminate;
         }
 

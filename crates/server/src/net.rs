@@ -24,45 +24,11 @@ mod linux;
 
 mod generic;
 
-#[derive(Debug, Copy, Clone, Component)]
+#[derive(Debug, Copy, Clone, Component, PartialEq, Eq, Hash)]
 pub struct Fd(
     #[cfg(target_os = "linux")] linux::Fixed,
     #[cfg(target_os = "macos")] usize,
 );
-
-#[cfg(target_os = "linux")]
-impl Hash for Fd {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.0 .0.hash(state);
-    }
-}
-
-#[cfg(not(target_os = "linux"))]
-impl PartialEq for Fd {
-    fn eq(&self, _other: &Self) -> bool {
-        self.0 == 0
-    }
-}
-
-#[cfg(not(target_os = "linux"))]
-impl Eq for Fd {}
-
-#[cfg(not(target_os = "linux"))]
-impl Hash for Fd {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.0.hash(state);
-    }
-}
-
-#[cfg(target_os = "linux")]
-impl PartialEq for Fd {
-    fn eq(&self, other: &Self) -> bool {
-        self.0 .0 == other.0 .0
-    }
-}
-
-#[cfg(target_os = "linux")]
-impl Eq for Fd {}
 
 #[allow(unused, reason = "these are used on linux")]
 pub enum ServerEvent<'a> {

@@ -1,6 +1,7 @@
 // You can run this example from the root of the mio repo:
 // cargo run --example tcp_server --features="os-poll net"
 use std::{
+    collections::VecDeque,
     hash::BuildHasherDefault,
     io::{self, Read, Write},
     mem::MaybeUninit,
@@ -31,6 +32,7 @@ const EVENT_CAPACITY: usize = 128;
 struct ConnectionInfo {
     pub to_write: Vec<PacketWriteInfo>,
     pub connection: TcpStream,
+    pub data_to_write: Vec<u8>,
 }
 
 pub struct GenericServer {
@@ -85,7 +87,7 @@ impl ServerDef for GenericServer {
             events,
             ids: Ids { token_on: 1 },
             server,
-            write_iovecs: vec![],
+            write_iovecs: Vec::new(),
         })
     }
 
@@ -93,8 +95,6 @@ impl ServerDef for GenericServer {
         // todo: this is a bit of a hack, is there a better number? probs dont want people sending more than this
         let mut received_data = Vec::with_capacity(MAX_PACKET_SIZE * 2);
 
-        println!("start of loop");
-        // todo: fine tune ms amount... probably should be fine tuned with the amount of time left have to
         // process the current tick
         if let Err(err) = self
             .poll
@@ -106,12 +106,9 @@ impl ServerDef for GenericServer {
             return Err(err);
         }
 
-        println!("events.......");
         for event in &self.events {
-            println!("got event");
             match event.token() {
                 SERVER => loop {
-                    println!("server loop");
                     // Received an event for the TCP server socket, which
                     // indicates we can accept an connection.
                     let (mut connection, address) = match self.server.accept() {
@@ -130,8 +127,6 @@ impl ServerDef for GenericServer {
                         }
                     };
 
-                    println!("Accepted connection from: {address}");
-
                     let token = self.ids.generate_unique_token();
                     self.poll.registry().register(
                         &mut connection,
@@ -142,6 +137,7 @@ impl ServerDef for GenericServer {
                     self.connections.insert(token.0, ConnectionInfo {
                         to_write: vec![],
                         connection,
+                        data_to_write: vec![],
                     });
 
                     f(ServerEvent::AddPlayer { fd: Fd(token.0) });
@@ -168,15 +164,12 @@ impl ServerDef for GenericServer {
                                 .registry()
                                 .deregister(&mut connection.connection)?;
                         }
-                        println!("removed connection");
                         f(ServerEvent::RemovePlayer { fd: Fd(token.0) });
                     }
                 }
             }
-            println!("loop");
         }
 
-        println!("done events");
         Ok(())
     }
 
@@ -209,6 +202,7 @@ impl ServerDef for GenericServer {
 
             to_write.extend_from_slice(a);
             to_write.extend_from_slice(b);
+
             write.clear();
         }
     }
@@ -228,20 +222,42 @@ fn handle_connection_event(
     f: &mut impl FnMut(ServerEvent),
 ) -> io::Result<bool> {
     if event.is_writable() {
-        println!("writable event");
-        let mut data = Vec::new();
+        let data = &mut info.data_to_write;
 
         for elem in &info.to_write {
             data.extend_from_slice(unsafe { elem.as_slice() });
         }
 
+        if data.is_empty() {
+            // todo: I think an event cannot be both readable and writable
+            registry.reregister(
+                &mut info.connection,
+                event.token(),
+                Interest::READABLE.add(Interest::WRITABLE),
+            )?;
+
+            return Ok(false);
+        }
+
         // We can (maybe) write to the connection.
-        match info.connection.write(&data) {
-            Ok(n) if n < data.len() => return Err(io::ErrorKind::WriteZero.into()),
+        match info.connection.write(data) {
+            Ok(n) if n < data.len() => {
+                // remove {n} bytes from the data
+                // todo: is this most efficient
+                data.drain(..n);
+                registry.reregister(
+                    &mut info.connection,
+                    event.token(),
+                    Interest::READABLE.add(Interest::WRITABLE),
+                )?;
+            }
             Ok(_) => {
-                // After we've written something we'll reregister the connection
-                // to only respond to readable events.
-                registry.reregister(&mut info.connection, event.token(), Interest::READABLE)?;
+                data.drain(..);
+                registry.reregister(
+                    &mut info.connection,
+                    event.token(),
+                    Interest::READABLE.add(Interest::WRITABLE),
+                )?;
             }
             // Would block "errors" are the OS's way of saying that the
             // connection is not actually ready to perform this I/O operation.
@@ -253,10 +269,14 @@ fn handle_connection_event(
             // Other errors we'll consider fatal.
             Err(err) => return Err(err),
         }
+
+        for _ in info.to_write.drain(..) {
+            // we do not have to care about data getting picked up by the kernel since this is not io uring
+            f(ServerEvent::SentData { fd: Fd(token.0) });
+        }
     }
 
     if event.is_readable() {
-        println!("readable event");
         let mut connection_closed = false;
         let mut bytes_read = 0;
         // We can (maybe) read from the connection.
@@ -265,17 +285,14 @@ fn handle_connection_event(
         received_data.resize(1024, 0);
 
         loop {
-            println!("start of read loop");
             match info.connection.read(&mut received_data[bytes_read..]) {
                 Ok(0) => {
                     // Reading 0 bytes means the other side has closed the
                     // connection or is done writing, then so are we.
                     connection_closed = true;
-                    println!("got 0 bytes");
                     break;
                 }
                 Ok(n) => {
-                    println!("got {} bytes", n);
                     bytes_read += n;
                     if bytes_read == received_data.len() {
                         received_data.resize(received_data.len() + 1024, 0);
@@ -291,7 +308,6 @@ fn handle_connection_event(
         }
 
         if bytes_read != 0 {
-            println!("sending RecvData");
             let received_data = &received_data[..bytes_read];
             f(ServerEvent::RecvData {
                 fd: Fd(token.0),
