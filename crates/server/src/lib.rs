@@ -313,13 +313,18 @@ impl Game {
 
         generate_ingress_events(&mut self.world, &mut self.server, &mut scratch);
 
-        self.world.send(Gametick {
-            bump: &bump,
-            scratch: &mut scratch, // todo: any problem with ref vs val
+        tracing::span!(tracing::Level::TRACE, "gametick").in_scope(|| {
+            self.world.send(Gametick {
+                bump: &bump,
+                scratch: &mut scratch, // todo: any problem with ref vs val
+            });
         });
 
         let server = &mut self.server;
-        self.world.send(Egress { server });
+
+        tracing::span!(tracing::Level::TRACE, "egress").in_scope(|| {
+            self.world.send(Egress { server });
+        });
 
         #[expect(
             clippy::cast_precision_loss,
@@ -330,7 +335,7 @@ impl Game {
         self.update_tick_stats(ms, scratch.one());
     }
 
-    #[instrument(skip(self))]
+    #[instrument(skip_all, level = "trace")]
     fn update_tick_stats(&mut self, ms: f64, scratch: &mut BumpScratch) {
         self.last_ms_per_tick.push_back(ms);
 

@@ -88,6 +88,7 @@ pub struct SentData {
 unsafe impl<'a, 'b, 'c> Send for RecvData<'a, 'b, 'c> {}
 unsafe impl<'a, 'b, 'c> Sync for RecvData<'a, 'b, 'c> {}
 
+#[instrument(skip_all)]
 pub fn generate_ingress_events(
     world: &mut World,
     server: &mut Server,
@@ -187,6 +188,7 @@ pub fn sent_data(
     pkts.set_successfully_sent();
 }
 
+#[instrument(skip_all)]
 pub fn recv_data(
     r: ReceiverMut<RecvData>,
     mut fd_lookup: Single<&mut FdLookup>,

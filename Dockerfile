@@ -1,5 +1,5 @@
 # Define an argument for the Rust nightly version
-ARG RUST_NIGHTLY_VERSION=nightly-2024-04-19
+ARG RUST_NIGHTLY_VERSION=nightly-2024-04-24
 
 # Use Debian Bookworm as base image
 FROM debian:bookworm-slim as packages

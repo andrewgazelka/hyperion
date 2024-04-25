@@ -4,7 +4,7 @@ use evenio::{
     fetch::{Fetcher, Single},
 };
 use rayon::prelude::*;
-use tracing::instrument;
+use tracing::{instrument, trace};
 
 use crate::{
     components::{EntityReaction, FullEntityPose},
