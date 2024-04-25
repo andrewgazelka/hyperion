@@ -36,7 +36,7 @@ fn init() -> anyhow::Result<()> {
             std::thread::spawn(|| {
                 no_denormals::no_denormals(|| {
                     thread.run();
-                })
+                });
             });
             Ok(())
         })

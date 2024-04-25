@@ -8,7 +8,7 @@ use crate::{
     events::{Gametick, KickPlayer},
     global::Global,
     net,
-    net::{IoBuf, IoBufs, Packets},
+    net::{IoBufs, Packets},
     system::player_join_world::send_keep_alive,
 };
 
@@ -22,6 +22,8 @@ pub fn keep_alive(
     mut compressor: Single<&mut net::Compressor>,
 ) {
     let mut gametick = gametick.event;
+
+    #[expect(clippy::mut_mut, reason = "I do not know a way around this")]
     let scratch = &mut gametick.scratch;
     let compressor = compressor.one();
 
@@ -47,7 +49,7 @@ pub fn keep_alive(
             *sent = Instant::now();
 
             // todo: handle and disconnect
-            let mut scratch = scratch.one();
+            let scratch = scratch.one();
             send_keep_alive(packets, io.one(), scratch, compressor).unwrap();
 
             trace!("keep alive");

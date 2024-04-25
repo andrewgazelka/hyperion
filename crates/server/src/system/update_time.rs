@@ -10,7 +10,7 @@ use crate::{
 #[instrument(skip_all, level = "trace")]
 pub fn update_time(
     gametick: ReceiverMut<Gametick>,
-    mut broadcast: Single<&mut Broadcast>,
+    broadcast: Single<&Broadcast>,
     mut global: Single<&mut Global>,
     mut io: Single<&mut IoBufs>,
     mut compressor: Single<&mut Compressor>,
@@ -19,6 +19,7 @@ pub fn update_time(
 
     let gametick = &mut *gametick;
 
+    #[expect(clippy::mut_mut, reason = "I do not know a way around this")]
     let scratch = &mut gametick.scratch;
 
     let tick = global.tick;
@@ -33,7 +34,7 @@ pub fn update_time(
 
         let scratch = scratch.one();
         broadcast
-            .append(&pkt, io.one(), scratch, &mut compressor.one())
+            .append(&pkt, io.one(), scratch, compressor.one())
             .unwrap();
     }
 

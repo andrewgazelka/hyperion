@@ -15,10 +15,6 @@ pub struct PacketEncoder {
     threshold: CompressionThreshold,
 }
 
-#[expect(
-    clippy::missing_fields_in_debug,
-    reason = "compressor is not debuggable"
-)]
 impl Debug for PacketEncoder {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("PacketEncoder")

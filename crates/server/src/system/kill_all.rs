@@ -12,7 +12,7 @@ use crate::{
 pub fn kill_all(
     _r: ReceiverMut<KillAllEntities>,
     entities: Fetcher<(EntityId, &MinecraftEntity, Not<&Player>)>,
-    mut broadcast: Single<&mut Broadcast>,
+    broadcast: Single<&Broadcast>,
     mut io: Single<&mut IoBufs>,
     mut compressor: Single<&mut Compressor>,
     mut s: Sender<Despawn>,
@@ -27,12 +27,7 @@ pub fn kill_all(
     // todo: use shared scratch if possible
     let mut scratch = Scratch::new();
     broadcast
-        .append(
-            &despawn_packet,
-            io.one(),
-            &mut scratch,
-            &mut compressor.one(),
-        )
+        .append(&despawn_packet, io.one(), &mut scratch, compressor.one())
         .unwrap();
 
     for id in ids {

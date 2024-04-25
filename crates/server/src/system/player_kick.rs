@@ -11,10 +11,9 @@ use crate::{
     components::Uuid,
     events::{KickPlayer, Scratch},
     global::Global,
-    net::{Compressor, IoBuf, Packets},
+    net::{Compressor, IoBufs, Packets},
     singleton::{player_id_lookup::EntityIdLookup, player_uuid_lookup::PlayerUuidLookup},
 };
-use crate::net::IoBufs;
 
 #[instrument(skip_all)]
 pub fn player_kick(

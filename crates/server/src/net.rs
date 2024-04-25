@@ -219,7 +219,7 @@ impl IoBuf {
         }
     }
 
-    pub fn index(&self) -> usize {
+    pub const fn index(&self) -> usize {
         self.index
     }
 

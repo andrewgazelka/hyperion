@@ -8,9 +8,8 @@ use valence_protocol::{packets::play, VarInt, Velocity};
 use crate::{
     components::EntityReaction,
     events::Gametick,
-    net::{Compressor, IoBuf, Packets},
+    net::{Compressor, IoBufs, Packets},
 };
-use crate::net::IoBufs;
 
 fn vel_m_per_tick(input: glam::Vec3) -> Velocity {
     let input = input * 8000.0;

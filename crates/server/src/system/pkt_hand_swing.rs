@@ -4,13 +4,13 @@ use valence_protocol::{packets::play, Hand, VarInt};
 
 use crate::{
     events::{Scratch, SwingArm},
-    net::{Broadcast, Compressor, IoBuf, IoBufs},
+    net::{Broadcast, Compressor, IoBufs},
 };
 
 #[instrument(skip_all, level = "trace")]
 pub fn pkt_hand_swing(
     swing_arm: Receiver<SwingArm, EntityId>,
-    mut broadcast: Single<&mut Broadcast>,
+    broadcast: Single<&mut Broadcast>,
     mut io: Single<&mut IoBufs>,
     mut compressor: Single<&mut Compressor>,
 ) {
@@ -30,6 +30,6 @@ pub fn pkt_hand_swing(
 
     let mut scratch = Scratch::new();
     broadcast
-        .append(&pkt, &mut io.one(), &mut scratch, compressor.one())
+        .append(&pkt, io.one(), &mut scratch, compressor.one())
         .unwrap();
 }

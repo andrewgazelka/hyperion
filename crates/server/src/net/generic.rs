@@ -16,7 +16,7 @@ use mio::{
     Events, Interest, Poll, Registry, Token,
 };
 use rayon_local::RayonLocal;
-use tracing::{info, warn};
+use tracing::warn;
 
 use crate::{
     global::Global,
@@ -275,7 +275,7 @@ fn handle_connection_event(
         info.to_write
             .iter_mut()
             .flat_map(|buf| buf.drain(..))
-            .for_each(|buf| {
+            .for_each(|_| {
                 f(ServerEvent::SentData { fd: Fd(token.0) });
             });
     }

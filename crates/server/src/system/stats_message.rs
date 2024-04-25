@@ -10,7 +10,7 @@ use crate::{
 #[instrument(skip_all, level = "trace")]
 pub fn stats_message(
     r: ReceiverMut<StatsEvent>,
-    mut broadcast: Single<&mut Broadcast>,
+    broadcast: Single<&Broadcast>,
     mut compressor: Single<&mut Compressor>,
     mut io: Single<&mut IoBufs>,
 ) {
@@ -27,6 +27,6 @@ pub fn stats_message(
     };
 
     broadcast
-        .append(&packet, io.one(), scratch, &mut compressor.one())
+        .append(&packet, io.one(), scratch, compressor.one())
         .unwrap();
 }

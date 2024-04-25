@@ -79,7 +79,7 @@ pub fn player_join_world(
     players: Fetcher<PlayerQuery>,
     mut uuid_lookup: Single<&mut PlayerUuidLookup>,
     mut id_lookup: Single<&mut EntityIdLookup>,
-    mut broadcast: Single<&mut Broadcast>,
+    broadcast: Single<&Broadcast>,
     mut io: Single<&mut IoBufs>,
     mut compressor: Single<&mut net::Compressor>,
 ) {
@@ -162,15 +162,15 @@ pub fn player_join_world(
 
     let compressor = compressor.one();
 
-    let mut io = io.one();
+    let io = io.one();
 
     broadcast
-        .append(&text, &mut io, &mut scratch, compressor)
+        .append(&text, io, &mut scratch, compressor)
         .unwrap();
 
     let local = query.packets;
 
-    local.append_raw(cached_data, &mut io);
+    local.append_raw(cached_data, io);
 
     info!("appending cached data");
 
@@ -180,7 +180,7 @@ pub fn player_join_world(
                 entity_id: VarInt(0),
                 equipment: Cow::Borrowed(&equipment),
             },
-            &mut io,
+            io,
             &mut scratch,
             compressor,
         )
@@ -197,14 +197,12 @@ pub fn player_join_world(
     };
 
     broadcast
-        .append(&info, &mut io, &mut scratch, compressor)
+        .append(&info, io, &mut scratch, compressor)
         .unwrap();
 
     for entity in entities {
         let pkt = spawn_packet(entity.id, *entity.uuid, entity.pose);
-        local
-            .append(&pkt, &mut io, &mut scratch, compressor)
-            .unwrap();
+        local.append(&pkt, io, &mut scratch, compressor).unwrap();
     }
 
     // todo: cache
@@ -235,7 +233,7 @@ pub fn player_join_world(
                     entities: player_names,
                 },
             },
-            &mut io,
+            io,
             &mut scratch,
             compressor,
         )
@@ -251,7 +249,7 @@ pub fn player_join_world(
                     entities: vec![current_name],
                 },
             },
-            &mut io,
+            io,
             &mut scratch,
             compressor,
         )
@@ -263,7 +261,7 @@ pub fn player_join_world(
                 actions,
                 entries: Cow::Owned(entries),
             },
-            &mut io,
+            io,
             &mut scratch,
             compressor,
         )
@@ -278,7 +276,7 @@ pub fn player_join_world(
                 world_age: tick,
                 time_of_day,
             },
-            &mut io,
+            io,
             &mut scratch,
             compressor,
         )
@@ -300,17 +298,13 @@ pub fn player_join_world(
             pitch: ByteAngle::from_degrees(pose.pitch),
         };
 
-        local
-            .append(&pkt, &mut io, &mut scratch, compressor)
-            .unwrap();
+        local.append(&pkt, io, &mut scratch, compressor).unwrap();
 
         let pkt = crate::packets::def::EntityEquipmentUpdateS2c {
             entity_id,
             equipment: Cow::Borrowed(&equipment),
         };
-        local
-            .append(&pkt, &mut io, &mut scratch, compressor)
-            .unwrap();
+        local.append(&pkt, io, &mut scratch, compressor).unwrap();
     }
 
     global
@@ -336,14 +330,14 @@ pub fn player_join_world(
                 flags: PlayerPositionLookFlags::default(),
                 teleport_id: 1.into(),
             },
-            &mut io,
+            io,
             &mut scratch,
             compressor,
         )
         .unwrap();
 
     broadcast
-        .append(&spawn_player, &mut io, &mut scratch, compressor)
+        .append(&spawn_player, io, &mut scratch, compressor)
         .unwrap();
 
     broadcast
@@ -352,7 +346,7 @@ pub fn player_join_world(
                 entity_id: current_entity_id,
                 equipment: Cow::Borrowed(&equipment),
             },
-            &mut io,
+            io,
             &mut scratch,
             compressor,
         )
@@ -407,7 +401,7 @@ impl<T, const N: usize> Array3d for [T; N] {
 }
 
 pub fn send_keep_alive(
-    packets: &mut Packets,
+    packets: &Packets,
     io: &mut IoBuf,
     scratch: &mut impl ScratchBuffer,
     compressor: &mut Compressor,

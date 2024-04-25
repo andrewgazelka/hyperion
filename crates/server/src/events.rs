@@ -151,11 +151,6 @@ pub struct Gametick<'a, 'b> {
     pub scratch: &'b mut RayonLocal<BumpScratch<'a>>,
 }
 
-// todo: REMOVE
-#[expect(
-    clippy::non_send_fields_in_send_ty,
-    reason = "this will be removed in the future"
-)]
 unsafe impl<'a, 'b> Send for Gametick<'a, 'b> {}
 unsafe impl<'a, 'b> Sync for Gametick<'a, 'b> {}
 

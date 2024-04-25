@@ -18,7 +18,7 @@ rayon = "1.10.0"
 divan = "0.1.14"
 
 [lints.rust]
-missing_docs= "warn"
+#missing_docs= "warn"
 
 [lints.clippy]
 complexity = "deny"

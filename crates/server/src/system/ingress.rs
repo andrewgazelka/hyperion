@@ -80,14 +80,6 @@ pub struct SentData {
     fd: Fd,
 }
 
-// todo: remove
-#[expect(
-    clippy::non_send_fields_in_send_ty,
-    reason = "todo we will remove this"
-)]
-unsafe impl<'a, 'b, 'c> Send for RecvData<'a, 'b, 'c> {}
-unsafe impl<'a, 'b, 'c> Sync for RecvData<'a, 'b, 'c> {}
-
 #[instrument(skip_all)]
 pub fn generate_ingress_events(
     world: &mut World,
@@ -189,6 +181,7 @@ pub fn sent_data(
 }
 
 #[instrument(skip_all)]
+#[allow(clippy::too_many_arguments, reason = "todo")]
 pub fn recv_data(
     r: ReceiverMut<RecvData>,
     mut fd_lookup: Single<&mut FdLookup>,
@@ -235,7 +228,7 @@ pub fn recv_data(
         match *login_state {
             LoginState::Handshake => process_handshake(login_state, &frame).unwrap(),
             LoginState::Status => {
-                process_status(login_state, &frame, packets, scratch, io).unwrap();
+                process_status(login_state, &frame, packets, io).unwrap();
             }
             LoginState::Terminate => {
                 // todo: does this properly terminate the connection? I don't think so probably
@@ -362,7 +355,7 @@ fn process_login(
         properties: Cow::default(),
     };
 
-    packets.append(&pkt, io, scratch, &mut compressor.one())?;
+    packets.append(&pkt, io, scratch, compressor.one())?;
 
     let username = Box::from(username);
 
@@ -384,8 +377,7 @@ fn process_login(
 fn process_status(
     login_state: &mut LoginState,
     packet: &PacketFrame,
-    packets: &mut Packets,
-    scratch: &mut impl ScratchBuffer,
+    packets: &Packets,
     io: &mut IoBuf,
 ) -> anyhow::Result<()> {
     debug_assert!(*login_state == LoginState::Status);

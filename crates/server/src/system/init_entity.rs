@@ -13,7 +13,7 @@ use crate::{
         EntityReaction, FullEntityPose, ImmuneStatus, MinecraftEntity, RunningSpeed, Uuid, Vitals,
     },
     events::{InitEntity, Scratch},
-    net::{Broadcast, Compressor, IoBuf, IoBufs},
+    net::{Broadcast, Compressor, IoBufs},
     singleton::player_id_lookup::EntityIdLookup,
     system::entity_position::PositionSyncMetadata,
 };
@@ -55,7 +55,7 @@ pub fn init_entity(
         Spawn,
     )>,
     mut io: Single<&mut IoBufs>,
-    mut broadcast: Single<&mut Broadcast>,
+    broadcast: Single<&Broadcast>,
     mut compressor: Single<&mut Compressor>,
 ) {
     let event = r.event;

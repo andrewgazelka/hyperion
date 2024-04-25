@@ -6,11 +6,10 @@ use valence_text::{Color, IntoText};
 use crate::{
     events::Gametick,
     global::Global,
-    net::{Compressor, IoBuf, Packets},
+    net::{Compressor, IoBufs, Packets},
     tracker::Prev,
     Vitals,
 };
-use crate::net::IoBufs;
 
 #[allow(dead_code, reason = "todo")]
 const HURT_SOUND: VarInt = VarInt(1018); // represents 1019
@@ -41,12 +40,13 @@ pub fn sync_players(
 
     let mut gametick = gametick.event;
 
+    #[expect(clippy::mut_mut, reason = "I do not know a way around this")]
     let scratch = &mut gametick.scratch;
 
     let scratch = scratch.one();
     let compressor = compressor.one();
-    
-    let mut io = io.one();
+
+    let io = io.one();
 
     fetcher.iter_mut().for_each(|query| {
         let entity_id = VarInt(query.id.index().0 as i32);
@@ -78,7 +78,7 @@ pub fn sync_players(
                             food: VarInt(20),
                             food_saturation: 5.0,
                         },
-                        &mut io,
+                        io,
                         scratch,
                         compressor,
                     );
@@ -111,7 +111,7 @@ pub fn sync_players(
                                 .with_show_icon(true),
                             factor_codec: None,
                         },
-                        &mut io,
+                        io,
                         scratch,
                         compressor,
                     );
@@ -123,7 +123,7 @@ pub fn sync_players(
                         kind: play::game_state_change_s2c::GameEventKind::ChangeGameMode,
                         value: SPECTATOR,
                     },
-                    &mut io,
+                    io,
                     scratch,
                     compressor,
                 );
@@ -132,7 +132,7 @@ pub fn sync_players(
                     &play::TitleS2c {
                         title_text: "YOU DIED!".into_text().color(Color::RED).into(),
                     },
-                    &mut io,
+                    io,
                     scratch,
                     compressor,
                 );
@@ -145,7 +145,7 @@ pub fn sync_players(
                             + " seconds")
                             .into(),
                     },
-                    &mut io,
+                    io,
                     scratch,
                     compressor,
                 );
@@ -160,14 +160,14 @@ pub fn sync_players(
                 //             pitch: 1.0,
                 //             seed: 0,
                 //         },
-                //         &mut io,
+                //         io,
                 //     )
                 //     .unwrap();
             }
             (Vitals::Dead { .. }, Vitals::Alive { health, .. }) => {
                 let _ = packets.append(
                     &play::ClearTitleS2c { reset: true },
-                    &mut io,
+                    io,
                     scratch,
                     compressor,
                 );
@@ -176,7 +176,7 @@ pub fn sync_players(
                         kind: play::game_state_change_s2c::GameEventKind::ChangeGameMode,
                         value: SURVIVAL,
                     },
-                    &mut io,
+                    io,
                     scratch,
                     compressor,
                 );
@@ -186,7 +186,7 @@ pub fn sync_players(
                         food: VarInt(20),
                         food_saturation: 5.0,
                     },
-                    &mut io,
+                    io,
                     scratch,
                     compressor,
                 );
@@ -201,7 +201,7 @@ pub fn sync_players(
                             + " seconds")
                             .into(),
                     },
-                    &mut io,
+                    io,
                     scratch,
                     compressor,
                 );
