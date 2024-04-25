@@ -13,10 +13,9 @@ pub mod locals;
 use std::{
     alloc::{AllocError, Allocator, Layout},
     cell::UnsafeCell,
-    ops::{Deref, DerefMut},
+    ops::{Deref, DerefMut, Index, IndexMut},
     ptr::NonNull,
 };
-use std::ops::{Index, IndexMut};
 
 #[cfg(feature = "evenio")]
 pub use evenio::*;
@@ -54,8 +53,9 @@ pub struct RayonLocal<S> {
     main_thread_id: ThreadId,
 }
 
-impl <'a, S> IntoIterator for &'a RayonLocal<S> {
+impl<'a, S> IntoIterator for &'a RayonLocal<S> {
     type Item = &'a S;
+
     type IntoIter = impl Iterator<Item = &'a S>;
 
     fn into_iter(self) -> Self::IntoIter {
@@ -63,8 +63,9 @@ impl <'a, S> IntoIterator for &'a RayonLocal<S> {
     }
 }
 
-impl <'a, S> IntoIterator for &'a mut RayonLocal<S> {
+impl<'a, S> IntoIterator for &'a mut RayonLocal<S> {
     type Item = &'a mut S;
+
     type IntoIter = impl Iterator<Item = &'a mut S>;
 
     fn into_iter(self) -> Self::IntoIter {
@@ -72,7 +73,7 @@ impl <'a, S> IntoIterator for &'a mut RayonLocal<S> {
     }
 }
 
-impl <S> Index<usize> for RayonLocal<S> {
+impl<S> Index<usize> for RayonLocal<S> {
     type Output = S;
 
     fn index(&self, index: usize) -> &Self::Output {
@@ -80,7 +81,7 @@ impl <S> Index<usize> for RayonLocal<S> {
     }
 }
 
-impl <S> IndexMut<usize> for RayonLocal<S> {
+impl<S> IndexMut<usize> for RayonLocal<S> {
     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
         unsafe { &mut *self.thread_locals[index].get() }
     }
@@ -204,6 +205,16 @@ impl<S> RayonLocal<S> {
         Self { thread_locals }
     }
 
+    pub fn init_with_index(mut f: impl FnMut(usize) -> S) -> Self {
+        let num_threads = rayon::current_num_threads();
+
+        let thread_locals = (0..=num_threads)
+            .map(|idx| UnsafeCell::new(f(idx)))
+            .collect();
+
+        Self { thread_locals }
+    }
+
     pub fn iter(&self) -> impl Iterator<Item = &S> {
         self.get_all().iter()
     }
@@ -229,7 +240,8 @@ impl<S> RayonLocal<S> {
         RayonLocal { thread_locals }
     }
 
-    #[must_use] pub fn idx(&self) -> usize {
+    #[must_use]
+    pub fn idx(&self) -> usize {
         // this is so the main thread will still have a place to put data
         // todo: priority—this is currently unsafe in the situation where there is another thread beyond the main thread
         let index = rayon::current_thread_index().unwrap_or(self.thread_locals.len() - 1);
@@ -256,6 +268,11 @@ impl<S> RayonLocal<S> {
     #[must_use]
     pub fn get_local_raw(&self) -> &UnsafeCell<S> {
         &self.thread_locals[self.idx()]
+    }
+
+    #[must_use]
+    pub const fn get_raw(&self, index: usize) -> &UnsafeCell<S> {
+        &self.thread_locals[index]
     }
 
     /// Get a mutable reference to all thread-local values.

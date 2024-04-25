@@ -6,7 +6,7 @@ use derive_more::{Deref, DerefMut, From};
 use evenio::prelude::Component;
 use libc::iovec;
 use libdeflater::CompressionLvl;
-use tracing::info;
+use tracing::debug;
 use valence_protocol::{CompressionThreshold, Encode};
 
 use crate::{
@@ -68,6 +68,12 @@ impl ServerDef for Server {
     }
 
     fn allocate_buffers(&mut self, buffers: &[iovec]) {
+        for (idx, elem) in buffers.iter().enumerate() {
+            let ptr = elem.iov_base as *const u8;
+            let len = elem.iov_len;
+            debug!("allocating buffer {idx} {ptr:?} {len:?}");
+        }
+
         self.server.allocate_buffers(buffers);
     }
 
@@ -168,6 +174,7 @@ pub struct IoBuf {
     /// The encoding buffer and logic
     enc: encoder::PacketEncoder,
     buf: Ring,
+    index: usize,
 }
 
 #[derive(Component, Deref, DerefMut)]
@@ -190,12 +197,10 @@ pub struct IoBufs {
 
 impl IoBufs {
     pub fn init(threshold: CompressionThreshold, server_def: &mut impl ServerDef) -> Self {
-        let mut locals = RayonLocal::init(|| IoBuf::new(threshold));
+        let mut locals = RayonLocal::init_with_index(|i| IoBuf::new(threshold, i));
 
-        info!("initializing iobufs");
         let rings = locals.get_all_mut().iter_mut().map(IoBuf::buf_mut);
         register_rings(server_def, rings);
-        info!("iobufs initialized");
 
         Self { locals }
     }
@@ -206,11 +211,16 @@ unsafe impl Send for IoBuf {}
 unsafe impl Sync for IoBuf {}
 
 impl IoBuf {
-    pub fn new(threshold: CompressionThreshold) -> Self {
+    pub fn new(threshold: CompressionThreshold, index: usize) -> Self {
         Self {
             enc: encoder::PacketEncoder::new(threshold),
             buf: Ring::new(S2C_BUFFER_SIZE),
+            index,
         }
+    }
+
+    pub fn index(&self) -> usize {
+        self.index
     }
 
     pub fn buf_mut(&mut self) -> &mut Ring {
@@ -273,10 +283,9 @@ impl Packets {
         self.to_write.iter_mut().for_each(VecDeque::clear);
     }
 
-    fn push(&self, writer: PacketWriteInfo) {
-        let idx = self.to_write.idx();
-        info!("idx: {idx}");
-        let to_write = unsafe { &mut *self.to_write.get_local_raw().get() };
+    fn push(&self, writer: PacketWriteInfo, buf: &IoBuf) {
+        let idx = buf.index();
+        let to_write = unsafe { &mut *self.to_write.get_raw(idx).get() };
 
         if let Some(last) = to_write.back_mut() {
             let start_pointer_if_contiguous = unsafe { last.start_ptr.add(last.len as usize) };
@@ -299,7 +308,7 @@ impl Packets {
 
         let result = append_packet_without_compression(pkt, &mut buf.buf)?;
 
-        self.push(result);
+        self.push(result, buf);
 
         // reset
         buf.enc.set_compression(compression);
@@ -321,7 +330,7 @@ impl Packets {
             .enc
             .append_packet(pkt, &mut buf.buf, scratch, compressor)?;
 
-        self.push(result);
+        self.push(result, buf);
         Ok(())
     }
 
@@ -333,7 +342,7 @@ impl Packets {
             len: data.len() as u32,
         };
 
-        self.push(writer);
+        self.push(writer, buf);
     }
 }
 
