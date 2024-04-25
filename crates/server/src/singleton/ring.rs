@@ -70,17 +70,20 @@ impl Ring {
         }
     }
 
-    pub fn register(&mut self, server_def: &mut impl ServerDef) {
-        let ptr = self.data.as_mut_ptr();
-        let len = self.data.len();
-
-        let to_register = iovec {
-            iov_base: ptr.cast(),
-            iov_len: len,
-        };
-
-        server_def.allocate_buffers(&[to_register]);
+    fn as_iovec(&mut self) -> iovec {
+        iovec {
+            iov_base: self.data.as_mut_ptr().cast(),
+            iov_len: self.data.len(),
+        }
     }
+}
+
+pub fn register_rings<'a>(
+    server_def: &mut impl ServerDef,
+    io_buf: impl Iterator<Item = &'a mut Ring>,
+) {
+    let vec = io_buf.map(Ring::as_iovec).collect::<Vec<_>>();
+    server_def.allocate_buffers(&vec);
 }
 
 #[cfg(test)]

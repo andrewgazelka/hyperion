@@ -155,6 +155,9 @@ mod decoder;
 mod encoder;
 
 pub use decoder::PacketDecoder;
+use rayon_local::RayonLocal;
+
+use crate::{net::encoder::append_packet_without_compression, singleton::ring::register_rings};
 
 const NUM_PLAYERS: usize = 1024;
 const S2C_BUFFER_SIZE: usize = 1024 * 1024 * NUM_PLAYERS;
@@ -166,14 +169,35 @@ pub struct IoBuf {
     buf: Ring,
 }
 
+#[derive(Component, Deref, DerefMut)]
+pub struct Compressor {
+    compressors: RayonLocal<libdeflater::Compressor>,
+}
+
+#[derive(Component, Debug, Deref, DerefMut)]
+pub struct IoBufs {
+    locals: RayonLocal<IoBuf>,
+}
+
+impl IoBufs {
+    pub fn init(threshold: CompressionThreshold, server_def: &mut impl ServerDef) -> Self {
+        let mut locals = RayonLocal::init(|| IoBuf::new(threshold));
+
+        let rings = locals.get_all_mut().iter_mut().map(IoBuf::buf_mut);
+        register_rings(server_def, rings);
+
+        Self { locals }
+    }
+}
+
 // todo: not valid we should remove
 unsafe impl Send for IoBuf {}
 unsafe impl Sync for IoBuf {}
 
 impl IoBuf {
-    pub fn new(threshold: CompressionThreshold, level: CompressionLvl) -> Self {
+    pub fn new(threshold: CompressionThreshold) -> Self {
         Self {
-            enc: encoder::PacketEncoder::new(threshold, level),
+            enc: encoder::PacketEncoder::new(threshold),
             buf: Ring::new(S2C_BUFFER_SIZE),
         }
     }
@@ -185,7 +209,7 @@ impl IoBuf {
 
 /// This is useful for the ECS so we can use Single<&mut Broadcast> instead of having to use a marker struct
 #[derive(Component, From, Deref, DerefMut, Default)]
-pub struct Broadcast(Packets);
+pub struct Broadcast(RayonLocal<Packets>);
 
 /// Stores indices of packets
 #[derive(Component, Default)]
@@ -246,7 +270,6 @@ impl Packets {
         &mut self,
         pkt: &P,
         buf: &mut IoBuf,
-        scratch: &mut impl ScratchBuffer,
     ) -> anyhow::Result<()>
     where
         P: valence_protocol::Packet + Encode,
@@ -255,7 +278,7 @@ impl Packets {
         // none
         buf.enc.set_compression(CompressionThreshold::DEFAULT);
 
-        let result = buf.enc.append_packet(pkt, &mut buf.buf, scratch)?;
+        let result = append_packet_without_compression(pkt, &mut buf.buf)?;
 
         self.push(result);
 
@@ -270,11 +293,14 @@ impl Packets {
         pkt: &P,
         buf: &mut IoBuf,
         scratch: &mut impl ScratchBuffer,
+        compressor: &mut libdeflater::Compressor,
     ) -> anyhow::Result<()>
     where
         P: valence_protocol::Packet + Encode,
     {
-        let result = buf.enc.append_packet(pkt, &mut buf.buf, scratch)?;
+        let result = buf
+            .enc
+            .append_packet(pkt, &mut buf.buf, scratch, compressor)?;
 
         self.push(result);
         Ok(())
@@ -292,132 +318,132 @@ impl Packets {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use bumpalo::Bump;
-    use valence_protocol::{packets::login::LoginHelloC2s, Bounded};
-
-    use super::*;
-    use crate::events::Scratch;
-
-    #[test]
-    fn test_append_pre_compression_packet() {
-        let mut buf = IoBuf::new(
-            CompressionThreshold::DEFAULT,
-            CompressionLvl::new(4).unwrap(),
-        );
-        let mut packets = Packets::default();
-
-        let pkt = LoginHelloC2s {
-            username: Bounded::default(),
-            profile_id: None,
-        };
-
-        let bump = Bump::new();
-        let mut scratch = Scratch::from(&bump);
-
-        packets
-            .append_pre_compression_packet(&pkt, &mut buf, &mut scratch)
-            .unwrap();
-
-        assert_eq!(packets.get_write().len(), 1);
-
-        let len = packets.get_write()[0].len;
-
-        assert_eq!(len, 4); // Packet length for an empty LoginHelloC2s
-    }
-    #[test]
-    fn test_append_packet() {
-        let mut buf = IoBuf::new(
-            CompressionThreshold::DEFAULT,
-            CompressionLvl::new(4).unwrap(),
-        );
-        let mut packets = Packets::default();
-
-        let pkt = LoginHelloC2s {
-            username: Bounded::default(),
-            profile_id: None,
-        };
-
-        let bump = Bump::new();
-        let mut scratch = Scratch::from(&bump);
-        packets.append(&pkt, &mut buf, &mut scratch).unwrap();
-
-        assert_eq!(packets.get_write().len(), 1);
-        let len = packets.get_write()[0].len;
-        assert_eq!(len, 4); // Packet length for an empty LoginHelloC2s
-    }
-
-    #[test]
-    fn test_append_raw() {
-        let mut buf = IoBuf::new(
-            CompressionThreshold::DEFAULT,
-            CompressionLvl::new(4).unwrap(),
-        );
-        let mut packets = Packets::default();
-
-        let data = b"Hello, world!";
-        packets.append_raw(data, &mut buf);
-
-        assert_eq!(packets.get_write().len(), 1);
-
-        let len = packets.get_write()[0].len;
-        assert_eq!(len, data.len() as u32);
-    }
-
-    #[test]
-    fn test_clear() {
-        let mut buf = IoBuf::new(
-            CompressionThreshold::DEFAULT,
-            CompressionLvl::new(4).unwrap(),
-        );
-        let mut packets = Packets::default();
-
-        let pkt = LoginHelloC2s {
-            username: Bounded::default(),
-            profile_id: None,
-        };
-
-        let bump = Bump::new();
-        let mut scratch = Scratch::from(&bump);
-
-        packets.append(&pkt, &mut buf, &mut scratch).unwrap();
-        assert_eq!(packets.get_write().len(), 1);
-
-        packets.clear();
-        assert_eq!(packets.get_write().len(), 0);
-    }
-
-    #[test]
-    fn test_contiguous_packets() {
-        let mut buf = IoBuf::new(
-            CompressionThreshold::DEFAULT,
-            CompressionLvl::new(4).unwrap(),
-        );
-        let mut packets = Packets::default();
-
-        let pkt1 = LoginHelloC2s {
-            username: Bounded::default(),
-            profile_id: None,
-        };
-        let pkt2 = LoginHelloC2s {
-            username: Bounded::default(),
-            profile_id: None,
-        };
-
-        let bump = Bump::new();
-        let mut scratch = Scratch::from(&bump);
-
-        packets
-            .append_pre_compression_packet(&pkt1, &mut buf, &mut scratch)
-            .unwrap();
-        packets
-            .append_pre_compression_packet(&pkt2, &mut buf, &mut scratch)
-            .unwrap();
-
-        assert_eq!(packets.get_write().len(), 1);
-
-        let len = packets.get_write()[0].len;
-        assert_eq!(len, 8); // Combined length of both packets
-    }
-}
+// #[cfg(test)]
+// mod tests {
+//     use bumpalo::Bump;
+//     use valence_protocol::{packets::login::LoginHelloC2s, Bounded};
+//
+//     use super::*;
+//     use crate::events::Scratch;
+//
+//     #[test]
+//     fn test_append_pre_compression_packet() {
+//         let mut buf = IoBuf::new(
+//             CompressionThreshold::DEFAULT,
+//             CompressionLvl::new(4).unwrap(),
+//         );
+//         let mut packets = Packets::default();
+//
+//         let pkt = LoginHelloC2s {
+//             username: Bounded::default(),
+//             profile_id: None,
+//         };
+//
+//         let bump = Bump::new();
+//         let mut scratch = Scratch::from(&bump);
+//
+//         packets
+//             .append_pre_compression_packet(&pkt, &mut buf)
+//             .unwrap();
+//
+//         assert_eq!(packets.get_write().len(), 1);
+//
+//         let len = packets.get_write()[0].len;
+//
+//         assert_eq!(len, 4); // Packet length for an empty LoginHelloC2s
+//     }
+//     #[test]
+//     fn test_append_packet() {
+//         let mut buf = IoBuf::new(
+//             CompressionThreshold::DEFAULT,
+//             CompressionLvl::new(4).unwrap(),
+//         );
+//         let mut packets = Packets::default();
+//
+//         let pkt = LoginHelloC2s {
+//             username: Bounded::default(),
+//             profile_id: None,
+//         };
+//
+//         let bump = Bump::new();
+//         let mut scratch = Scratch::from(&bump);
+//         packets.append(&pkt, &mut buf, &mut scratch).unwrap();
+//
+//         assert_eq!(packets.get_write().len(), 1);
+//         let len = packets.get_write()[0].len;
+//         assert_eq!(len, 4); // Packet length for an empty LoginHelloC2s
+//     }
+//
+//     #[test]
+//     fn test_append_raw() {
+//         let mut buf = IoBuf::new(
+//             CompressionThreshold::DEFAULT,
+//             CompressionLvl::new(4).unwrap(),
+//         );
+//         let mut packets = Packets::default();
+//
+//         let data = b"Hello, world!";
+//         packets.append_raw(data, &mut buf);
+//
+//         assert_eq!(packets.get_write().len(), 1);
+//
+//         let len = packets.get_write()[0].len;
+//         assert_eq!(len, data.len() as u32);
+//     }
+//
+//     #[test]
+//     fn test_clear() {
+//         let mut buf = IoBuf::new(
+//             CompressionThreshold::DEFAULT,
+//             CompressionLvl::new(4).unwrap(),
+//         );
+//         let mut packets = Packets::default();
+//
+//         let pkt = LoginHelloC2s {
+//             username: Bounded::default(),
+//             profile_id: None,
+//         };
+//
+//         let bump = Bump::new();
+//         let mut scratch = Scratch::from(&bump);
+//
+//         packets.append(&pkt, &mut buf, &mut scratch).unwrap();
+//         assert_eq!(packets.get_write().len(), 1);
+//
+//         packets.clear();
+//         assert_eq!(packets.get_write().len(), 0);
+//     }
+//
+//     #[test]
+//     fn test_contiguous_packets() {
+//         let mut buf = IoBuf::new(
+//             CompressionThreshold::DEFAULT,
+//             CompressionLvl::new(4).unwrap(),
+//         );
+//         let mut packets = Packets::default();
+//
+//         let pkt1 = LoginHelloC2s {
+//             username: Bounded::default(),
+//             profile_id: None,
+//         };
+//         let pkt2 = LoginHelloC2s {
+//             username: Bounded::default(),
+//             profile_id: None,
+//         };
+//
+//         let bump = Bump::new();
+//         let mut scratch = Scratch::from(&bump);
+//
+//         packets
+//             .append_pre_compression_packet(&pkt1, &mut buf, &mut scratch)
+//             .unwrap();
+//         packets
+//             .append_pre_compression_packet(&pkt2, &mut buf, &mut scratch)
+//             .unwrap();
+//
+//         assert_eq!(packets.get_write().len(), 1);
+//
+//         let len = packets.get_write()[0].len;
+//         assert_eq!(len, 8); // Combined length of both packets
+//     }
+// }

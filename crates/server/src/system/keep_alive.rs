@@ -20,7 +20,7 @@ pub fn keep_alive(
     mut s: Sender<KickPlayer>,
 ) {
     let mut gametick = gametick.event;
-    let scratch = &mut *gametick.scratch;
+    let scratch = &mut gametick.scratch;
 
     fetcher.iter_mut().for_each(|(id, keep_alive, packets)| {
         let Some(sent) = &mut keep_alive.last_sent else {
@@ -44,7 +44,8 @@ pub fn keep_alive(
             *sent = Instant::now();
 
             // todo: handle and disconnect
-            send_keep_alive(packets, &mut io, scratch).unwrap();
+            let mut scratch = scratch.get_round_robin();
+            send_keep_alive(packets, &mut io, *scratch).unwrap();
 
             trace!("keep alive");
         }

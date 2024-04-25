@@ -3,6 +3,7 @@ use std::{alloc::Allocator, fmt::Debug};
 use bumpalo::Bump;
 use evenio::{entity::EntityId, event::Event};
 use glam::Vec3;
+use rayon_local::RayonLocal;
 use valence_protocol::Hand;
 
 use crate::{
@@ -135,10 +136,10 @@ unsafe impl<A: Allocator + Debug> ScratchBuffer for Scratch<A> {
 
 pub type BumpScratch<'a> = Scratch<&'a Bump>;
 
-impl<'a> From<&'a Bump> for BumpScratch<'a> {
-    fn from(bump: &'a Bump) -> Self {
+impl<A: Allocator> From<A> for Scratch<A> {
+    fn from(allocator: A) -> Self {
         Self {
-            inner: Vec::with_capacity_in(MAX_PACKET_SIZE, bump),
+            inner: Vec::with_capacity_in(MAX_PACKET_SIZE, allocator),
         }
     }
 }
@@ -147,7 +148,7 @@ impl<'a> From<&'a Bump> for BumpScratch<'a> {
 #[derive(Event)]
 pub struct Gametick<'a, 'b> {
     pub bump: &'a Bump,
-    pub scratch: &'b mut BumpScratch<'a>,
+    pub scratch: &'b mut RayonLocal<BumpScratch<'a>>,
 }
 
 // todo: REMOVE

@@ -14,7 +14,6 @@ mod util;
 
 pub struct PacketEncoder {
     threshold: CompressionThreshold,
-    compressor: libdeflater::Compressor,
 }
 
 #[expect(
@@ -102,12 +101,8 @@ where
 }
 
 impl PacketEncoder {
-    pub fn new(threshold: CompressionThreshold, compression: CompressionLvl) -> Self {
-        let compressor = libdeflater::Compressor::new(compression);
-        Self {
-            threshold,
-            compressor,
-        }
+    pub const fn new(threshold: CompressionThreshold) -> Self {
+        Self { threshold }
     }
 
     pub const fn compression_threshold(&self) -> CompressionThreshold {
@@ -115,10 +110,11 @@ impl PacketEncoder {
     }
 
     pub fn append_packet_with_compression<P>(
-        &mut self,
+        &self,
         pkt: &P,
         buf: &mut impl Buf,
         scratch: &mut impl ScratchBuffer,
+        compressor: &mut libdeflater::Compressor,
     ) -> anyhow::Result<PacketWriteInfo>
     where
         P: valence_protocol::Packet + Encode,
@@ -154,7 +150,7 @@ impl PacketEncoder {
                     let scratch = scratch.spare_capacity_mut();
                     let scratch = unsafe { MaybeUninit::slice_assume_init_mut(scratch) };
 
-                    self.compressor.zlib_compress(data_slice, scratch)?
+                    compressor.zlib_compress(data_slice, scratch)?
                 };
 
                 unsafe {
@@ -210,6 +206,7 @@ impl PacketEncoder {
         pkt: &P,
         buf: &mut impl Buf,
         scratch: &mut impl ScratchBuffer,
+        compressor: &mut libdeflater::Compressor,
     ) -> anyhow::Result<PacketWriteInfo>
     where
         P: Packet + Encode,
@@ -217,7 +214,7 @@ impl PacketEncoder {
         let has_compression = self.threshold.0 >= 0;
 
         if has_compression {
-            self.append_packet_with_compression(pkt, buf, scratch)
+            self.append_packet_with_compression(pkt, buf, scratch, compressor)
         } else {
             append_packet_without_compression(pkt, buf)
         }

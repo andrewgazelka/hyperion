@@ -39,7 +39,7 @@ pub fn sync_players(
 
     let mut gametick = gametick.event;
 
-    let scratch = &mut *gametick.scratch;
+    let scratch = &mut gametick.scratch;
 
     fetcher.iter_mut().for_each(|query| {
         let entity_id = VarInt(query.id.index().0 as i32);

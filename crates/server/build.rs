@@ -9,7 +9,7 @@ fn main() {
         }
         Channel::Nightly => {
             let data = meta.short_version_string;
-            assert_eq!("rustc 1.79.0-nightly (e3181b091 2024-04-18)", data);
+            assert_eq!("rustc 1.79.0-nightly (ef8b9dcf2 2024-04-24)", data);
         }
     }
 }

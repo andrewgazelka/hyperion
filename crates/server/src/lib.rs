@@ -26,6 +26,7 @@ use evenio::prelude::*;
 use libc::{getrlimit, setrlimit, RLIMIT_NOFILE};
 use libdeflater::CompressionLvl;
 use ndarray::s;
+use rayon_local::RayonLocal;
 use signal_hook::iterator::Signals;
 use singleton::bounding_box;
 use spin::Lazy;
@@ -36,7 +37,7 @@ use crate::{
     components::Vitals,
     events::{BumpScratch, Egress, Gametick, StatsEvent},
     global::Global,
-    net::{Broadcast, IoBuf, Server, ServerDef},
+    net::{Broadcast, IoBufs, Server, ServerDef},
     singleton::{
         fd_lookup::FdLookup, player_aabb_lookup::PlayerBoundingBoxes,
         player_id_lookup::EntityIdLookup, player_uuid_lookup::PlayerUuidLookup,
@@ -170,8 +171,8 @@ impl Game {
         let mut server_def = Server::new(address)?;
 
         let io_id = world.spawn();
-        let mut io = IoBuf::new(shared.compression_threshold, shared.compression_level);
-        io.buf_mut().register(&mut server_def);
+
+        let io = IoBufs::init(shared.compression_threshold, &mut server_def);
 
         world.insert(io_id, io);
 
@@ -181,7 +182,7 @@ impl Game {
         world.add_handler(system::ingress::sent_data);
 
         world.add_handler(system::init_player);
-        world.add_handler(system::player_join_world);
+        // world.add_handler(system::player_join_world);
         world.add_handler(system::player_kick);
         world.add_handler(system::init_entity);
         world.add_handler(system::entity_move_logic);
@@ -190,7 +191,7 @@ impl Game {
         world.add_handler(system::reset_bounding_boxes);
         world.add_handler(system::update_time);
         world.add_handler(system::update_health);
-        world.add_handler(system::sync_players);
+        // world.add_handler(system::sync_players);
         world.add_handler(system::rebuild_player_location);
         world.add_handler(system::player_detect_mob_hits);
 
@@ -204,7 +205,7 @@ impl Game {
 
         world.add_handler(system::egress);
 
-        world.add_handler(system::keep_alive);
+        // world.add_handler(system::keep_alive);
         world.add_handler(system::stats_message);
         world.add_handler(system::kill_all);
 
@@ -304,9 +305,8 @@ impl Game {
 
         self.last_ticks.push_back(now);
 
-        let bump = bumpalo::Bump::new();
-
-        let mut scratch = events::Scratch::from(&bump);
+        let bump = RayonLocal::init(bumpalo::Bump::new);
+        let mut scratch = bump.map_ref(events::Scratch::from);
 
         generate_ingress_events(&mut self.world, &mut self.server, &mut scratch);
 

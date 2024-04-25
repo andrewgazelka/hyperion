@@ -5,7 +5,7 @@ use valence_protocol::{packets::play, VarInt};
 use crate::{
     components::{EntityReaction, FullEntityPose, ImmuneStatus, Player, Vitals},
     events::{AttackEntity, Scratch},
-    net::{Broadcast, IoBuf, Packets},
+    net::{Broadcast, Compressor, IoBuf, Packets},
 };
 
 #[derive(Query)]
@@ -40,6 +40,7 @@ pub fn check_immunity(
 pub fn pkt_attack_player(
     mut io: Single<&mut IoBuf>,
     attack: Receiver<AttackEntity, AttackPlayerQuery>,
+    mut compressor: Single<&mut Compressor>,
 ) {
     let AttackPlayerQuery {
         id: entity_id,
@@ -53,7 +54,7 @@ pub fn pkt_attack_player(
     let mut scratch = Scratch::new();
 
     packets
-        .append(&damage_broadcast, &mut io, &mut scratch)
+        .append(&damage_broadcast, &mut io, &mut scratch, &mut compressor)
         .unwrap();
 }
 
@@ -63,6 +64,7 @@ pub fn pkt_attack_entity(
     global: Single<&crate::global::Global>,
     attack: Receiver<AttackEntity, AttackEntityQuery>,
     mut broadcast: Single<&mut Broadcast>,
+    mut compressor: Single<&mut Compressor>,
     mut io: Single<&mut IoBuf>,
 ) {
     let AttackEntityQuery {
@@ -77,7 +79,7 @@ pub fn pkt_attack_entity(
 
     let mut scratch = Scratch::new();
     broadcast
-        .append(&damage_broadcast, &mut io, &mut scratch)
+        .append(&damage_broadcast, &mut io, &mut scratch, &mut compressor)
         .unwrap();
 
     let event = attack.event;

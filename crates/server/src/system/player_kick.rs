@@ -11,7 +11,7 @@ use crate::{
     components::Uuid,
     events::{KickPlayer, Scratch},
     global::Global,
-    net::{IoBuf, Packets},
+    net::{Compressor, IoBuf, Packets},
     singleton::{player_id_lookup::EntityIdLookup, player_uuid_lookup::PlayerUuidLookup},
 };
 
@@ -22,6 +22,7 @@ pub fn player_kick(
     mut uuid_lookup: Single<&mut PlayerUuidLookup>,
     mut io: Single<&mut IoBuf>,
     mut id_lookup: Single<&mut EntityIdLookup>,
+    mut compressor: Single<&mut Compressor>,
     mut s: Sender<Despawn>,
 ) {
     let (id, uuid, packets) = r.query;
@@ -43,6 +44,7 @@ pub fn player_kick(
             },
             &mut io,
             &mut scratch,
+            &mut compressor,
         )
         .unwrap();
 

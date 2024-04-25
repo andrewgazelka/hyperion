@@ -1,10 +1,12 @@
+use std::ops::DerefMut;
+
 use evenio::prelude::*;
 use tracing::instrument;
 
 use crate::{
     events::Gametick,
     global::Global,
-    net::{Broadcast, IoBuf},
+    net::{Broadcast, Compressor, IoBuf},
 };
 
 #[instrument(skip_all, level = "trace")]
@@ -13,12 +15,13 @@ pub fn update_time(
     mut broadcast: Single<&mut Broadcast>,
     mut global: Single<&mut Global>,
     mut io: Single<&mut IoBuf>,
+    mut compressor: Single<&mut Compressor>,
 ) {
     let mut gametick = gametick.event;
 
     let gametick = &mut *gametick;
 
-    let scratch = &mut *gametick.scratch;
+    let mut scratch = &mut gametick.scratch;
 
     let tick = global.tick;
     let time_of_day = tick % 24000;
@@ -30,7 +33,10 @@ pub fn update_time(
             time_of_day,
         };
 
-        broadcast.append(&pkt, &mut io, scratch).unwrap();
+        let scratch = scratch.get_round_robin();
+        broadcast
+            .append(&pkt, &mut io, scratch, &mut compressor)
+            .unwrap();
     }
 
     // update the tick
