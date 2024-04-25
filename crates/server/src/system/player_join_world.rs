@@ -7,6 +7,7 @@ use chunk::{
 };
 use evenio::prelude::*;
 use itertools::Itertools;
+use libdeflater::Compressor;
 use tracing::{debug, info, instrument};
 use valence_protocol::{
     game_mode::OptGameMode,
@@ -35,7 +36,8 @@ use crate::{
     config,
     events::{PlayerJoinWorld, Scratch, ScratchBuffer},
     global::Global,
-    net::{Broadcast, IoBuf, Packets},
+    net,
+    net::{Broadcast, IoBuf, IoBufs, Packets},
     singleton::{player_id_lookup::EntityIdLookup, player_uuid_lookup::PlayerUuidLookup},
     system::init_entity::spawn_packet,
 };
@@ -78,7 +80,8 @@ pub fn player_join_world(
     mut uuid_lookup: Single<&mut PlayerUuidLookup>,
     mut id_lookup: Single<&mut EntityIdLookup>,
     mut broadcast: Single<&mut Broadcast>,
-    mut io: Single<&mut IoBuf>,
+    mut io: Single<&mut IoBufs>,
+    mut compressor: Single<&mut net::Compressor>,
 ) {
     static CACHED_DATA: once_cell::sync::OnceCell<bytes::Bytes> = once_cell::sync::OnceCell::new();
 
@@ -157,7 +160,13 @@ pub fn player_join_world(
         overlay: false,
     };
 
-    broadcast.append(&text, &mut io, &mut scratch).unwrap();
+    let compressor = compressor.one();
+
+    let mut io = io.one();
+
+    broadcast
+        .append(&text, &mut io, &mut scratch, compressor)
+        .unwrap();
 
     let local = query.packets;
 
@@ -173,6 +182,7 @@ pub fn player_join_world(
             },
             &mut io,
             &mut scratch,
+            compressor,
         )
         .unwrap();
 
@@ -186,11 +196,15 @@ pub fn player_join_world(
         entries: Cow::Borrowed(entries),
     };
 
-    broadcast.append(&info, &mut io, &mut scratch).unwrap();
+    broadcast
+        .append(&info, &mut io, &mut scratch, compressor)
+        .unwrap();
 
     for entity in entities {
         let pkt = spawn_packet(entity.id, *entity.uuid, entity.pose);
-        local.append(&pkt, &mut io, &mut scratch).unwrap();
+        local
+            .append(&pkt, &mut io, &mut scratch, compressor)
+            .unwrap();
     }
 
     // todo: cache
@@ -223,6 +237,7 @@ pub fn player_join_world(
             },
             &mut io,
             &mut scratch,
+            compressor,
         )
         .unwrap();
 
@@ -238,6 +253,7 @@ pub fn player_join_world(
             },
             &mut io,
             &mut scratch,
+            compressor,
         )
         .unwrap();
 
@@ -249,6 +265,7 @@ pub fn player_join_world(
             },
             &mut io,
             &mut scratch,
+            compressor,
         )
         .unwrap();
 
@@ -263,6 +280,7 @@ pub fn player_join_world(
             },
             &mut io,
             &mut scratch,
+            compressor,
         )
         .unwrap();
 
@@ -282,13 +300,17 @@ pub fn player_join_world(
             pitch: ByteAngle::from_degrees(pose.pitch),
         };
 
-        local.append(&pkt, &mut io, &mut scratch).unwrap();
+        local
+            .append(&pkt, &mut io, &mut scratch, compressor)
+            .unwrap();
 
         let pkt = crate::packets::def::EntityEquipmentUpdateS2c {
             entity_id,
             equipment: Cow::Borrowed(&equipment),
         };
-        local.append(&pkt, &mut io, &mut scratch).unwrap();
+        local
+            .append(&pkt, &mut io, &mut scratch, compressor)
+            .unwrap();
     }
 
     global
@@ -316,11 +338,12 @@ pub fn player_join_world(
             },
             &mut io,
             &mut scratch,
+            compressor,
         )
         .unwrap();
 
     broadcast
-        .append(&spawn_player, &mut io, &mut scratch)
+        .append(&spawn_player, &mut io, &mut scratch, compressor)
         .unwrap();
 
     broadcast
@@ -331,6 +354,7 @@ pub fn player_join_world(
             },
             &mut io,
             &mut scratch,
+            compressor,
         )
         .unwrap();
 
@@ -386,13 +410,14 @@ pub fn send_keep_alive(
     packets: &mut Packets,
     io: &mut IoBuf,
     scratch: &mut impl ScratchBuffer,
+    compressor: &mut Compressor,
 ) -> anyhow::Result<()> {
     let pkt = play::KeepAliveS2c {
         // The ID can be set to zero because it doesn't matter
         id: 0,
     };
 
-    packets.append(&pkt, io, scratch)?;
+    packets.append(&pkt, io, scratch, compressor)?;
 
     Ok(())
 }

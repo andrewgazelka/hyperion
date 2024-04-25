@@ -20,10 +20,9 @@ pub fn egress(
 ) {
     // todo: idk how inefficient this is
     for (pkts, _, login_state) in &mut players {
-        for &mut broadcast_write in broadcast.get_write_mut() {
-            if *login_state == LoginState::Play {
-                pkts.get_write_mut().push_back(broadcast_write);
-            }
+        if *login_state == LoginState::Play {
+            let broadcast = &mut ***broadcast;
+            pkts.extend(broadcast);
         }
     }
 

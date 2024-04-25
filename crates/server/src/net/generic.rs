@@ -15,7 +15,8 @@ use mio::{
     net::{TcpListener, TcpStream},
     Events, Interest, Poll, Registry, Token,
 };
-use tracing::warn;
+use rayon_local::RayonLocal;
+use tracing::{info, warn};
 
 use crate::{
     global::Global,
@@ -28,7 +29,7 @@ const SERVER: Token = Token(0);
 const EVENT_CAPACITY: usize = 128;
 
 struct ConnectionInfo {
-    pub to_write: Vec<PacketWriteInfo>,
+    pub to_write: RayonLocal<Vec<PacketWriteInfo>>,
     pub connection: TcpStream,
     pub data_to_write: Vec<u8>,
 }
@@ -133,7 +134,7 @@ impl ServerDef for GenericServer {
                     )?;
 
                     self.connections.insert(token.0, ConnectionInfo {
-                        to_write: vec![],
+                        to_write: RayonLocal::default(),
                         connection,
                         data_to_write: vec![],
                     });
@@ -192,16 +193,17 @@ impl ServerDef for GenericServer {
                 continue;
             };
 
-            let to_write = &mut to_write.to_write;
+            for (idx, write) in write.iter_mut().enumerate() {
+                let (a, b) = write.as_slices();
 
-            let (a, b) = write.as_slices();
+                let to_write = &mut to_write.to_write[idx];
+                to_write.reserve(a.len() + b.len());
 
-            to_write.reserve(a.len() + b.len());
+                to_write.extend_from_slice(a);
+                to_write.extend_from_slice(b);
 
-            to_write.extend_from_slice(a);
-            to_write.extend_from_slice(b);
-
-            write.clear();
+                write.clear();
+            }
         }
     }
 
@@ -222,8 +224,10 @@ fn handle_connection_event(
     if event.is_writable() {
         let data = &mut info.data_to_write;
 
-        for elem in &info.to_write {
-            data.extend_from_slice(unsafe { elem.as_slice() });
+        for buf in &info.to_write {
+            for elem in buf {
+                data.extend_from_slice(unsafe { elem.as_slice() });
+            }
         }
 
         if data.is_empty() {
@@ -268,10 +272,12 @@ fn handle_connection_event(
             Err(err) => return Err(err),
         }
 
-        for _ in info.to_write.drain(..) {
-            // we do not have to care about data getting picked up by the kernel since this is not io uring
-            f(ServerEvent::SentData { fd: Fd(token.0) });
-        }
+        info.to_write
+            .iter_mut()
+            .flat_map(|buf| buf.drain(..))
+            .for_each(|buf| {
+                f(ServerEvent::SentData { fd: Fd(token.0) });
+            });
     }
 
     if event.is_readable() {

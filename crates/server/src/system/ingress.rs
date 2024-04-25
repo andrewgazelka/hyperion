@@ -33,7 +33,7 @@ use crate::{
         AttackEntity, BumpScratch, InitEntity, KickPlayer, KillAllEntities, PlayerInit,
         ScratchBuffer, SwingArm,
     },
-    net::{Compressor, Fd, IoBuf, Packets, MINECRAFT_VERSION, PROTOCOL_VERSION},
+    net::{Compressor, Fd, IoBuf, IoBufs, Packets, MINECRAFT_VERSION, PROTOCOL_VERSION},
     packets::PacketSwitchQuery,
     singleton::player_id_lookup::EntityIdLookup,
     system::ingress::player_packet_buffer::DecodeBuffer,
@@ -45,7 +45,6 @@ pub type IngressSender<'a> = Sender<
         Spawn,
         Insert<LoginState>,
         Insert<DecodeBuffer>,
-        Insert<IoBuf>,
         Insert<Fd>,
         Insert<Packets>,
         PlayerInit,
@@ -73,7 +72,7 @@ pub struct RemovePlayer {
 pub struct RecvData<'a, 'b, 'c> {
     fd: Fd,
     data: &'c [u8],
-    scratch: &'b mut BumpScratch<'a>,
+    scratch: &'b mut RayonLocal<BumpScratch<'a>>,
 }
 
 #[derive(Event)]
@@ -205,7 +204,7 @@ pub fn recv_data(
     )>,
     mut compressor: Single<&mut Compressor>,
     id_lookup: Single<&EntityIdLookup>,
-    mut io: Single<&mut IoBuf>,
+    mut io: Single<&mut IoBufs>,
 ) {
     let mut event = r.event;
 
@@ -225,12 +224,16 @@ pub fn recv_data(
 
     decoder.queue_slice(data);
 
+    let scratch = scratch.one();
+
+    let io = io.one();
+
     // todo: error  on low compression: "decompressed packet length of 2 is <= the compression threshold of 2"
     while let Some(frame) = decoder.try_next_packet(scratch).unwrap() {
         match *login_state {
             LoginState::Handshake => process_handshake(login_state, &frame).unwrap(),
             LoginState::Status => {
-                process_status(login_state, &frame, packets, scratch, &mut io).unwrap();
+                process_status(login_state, &frame, packets, scratch, io).unwrap();
             }
             LoginState::Terminate => {
                 // todo: does this properly terminate the connection? I don't think so probably
@@ -248,7 +251,7 @@ pub fn recv_data(
                     packets,
                     decoder,
                     &global,
-                    &mut io,
+                    io,
                     scratch,
                     &mut compressor,
                     &mut sender,
@@ -324,12 +327,12 @@ fn process_login(
     id: EntityId,
     login_state: &mut LoginState,
     packet: &PacketFrame,
-    packets: &mut Packets,
+    packets: &Packets,
     decoder: &mut DecodeBuffer,
     global: &Global,
     io: &mut IoBuf,
     scratch: &mut impl ScratchBuffer,
-    mut compressor: &mut Compressor,
+    compressor: &mut Compressor,
     sender: &mut IngressSender,
 ) -> anyhow::Result<()> {
     debug_assert!(*login_state == LoginState::Login);
@@ -357,7 +360,7 @@ fn process_login(
         properties: Cow::default(),
     };
 
-    packets.append(&pkt, io, scratch, &mut compressor)?;
+    packets.append(&pkt, io, scratch, &mut compressor.one())?;
 
     let username = Box::from(username);
 

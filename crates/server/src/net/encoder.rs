@@ -5,7 +5,6 @@ use std::{
 };
 
 use anyhow::ensure;
-use libdeflater::CompressionLvl;
 use valence_protocol::{CompressionThreshold, Encode, Packet, VarInt};
 
 use crate::{events::ScratchBuffer, net::MAX_PACKET_SIZE, singleton::ring::Buf};

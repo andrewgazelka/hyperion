@@ -37,7 +37,7 @@ use crate::{
     components::Vitals,
     events::{BumpScratch, Egress, Gametick, StatsEvent},
     global::Global,
-    net::{Broadcast, IoBufs, Server, ServerDef},
+    net::{Broadcast, Compressor, IoBufs, Server, ServerDef},
     singleton::{
         fd_lookup::FdLookup, player_aabb_lookup::PlayerBoundingBoxes,
         player_id_lookup::EntityIdLookup, player_uuid_lookup::PlayerUuidLookup,
@@ -168,6 +168,9 @@ impl Game {
 
         let mut world = World::new();
 
+        let compressor_id = world.spawn();
+        world.insert(compressor_id, Compressor::new(shared.compression_level));
+
         let mut server_def = Server::new(address)?;
 
         let io_id = world.spawn();
@@ -182,7 +185,7 @@ impl Game {
         world.add_handler(system::ingress::sent_data);
 
         world.add_handler(system::init_player);
-        // world.add_handler(system::player_join_world);
+        world.add_handler(system::player_join_world);
         world.add_handler(system::player_kick);
         world.add_handler(system::init_entity);
         world.add_handler(system::entity_move_logic);
@@ -191,7 +194,7 @@ impl Game {
         world.add_handler(system::reset_bounding_boxes);
         world.add_handler(system::update_time);
         world.add_handler(system::update_health);
-        // world.add_handler(system::sync_players);
+        world.add_handler(system::sync_players);
         world.add_handler(system::rebuild_player_location);
         world.add_handler(system::player_detect_mob_hits);
 
@@ -205,7 +208,7 @@ impl Game {
 
         world.add_handler(system::egress);
 
-        // world.add_handler(system::keep_alive);
+        world.add_handler(system::keep_alive);
         world.add_handler(system::stats_message);
         world.add_handler(system::kill_all);
 
@@ -324,7 +327,7 @@ impl Game {
                       (~52 days)"
         )]
         let ms = now.elapsed().as_nanos() as f64 / 1_000_000.0;
-        self.update_tick_stats(ms, &mut scratch);
+        self.update_tick_stats(ms, scratch.one());
     }
 
     #[instrument(skip(self))]

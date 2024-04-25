@@ -6,10 +6,11 @@ use valence_text::{Color, IntoText};
 use crate::{
     events::Gametick,
     global::Global,
-    net::{IoBuf, Packets},
+    net::{Compressor, IoBuf, Packets},
     tracker::Prev,
     Vitals,
 };
+use crate::net::IoBufs;
 
 #[allow(dead_code, reason = "todo")]
 const HURT_SOUND: VarInt = VarInt(1018); // represents 1019
@@ -33,13 +34,19 @@ pub fn sync_players(
     gametick: ReceiverMut<Gametick>,
     global: Single<&Global>,
     mut fetcher: Fetcher<SyncPlayersQuery>,
-    mut io: Single<&mut IoBuf>,
+    mut compressor: Single<&mut Compressor>,
+    mut io: Single<&mut IoBufs>,
 ) {
     let tick = global.tick;
 
     let mut gametick = gametick.event;
 
     let scratch = &mut gametick.scratch;
+
+    let scratch = scratch.one();
+    let compressor = compressor.one();
+    
+    let mut io = io.one();
 
     fetcher.iter_mut().for_each(|query| {
         let entity_id = VarInt(query.id.index().0 as i32);
@@ -73,6 +80,7 @@ pub fn sync_players(
                         },
                         &mut io,
                         scratch,
+                        compressor,
                     );
                 }
 
@@ -105,6 +113,7 @@ pub fn sync_players(
                         },
                         &mut io,
                         scratch,
+                        compressor,
                     );
                 }
             }
@@ -116,6 +125,7 @@ pub fn sync_players(
                     },
                     &mut io,
                     scratch,
+                    compressor,
                 );
                 // The title is repeatedly sent so it doesn't fade away after a few seconds
                 let _ = packets.append(
@@ -124,6 +134,7 @@ pub fn sync_players(
                     },
                     &mut io,
                     scratch,
+                    compressor,
                 );
 
                 let seconds_remaining = (*respawn_tick - tick) as f32 / 20.0;
@@ -136,6 +147,7 @@ pub fn sync_players(
                     },
                     &mut io,
                     scratch,
+                    compressor,
                 );
 
                 // packets
@@ -153,7 +165,12 @@ pub fn sync_players(
                 //     .unwrap();
             }
             (Vitals::Dead { .. }, Vitals::Alive { health, .. }) => {
-                let _ = packets.append(&play::ClearTitleS2c { reset: true }, &mut io, scratch);
+                let _ = packets.append(
+                    &play::ClearTitleS2c { reset: true },
+                    &mut io,
+                    scratch,
+                    compressor,
+                );
                 let _ = packets.append(
                     &play::GameStateChangeS2c {
                         kind: play::game_state_change_s2c::GameEventKind::ChangeGameMode,
@@ -161,6 +178,7 @@ pub fn sync_players(
                     },
                     &mut io,
                     scratch,
+                    compressor,
                 );
                 let _ = packets.append(
                     &play::HealthUpdateS2c {
@@ -170,6 +188,7 @@ pub fn sync_players(
                     },
                     &mut io,
                     scratch,
+                    compressor,
                 );
                 // TODO: Update absorption and regeneration
             }
@@ -184,6 +203,7 @@ pub fn sync_players(
                     },
                     &mut io,
                     scratch,
+                    compressor,
                 );
             }
         }

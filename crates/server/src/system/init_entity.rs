@@ -13,7 +13,7 @@ use crate::{
         EntityReaction, FullEntityPose, ImmuneStatus, MinecraftEntity, RunningSpeed, Uuid, Vitals,
     },
     events::{InitEntity, Scratch},
-    net::{Broadcast, Compressor, IoBuf},
+    net::{Broadcast, Compressor, IoBuf, IoBufs},
     singleton::player_id_lookup::EntityIdLookup,
     system::entity_position::PositionSyncMetadata,
 };
@@ -54,7 +54,7 @@ pub fn init_entity(
         Insert<ImmuneStatus>,
         Spawn,
     )>,
-    mut io: Single<&mut IoBuf>,
+    mut io: Single<&mut IoBufs>,
     mut broadcast: Single<&mut Broadcast>,
     mut compressor: Single<&mut Compressor>,
 ) {
@@ -82,7 +82,7 @@ pub fn init_entity(
     // todo: use shared scratch if possible
     let mut scratch = Scratch::new();
     broadcast
-        .append(&pkt, &mut io, &mut scratch, &mut compressor)
+        .append(&pkt, io.one(), &mut scratch, compressor.one())
         .unwrap();
 }
 

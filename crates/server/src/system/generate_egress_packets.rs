@@ -10,6 +10,7 @@ use crate::{
     events::Gametick,
     net::{Compressor, IoBuf, Packets},
 };
+use crate::net::IoBufs;
 
 fn vel_m_per_tick(input: glam::Vec3) -> Velocity {
     let input = input * 8000.0;
@@ -20,7 +21,7 @@ fn vel_m_per_tick(input: glam::Vec3) -> Velocity {
 #[instrument(skip_all, level = "trace")]
 pub fn generate_egress_packets(
     gametick: ReceiverMut<Gametick>,
-    mut io: Single<&mut IoBuf>,
+    mut io: Single<&mut IoBufs>,
     mut connections: Fetcher<(&mut Packets, &mut EntityReaction)>,
     mut compressor: Single<&mut Compressor>,
 ) {
@@ -37,9 +38,9 @@ pub fn generate_egress_packets(
                         entity_id: VarInt(0), // 0 is always self as the join packet we are giving 0
                         velocity,
                     },
-                    &mut io,
-                    gametick.scratch.get_round_robin(),
-                    &mut compressor,
+                    io.one(),
+                    gametick.scratch.one(),
+                    compressor.one(),
                 )
                 .unwrap();
         }

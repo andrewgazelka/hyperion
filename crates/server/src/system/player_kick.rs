@@ -14,13 +14,14 @@ use crate::{
     net::{Compressor, IoBuf, Packets},
     singleton::{player_id_lookup::EntityIdLookup, player_uuid_lookup::PlayerUuidLookup},
 };
+use crate::net::IoBufs;
 
 #[instrument(skip_all)]
 pub fn player_kick(
     r: Receiver<KickPlayer, (EntityId, &Uuid, &mut Packets)>,
     global: Single<&Global>,
     mut uuid_lookup: Single<&mut PlayerUuidLookup>,
-    mut io: Single<&mut IoBuf>,
+    mut io: Single<&mut IoBufs>,
     mut id_lookup: Single<&mut EntityIdLookup>,
     mut compressor: Single<&mut Compressor>,
     mut s: Sender<Despawn>,
@@ -42,9 +43,9 @@ pub fn player_kick(
             &play::DisconnectS2c {
                 reason: reason.into(),
             },
-            &mut io,
+            io.one(),
             &mut scratch,
-            &mut compressor,
+            compressor.one(),
         )
         .unwrap();
 

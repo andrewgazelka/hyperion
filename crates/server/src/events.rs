@@ -147,7 +147,7 @@ impl<A: Allocator> From<A> for Scratch<A> {
 // todo: why need two life times?
 #[derive(Event)]
 pub struct Gametick<'a, 'b> {
-    pub bump: &'a Bump,
+    pub bump: &'a RayonLocal<Bump>,
     pub scratch: &'b mut RayonLocal<BumpScratch<'a>>,
 }
 

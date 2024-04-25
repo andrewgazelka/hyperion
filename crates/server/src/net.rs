@@ -6,6 +6,7 @@ use derive_more::{Deref, DerefMut, From};
 use evenio::prelude::Component;
 use libc::iovec;
 use libdeflater::CompressionLvl;
+use tracing::info;
 use valence_protocol::{CompressionThreshold, Encode};
 
 use crate::{
@@ -86,7 +87,7 @@ impl ServerDef for Server {
 
 #[allow(unused, reason = "this is used on linux")]
 pub struct RefreshItems<'a> {
-    pub write: &'a mut VecDeque<PacketWriteInfo>,
+    pub write: &'a mut RayonLocal<VecDeque<PacketWriteInfo>>,
     pub fd: Fd,
 }
 
@@ -162,7 +163,7 @@ use crate::{net::encoder::append_packet_without_compression, singleton::ring::re
 const NUM_PLAYERS: usize = 1024;
 const S2C_BUFFER_SIZE: usize = 1024 * 1024 * NUM_PLAYERS;
 
-#[derive(Component, Debug)]
+#[derive(Debug)]
 pub struct IoBuf {
     /// The encoding buffer and logic
     enc: encoder::PacketEncoder,
@@ -172,6 +173,14 @@ pub struct IoBuf {
 #[derive(Component, Deref, DerefMut)]
 pub struct Compressor {
     compressors: RayonLocal<libdeflater::Compressor>,
+}
+
+impl Compressor {
+    pub fn new(level: CompressionLvl) -> Self {
+        Self {
+            compressors: RayonLocal::init(|| libdeflater::Compressor::new(level)),
+        }
+    }
 }
 
 #[derive(Component, Debug, Deref, DerefMut)]
@@ -209,27 +218,35 @@ impl IoBuf {
 
 /// This is useful for the ECS so we can use Single<&mut Broadcast> instead of having to use a marker struct
 #[derive(Component, From, Deref, DerefMut, Default)]
-pub struct Broadcast(RayonLocal<Packets>);
+pub struct Broadcast(Packets);
 
 /// Stores indices of packets
 #[derive(Component, Default)]
 pub struct Packets {
-    to_write: VecDeque<PacketWriteInfo>,
+    to_write: RayonLocal<VecDeque<PacketWriteInfo>>,
     number_sending: usize,
 }
 
 impl Packets {
-    pub fn get_write_mut(&mut self) -> &mut VecDeque<PacketWriteInfo> {
+    pub fn extend(&mut self, other: &Self) {
+        let this = self.to_write.iter_mut();
+        let other = other.to_write.iter();
+
+        for (this, other) in this.zip(other) {
+            this.extend(other);
+        }
+    }
+
+    pub fn get_write_mut(&mut self) -> &mut RayonLocal<VecDeque<PacketWriteInfo>> {
         &mut self.to_write
     }
 
-    #[allow(dead_code, reason = "this will probably be used in the future")]
-    pub const fn get_write(&self) -> &VecDeque<PacketWriteInfo> {
-        &self.to_write
-    }
-
     pub fn can_send(&self) -> bool {
-        self.number_sending == 0 && !self.to_write.is_empty()
+        if self.number_sending != 0 {
+            return false;
+        }
+
+        self.to_write.iter().any(|x| !x.is_empty())
     }
 
     pub fn set_successfully_sent(&mut self) {
@@ -246,16 +263,18 @@ impl Packets {
             self.number_sending == 0,
             "number sending is not 0 even though we are preparing for send"
         );
-        let count = self.to_write.len();
+        let count = self.to_write.iter().map(VecDeque::len).sum();
         self.number_sending = count;
     }
 
     pub fn clear(&mut self) {
-        self.to_write.clear();
+        self.to_write.iter_mut().for_each(VecDeque::clear);
     }
 
-    fn push(&mut self, writer: PacketWriteInfo) {
-        if let Some(last) = self.to_write.back_mut() {
+    fn push(&self, writer: PacketWriteInfo) {
+        let to_write = unsafe { &mut *self.to_write.get_local_raw().get() };
+
+        if let Some(last) = to_write.back_mut() {
             let start_pointer_if_contiguous = unsafe { last.start_ptr.add(last.len as usize) };
             if start_pointer_if_contiguous == writer.start_ptr {
                 last.len += writer.len;
@@ -263,14 +282,10 @@ impl Packets {
             }
         }
 
-        self.to_write.push_back(writer);
+        to_write.push_back(writer);
     }
 
-    pub fn append_pre_compression_packet<P>(
-        &mut self,
-        pkt: &P,
-        buf: &mut IoBuf,
-    ) -> anyhow::Result<()>
+    pub fn append_pre_compression_packet<P>(&self, pkt: &P, buf: &mut IoBuf) -> anyhow::Result<()>
     where
         P: valence_protocol::Packet + Encode,
     {
@@ -289,7 +304,7 @@ impl Packets {
     }
 
     pub fn append<P>(
-        &mut self,
+        &self,
         pkt: &P,
         buf: &mut IoBuf,
         scratch: &mut impl ScratchBuffer,
