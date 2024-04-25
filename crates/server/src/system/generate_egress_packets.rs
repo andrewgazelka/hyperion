@@ -8,7 +8,7 @@ use valence_protocol::{packets::play, VarInt, Velocity};
 use crate::{
     components::EntityReaction,
     events::Gametick,
-    net::{IoBuf, Packets},
+    net::{Compressor, IoBufs, Packets},
 };
 
 fn vel_m_per_tick(input: glam::Vec3) -> Velocity {
@@ -20,8 +20,9 @@ fn vel_m_per_tick(input: glam::Vec3) -> Velocity {
 #[instrument(skip_all, level = "trace")]
 pub fn generate_egress_packets(
     gametick: ReceiverMut<Gametick>,
-    mut io: Single<&mut IoBuf>,
+    mut io: Single<&mut IoBufs>,
     mut connections: Fetcher<(&mut Packets, &mut EntityReaction)>,
+    mut compressor: Single<&mut Compressor>,
 ) {
     let mut gametick = gametick.event;
     connections.iter_mut().for_each(|(packets, reaction)| {
@@ -36,8 +37,9 @@ pub fn generate_egress_packets(
                         entity_id: VarInt(0), // 0 is always self as the join packet we are giving 0
                         velocity,
                     },
-                    &mut io,
-                    gametick.scratch,
+                    io.one(),
+                    gametick.scratch.one(),
+                    compressor.one(),
                 )
                 .unwrap();
         }

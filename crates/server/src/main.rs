@@ -33,7 +33,11 @@ fn init() -> anyhow::Result<()> {
 
     rayon::ThreadPoolBuilder::new()
         .spawn_handler(|thread| {
-            std::thread::spawn(|| no_denormals::no_denormals(|| thread.run()));
+            std::thread::spawn(|| {
+                no_denormals::no_denormals(|| {
+                    thread.run();
+                });
+            });
             Ok(())
         })
         .build_global()

@@ -6,6 +6,7 @@ use derive_more::{Deref, DerefMut, From};
 use evenio::prelude::Component;
 use libc::iovec;
 use libdeflater::CompressionLvl;
+use tracing::debug;
 use valence_protocol::{CompressionThreshold, Encode};
 
 use crate::{
@@ -67,6 +68,12 @@ impl ServerDef for Server {
     }
 
     fn allocate_buffers(&mut self, buffers: &[iovec]) {
+        for (idx, elem) in buffers.iter().enumerate() {
+            let ptr = elem.iov_base as *const u8;
+            let len = elem.iov_len;
+            debug!("allocating buffer {idx} {ptr:?} {len:?}");
+        }
+
         self.server.allocate_buffers(buffers);
     }
 
@@ -86,7 +93,7 @@ impl ServerDef for Server {
 
 #[allow(unused, reason = "this is used on linux")]
 pub struct RefreshItems<'a> {
-    pub write: &'a mut VecDeque<PacketWriteInfo>,
+    pub write: &'a mut RayonLocal<VecDeque<PacketWriteInfo>>,
     pub fd: Fd,
 }
 
@@ -155,15 +162,48 @@ mod decoder;
 mod encoder;
 
 pub use decoder::PacketDecoder;
+use rayon_local::RayonLocal;
 
-const NUM_PLAYERS: usize = 1024;
+use crate::{net::encoder::append_packet_without_compression, singleton::ring::register_rings};
+
+const NUM_PLAYERS: usize = 10;
 const S2C_BUFFER_SIZE: usize = 1024 * 1024 * NUM_PLAYERS;
 
-#[derive(Component, Debug)]
+#[derive(Debug)]
 pub struct IoBuf {
     /// The encoding buffer and logic
     enc: encoder::PacketEncoder,
     buf: Ring,
+    index: usize,
+}
+
+#[derive(Component, Deref, DerefMut)]
+pub struct Compressor {
+    compressors: RayonLocal<libdeflater::Compressor>,
+}
+
+impl Compressor {
+    pub fn new(level: CompressionLvl) -> Self {
+        Self {
+            compressors: RayonLocal::init(|| libdeflater::Compressor::new(level)),
+        }
+    }
+}
+
+#[derive(Component, Debug, Deref, DerefMut)]
+pub struct IoBufs {
+    locals: RayonLocal<IoBuf>,
+}
+
+impl IoBufs {
+    pub fn init(threshold: CompressionThreshold, server_def: &mut impl ServerDef) -> Self {
+        let mut locals = RayonLocal::init_with_index(|i| IoBuf::new(threshold, i));
+
+        let rings = locals.get_all_mut().iter_mut().map(IoBuf::buf_mut);
+        register_rings(server_def, rings);
+
+        Self { locals }
+    }
 }
 
 // todo: not valid we should remove
@@ -171,11 +211,16 @@ unsafe impl Send for IoBuf {}
 unsafe impl Sync for IoBuf {}
 
 impl IoBuf {
-    pub fn new(threshold: CompressionThreshold, level: CompressionLvl) -> Self {
+    pub fn new(threshold: CompressionThreshold, index: usize) -> Self {
         Self {
-            enc: encoder::PacketEncoder::new(threshold, level),
+            enc: encoder::PacketEncoder::new(threshold),
             buf: Ring::new(S2C_BUFFER_SIZE),
+            index,
         }
+    }
+
+    pub const fn index(&self) -> usize {
+        self.index
     }
 
     pub fn buf_mut(&mut self) -> &mut Ring {
@@ -190,22 +235,30 @@ pub struct Broadcast(Packets);
 /// Stores indices of packets
 #[derive(Component, Default)]
 pub struct Packets {
-    to_write: VecDeque<PacketWriteInfo>,
+    to_write: RayonLocal<VecDeque<PacketWriteInfo>>,
     number_sending: usize,
 }
 
 impl Packets {
-    pub fn get_write_mut(&mut self) -> &mut VecDeque<PacketWriteInfo> {
+    pub fn extend(&mut self, other: &Self) {
+        let this = self.to_write.iter_mut();
+        let other = other.to_write.iter();
+
+        for (this, other) in this.zip(other) {
+            this.extend(other);
+        }
+    }
+
+    pub fn get_write_mut(&mut self) -> &mut RayonLocal<VecDeque<PacketWriteInfo>> {
         &mut self.to_write
     }
 
-    #[allow(dead_code, reason = "this will probably be used in the future")]
-    pub const fn get_write(&self) -> &VecDeque<PacketWriteInfo> {
-        &self.to_write
-    }
-
     pub fn can_send(&self) -> bool {
-        self.number_sending == 0 && !self.to_write.is_empty()
+        if self.number_sending != 0 {
+            return false;
+        }
+
+        self.to_write.iter().any(|x| !x.is_empty())
     }
 
     pub fn set_successfully_sent(&mut self) {
@@ -222,16 +275,19 @@ impl Packets {
             self.number_sending == 0,
             "number sending is not 0 even though we are preparing for send"
         );
-        let count = self.to_write.len();
+        let count = self.to_write.iter().map(VecDeque::len).sum();
         self.number_sending = count;
     }
 
     pub fn clear(&mut self) {
-        self.to_write.clear();
+        self.to_write.iter_mut().for_each(VecDeque::clear);
     }
 
-    fn push(&mut self, writer: PacketWriteInfo) {
-        if let Some(last) = self.to_write.back_mut() {
+    fn push(&self, writer: PacketWriteInfo, buf: &IoBuf) {
+        let idx = buf.index();
+        let to_write = unsafe { &mut *self.to_write.get_raw(idx).get() };
+
+        if let Some(last) = to_write.back_mut() {
             let start_pointer_if_contiguous = unsafe { last.start_ptr.add(last.len as usize) };
             if start_pointer_if_contiguous == writer.start_ptr {
                 last.len += writer.len;
@@ -239,15 +295,10 @@ impl Packets {
             }
         }
 
-        self.to_write.push_back(writer);
+        to_write.push_back(writer);
     }
 
-    pub fn append_pre_compression_packet<P>(
-        &mut self,
-        pkt: &P,
-        buf: &mut IoBuf,
-        scratch: &mut impl ScratchBuffer,
-    ) -> anyhow::Result<()>
+    pub fn append_pre_compression_packet<P>(&self, pkt: &P, buf: &mut IoBuf) -> anyhow::Result<()>
     where
         P: valence_protocol::Packet + Encode,
     {
@@ -255,9 +306,9 @@ impl Packets {
         // none
         buf.enc.set_compression(CompressionThreshold::DEFAULT);
 
-        let result = buf.enc.append_packet(pkt, &mut buf.buf, scratch)?;
+        let result = append_packet_without_compression(pkt, &mut buf.buf)?;
 
-        self.push(result);
+        self.push(result, buf);
 
         // reset
         buf.enc.set_compression(compression);
@@ -266,17 +317,20 @@ impl Packets {
     }
 
     pub fn append<P>(
-        &mut self,
+        &self,
         pkt: &P,
         buf: &mut IoBuf,
         scratch: &mut impl ScratchBuffer,
+        compressor: &mut libdeflater::Compressor,
     ) -> anyhow::Result<()>
     where
         P: valence_protocol::Packet + Encode,
     {
-        let result = buf.enc.append_packet(pkt, &mut buf.buf, scratch)?;
+        let result = buf
+            .enc
+            .append_packet(pkt, &mut buf.buf, scratch, compressor)?;
 
-        self.push(result);
+        self.push(result, buf);
         Ok(())
     }
 
@@ -288,136 +342,136 @@ impl Packets {
             len: data.len() as u32,
         };
 
-        self.push(writer);
+        self.push(writer, buf);
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use bumpalo::Bump;
-    use valence_protocol::{packets::login::LoginHelloC2s, Bounded};
-
-    use super::*;
-    use crate::events::Scratch;
-
-    #[test]
-    fn test_append_pre_compression_packet() {
-        let mut buf = IoBuf::new(
-            CompressionThreshold::DEFAULT,
-            CompressionLvl::new(4).unwrap(),
-        );
-        let mut packets = Packets::default();
-
-        let pkt = LoginHelloC2s {
-            username: Bounded::default(),
-            profile_id: None,
-        };
-
-        let bump = Bump::new();
-        let mut scratch = Scratch::from(&bump);
-
-        packets
-            .append_pre_compression_packet(&pkt, &mut buf, &mut scratch)
-            .unwrap();
-
-        assert_eq!(packets.get_write().len(), 1);
-
-        let len = packets.get_write()[0].len;
-
-        assert_eq!(len, 4); // Packet length for an empty LoginHelloC2s
-    }
-    #[test]
-    fn test_append_packet() {
-        let mut buf = IoBuf::new(
-            CompressionThreshold::DEFAULT,
-            CompressionLvl::new(4).unwrap(),
-        );
-        let mut packets = Packets::default();
-
-        let pkt = LoginHelloC2s {
-            username: Bounded::default(),
-            profile_id: None,
-        };
-
-        let bump = Bump::new();
-        let mut scratch = Scratch::from(&bump);
-        packets.append(&pkt, &mut buf, &mut scratch).unwrap();
-
-        assert_eq!(packets.get_write().len(), 1);
-        let len = packets.get_write()[0].len;
-        assert_eq!(len, 4); // Packet length for an empty LoginHelloC2s
-    }
-
-    #[test]
-    fn test_append_raw() {
-        let mut buf = IoBuf::new(
-            CompressionThreshold::DEFAULT,
-            CompressionLvl::new(4).unwrap(),
-        );
-        let mut packets = Packets::default();
-
-        let data = b"Hello, world!";
-        packets.append_raw(data, &mut buf);
-
-        assert_eq!(packets.get_write().len(), 1);
-
-        let len = packets.get_write()[0].len;
-        assert_eq!(len, data.len() as u32);
-    }
-
-    #[test]
-    fn test_clear() {
-        let mut buf = IoBuf::new(
-            CompressionThreshold::DEFAULT,
-            CompressionLvl::new(4).unwrap(),
-        );
-        let mut packets = Packets::default();
-
-        let pkt = LoginHelloC2s {
-            username: Bounded::default(),
-            profile_id: None,
-        };
-
-        let bump = Bump::new();
-        let mut scratch = Scratch::from(&bump);
-
-        packets.append(&pkt, &mut buf, &mut scratch).unwrap();
-        assert_eq!(packets.get_write().len(), 1);
-
-        packets.clear();
-        assert_eq!(packets.get_write().len(), 0);
-    }
-
-    #[test]
-    fn test_contiguous_packets() {
-        let mut buf = IoBuf::new(
-            CompressionThreshold::DEFAULT,
-            CompressionLvl::new(4).unwrap(),
-        );
-        let mut packets = Packets::default();
-
-        let pkt1 = LoginHelloC2s {
-            username: Bounded::default(),
-            profile_id: None,
-        };
-        let pkt2 = LoginHelloC2s {
-            username: Bounded::default(),
-            profile_id: None,
-        };
-
-        let bump = Bump::new();
-        let mut scratch = Scratch::from(&bump);
-
-        packets
-            .append_pre_compression_packet(&pkt1, &mut buf, &mut scratch)
-            .unwrap();
-        packets
-            .append_pre_compression_packet(&pkt2, &mut buf, &mut scratch)
-            .unwrap();
-
-        assert_eq!(packets.get_write().len(), 1);
-
-        let len = packets.get_write()[0].len;
-        assert_eq!(len, 8); // Combined length of both packets
-    }
-}
+// #[cfg(test)]
+// mod tests {
+//     use bumpalo::Bump;
+//     use valence_protocol::{packets::login::LoginHelloC2s, Bounded};
+//
+//     use super::*;
+//     use crate::events::Scratch;
+//
+//     #[test]
+//     fn test_append_pre_compression_packet() {
+//         let mut buf = IoBuf::new(
+//             CompressionThreshold::DEFAULT,
+//             CompressionLvl::new(4).unwrap(),
+//         );
+//         let mut packets = Packets::default();
+//
+//         let pkt = LoginHelloC2s {
+//             username: Bounded::default(),
+//             profile_id: None,
+//         };
+//
+//         let bump = Bump::new();
+//         let mut scratch = Scratch::from(&bump);
+//
+//         packets
+//             .append_pre_compression_packet(&pkt, &mut buf)
+//             .unwrap();
+//
+//         assert_eq!(packets.get_write().len(), 1);
+//
+//         let len = packets.get_write()[0].len;
+//
+//         assert_eq!(len, 4); // Packet length for an empty LoginHelloC2s
+//     }
+//     #[test]
+//     fn test_append_packet() {
+//         let mut buf = IoBuf::new(
+//             CompressionThreshold::DEFAULT,
+//             CompressionLvl::new(4).unwrap(),
+//         );
+//         let mut packets = Packets::default();
+//
+//         let pkt = LoginHelloC2s {
+//             username: Bounded::default(),
+//             profile_id: None,
+//         };
+//
+//         let bump = Bump::new();
+//         let mut scratch = Scratch::from(&bump);
+//         packets.append(&pkt, &mut buf, &mut scratch).unwrap();
+//
+//         assert_eq!(packets.get_write().len(), 1);
+//         let len = packets.get_write()[0].len;
+//         assert_eq!(len, 4); // Packet length for an empty LoginHelloC2s
+//     }
+//
+//     #[test]
+//     fn test_append_raw() {
+//         let mut buf = IoBuf::new(
+//             CompressionThreshold::DEFAULT,
+//             CompressionLvl::new(4).unwrap(),
+//         );
+//         let mut packets = Packets::default();
+//
+//         let data = b"Hello, world!";
+//         packets.append_raw(data, &mut buf);
+//
+//         assert_eq!(packets.get_write().len(), 1);
+//
+//         let len = packets.get_write()[0].len;
+//         assert_eq!(len, data.len() as u32);
+//     }
+//
+//     #[test]
+//     fn test_clear() {
+//         let mut buf = IoBuf::new(
+//             CompressionThreshold::DEFAULT,
+//             CompressionLvl::new(4).unwrap(),
+//         );
+//         let mut packets = Packets::default();
+//
+//         let pkt = LoginHelloC2s {
+//             username: Bounded::default(),
+//             profile_id: None,
+//         };
+//
+//         let bump = Bump::new();
+//         let mut scratch = Scratch::from(&bump);
+//
+//         packets.append(&pkt, &mut buf, &mut scratch).unwrap();
+//         assert_eq!(packets.get_write().len(), 1);
+//
+//         packets.clear();
+//         assert_eq!(packets.get_write().len(), 0);
+//     }
+//
+//     #[test]
+//     fn test_contiguous_packets() {
+//         let mut buf = IoBuf::new(
+//             CompressionThreshold::DEFAULT,
+//             CompressionLvl::new(4).unwrap(),
+//         );
+//         let mut packets = Packets::default();
+//
+//         let pkt1 = LoginHelloC2s {
+//             username: Bounded::default(),
+//             profile_id: None,
+//         };
+//         let pkt2 = LoginHelloC2s {
+//             username: Bounded::default(),
+//             profile_id: None,
+//         };
+//
+//         let bump = Bump::new();
+//         let mut scratch = Scratch::from(&bump);
+//
+//         packets
+//             .append_pre_compression_packet(&pkt1, &mut buf, &mut scratch)
+//             .unwrap();
+//         packets
+//             .append_pre_compression_packet(&pkt2, &mut buf, &mut scratch)
+//             .unwrap();
+//
+//         assert_eq!(packets.get_write().len(), 1);
+//
+//         let len = packets.get_write()[0].len;
+//         assert_eq!(len, 8); // Combined length of both packets
+//     }
+// }

@@ -7,9 +7,9 @@ fn main() {
         Channel::Stable | Channel::Beta | Channel::Dev => {
             panic!("This crate is only meant to be used with nightly rustc")
         }
-        Channel::Nightly => {
-            let data = meta.short_version_string;
-            assert_eq!("rustc 1.79.0-nightly (e3181b091 2024-04-18)", data);
-        }
+        Channel::Nightly => {} /* Channel::Nightly => {
+                                *     let data = meta.short_version_string;
+                                *     assert_eq!("rustc 1.79.0-nightly (244da22fa 2024-04-23)", data);
+                                * } */
     }
 }

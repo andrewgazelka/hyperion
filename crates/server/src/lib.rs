@@ -26,6 +26,7 @@ use evenio::prelude::*;
 use libc::{getrlimit, setrlimit, RLIMIT_NOFILE};
 use libdeflater::CompressionLvl;
 use ndarray::s;
+use rayon_local::RayonLocal;
 use signal_hook::iterator::Signals;
 use singleton::bounding_box;
 use spin::Lazy;
@@ -36,7 +37,7 @@ use crate::{
     components::Vitals,
     events::{BumpScratch, Egress, Gametick, StatsEvent},
     global::Global,
-    net::{Broadcast, IoBuf, Server, ServerDef},
+    net::{Broadcast, Compressor, IoBufs, Server, ServerDef},
     singleton::{
         fd_lookup::FdLookup, player_aabb_lookup::PlayerBoundingBoxes,
         player_id_lookup::EntityIdLookup, player_uuid_lookup::PlayerUuidLookup,
@@ -167,11 +168,14 @@ impl Game {
 
         let mut world = World::new();
 
+        let compressor_id = world.spawn();
+        world.insert(compressor_id, Compressor::new(shared.compression_level));
+
         let mut server_def = Server::new(address)?;
 
         let io_id = world.spawn();
-        let mut io = IoBuf::new(shared.compression_threshold, shared.compression_level);
-        io.buf_mut().register(&mut server_def);
+
+        let io = IoBufs::init(shared.compression_threshold, &mut server_def);
 
         world.insert(io_id, io);
 
@@ -304,19 +308,23 @@ impl Game {
 
         self.last_ticks.push_back(now);
 
-        let bump = bumpalo::Bump::new();
-
-        let mut scratch = events::Scratch::from(&bump);
+        let bump = RayonLocal::init(bumpalo::Bump::new);
+        let mut scratch = bump.map_ref(events::Scratch::from);
 
         generate_ingress_events(&mut self.world, &mut self.server, &mut scratch);
 
-        self.world.send(Gametick {
-            bump: &bump,
-            scratch: &mut scratch, // todo: any problem with ref vs val
+        tracing::span!(tracing::Level::TRACE, "gametick").in_scope(|| {
+            self.world.send(Gametick {
+                bump: &bump,
+                scratch: &mut scratch, // todo: any problem with ref vs val
+            });
         });
 
         let server = &mut self.server;
-        self.world.send(Egress { server });
+
+        tracing::span!(tracing::Level::TRACE, "egress").in_scope(|| {
+            self.world.send(Egress { server });
+        });
 
         #[expect(
             clippy::cast_precision_loss,
@@ -324,10 +332,10 @@ impl Game {
                       (~52 days)"
         )]
         let ms = now.elapsed().as_nanos() as f64 / 1_000_000.0;
-        self.update_tick_stats(ms, &mut scratch);
+        self.update_tick_stats(ms, scratch.one());
     }
 
-    #[instrument(skip(self))]
+    #[instrument(skip_all, level = "trace")]
     fn update_tick_stats(&mut self, ms: f64, scratch: &mut BumpScratch) {
         self.last_ms_per_tick.push_back(ms);
 

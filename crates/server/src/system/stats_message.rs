@@ -4,14 +4,15 @@ use valence_protocol::text::IntoText;
 
 use crate::{
     events::StatsEvent,
-    net::{Broadcast, IoBuf},
+    net::{Broadcast, Compressor, IoBufs},
 };
 
 #[instrument(skip_all, level = "trace")]
 pub fn stats_message(
     r: ReceiverMut<StatsEvent>,
-    mut broadcast: Single<&mut Broadcast>,
-    mut io: Single<&mut IoBuf>,
+    broadcast: Single<&Broadcast>,
+    mut compressor: Single<&mut Compressor>,
+    mut io: Single<&mut IoBufs>,
 ) {
     let mut event = r.event;
 
@@ -25,5 +26,7 @@ pub fn stats_message(
         action_bar_text: message.into_cow_text(),
     };
 
-    broadcast.append(&packet, &mut io, scratch).unwrap();
+    broadcast
+        .append(&packet, io.one(), scratch, compressor.one())
+        .unwrap();
 }

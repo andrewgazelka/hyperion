@@ -2152,6 +2152,7 @@ dependencies = [
  "rand 0.8.5",
  "rand_distr",
  "rayon",
+ "rayon-local",
  "rustc_version",
  "serde",
  "serde_json",

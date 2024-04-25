@@ -65,6 +65,7 @@ bumpalo = { version = "3.16.0", features = ["allocator_api"] }
 libdeflater = "1.20.0"
 more-asserts = "0.3.1"
 mio = { version = "0.8.11", features = ["net", "os-poll"] }
+rayon-local = { version = "0.1.0", path = "../rayon-local" }
 
 
 [target.'cfg(target_os = "linux")'.dependencies]

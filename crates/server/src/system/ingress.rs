@@ -7,6 +7,7 @@ use evenio::{
     prelude::{EntityId, ReceiverMut},
     world::World,
 };
+use rayon_local::RayonLocal;
 use serde_json::json;
 use sha2::Digest;
 use tracing::{info, instrument, trace, warn};
@@ -32,7 +33,7 @@ use crate::{
         AttackEntity, BumpScratch, InitEntity, KickPlayer, KillAllEntities, PlayerInit,
         ScratchBuffer, SwingArm,
     },
-    net::{Fd, IoBuf, Packets, MINECRAFT_VERSION, PROTOCOL_VERSION},
+    net::{Compressor, Fd, IoBuf, IoBufs, Packets, MINECRAFT_VERSION, PROTOCOL_VERSION},
     packets::PacketSwitchQuery,
     singleton::player_id_lookup::EntityIdLookup,
     system::ingress::player_packet_buffer::DecodeBuffer,
@@ -44,7 +45,6 @@ pub type IngressSender<'a> = Sender<
         Spawn,
         Insert<LoginState>,
         Insert<DecodeBuffer>,
-        Insert<IoBuf>,
         Insert<Fd>,
         Insert<Packets>,
         PlayerInit,
@@ -72,7 +72,7 @@ pub struct RemovePlayer {
 pub struct RecvData<'a, 'b, 'c> {
     fd: Fd,
     data: &'c [u8],
-    scratch: &'b mut BumpScratch<'a>,
+    scratch: &'b mut RayonLocal<BumpScratch<'a>>,
 }
 
 #[derive(Event)]
@@ -80,15 +80,12 @@ pub struct SentData {
     fd: Fd,
 }
 
-// todo: remove
-#[expect(
-    clippy::non_send_fields_in_send_ty,
-    reason = "todo we will remove this"
-)]
-unsafe impl<'a, 'b, 'c> Send for RecvData<'a, 'b, 'c> {}
-unsafe impl<'a, 'b, 'c> Sync for RecvData<'a, 'b, 'c> {}
-
-pub fn generate_ingress_events(world: &mut World, server: &mut Server, scratch: &mut BumpScratch) {
+#[instrument(skip_all)]
+pub fn generate_ingress_events(
+    world: &mut World,
+    server: &mut Server,
+    scratch: &mut RayonLocal<BumpScratch>,
+) {
     server
         .drain(|event| match event {
             ServerEvent::AddPlayer { fd } => {
@@ -183,6 +180,8 @@ pub fn sent_data(
     pkts.set_successfully_sent();
 }
 
+#[instrument(skip_all)]
+#[allow(clippy::too_many_arguments, reason = "todo")]
 pub fn recv_data(
     r: ReceiverMut<RecvData>,
     mut fd_lookup: Single<&mut FdLookup>,
@@ -198,8 +197,9 @@ pub fn recv_data(
         Option<&mut KeepAlive>,
         Option<&mut ImmuneStatus>,
     )>,
+    mut compressor: Single<&mut Compressor>,
     id_lookup: Single<&EntityIdLookup>,
-    mut io: Single<&mut IoBuf>,
+    mut io: Single<&mut IoBufs>,
 ) {
     let mut event = r.event;
 
@@ -219,12 +219,16 @@ pub fn recv_data(
 
     decoder.queue_slice(data);
 
+    let scratch = scratch.one();
+
+    let io = io.one();
+
     // todo: error  on low compression: "decompressed packet length of 2 is <= the compression threshold of 2"
     while let Some(frame) = decoder.try_next_packet(scratch).unwrap() {
         match *login_state {
             LoginState::Handshake => process_handshake(login_state, &frame).unwrap(),
             LoginState::Status => {
-                process_status(login_state, &frame, packets, scratch, &mut io).unwrap();
+                process_status(login_state, &frame, packets, io).unwrap();
             }
             LoginState::Terminate => {
                 // todo: does this properly terminate the connection? I don't think so probably
@@ -242,8 +246,9 @@ pub fn recv_data(
                     packets,
                     decoder,
                     &global,
-                    &mut io,
+                    io,
                     scratch,
+                    &mut compressor,
                     &mut sender,
                 )
                 .unwrap();
@@ -317,11 +322,12 @@ fn process_login(
     id: EntityId,
     login_state: &mut LoginState,
     packet: &PacketFrame,
-    packets: &mut Packets,
+    packets: &Packets,
     decoder: &mut DecodeBuffer,
     global: &Global,
     io: &mut IoBuf,
     scratch: &mut impl ScratchBuffer,
+    compressor: &mut Compressor,
     sender: &mut IngressSender,
 ) -> anyhow::Result<()> {
     debug_assert!(*login_state == LoginState::Login);
@@ -337,7 +343,7 @@ fn process_login(
         threshold: VarInt(global.shared.compression_threshold.0),
     };
 
-    packets.append_pre_compression_packet(&pkt, io, scratch)?;
+    packets.append_pre_compression_packet(&pkt, io)?;
 
     decoder.set_compression(global.shared.compression_threshold);
 
@@ -349,7 +355,7 @@ fn process_login(
         properties: Cow::default(),
     };
 
-    packets.append(&pkt, io, scratch)?;
+    packets.append(&pkt, io, scratch, compressor.one())?;
 
     let username = Box::from(username);
 
@@ -371,8 +377,7 @@ fn process_login(
 fn process_status(
     login_state: &mut LoginState,
     packet: &PacketFrame,
-    packets: &mut Packets,
-    scratch: &mut impl ScratchBuffer,
+    packets: &Packets,
     io: &mut IoBuf,
 ) -> anyhow::Result<()> {
     debug_assert!(*login_state == LoginState::Status);
@@ -402,7 +407,7 @@ fn process_status(
 
             info!("sent query response: {query_request:?}");
             //
-            packets.append_pre_compression_packet(&send, io, scratch)?;
+            packets.append_pre_compression_packet(&send, io)?;
 
             // send pong
             // we send this right away so our ping looks better
@@ -420,7 +425,7 @@ fn process_status(
 
             let send = packets::status::QueryPongS2c { payload };
 
-            packets.append_pre_compression_packet(&send, io, scratch)?;
+            packets.append_pre_compression_packet(&send, io)?;
 
             info!("sent query pong: {query_ping:?}");
             *login_state = LoginState::Terminate;
