@@ -160,7 +160,7 @@ use rayon_local::RayonLocal;
 
 use crate::{net::encoder::append_packet_without_compression, singleton::ring::register_rings};
 
-const NUM_PLAYERS: usize = 1024;
+const NUM_PLAYERS: usize = 10;
 const S2C_BUFFER_SIZE: usize = 1024 * 1024 * NUM_PLAYERS;
 
 #[derive(Debug)]
@@ -192,8 +192,10 @@ impl IoBufs {
     pub fn init(threshold: CompressionThreshold, server_def: &mut impl ServerDef) -> Self {
         let mut locals = RayonLocal::init(|| IoBuf::new(threshold));
 
+        info!("initializing iobufs");
         let rings = locals.get_all_mut().iter_mut().map(IoBuf::buf_mut);
         register_rings(server_def, rings);
+        info!("iobufs initialized");
 
         Self { locals }
     }
@@ -272,6 +274,8 @@ impl Packets {
     }
 
     fn push(&self, writer: PacketWriteInfo) {
+        let idx = self.to_write.idx();
+        info!("idx: {idx}");
         let to_write = unsafe { &mut *self.to_write.get_local_raw().get() };
 
         if let Some(last) = to_write.back_mut() {

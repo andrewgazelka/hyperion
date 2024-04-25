@@ -1,5 +1,5 @@
 use libc::iovec;
-use tracing::warn;
+use tracing::{info, warn};
 
 use crate::net::ServerDef;
 

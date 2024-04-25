@@ -229,7 +229,7 @@ impl<S> RayonLocal<S> {
         RayonLocal { thread_locals }
     }
 
-    fn idx(&self) -> usize {
+    #[must_use] pub fn idx(&self) -> usize {
         // this is so the main thread will still have a place to put data
         // todo: priority—this is currently unsafe in the situation where there is another thread beyond the main thread
         let index = rayon::current_thread_index().unwrap_or(self.thread_locals.len() - 1);

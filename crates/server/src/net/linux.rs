@@ -339,7 +339,9 @@ impl ServerDef for LinuxServer {
         Ok(())
     }
 
+    #[instrument(skip_all, level = "trace", name = "iou-allocate-buffers")]
     fn allocate_buffers(&mut self, buffers: &[iovec]) {
+        info!("allocating buffers");
         unsafe { self.register_buffers(buffers) };
     }
 
@@ -354,12 +356,13 @@ impl ServerDef for LinuxServer {
 
             let fd = fd.0;
 
-            for elem in write.iter() {
-                let PacketWriteInfo { start_ptr, len } = *elem;
-                self.write_raw(fd, start_ptr, len, 0);
+            for (idx, buf) in write.iter_mut().enumerate() {
+                for elem in buf.iter() {
+                    let PacketWriteInfo { start_ptr, len } = *elem;
+                    self.write_raw(fd, start_ptr, len, idx as u16);
+                }
+                buf.clear();
             }
-
-            write.clear();
         });
     }
 
