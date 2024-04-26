@@ -9,8 +9,13 @@ use tracing::instrument;
 use valence_protocol::{ByteAngle, VarInt, Velocity};
 
 use crate::{
-    singleton::broadcast::BroadcastBuf, system::entity_position::PositionSyncMetadata,
-    EntityReaction, FullEntityPose, InitEntity, MinecraftEntity, RunningSpeed, Uuid,
+    components::{
+        EntityReaction, FullEntityPose, ImmuneStatus, MinecraftEntity, RunningSpeed, Uuid, Vitals,
+    },
+    events::{InitEntity, Scratch},
+    net::{Broadcast, Compressor, IoBufs},
+    singleton::player_id_lookup::EntityIdLookup,
+    system::entity_position::PositionSyncMetadata,
 };
 
 pub fn spawn_packet(
@@ -23,7 +28,7 @@ pub fn spawn_packet(
 
     valence_protocol::packets::play::EntitySpawnS2c {
         entity_id,
-        object_uuid: uuid.0,
+        object_uuid: *uuid,
         kind: VarInt(EntityType::Zombie as i32),
         position: pose.position.as_dvec3(),
         pitch: ByteAngle::from_degrees(pose.pitch),
@@ -37,6 +42,7 @@ pub fn spawn_packet(
 #[instrument(skip_all)]
 pub fn init_entity(
     r: Receiver<InitEntity>,
+    mut id_lookup: Single<&mut EntityIdLookup>,
     mut s: Sender<(
         Insert<FullEntityPose>,
         Insert<PositionSyncMetadata>,
@@ -44,28 +50,40 @@ pub fn init_entity(
         Insert<Uuid>,
         Insert<RunningSpeed>,
         Insert<EntityReaction>,
+        Insert<Vitals>,
+        Insert<ImmuneStatus>,
         Spawn,
     )>,
-    mut broadcast: Single<&mut BroadcastBuf>,
+    mut io: Single<&mut IoBufs>,
+    broadcast: Single<&Broadcast>,
+    mut compressor: Single<&mut Compressor>,
 ) {
     let event = r.event;
 
     let id = s.spawn();
 
-    let uuid = Uuid(uuid::Uuid::new_v4());
+    let uuid = Uuid::from(uuid::Uuid::new_v4());
 
     s.insert(id, MinecraftEntity);
     s.insert(id, event.pose);
     s.insert(id, uuid);
     s.insert(id, EntityReaction::default());
+    s.insert(id, ImmuneStatus::default());
     s.insert(id, generate_running_speed());
     s.insert(id, PositionSyncMetadata::default());
+    s.insert(id, Vitals::ALIVE);
+
+    id_lookup.inner.insert(id.index().0 as i32, id);
 
     let pose = event.pose;
 
     let pkt = spawn_packet(id, uuid, &pose);
 
-    broadcast.get_round_robin().append_packet(&pkt).unwrap();
+    // todo: use shared scratch if possible
+    let mut scratch = Scratch::new();
+    broadcast
+        .append(&pkt, io.one(), &mut scratch, compressor.one())
+        .unwrap();
 }
 
 fn generate_running_speed() -> RunningSpeed {

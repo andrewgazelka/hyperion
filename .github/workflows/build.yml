@@ -10,7 +10,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  RUST_NIGHTLY_TOOLCHAIN: nightly-2024-04-10
+  RUST_NIGHTLY_TOOLCHAIN: nightly-2024-04-19
 
 jobs:
   machete:

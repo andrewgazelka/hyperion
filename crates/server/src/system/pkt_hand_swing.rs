@@ -2,12 +2,17 @@ use evenio::prelude::*;
 use tracing::instrument;
 use valence_protocol::{packets::play, Hand, VarInt};
 
-use crate::{singleton::broadcast::BroadcastBuf, SwingArm};
+use crate::{
+    events::{Scratch, SwingArm},
+    net::{Broadcast, Compressor, IoBufs},
+};
 
 #[instrument(skip_all, level = "trace")]
 pub fn pkt_hand_swing(
     swing_arm: Receiver<SwingArm, EntityId>,
-    mut broadcast: Single<&mut BroadcastBuf>,
+    broadcast: Single<&mut Broadcast>,
+    mut io: Single<&mut IoBufs>,
+    mut compressor: Single<&mut Compressor>,
 ) {
     let entity_id = swing_arm.query;
     let entity_id = VarInt(entity_id.index().0 as i32);
@@ -23,5 +28,8 @@ pub fn pkt_hand_swing(
         animation,
     };
 
-    broadcast.get_round_robin().append_packet(&pkt).unwrap();
+    let mut scratch = Scratch::new();
+    broadcast
+        .append(&pkt, io.one(), &mut scratch, compressor.one())
+        .unwrap();
 }

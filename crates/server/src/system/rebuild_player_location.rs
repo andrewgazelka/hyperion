@@ -8,8 +8,9 @@ use evenio::{
 use tracing::instrument;
 
 use crate::{
+    components::{FullEntityPose, Player},
+    events::Gametick,
     singleton::player_aabb_lookup::{LookupData, PlayerBoundingBoxes},
-    FullEntityPose, Gametick, Player,
 };
 
 #[derive(Query, Debug)]

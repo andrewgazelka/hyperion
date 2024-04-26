@@ -2,14 +2,15 @@ use evenio::{
     event::Receiver,
     fetch::{Fetcher, Single},
     query::{Query, With},
-    rayon::prelude::*,
 };
+use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
 use tracing::instrument;
 use valence_protocol::math::{Vec2, Vec3};
 
 use crate::{
-    singleton::player_aabb_lookup::PlayerBoundingBoxes, EntityReaction, FullEntityPose, Gametick,
-    MinecraftEntity, RunningSpeed,
+    components::{EntityReaction, FullEntityPose, MinecraftEntity, RunningSpeed},
+    events::Gametick,
+    singleton::player_aabb_lookup::PlayerBoundingBoxes,
 };
 
 #[derive(Query, Debug)]

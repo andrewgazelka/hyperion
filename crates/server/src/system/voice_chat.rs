@@ -3,11 +3,14 @@ use evenio::{
     entity::EntityId,
     event::{Event, Receiver},
     fetch::Single,
-    query::Query,
+    query::{Query, With},
 };
 
 use crate::{
+    components::{Player, Uuid},
+    events::Scratch,
     global::Global,
+    net::Packets,
     packets::voicechat::{Codec, Msg},
 };
 
@@ -34,17 +37,19 @@ struct VoiceChatGlobal {
 #[derive(Query)]
 pub struct PlayerQuery<'a> {
     id: EntityId,
-    player: &'a mut crate::Player,
-    encoder: &'a mut crate::Encoder,
-    uuid: &'a crate::Uuid,
+    packets: &'a mut Packets,
+    uuid: &'a Uuid,
+    _player: With<&'static Player>,
 }
 
-pub fn voice_chat(r: Receiver<InitVoiceChat, PlayerQuery>, global: Single<&VoiceChatGlobal>) {
+pub fn voice_chat(
+    r: Receiver<InitVoiceChat, PlayerQuery>,
+    global: Single<&VoiceChatGlobal>,
+    mut io: Single<&mut crate::net::IoBufs>,
+    mut compressor: Single<&mut crate::net::Compressor>,
+) {
     let PlayerQuery {
-        id,
-        player,
-        encoder,
-        uuid,
+        id, packets, uuid, ..
     } = r.query;
 
     let uuid = uuid.0;
@@ -63,6 +68,11 @@ pub fn voice_chat(r: Receiver<InitVoiceChat, PlayerQuery>, global: Single<&Voice
         allow_recording: global.allow_recording,
     }
     .to_plugin_message();
-    
-    encoder.append_packet(&pkt).unwrap();
+
+    let mut scratch = Scratch::new();
+    let compressor = compressor.one();
+
+    packets
+        .append(&pkt, io.one(), &mut scratch, compressor)
+        .unwrap();
 }

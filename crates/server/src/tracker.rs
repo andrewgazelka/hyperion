@@ -1,14 +1,20 @@
-//! See [Tracker] for more information.
+#![expect(unused, reason = "probably will be used in future")]
+
+//! See [Delta] for more information.
+
+use derive_more::{Deref, DerefMut, From};
+use evenio::prelude::Component;
 
 /// Tracks changes in a value
-pub struct Tracker<T> {
+#[derive(Component)]
+pub struct Delta<T> {
     /// The previous value of the tracker.
     previous: T,
     /// The current value of the tracker.
     current: T,
 }
 
-impl<T: Clone> Tracker<T> {
+impl<T: Clone> Delta<T> {
     /// Creates a new tracker with the given value.
     pub fn new(value: T) -> Self {
         Self {
@@ -40,4 +46,11 @@ impl<T: Clone> Tracker<T> {
     pub fn update_previous(&mut self) {
         self.previous = self.current.clone();
     }
+}
+
+/// Previous value
+#[derive(Component, Deref, DerefMut, From)]
+#[repr(transparent)]
+pub struct Prev<T> {
+    previous: T,
 }

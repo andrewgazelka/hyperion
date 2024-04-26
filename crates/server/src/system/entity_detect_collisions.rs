@@ -2,12 +2,14 @@ use evenio::{
     entity::EntityId,
     event::Receiver,
     fetch::{Fetcher, Single},
-    rayon::prelude::*,
 };
+use rayon::prelude::*;
 use tracing::instrument;
 
 use crate::{
-    singleton::bounding_box::EntityBoundingBoxes, EntityReaction, FullEntityPose, Gametick,
+    components::{EntityReaction, FullEntityPose},
+    events::Gametick,
+    singleton::bounding_box::EntityBoundingBoxes,
 };
 
 #[instrument(skip_all, level = "trace")]

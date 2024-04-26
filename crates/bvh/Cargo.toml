@@ -19,6 +19,7 @@ ordered-float = "4.2.0"
 itertools = "0.12.1"
 plotters = { version = "0.3.5", default-features = false, features = ["plotters-bitmap", "image"], optional = true}
 plotters-bitmap = { version = "0.3.3" , optional = true }
+tracing = "0.1.40"
 
 [dev-dependencies]
 divan = "0.1.14"

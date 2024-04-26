@@ -1,14 +1,27 @@
 use evenio::prelude::*;
 use tracing::instrument;
 
-use crate::{global::Global, singleton::broadcast::BroadcastBuf, Gametick};
+use crate::{
+    events::Gametick,
+    global::Global,
+    net::{Broadcast, Compressor, IoBufs},
+};
 
 #[instrument(skip_all, level = "trace")]
 pub fn update_time(
-    _: ReceiverMut<Gametick>,
-    mut broadcast: Single<&mut BroadcastBuf>,
+    gametick: ReceiverMut<Gametick>,
+    broadcast: Single<&Broadcast>,
     mut global: Single<&mut Global>,
+    mut io: Single<&mut IoBufs>,
+    mut compressor: Single<&mut Compressor>,
 ) {
+    let mut gametick = gametick.event;
+
+    let gametick = &mut *gametick;
+
+    #[expect(clippy::mut_mut, reason = "I do not know a way around this")]
+    let scratch = &mut gametick.scratch;
+
     let tick = global.tick;
     let time_of_day = tick % 24000;
 
@@ -19,7 +32,10 @@ pub fn update_time(
             time_of_day,
         };
 
-        broadcast.get_round_robin().append_packet(&pkt).unwrap();
+        let scratch = scratch.one();
+        broadcast
+            .append(&pkt, io.one(), scratch, compressor.one())
+            .unwrap();
     }
 
     // update the tick

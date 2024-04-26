@@ -2,13 +2,19 @@ use evenio::prelude::*;
 use tracing::instrument;
 use valence_protocol::VarInt;
 
-use crate::{singleton::broadcast::BroadcastBuf, KillAllEntities, MinecraftEntity, Player};
+use crate::{
+    components::{MinecraftEntity, Player},
+    events::{KillAllEntities, Scratch},
+    net::{Broadcast, Compressor, IoBufs},
+};
 
 #[instrument(skip_all)]
 pub fn kill_all(
     _r: ReceiverMut<KillAllEntities>,
     entities: Fetcher<(EntityId, &MinecraftEntity, Not<&Player>)>,
-    broadcast: Single<&mut BroadcastBuf>,
+    broadcast: Single<&Broadcast>,
+    mut io: Single<&mut IoBufs>,
+    mut compressor: Single<&mut Compressor>,
     mut s: Sender<Despawn>,
 ) {
     let ids = entities.iter().map(|(id, ..)| id).collect::<Vec<_>>();
@@ -18,10 +24,10 @@ pub fn kill_all(
 
     let despawn_packet = valence_protocol::packets::play::EntitiesDestroyS2c { entity_ids };
 
+    // todo: use shared scratch if possible
+    let mut scratch = Scratch::new();
     broadcast
-        .0
-        .get_round_robin()
-        .append_packet(&despawn_packet)
+        .append(&despawn_packet, io.one(), &mut scratch, compressor.one())
         .unwrap();
 
     for id in ids {

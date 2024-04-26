@@ -3,6 +3,7 @@ use std::{borrow::Cow, collections::BTreeSet, io::Write};
 use anyhow::{bail, Context};
 use evenio::prelude::*;
 use itertools::Itertools;
+use libdeflater::Compressor;
 use serde::Deserialize;
 use tracing::{debug, info, instrument};
 use valence_nbt::{value::ValueRef, Value};
@@ -36,16 +37,14 @@ use crate::{
     bits::BitStorage,
     blocks::AnvilFolder,
     chunk::heightmap,
+    components::{FullEntityPose, InGameName, MinecraftEntity, Player, Uuid},
     config,
+    events::{PlayerJoinWorld, Scratch, ScratchBuffer},
     global::Global,
-    net::Encoder,
-    packets::{voicechat, voicechat::Codec},
-    singleton::{
-        broadcast::BroadcastBuf, player_id_lookup::PlayerIdLookup,
-        player_uuid_lookup::PlayerUuidLookup,
-    },
+    net,
+    net::{Broadcast, IoBuf, IoBufs, Packets},
+    singleton::{player_id_lookup::EntityIdLookup, player_uuid_lookup::PlayerUuidLookup},
     system::init_entity::spawn_packet,
-    FullEntityPose, MinecraftEntity, Player, PlayerJoinWorld, Uuid,
 };
 
 #[derive(Query, Debug)]
@@ -56,21 +55,45 @@ pub(crate) struct EntityQuery<'a> {
     _player: With<&'static MinecraftEntity>,
 }
 
+#[derive(Query)]
+pub(crate) struct PlayerJoinWorldQuery<'a> {
+    id: EntityId,
+    uuid: &'a Uuid,
+    pose: &'a FullEntityPose,
+    packets: &'a mut Packets,
+    name: &'a InGameName,
+    _player: With<&'static Player>,
+}
+
+#[derive(Query)]
+pub(crate) struct PlayerQuery<'a> {
+    id: EntityId,
+    uuid: &'a Uuid,
+    pose: &'a FullEntityPose,
+    name: &'a InGameName,
+    _player: With<&'static Player>,
+}
+
 // todo: clean up player_join_world; the file is super super super long and hard to understand
+#[allow(clippy::too_many_arguments, reason = "todo")]
 #[instrument(skip_all)]
 pub fn player_join_world(
-    // todo: I doubt &mut Player will work here due to aliasing
-    r: Receiver<PlayerJoinWorld, (EntityId, &Player, &Uuid, &FullEntityPose, &mut Encoder)>,
+    r: Receiver<PlayerJoinWorld, PlayerJoinWorldQuery>,
     entities: Fetcher<EntityQuery>,
     global: Single<&Global>,
-    players: Fetcher<(EntityId, &Player, &Uuid, &FullEntityPose)>,
+    players: Fetcher<PlayerQuery>,
     mut uuid_lookup: Single<&mut PlayerUuidLookup>,
-    mut id_lookup: Single<&mut PlayerIdLookup>,
-    mut broadcast: Single<&mut BroadcastBuf>,
+    mut id_lookup: Single<&mut EntityIdLookup>,
+    broadcast: Single<&Broadcast>,
+    mut io: Single<&mut IoBufs>,
+    mut compressor: Single<&mut net::Compressor>,
 ) {
     static CACHED_DATA: once_cell::sync::OnceCell<bytes::Bytes> = once_cell::sync::OnceCell::new();
 
-    let compression_level = global.0.shared.compression_level;
+    // todo: remove
+    let mut scratch = Scratch::new();
+
+    let compression_level = global.0.shared.compression_threshold;
 
     let cached_data = CACHED_DATA.get_or_init(|| {
         let mut encoder = PacketEncoder::new();
@@ -83,14 +106,12 @@ pub fn player_join_world(
         bytes.freeze()
     });
 
-    let broadcast = broadcast.get_round_robin();
+    info!("got cached data");
 
-    let (current_id, current_player, uuid, pose, encoder) = r.query;
+    let query = r.query;
 
-    uuid_lookup.insert(uuid.0, current_id);
-    id_lookup
-        .inner
-        .insert(current_id.index().0 as i32, current_id);
+    uuid_lookup.insert(query.uuid.0, query.id);
+    id_lookup.inner.insert(query.id.index().0 as i32, query.id);
 
     let boots = ItemStack::new(ItemKind::NetheriteBoots, 1, None);
     let leggings = ItemStack::new(ItemKind::NetheriteLeggings, 1, None);
@@ -127,32 +148,47 @@ pub fn player_join_world(
     let equipment = vec![mainhand, boots, leggings, chestplate, helmet];
 
     let entries = &[play::player_list_s2c::PlayerListEntry {
-        player_uuid: uuid.0,
-        username: &current_player.name,
+        player_uuid: query.uuid.0,
+        username: query.name,
         properties: Cow::Borrowed(&[]),
         chat_data: None,
         listed: true,
         ping: 0,
         game_mode: GameMode::Creative,
-        display_name: Some(current_player.name.to_string().into_cow_text()),
+        display_name: Some(query.name.to_string().into_cow_text()),
     }];
 
-    let current_entity_id = VarInt(current_id.index().0 as i32);
+    let current_entity_id = VarInt(query.id.index().0 as i32);
 
     let text = play::GameMessageS2c {
-        chat: format!("{} joined the world", current_player.name).into_cow_text(),
+        chat: format!("{} joined the world", query.name).into_cow_text(),
         overlay: false,
     };
 
-    broadcast.append_packet(&text).unwrap();
+    let compressor = compressor.one();
 
-    encoder.append(cached_data);
+    let io = io.one();
 
-    encoder
-        .append_packet(&crate::packets::vanilla::EntityEquipmentUpdateS2c {
-            entity_id: VarInt(0),
-            equipment: Cow::Borrowed(&equipment),
-        })
+    broadcast
+        .append(&text, io, &mut scratch, compressor)
+        .unwrap();
+
+    let local = query.packets;
+
+    local.append_raw(cached_data, io);
+
+    info!("appending cached data");
+
+    local
+        .append(
+            &crate::packets::vanilla::EntityEquipmentUpdateS2c {
+                entity_id: VarInt(0),
+                equipment: Cow::Borrowed(&equipment),
+            },
+            io,
+            &mut scratch,
+            compressor,
+        )
         .unwrap();
 
     let actions = PlayerListActions::default()
@@ -165,74 +201,98 @@ pub fn player_join_world(
         entries: Cow::Borrowed(entries),
     };
 
-    broadcast.append_packet(&info).unwrap();
+    broadcast
+        .append(&info, io, &mut scratch, compressor)
+        .unwrap();
 
     for entity in entities {
         let pkt = spawn_packet(entity.id, *entity.uuid, entity.pose);
-        encoder.append_packet(&pkt).unwrap();
+        local.append(&pkt, io, &mut scratch, compressor).unwrap();
     }
 
     // todo: cache
     let entries = players
         .iter()
-        .map(
-            |(_, player, uuid, _)| play::player_list_s2c::PlayerListEntry {
-                player_uuid: uuid.0,
-                username: &player.name,
-                properties: Cow::Borrowed(&[]),
-                chat_data: None,
-                listed: true,
-                ping: 20,
-                game_mode: GameMode::Creative,
-                display_name: Some(player.name.to_string().into_cow_text()),
-            },
-        )
-        .collect::<Vec<_>>();
-
-    let player_names = players
-        .iter()
-        .map(|(_, player, ..)| &*player.name)
-        .collect::<Vec<_>>();
-
-    encoder
-        .append_packet(&play::TeamS2c {
-            team_name: "no_tag",
-            mode: Mode::AddEntities {
-                entities: player_names,
-            },
+        .map(|query| play::player_list_s2c::PlayerListEntry {
+            player_uuid: query.uuid.0,
+            username: query.name,
+            properties: Cow::Borrowed(&[]),
+            chat_data: None,
+            listed: true,
+            ping: 20,
+            game_mode: GameMode::Creative,
+            display_name: Some(query.name.to_string().into_cow_text()),
         })
+        .collect::<Vec<_>>();
+
+    let player_names: Vec<_> = players
+        .iter()
+        .map(|query| &***query.name) // todo: lol
+        .collect();
+
+    local
+        .append(
+            &play::TeamS2c {
+                team_name: "no_tag",
+                mode: Mode::AddEntities {
+                    entities: player_names,
+                },
+            },
+            io,
+            &mut scratch,
+            compressor,
+        )
         .unwrap();
 
-    let current_name = &*current_player.name;
+    let current_name = query.name;
 
     broadcast
-        .append_packet(&play::TeamS2c {
-            team_name: "no_tag",
-            mode: Mode::AddEntities {
-                entities: vec![current_name],
+        .append(
+            &play::TeamS2c {
+                team_name: "no_tag",
+                mode: Mode::AddEntities {
+                    entities: vec![current_name],
+                },
             },
-        })
+            io,
+            &mut scratch,
+            compressor,
+        )
         .unwrap();
 
-    encoder
-        .append_packet(&play::PlayerListS2c {
-            actions,
-            entries: Cow::Owned(entries),
-        })
+    local
+        .append(
+            &play::PlayerListS2c {
+                actions,
+                entries: Cow::Owned(entries),
+            },
+            io,
+            &mut scratch,
+            compressor,
+        )
         .unwrap();
 
     let tick = global.tick;
     let time_of_day = tick % 24000;
 
-    encoder
-        .append_packet(&play::WorldTimeUpdateS2c {
-            world_age: tick,
-            time_of_day,
-        })
+    local
+        .append(
+            &play::WorldTimeUpdateS2c {
+                world_age: tick,
+                time_of_day,
+            },
+            io,
+            &mut scratch,
+            compressor,
+        )
         .unwrap();
 
     // todo: cache
-    for (id, _, uuid, pose) in &players {
+    for current_query in &players {
+        let id = current_query.id;
+        let pose = current_query.pose;
+        let uuid = current_query.uuid;
+
         let entity_id = VarInt(id.index().0 as i32);
 
         let pkt = play::PlayerSpawnS2c {
@@ -242,13 +302,14 @@ pub fn player_join_world(
             yaw: ByteAngle::from_degrees(pose.yaw),
             pitch: ByteAngle::from_degrees(pose.pitch),
         };
-        encoder.append_packet(&pkt).unwrap();
+
+        local.append(&pkt, io, &mut scratch, compressor).unwrap();
 
         let pkt = crate::packets::vanilla::EntityEquipmentUpdateS2c {
             entity_id,
             equipment: Cow::Borrowed(&equipment),
         };
-        encoder.append_packet(&pkt).unwrap();
+        local.append(&pkt, io, &mut scratch, compressor).unwrap();
     }
 
     global
@@ -259,34 +320,44 @@ pub fn player_join_world(
 
     let spawn_player = play::PlayerSpawnS2c {
         entity_id: current_entity_id,
-        player_uuid: uuid.0,
-        position: pose.position.as_dvec3(),
-        yaw: ByteAngle::from_degrees(pose.yaw),
-        pitch: ByteAngle::from_degrees(pose.pitch),
+        player_uuid: query.uuid.0,
+        position: query.pose.position.as_dvec3(),
+        yaw: ByteAngle::from_degrees(query.pose.yaw),
+        pitch: ByteAngle::from_degrees(query.pose.pitch),
     };
 
-    encoder
-        .append_packet(&play::PlayerPositionLookS2c {
-            position: pose.position.as_dvec3(),
-            yaw: pose.yaw,
-            pitch: pose.pitch,
-            flags: PlayerPositionLookFlags::default(),
-            teleport_id: 1.into(),
-        })
+    local
+        .append(
+            &play::PlayerPositionLookS2c {
+                position: query.pose.position.as_dvec3(),
+                yaw: query.pose.yaw,
+                pitch: query.pose.pitch,
+                flags: PlayerPositionLookFlags::default(),
+                teleport_id: 1.into(),
+            },
+            io,
+            &mut scratch,
+            compressor,
+        )
         .unwrap();
-
-    broadcast.append_packet(&spawn_player).unwrap();
 
     broadcast
-        .append_packet(&crate::packets::vanilla::EntityEquipmentUpdateS2c {
-            entity_id: current_entity_id,
-            equipment: Cow::Borrowed(&equipment),
-        })
+        .append(&spawn_player, io, &mut scratch, compressor)
         .unwrap();
 
-    encoder.deallocate_on_process();
+    broadcast
+        .append(
+            &crate::packets::vanilla::EntityEquipmentUpdateS2c {
+                entity_id: current_entity_id,
+                equipment: Cow::Borrowed(&equipment),
+            },
+            io,
+            &mut scratch,
+            compressor,
+        )
+        .unwrap();
 
-    info!("Player {} joined the world", current_player.name);
+    info!("Player {} joined the world", query.name);
 }
 
 fn write_block_states(states: &BlockStateContainer, writer: &mut impl Write) -> anyhow::Result<()> {
@@ -334,13 +405,18 @@ impl<T, const N: usize> Array3d for [T; N] {
     }
 }
 
-pub fn send_keep_alive(encoder: &mut PacketEncoder) -> anyhow::Result<()> {
-    let pkt = valence_protocol::packets::play::KeepAliveS2c {
+pub fn send_keep_alive(
+    packets: &Packets,
+    io: &mut IoBuf,
+    scratch: &mut impl ScratchBuffer,
+    compressor: &mut Compressor,
+) -> anyhow::Result<()> {
+    let pkt = play::KeepAliveS2c {
         // The ID can be set to zero because it doesn't matter
         id: 0,
     };
 
-    encoder.append_packet(&pkt)?;
+    packets.append(&pkt, io, scratch, compressor)?;
 
     Ok(())
 }
@@ -658,8 +734,8 @@ fn inner(encoder: &mut PacketEncoder) -> anyhow::Result<()> {
 
     let mut anvil = AnvilFolder::new(&biome_registry);
 
-    for x in -16..=16 {
-        for z in -16..=16 {
+    for x in -16..16 {
+        for z in -16..16 {
             let pos = ChunkPos::new(x, z);
             encode_chunk_packet(&mut anvil, pos, encoder)?;
         }
