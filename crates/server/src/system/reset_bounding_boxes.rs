@@ -5,7 +5,7 @@ use evenio::{
     fetch::{Fetcher, Single},
     query::Query,
 };
-use tracing::instrument;
+use tracing::{instrument, span};
 
 use crate::{
     components::FullEntityPose,
@@ -30,14 +30,15 @@ pub fn reset_bounding_boxes(
     entity_bounding_boxes.clear();
 
     // todo: make par iterator
-
-    let stored: Vec<_> = entities
-        .iter()
-        .map(|query| Stored {
-            aabb: query.pose.bounding,
-            id: query.id,
-        })
-        .collect();
+    let stored: Vec<_> = span!(tracing::Level::TRACE, "entities-to-vec").in_scope(|| {
+        entities
+            .iter()
+            .map(|query| Stored {
+                aabb: query.pose.bounding,
+                id: query.id,
+            })
+            .collect()
+    });
 
     let bvh = bvh::Bvh::build::<TrivialHeuristic>(stored);
 
