@@ -4,7 +4,7 @@ use valence_protocol::{packets::play, VarInt};
 use valence_text::{Color, IntoText};
 
 use crate::{
-    events::Gametick,
+    event::Gametick,
     global::Global,
     net::{Compressor, IoBufs, Packets},
     tracker::Prev,

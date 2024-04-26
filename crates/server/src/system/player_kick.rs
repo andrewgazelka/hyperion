@@ -9,7 +9,7 @@ use valence_protocol::{
 
 use crate::{
     components::Uuid,
-    events::{KickPlayer, Scratch},
+    event::{KickPlayer, Scratch},
     global::Global,
     net::{Compressor, IoBufs, Packets},
     singleton::{player_id_lookup::EntityIdLookup, player_uuid_lookup::PlayerUuidLookup},

@@ -9,7 +9,7 @@ use tracing::instrument;
 
 use crate::{
     components::{FullEntityPose, Player},
-    events::Gametick,
+    event::Gametick,
     singleton::player_aabb_lookup::{LookupData, PlayerBoundingBoxes},
 };
 

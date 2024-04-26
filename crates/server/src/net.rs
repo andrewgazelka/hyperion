@@ -10,7 +10,7 @@ use tracing::debug;
 use valence_protocol::{CompressionThreshold, Encode};
 
 use crate::{
-    events::ScratchBuffer,
+    event::ScratchBuffer,
     global::Global,
     net::encoder::PacketWriteInfo,
     singleton::ring::{Buf, Ring},

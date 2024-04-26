@@ -6,7 +6,7 @@ use tracing::instrument;
 
 use crate::{
     components::LoginState,
-    events::Egress,
+    event::Egress,
     global::Global,
     net::{Broadcast, Fd, Packets, RefreshItems, ServerDef},
 };

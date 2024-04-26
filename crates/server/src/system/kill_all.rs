@@ -4,7 +4,7 @@ use valence_protocol::VarInt;
 
 use crate::{
     components::{MinecraftEntity, Player},
-    events::{KillAllEntities, Scratch},
+    event::{KillAllEntities, Scratch},
     net::{Broadcast, Compressor, IoBufs},
 };
 

@@ -3,7 +3,7 @@ use tracing::instrument;
 
 use crate::{
     components::vitals::{Absorption, Regeneration},
-    events::Gametick,
+    event::Gametick,
     global::Global,
     Vitals,
 };

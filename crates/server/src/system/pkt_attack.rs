@@ -4,7 +4,7 @@ use valence_protocol::{packets::play, VarInt};
 
 use crate::{
     components::{EntityReaction, FullEntityPose, ImmuneStatus, Player, Vitals},
-    events::{AttackEntity, Scratch},
+    event::{AttackEntity, Scratch},
     net::{Broadcast, Compressor, IoBufs, Packets},
 };
 

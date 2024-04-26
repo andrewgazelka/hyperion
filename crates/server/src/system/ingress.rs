@@ -20,6 +20,7 @@ use valence_protocol::{
 };
 
 use crate::{
+    event,
     global::Global,
     net::{Server, ServerDef, ServerEvent},
     singleton::fd_lookup::FdLookup,
@@ -29,15 +30,12 @@ mod player_packet_buffer;
 
 use crate::{
     components::{FullEntityPose, ImmuneStatus, KeepAlive, LoginState, Vitals},
-    events::{
-        AttackEntity, BumpScratch, InitEntity, KickPlayer, KillAllEntities, PlayerInit,
-        ScratchBuffer, SwingArm,
-    },
     net::{Compressor, Fd, IoBuf, IoBufs, Packets, MINECRAFT_VERSION, PROTOCOL_VERSION},
     packets::PacketSwitchQuery,
     singleton::player_id_lookup::EntityIdLookup,
     system::ingress::player_packet_buffer::DecodeBuffer,
 };
+use crate::event::{BumpScratch, ScratchBuffer};
 
 pub type IngressSender<'a> = Sender<
     'a,
@@ -47,13 +45,16 @@ pub type IngressSender<'a> = Sender<
         Insert<DecodeBuffer>,
         Insert<Fd>,
         Insert<Packets>,
-        PlayerInit,
         Despawn,
-        KickPlayer,
-        InitEntity,
-        KillAllEntities,
-        SwingArm,
-        AttackEntity,
+        event::PlayerInit,
+        event::KickPlayer,
+        event::InitEntity,
+        event::KillAllEntities,
+        event::SwingArm,
+        event::AttackEntity,
+        event::BlockStartBreak,
+        event::BlockAbortBreak,
+        event::BlockFinishBreak,
     ),
 >;
 
@@ -364,7 +365,7 @@ fn process_login(
         packets_to_transition: 5,
     };
 
-    sender.send(PlayerInit {
+    sender.send(event::PlayerInit {
         entity: id,
         username,
         uuid,

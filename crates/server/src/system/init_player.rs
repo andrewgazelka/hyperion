@@ -6,7 +6,7 @@ use crate::{
         AiTargetable, EntityReaction, FullEntityPose, ImmuneStatus, InGameName, KeepAlive, Player,
         Uuid, Vitals,
     },
-    events::{PlayerInit, PlayerJoinWorld},
+    event::{PlayerInit, PlayerJoinWorld},
     system::sync_entity_position::PositionSyncMetadata,
     tracker::Prev,
 };

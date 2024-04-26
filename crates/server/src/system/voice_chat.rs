@@ -8,7 +8,7 @@ use evenio::{
 
 use crate::{
     components::{Player, Uuid},
-    events::Scratch,
+    event::Scratch,
     net::Packets,
     packets::voicechat::{Codec, Msg},
 };

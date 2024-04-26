@@ -9,9 +9,6 @@
 
 //! <https://wiki.vg/index.php?title=Protocol&oldid=18375>
 
-pub mod vanilla;
-pub mod voicechat;
-
 use std::str::FromStr;
 
 use anyhow::{bail, ensure};
@@ -20,17 +17,24 @@ use evenio::{entity::EntityId, query::Query};
 use valence_protocol::{
     decode::PacketFrame,
     math::Vec3,
-    packets::{play, play::player_interact_entity_c2s::EntityInteraction},
+    packets::{
+        play,
+        play::{player_action_c2s::PlayerAction, player_interact_entity_c2s::EntityInteraction},
+    },
     Decode, Packet,
 };
 
 use crate::{
     components::{FullEntityPose, ImmuneStatus, KeepAlive, Vitals},
-    events::{AttackEntity, InitEntity, KillAllEntities, SwingArm},
+    event,
+    event::{AttackEntity, InitEntity, KillAllEntities, SwingArm},
     global::Global,
     singleton::player_id_lookup::EntityIdLookup,
     system::ingress::IngressSender,
 };
+
+pub mod vanilla;
+pub mod voicechat;
 
 const fn confirm_teleport(_pkt: &[u8]) {
     // ignore
@@ -323,6 +327,44 @@ pub struct PacketSwitchQuery<'a> {
     pub immunity: &'a mut ImmuneStatus,
 }
 
+/// i.e., doors, etc
+fn player_interact_block(
+    mut data: &[u8],
+    id_lookup: &EntityIdLookup,
+    sender: &mut IngressSender,
+) -> anyhow::Result<()> {
+    let packet = play::PlayerInteractBlockC2s::decode(&mut data)?;
+
+    todo!()
+}
+
+fn player_action(
+    mut data: &[u8],
+    sender: &mut IngressSender,
+    query: &PacketSwitchQuery,
+) -> anyhow::Result<()> {
+    let packet = play::PlayerActionC2s::decode(&mut data)?;
+
+    let id = query.id;
+    let position = packet.position;
+    let sequence = packet.sequence.0;
+
+    match packet.action {
+        PlayerAction::StartDestroyBlock => {
+            sender.send(event::BlockStartBreak { by: id, position, sequence });
+        }
+        PlayerAction::AbortDestroyBlock => {
+            sender.send(event::BlockAbortBreak { by: id, position, sequence });
+        }
+        PlayerAction::StopDestroyBlock => {
+            sender.send(event::BlockFinishBreak { by: id, position, sequence });
+        }
+        _ => {}
+    }
+    
+    Ok(())
+}
+
 pub fn switch(
     raw: PacketFrame,
     global: &Global,
@@ -337,9 +379,11 @@ pub fn switch(
     match packet_id {
         play::HandSwingC2s::ID => hand_swing(data, query, sender)?,
         play::TeleportConfirmC2s::ID => confirm_teleport(data),
+        play::PlayerInteractBlockC2s::ID => player_interact_block(data, id_lookup, sender)?,
         // play::ClientSettingsC2s::ID => client_settings(data, player)?,
         // play::CustomPayloadC2s::ID => custom_payload(data),
         play::FullC2s::ID => full(data, query.pose)?,
+        play::PlayerActionC2s::ID => player_action(data, sender, query)?,
         play::PositionAndOnGroundC2s::ID => position_and_on_ground(data, query.pose)?,
         play::LookAndOnGroundC2s::ID => look_and_on_ground(data, query.pose)?,
         // play::ClientCommandC2s::ID => player_command(data),

@@ -6,7 +6,7 @@ use valence_protocol::{
     MAX_PACKET_SIZE,
 };
 
-use crate::events::ScratchBuffer;
+use crate::event::ScratchBuffer;
 
 #[derive(Default)]
 pub struct PacketDecoder {
@@ -163,7 +163,7 @@ mod tests {
     };
 
     use super::*;
-    use crate::events::Scratch;
+    use crate::event::Scratch;
 
     fn compare_decoder(packet: &LoginHelloC2s, threshold: CompressionThreshold, msg: &str) {
         let mut valence_decoder = valence_protocol::PacketDecoder::new();

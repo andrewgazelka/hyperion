@@ -3,7 +3,7 @@ use tracing::instrument;
 use valence_protocol::{packets::play, Hand, VarInt};
 
 use crate::{
-    events::{Scratch, SwingArm},
+    event::{Scratch, SwingArm},
     net::{Broadcast, Compressor, IoBufs},
 };
 

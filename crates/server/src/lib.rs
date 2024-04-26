@@ -11,6 +11,8 @@
 #![feature(maybe_uninit_slice)]
 #![expect(clippy::type_complexity, reason = "evenio uses a lot of complex types")]
 
+pub use evenio;
+
 mod blocks;
 mod chunk;
 mod singleton;
@@ -33,10 +35,11 @@ use singleton::bounding_box;
 use spin::Lazy;
 use tracing::{error, info, instrument, trace, warn};
 use valence_protocol::CompressionThreshold;
+pub use valence_server;
 
 use crate::{
     components::Vitals,
-    events::{BumpScratch, Egress, Gametick, StatsEvent},
+    event::{BumpScratch, Egress, Gametick, StatsEvent},
     global::Global,
     net::{Broadcast, Compressor, IoBufs, Server, ServerDef},
     singleton::{
@@ -47,7 +50,7 @@ use crate::{
 };
 
 pub mod components;
-pub mod events;
+pub mod event;
 
 mod global;
 mod net;
@@ -203,6 +206,9 @@ impl Game {
         world.add_handler(system::pkt_attack_player);
         world.add_handler(system::pkt_attack_entity);
 
+        world.add_handler(system::block_update);
+        world.add_handler(system::chat_message);
+
         world.add_handler(system::pkt_hand_swing);
 
         world.add_handler(system::generate_egress_packets);
@@ -310,7 +316,7 @@ impl Game {
         self.last_ticks.push_back(now);
 
         let bump = RayonLocal::init(bumpalo::Bump::new);
-        let mut scratch = bump.map_ref(events::Scratch::from);
+        let mut scratch = bump.map_ref(event::Scratch::from);
 
         generate_ingress_events(&mut self.world, &mut self.server, &mut scratch);
 

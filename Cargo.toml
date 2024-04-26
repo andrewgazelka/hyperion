@@ -11,6 +11,7 @@ members = [
     "crates/generator-build",
     "crates/rayon-local",
     "crates/server",
+    "events/infection",
 ]
 #opt-level = 1
 
@@ -42,6 +43,7 @@ bvh = { path = "crates/bvh" }
 generator = { path = "crates/generator" }
 generator-build = { path = "crates/generator-build" }
 glam = "0.26.0"
+server = { path = "crates/server" }
 
 # todo: re-enable rayon
 #evenio = { git = "https://github.com/kuviman/evenio", features = [], branch = "non-send" }

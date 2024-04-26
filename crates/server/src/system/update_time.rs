@@ -2,7 +2,7 @@ use evenio::prelude::*;
 use tracing::instrument;
 
 use crate::{
-    events::Gametick,
+    event::Gametick,
     global::Global,
     net::{Broadcast, Compressor, IoBufs},
 };
