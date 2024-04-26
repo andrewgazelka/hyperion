@@ -39,7 +39,7 @@ pub use valence_server;
 
 use crate::{
     components::Vitals,
-    event::{BumpScratch, Egress, Gametick, StatsEvent},
+    event::{BumpScratch, Egress, Gametick, Stats},
     global::Global,
     net::{Broadcast, Compressor, IoBufs, Server, ServerDef},
     singleton::{
@@ -52,7 +52,7 @@ use crate::{
 pub mod components;
 pub mod event;
 
-mod global;
+pub mod global;
 mod net;
 
 mod packets;
@@ -218,6 +218,8 @@ impl Game {
         world.add_handler(system::block_update);
         world.add_handler(system::chat_message);
         world.add_handler(system::disguise_player);
+        world.add_handler(system::teleport);
+        world.add_handler(system::shoved_reaction);
 
         world.add_handler(system::pkt_hand_swing);
 
@@ -366,7 +368,7 @@ impl Game {
 
             trace!("ms / tick: {mean_1_second:.2}ms");
 
-            self.world.send(StatsEvent {
+            self.world.send(Stats {
                 ms_per_tick_mean_1s: mean_1_second,
                 ms_per_tick_mean_5s: mean_5_seconds,
                 scratch,

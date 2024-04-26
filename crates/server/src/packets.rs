@@ -28,7 +28,7 @@ use valence_server::entity::EntityKind;
 use crate::{
     components::{FullEntityPose, ImmuneStatus, KeepAlive, Vitals},
     event,
-    event::{AttackEntity, InitEntity, KillAllEntities, SwingArm},
+    event::{AttackEntity, AttackType, InitEntity, KillAllEntities, SwingArm},
     global::Global,
     singleton::player_id_lookup::EntityIdLookup,
     system::ingress::IngressSender,
@@ -205,6 +205,7 @@ fn hand_swing(
 
 fn player_interact_entity(
     mut data: &[u8],
+    query: &PacketSwitchQuery,
     id_lookup: &EntityIdLookup,
     from_pos: Vec3,
     sender: &mut IngressSender,
@@ -219,7 +220,13 @@ fn player_interact_entity(
     let target = packet.entity_id.0;
 
     if let Some(&target) = id_lookup.get(&target) {
-        sender.send(AttackEntity { target, from_pos });
+        sender.send(AttackEntity {
+            target,
+            from_pos,
+            from: query.id,
+            damage: 10.0,
+            source: AttackType::Melee,
+        });
     }
 
     Ok(())
@@ -309,7 +316,7 @@ pub fn switch(
         // play::UpdatePlayerAbilitiesC2s::ID => update_player_abilities(data)?,
         // play::UpdateSelectedSlotC2s::ID => update_selected_slot(data)?,
         play::PlayerInteractEntityC2s::ID => {
-            player_interact_entity(data, id_lookup, query.pose.position, sender)?;
+            player_interact_entity(data, query, id_lookup, query.pose.position, sender)?;
         }
         // play::KeepAliveC2s::ID => keep_alive(query.keep_alive)?,
         play::CommandExecutionC2s::ID => chat_command(data, query, sender)?,

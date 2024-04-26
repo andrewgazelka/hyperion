@@ -10,8 +10,7 @@ use valence_server::entity::EntityKind;
 
 use crate::{
     components::{
-        Display, EntityReaction, FullEntityPose, ImmuneStatus, MinecraftEntity, RunningSpeed, Uuid,
-        Vitals,
+        Display, EntityReaction, FullEntityPose, ImmuneStatus, Npc, RunningSpeed, Uuid, Vitals,
     },
     event::{InitEntity, Scratch},
     net::{Broadcast, Compressor, IoBufs},
@@ -48,7 +47,7 @@ pub fn init_entity(
     mut s: Sender<(
         Insert<FullEntityPose>,
         Insert<PositionSyncMetadata>,
-        Insert<MinecraftEntity>,
+        Insert<Npc>,
         Insert<Uuid>,
         Insert<RunningSpeed>,
         Insert<EntityReaction>,
@@ -67,7 +66,7 @@ pub fn init_entity(
 
     let uuid = Uuid::from(uuid::Uuid::new_v4());
 
-    s.insert(id, MinecraftEntity);
+    s.insert(id, Npc);
     s.insert(id, event.pose);
     s.insert(id, uuid);
     s.insert(id, EntityReaction::default());

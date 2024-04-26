@@ -2,12 +2,13 @@ use evenio::{
     entity::EntityId,
     event::Receiver,
     fetch::{Fetcher, Single},
+    query::With,
 };
 use rayon::prelude::*;
 use tracing::instrument;
 
 use crate::{
-    components::{EntityReaction, FullEntityPose},
+    components::{EntityReaction, FullEntityPose, Npc},
     event::Gametick,
     singleton::bounding_box::EntityBoundingBoxes,
 };
@@ -16,13 +17,13 @@ use crate::{
 pub fn entity_detect_collisions(
     _: Receiver<Gametick>,
     entity_bounding_boxes: Single<&EntityBoundingBoxes>,
-    mut poses_fetcher: Fetcher<(EntityId, &FullEntityPose, &mut EntityReaction)>,
+    mut poses_fetcher: Fetcher<(EntityId, &FullEntityPose, &mut EntityReaction, With<&Npc>)>,
 ) {
     const MAX_COLLISIONS: usize = 4;
 
     poses_fetcher
         .par_iter_mut()
-        .for_each(|(id, pose, reaction)| {
+        .for_each(|(id, pose, reaction, _)| {
             let mut collisions = 0;
             entity_bounding_boxes
                 .query
@@ -39,6 +40,7 @@ pub fn entity_detect_collisions(
                         return false;
                     }
 
+                    println!("colliding with {id:?}");
                     pose.apply_entity_collision(&collision.aabb, reaction);
 
                     true

@@ -1,9 +1,9 @@
 use evenio::prelude::*;
 use tracing::instrument;
 use valence_protocol::{packets::play, VarInt};
-use valence_text::{Color, IntoText};
 
 use crate::{
+    event,
     event::Gametick,
     global::Global,
     net::{Compressor, IoBufs, Packets},
@@ -18,7 +18,6 @@ const REGENERATION: VarInt = VarInt(10);
 #[allow(dead_code, reason = "todo")]
 const ABSORPTION: VarInt = VarInt(22);
 const SURVIVAL: f32 = 0.0;
-const SPECTATOR: f32 = 3.0;
 
 #[derive(Query)]
 pub struct SyncPlayersQuery<'a> {
@@ -35,6 +34,7 @@ pub fn sync_players(
     mut fetcher: Fetcher<SyncPlayersQuery>,
     mut compressor: Single<&mut Compressor>,
     mut io: Single<&mut IoBufs>,
+    mut s: Sender<event::Death>,
 ) {
     let tick = global.tick;
 
@@ -84,22 +84,6 @@ pub fn sync_players(
                     );
                 }
 
-                // // TODO: Adding these effects don't work for some reason
-                // if previous_absorption.end_tick != current_absorption.end_tick {
-                //     let _ = packets.append(
-                //         &play::EntityStatusEffectS2c {
-                //             entity_id,
-                //             effect_id: ABSORPTION,
-                //             amplifier: 0,
-                //             duration: dbg!(VarInt((current_absorption.end_tick - tick) as i32)),
-                //             flags: play::entity_status_effect_s2c::Flags::new()
-                //                 .with_show_icon(true),
-                //             factor_codec: None,
-                //         },
-                //         &mut io,
-                //     );
-                // }
-
                 if previous_regeneration.end_tick != current_regeneration.end_tick {
                     let _ = packets.append(
                         &play::EntityStatusEffectS2c {
@@ -117,54 +101,10 @@ pub fn sync_players(
                     );
                 }
             }
-            (Vitals::Alive { .. }, Vitals::Dead { respawn_tick }) => {
-                let _ = packets.append(
-                    &play::GameStateChangeS2c {
-                        kind: play::game_state_change_s2c::GameEventKind::ChangeGameMode,
-                        value: SPECTATOR,
-                    },
-                    io,
-                    scratch,
-                    compressor,
-                );
-                // The title is repeatedly sent so it doesn't fade away after a few seconds
-                let _ = packets.append(
-                    &play::TitleS2c {
-                        title_text: "YOU DIED!".into_text().color(Color::RED).into(),
-                    },
-                    io,
-                    scratch,
-                    compressor,
-                );
-
-                let seconds_remaining = (*respawn_tick - tick) as f32 / 20.0;
-                let _ = packets.append(
-                    &play::SubtitleS2c {
-                        subtitle_text: ("Respawning in ".into_text()
-                            + format!("{seconds_remaining:.2}").color(Color::RED)
-                            + " seconds")
-                            .into(),
-                    },
-                    io,
-                    scratch,
-                    compressor,
-                );
-
-                // packets
-                //     .append(
-                //         &play::PlaySoundS2c {
-                //             id: SoundId::Reference { id: HURT_SOUND },
-                //             category: SoundCategory::Player,
-                //             position: (pose.position * 8.00).as_ivec3(),
-                //             volume: 1.0,
-                //             pitch: 1.0,
-                //             seed: 0,
-                //         },
-                //         io,
-                //     )
-                //     .unwrap();
+            (Vitals::Alive { .. }, Vitals::Dead) => {
+                s.send(event::Death { target: query.id });
             }
-            (Vitals::Dead { .. }, Vitals::Alive { health, .. }) => {
+            (Vitals::Dead, Vitals::Alive { health, .. }) => {
                 let _ = packets.append(
                     &play::ClearTitleS2c { reset: true },
                     io,
@@ -192,20 +132,7 @@ pub fn sync_players(
                 );
                 // TODO: Update absorption and regeneration
             }
-            (Vitals::Dead { .. }, Vitals::Dead { respawn_tick }) => {
-                let seconds_remaining = (*respawn_tick - tick) as f32 / 20.0;
-                let _ = packets.append(
-                    &play::SubtitleS2c {
-                        subtitle_text: ("Respawning in ".into_text()
-                            + format!("{seconds_remaining:.2}").color(Color::RED)
-                            + " seconds")
-                            .into(),
-                    },
-                    io,
-                    scratch,
-                    compressor,
-                );
-            }
+            (Vitals::Dead, Vitals::Dead) => {}
         }
 
         *previous = *current;
