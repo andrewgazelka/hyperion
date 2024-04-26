@@ -20,14 +20,16 @@ pub struct EntityQuery<'a> {
 }
 
 #[instrument(skip_all, level = "trace")]
-pub fn reset_bounding_boxes(
+pub fn recalculate_bounding_boxes(
     _: Receiver<Gametick>,
     entity_bounding_boxes: Single<&mut EntityBoundingBoxes>,
     entities: Fetcher<EntityQuery>,
 ) {
     let entity_bounding_boxes = entity_bounding_boxes.0;
 
-    entity_bounding_boxes.clear();
+    span!(tracing::Level::TRACE, "clear-bounding-boxes").in_scope(|| {
+        entity_bounding_boxes.clear();
+    });
 
     // todo: make par iterator
     let stored: Vec<_> = span!(tracing::Level::TRACE, "entities-to-vec").in_scope(|| {
