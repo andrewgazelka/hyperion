@@ -180,16 +180,16 @@ pub struct FullEntityPose {
     pub bounding: Aabb,
 }
 
+pub const PLAYER_SPAWN_POSITION: Vec3 = Vec3::new(-656.0, 18.0, -1695.0);
+
 impl FullEntityPose {
     #[must_use]
     pub fn player() -> Self {
-        let position = Vec3::new(0.0, 70.0, 0.0);
-
         Self {
-            position,
+            position: PLAYER_SPAWN_POSITION,
             yaw: 0.0,
             pitch: 0.0,
-            bounding: Aabb::create(position, 0.6, 1.8),
+            bounding: Aabb::create(PLAYER_SPAWN_POSITION, 0.6, 1.8),
         }
     }
 }

@@ -26,7 +26,6 @@ mod update_time;
 mod voice_chat;
 
 pub use egress::egress;
-pub use voice_chat::voice_chat;
 pub use entity_detect_collisions::entity_detect_collisions;
 pub use entity_move_logic::entity_move_logic;
 pub use entity_position::sync_entity_position;

@@ -1,4 +1,4 @@
-use valence_protocol::{packets::play::CustomPayloadS2c, Encode};
+use valence_protocol::{packets::play::CustomPayloadS2c, Bounded, Encode};
 use valence_server::Ident;
 
 pub trait Msg: Encode {
@@ -7,7 +7,7 @@ pub trait Msg: Encode {
     fn to_plugin_message(&self) -> CustomPayloadS2c<'static> {
         CustomPayloadS2c {
             channel: Self::KEY.into(),
-            data: Default::default(),
+            data: Bounded::default(),
         }
     }
 }

@@ -5,7 +5,7 @@ use evenio::prelude::*;
 use itertools::Itertools;
 use libdeflater::Compressor;
 use serde::Deserialize;
-use tracing::{debug, info, instrument};
+use tracing::{debug, error, info, instrument};
 use valence_nbt::{value::ValueRef, Value};
 use valence_protocol::{
     game_mode::OptGameMode,
@@ -22,22 +22,22 @@ use valence_protocol::{
         },
     },
     text::IntoText,
-    BlockPos, BlockState, Bounded, ByteAngle, ChunkPos, Encode, FixedArray, GameMode, Ident,
-    ItemKind, ItemStack, PacketEncoder, RawBytes, VarInt,
+    BlockPos, BlockState, ByteAngle, ChunkPos, Encode, FixedArray, GameMode, Ident, ItemKind,
+    ItemStack, PacketEncoder, VarInt,
 };
 use valence_registry::{
     biome::{Biome, BiomeEffects},
     BiomeRegistry, RegistryCodec, RegistryIdx,
 };
-use valence_server::layer::chunk::{
-    bit_width, BiomeContainer, BlockStateContainer, SECTION_BLOCK_COUNT,
-};
+use valence_server::layer::chunk::{bit_width, BiomeContainer, BlockStateContainer};
 
 use crate::{
     bits::BitStorage,
     blocks::AnvilFolder,
     chunk::heightmap,
-    components::{FullEntityPose, InGameName, MinecraftEntity, Player, Uuid},
+    components::{
+        FullEntityPose, InGameName, MinecraftEntity, Player, Uuid, PLAYER_SPAWN_POSITION,
+    },
     config,
     events::{PlayerJoinWorld, Scratch, ScratchBuffer},
     global::Global,
@@ -386,6 +386,8 @@ trait Array3d {
     type Item;
     #[expect(dead_code, reason = "unused")]
     fn get3(&self, x: usize, y: usize, z: usize) -> &Self::Item;
+
+    #[expect(dead_code, reason = "unused")]
     fn get3_mut(&mut self, x: usize, y: usize, z: usize) -> &mut Self::Item;
 }
 
@@ -424,34 +426,6 @@ pub fn send_keep_alive(
 fn registry_codec_raw() -> anyhow::Result<Compound> {
     let bytes = include_bytes!("paper-registry.json");
     let compound = serde_json::from_slice::<Compound>(bytes)?;
-    Ok(compound)
-}
-
-fn registry_codec_raw_old(codec: &RegistryCodec) -> anyhow::Result<Compound> {
-    // codec.cached_codec.clear();
-
-    let mut compound = Compound::default();
-
-    for (reg_name, reg) in &codec.registries {
-        let mut value = vec![];
-
-        for (id, v) in reg.iter().enumerate() {
-            let id = i32::try_from(id).context("id too large")?;
-            value.push(compound! {
-                "id" => id,
-                "name" => v.name.as_str(),
-                "element" => v.element.clone(),
-            });
-        }
-
-        let registry = compound! {
-            "type" => reg_name.as_str(),
-            "value" => List::Compound(value),
-        };
-
-        compound.insert(reg_name.as_str(), registry);
-    }
-
     Ok(compound)
 }
 
@@ -653,7 +627,12 @@ fn encode_chunk_packet(
     location: ChunkPos,
     encoder: &mut PacketEncoder,
 ) -> anyhow::Result<()> {
-    let chunk = anvil_folder.dim.get_chunk(location).unwrap();
+    let chunk = anvil_folder.dim.get_chunk(location);
+
+    let Ok(chunk) = chunk else {
+        error!("failed to get chunk at {location:?}");
+        return Ok(());
+    };
 
     let Some(chunk) = chunk else {
         return Ok(());
@@ -724,18 +703,21 @@ fn inner(encoder: &mut PacketEncoder) -> anyhow::Result<()> {
     let biome_registry = send_game_join_packet(encoder)?;
     send_sync_tags(encoder)?;
 
-    send_secret_voice_chat(encoder)?;
+    let center_chunk = PLAYER_SPAWN_POSITION.as_ivec3() / 16;
 
     // TODO: Do we need to send this else where?
     encoder.append_packet(&play::ChunkRenderDistanceCenterS2c {
-        chunk_x: 0.into(),
-        chunk_z: 0.into(),
+        chunk_x: center_chunk.x.into(),
+        chunk_z: center_chunk.z.into(),
     })?;
 
-    let mut anvil = AnvilFolder::new(&biome_registry);
+    let mut anvil = AnvilFolder::new(&biome_registry).context("failed to get anvil data")?;
 
     for x in -16..16 {
         for z in -16..16 {
+            let x = center_chunk.x + x;
+            let z = center_chunk.z + z;
+
             let pos = ChunkPos::new(x, z);
             encode_chunk_packet(&mut anvil, pos, encoder)?;
         }
@@ -766,8 +748,8 @@ fn inner(encoder: &mut PacketEncoder) -> anyhow::Result<()> {
         debug!("Setting world border to diameter {}", diameter);
 
         encoder.append_packet(&play::WorldBorderInitializeS2c {
-            x: 0.0,
-            z: 0.0,
+            x: f64::from(PLAYER_SPAWN_POSITION.x),
+            z: f64::from(PLAYER_SPAWN_POSITION.z),
             old_diameter: diameter,
             new_diameter: diameter,
             duration_millis: 1.into(),
@@ -779,8 +761,8 @@ fn inner(encoder: &mut PacketEncoder) -> anyhow::Result<()> {
         encoder.append_packet(&play::WorldBorderSizeChangedS2c { diameter })?;
 
         encoder.append_packet(&play::WorldBorderCenterChangedS2c {
-            x_pos: 0.0,
-            z_pos: 0.0,
+            x_pos: f64::from(PLAYER_SPAWN_POSITION.x),
+            z_pos: f64::from(PLAYER_SPAWN_POSITION.z),
         })?;
     }
 
