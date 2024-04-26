@@ -7,7 +7,7 @@ use crate::{
         Uuid, Vitals,
     },
     events::{PlayerInit, PlayerJoinWorld},
-    system::entity_position::PositionSyncMetadata,
+    system::sync_entity_position::PositionSyncMetadata,
     tracker::Prev,
 };
 
