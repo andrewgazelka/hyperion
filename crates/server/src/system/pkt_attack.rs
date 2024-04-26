@@ -109,7 +109,7 @@ pub fn pkt_attack_entity(
         reaction.velocity.y = 0.4;
     }
 
-    vitals.hurt(&global, 1.0, immunity);
+    vitals.hurt(&global, event.damage, immunity);
 }
 
 #[instrument(skip_all, level = "trace")]

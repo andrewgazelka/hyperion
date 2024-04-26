@@ -50,11 +50,8 @@ pub fn init_player(
     // take ownership
     let event = EventMut::take(r.event);
 
-    // todo: bug in evenio I think where if it is targeting this event will not fire
-    // let entity = event.target();
-
     let PlayerInit {
-        entity,
+        target: entity,
         username,
         pose,
     } = event;

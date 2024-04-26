@@ -57,10 +57,7 @@ pub enum Vitals {
         regeneration: Regeneration,
     },
     /// If the player is dead
-    Dead {
-        /// The tick the player will be respawned
-        respawn_tick: i64,
-    },
+    Dead,
 }
 
 impl Vitals {
@@ -135,9 +132,7 @@ impl Vitals {
         *health -= amount;
 
         if *health <= 0.0 {
-            *self = Self::Dead {
-                respawn_tick: tick + 100,
-            }
+            *self = Self::Dead;
         }
     }
 }
@@ -150,7 +145,7 @@ pub struct Uuid(pub uuid::Uuid);
 ///
 /// Example: zombie, skeleton, etc.
 #[derive(Component, Debug)]
-pub struct MinecraftEntity;
+pub struct Npc;
 
 /// The running multiplier of the entity. This defaults to 1.0.
 #[derive(Component, Debug, Copy, Clone)]
@@ -166,7 +161,7 @@ impl Default for RunningSpeed {
 #[derive(Component)]
 pub struct AiTargetable;
 
-/// The full pose of an entity. This is used for both [`Player`] and [`MinecraftEntity`].
+/// The full pose of an entity. This is used for both [`Player`] and [`Npc`].
 #[derive(Component, Copy, Clone, Debug)]
 pub struct FullEntityPose {
     /// The (x, y, z) position of the entity.

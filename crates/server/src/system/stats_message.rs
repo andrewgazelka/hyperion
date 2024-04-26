@@ -3,13 +3,13 @@ use tracing::instrument;
 use valence_protocol::text::IntoText;
 
 use crate::{
-    event::StatsEvent,
+    event::Stats,
     net::{Broadcast, Compressor, IoBufs},
 };
 
 #[instrument(skip_all, level = "trace")]
 pub fn stats_message(
-    r: ReceiverMut<StatsEvent>,
+    r: ReceiverMut<Stats>,
     broadcast: Single<&Broadcast>,
     mut compressor: Single<&mut Compressor>,
     mut io: Single<&mut IoBufs>,

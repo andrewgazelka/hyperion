@@ -3,7 +3,7 @@ use tracing::instrument;
 use valence_protocol::VarInt;
 
 use crate::{
-    components::{MinecraftEntity, Player},
+    components::{Npc, Player},
     event::{KillAllEntities, Scratch},
     net::{Broadcast, Compressor, IoBufs},
 };
@@ -11,7 +11,7 @@ use crate::{
 #[instrument(skip_all)]
 pub fn kill_all(
     _r: ReceiverMut<KillAllEntities>,
-    entities: Fetcher<(EntityId, &MinecraftEntity, Not<&Player>)>,
+    entities: Fetcher<(EntityId, &Npc, Not<&Player>)>,
     broadcast: Single<&Broadcast>,
     mut io: Single<&mut IoBufs>,
     mut compressor: Single<&mut Compressor>,

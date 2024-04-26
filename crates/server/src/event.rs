@@ -32,7 +32,7 @@ pub struct Command {
 #[derive(Event)]
 pub struct PlayerInit {
     #[event(target)]
-    pub entity: EntityId,
+    pub target: EntityId,
 
     /// The name of the player i.e., `Emerald_Explorer`.
     pub username: Box<str>,
@@ -68,12 +68,33 @@ pub struct SwingArm {
 }
 
 #[derive(Event)]
+pub struct HurtEntity {
+    #[event(target)]
+    pub target: EntityId,
+    pub damage: f32,
+}
+
+pub enum AttackType {
+    Shove, Melee
+}
+
+#[derive(Event)]
 pub struct AttackEntity {
     /// The [`EntityId`] of the player.
     #[event(target)]
     pub target: EntityId,
     /// The location of the player that is hitting.
     pub from_pos: Vec3,
+    pub from: EntityId,
+    pub damage: f32,
+    pub source: AttackType,
+}
+
+#[derive(Event)]
+#[event(immutable)]
+pub struct Death {
+    #[event(target)]
+    pub target: EntityId,
 }
 
 /// An event to kill all minecraft entities (like zombies, skeletons, etc). This will be sent to the equivalent of
@@ -81,9 +102,26 @@ pub struct AttackEntity {
 #[derive(Event)]
 pub struct KillAllEntities;
 
+
+#[derive(Event)]
+pub struct Teleport {
+    #[event(target)]
+    pub target: EntityId,
+    pub position: Vec3,
+}
+
+/// i.e., when zombies bump into another player
+#[derive(Event)]
+pub struct Shoved {
+    #[event(target)]
+    pub target: EntityId,
+    pub from: EntityId,
+    pub from_location: Vec3,
+}
+
 /// An event when server stats are updated.
 #[derive(Event)]
-pub struct StatsEvent<'a, 'b> {
+pub struct Stats<'a, 'b> {
     /// The number of milliseconds per tick in the last second.
     pub ms_per_tick_mean_1s: f64,
     /// The number of milliseconds per tick in the last 5 seconds.
@@ -97,8 +135,8 @@ pub struct StatsEvent<'a, 'b> {
     clippy::non_send_fields_in_send_ty,
     reason = "this will be removed in the future"
 )]
-unsafe impl<'a, 'b> Send for StatsEvent<'a, 'b> {}
-unsafe impl<'a, 'b> Sync for StatsEvent<'a, 'b> {}
+unsafe impl<'a, 'b> Send for Stats<'a, 'b> {}
+unsafe impl<'a, 'b> Sync for Stats<'a, 'b> {}
 
 // todo: naming? this seems bad
 #[derive(Debug)]

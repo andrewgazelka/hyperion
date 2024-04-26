@@ -331,7 +331,7 @@ fn process_login(
     let username = Box::from(username);
 
     sender.send(event::PlayerInit {
-        entity: id,
+        target: id,
         username,
         pose: FullEntityPose::player(),
     });

@@ -1234,8 +1234,10 @@ name = "infection"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "evenio",
  "fastrand 2.0.2",
  "server",
+ "tracing",
 ]
 
 [[package]]

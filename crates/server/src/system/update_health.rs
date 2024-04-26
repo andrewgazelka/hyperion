@@ -1,12 +1,7 @@
 use evenio::prelude::*;
 use tracing::instrument;
 
-use crate::{
-    components::vitals::{Absorption, Regeneration},
-    event::Gametick,
-    global::Global,
-    Vitals,
-};
+use crate::{event::Gametick, global::Global, Vitals};
 
 /// Interval to regenerate half a heart from having a full hunger bar measured in ticks. All players
 /// are assumed to have a full hunger bar with no saturation.
@@ -44,18 +39,7 @@ pub fn update_health(
                     vitals.heal(1.0);
                 }
             }
-            Vitals::Dead { respawn_tick } => {
-                if tick == *respawn_tick {
-                    // TODO: This code is really bad
-
-                    // TODO: Teleport player to spawn location after respawning
-                    *vitals = Vitals::Alive {
-                        health: 20.0,
-                        absorption: Absorption::default(),
-                        regeneration: Regeneration::default(),
-                    }
-                }
-            }
+            Vitals::Dead => {}
         }
     });
 }

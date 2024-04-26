@@ -8,8 +8,10 @@ publish = false
 
 [dependencies]
 anyhow = "1.0.82"
+evenio.workspace = true
 fastrand = "2.0.2"
 server.workspace = true
+tracing = "0.1.40"
 
 [lints.clippy]
 complexity = "deny"
