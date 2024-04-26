@@ -2,17 +2,16 @@ use evenio::{
     entity::EntityId,
     event::Receiver,
     fetch::{Fetcher, Single},
+    query::With,
 };
-use evenio::query::With;
 use rayon::prelude::*;
 use tracing::instrument;
 
 use crate::{
-    components::{EntityReaction, FullEntityPose},
+    components::{EntityReaction, FullEntityPose, Npc},
     event::Gametick,
     singleton::bounding_box::EntityBoundingBoxes,
 };
-use crate::components::Npc;
 
 #[instrument(skip_all, level = "trace")]
 pub fn entity_detect_collisions(

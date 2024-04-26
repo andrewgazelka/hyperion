@@ -10,8 +10,7 @@ use valence_server::entity::EntityKind;
 
 use crate::{
     components::{
-        Display, EntityReaction, FullEntityPose, ImmuneStatus, Npc, RunningSpeed, Uuid,
-        Vitals,
+        Display, EntityReaction, FullEntityPose, ImmuneStatus, Npc, RunningSpeed, Uuid, Vitals,
     },
     event::{InitEntity, Scratch},
     net::{Broadcast, Compressor, IoBufs},

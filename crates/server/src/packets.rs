@@ -28,12 +28,11 @@ use valence_server::entity::EntityKind;
 use crate::{
     components::{FullEntityPose, ImmuneStatus, KeepAlive, Vitals},
     event,
-    event::{AttackEntity, InitEntity, KillAllEntities, SwingArm},
+    event::{AttackEntity, AttackType, InitEntity, KillAllEntities, SwingArm},
     global::Global,
     singleton::player_id_lookup::EntityIdLookup,
     system::ingress::IngressSender,
 };
-use crate::event::AttackType;
 
 pub mod vanilla;
 pub mod voicechat;

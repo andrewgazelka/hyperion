@@ -35,7 +35,7 @@ pub fn teleport(
 
     let teleport_id = fastrand::i32(..);
     let teleport_id = VarInt(teleport_id);
-    
+
     query
         .packets
         .append(

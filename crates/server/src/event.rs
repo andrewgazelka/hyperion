@@ -75,7 +75,8 @@ pub struct HurtEntity {
 }
 
 pub enum AttackType {
-    Shove, Melee
+    Shove,
+    Melee,
 }
 
 #[derive(Event)]
@@ -101,7 +102,6 @@ pub struct Death {
 /// `/killall` in the game.
 #[derive(Event)]
 pub struct KillAllEntities;
-
 
 #[derive(Event)]
 pub struct Teleport {
