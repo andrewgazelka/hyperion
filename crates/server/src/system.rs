@@ -4,6 +4,7 @@
 
 mod block_update;
 mod chat_message;
+mod disguise_player;
 mod egress;
 mod entity_detect_collisions;
 mod entity_move_logic;
@@ -29,6 +30,7 @@ mod voice_chat;
 
 pub use block_update::block_update;
 pub use chat_message::chat_message;
+pub use disguise_player::disguise_player;
 pub use egress::egress;
 pub use entity_detect_collisions::entity_detect_collisions;
 pub use entity_move_logic::entity_move_logic;

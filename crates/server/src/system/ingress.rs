@@ -1,6 +1,3 @@
-use std::borrow::Cow;
-
-use anyhow::Context;
 use evenio::{
     event::{Despawn, Event, Insert, Receiver, Sender, Spawn},
     fetch::{Fetcher, Single},
@@ -9,14 +6,12 @@ use evenio::{
 };
 use rayon_local::RayonLocal;
 use serde_json::json;
-use sha2::Digest;
 use tracing::{info, instrument, trace, warn};
-use uuid::Uuid;
 use valence_protocol::{
     decode::PacketFrame,
     packets,
     packets::{handshaking::handshake_c2s::HandshakeNextState, login, login::LoginCompressionS2c},
-    Bounded, Packet, VarInt,
+    Packet, VarInt,
 };
 
 use crate::{
@@ -30,8 +25,8 @@ mod player_packet_buffer;
 
 use crate::{
     components::{FullEntityPose, ImmuneStatus, KeepAlive, LoginState, Vitals},
-    event::{BumpScratch, ScratchBuffer},
-    net::{Compressor, Fd, IoBuf, IoBufs, Packets, MINECRAFT_VERSION, PROTOCOL_VERSION},
+    event::BumpScratch,
+    net::{Fd, IoBuf, IoBufs, Packets, MINECRAFT_VERSION, PROTOCOL_VERSION},
     packets::PacketSwitchQuery,
     singleton::player_id_lookup::EntityIdLookup,
     system::ingress::player_packet_buffer::DecodeBuffer,
@@ -49,12 +44,13 @@ pub type IngressSender<'a> = Sender<
         event::PlayerInit,
         event::KickPlayer,
         event::InitEntity,
-        event::KillAllEntities,
+        // event::KillAllEntities,
         event::SwingArm,
         event::AttackEntity,
         event::BlockStartBreak,
         event::BlockAbortBreak,
         event::BlockFinishBreak,
+        event::Command,
     ),
 >;
 
@@ -198,7 +194,6 @@ pub fn recv_data(
         Option<&mut KeepAlive>,
         Option<&mut ImmuneStatus>,
     )>,
-    mut compressor: Single<&mut Compressor>,
     id_lookup: Single<&EntityIdLookup>,
     mut io: Single<&mut IoBufs>,
 ) {
@@ -248,8 +243,6 @@ pub fn recv_data(
                     decoder,
                     &global,
                     io,
-                    scratch,
-                    &mut compressor,
                     &mut sender,
                 )
                 .unwrap();
@@ -308,16 +301,6 @@ fn process_handshake(login_state: &mut LoginState, packet: &PacketFrame) -> anyh
     Ok(())
 }
 
-/// Get a [`Uuid`] based on the given user's name.
-fn offline_uuid(username: &str) -> anyhow::Result<Uuid> {
-    let digest = sha2::Sha256::digest(username);
-
-    #[expect(clippy::indexing_slicing, reason = "sha256 is always 32 bytes")]
-    let slice = &digest[..16];
-
-    Uuid::from_slice(slice).context("failed to create uuid")
-}
-
 #[allow(clippy::too_many_arguments, reason = "todo del")]
 fn process_login(
     id: EntityId,
@@ -327,8 +310,6 @@ fn process_login(
     decoder: &mut DecodeBuffer,
     global: &Global,
     io: &mut IoBuf,
-    scratch: &mut impl ScratchBuffer,
-    compressor: &mut Compressor,
     sender: &mut IngressSender,
 ) -> anyhow::Result<()> {
     debug_assert!(*login_state == LoginState::Login);
@@ -338,7 +319,6 @@ fn process_login(
     info!("received LoginHello for {username}");
 
     let username = username.0;
-    let uuid = offline_uuid(username)?;
 
     let pkt = LoginCompressionS2c {
         threshold: VarInt(global.shared.compression_threshold.0),
@@ -348,29 +328,18 @@ fn process_login(
 
     decoder.set_compression(global.shared.compression_threshold);
 
-    let pkt = login::LoginSuccessS2c {
-        uuid,
-        username: Bounded(username),
-
-        // todo: do any properties make sense to include?
-        properties: Cow::default(),
-    };
-
-    packets.append(&pkt, io, scratch, compressor.one())?;
-
     let username = Box::from(username);
+
+    sender.send(event::PlayerInit {
+        entity: id,
+        username,
+        pose: FullEntityPose::player(),
+    });
 
     // todo: impl rest
     *login_state = LoginState::TransitioningPlay {
         packets_to_transition: 5,
     };
-
-    sender.send(event::PlayerInit {
-        entity: id,
-        username,
-        uuid,
-        pose: FullEntityPose::player(),
-    });
 
     Ok(())
 }

@@ -1234,6 +1234,7 @@ name = "infection"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "fastrand 2.0.2",
  "server",
 ]
 
@@ -2183,7 +2184,6 @@ dependencies = [
  "fastrand 2.0.2",
  "flate2",
  "fxhash",
- "generator 0.1.0",
  "glam",
  "hex",
  "io-uring",

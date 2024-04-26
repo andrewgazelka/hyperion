@@ -3,14 +3,15 @@ use evenio::{
     event::{Insert, Receiver, Sender, Spawn},
     prelude::Single,
 };
-use generator::EntityType;
 use rand_distr::{Distribution, LogNormal};
 use tracing::instrument;
 use valence_protocol::{ByteAngle, VarInt, Velocity};
+use valence_server::entity::EntityKind;
 
 use crate::{
     components::{
-        EntityReaction, FullEntityPose, ImmuneStatus, MinecraftEntity, RunningSpeed, Uuid, Vitals,
+        Display, EntityReaction, FullEntityPose, ImmuneStatus, MinecraftEntity, RunningSpeed, Uuid,
+        Vitals,
     },
     event::{InitEntity, Scratch},
     net::{Broadcast, Compressor, IoBufs},
@@ -18,8 +19,9 @@ use crate::{
     system::sync_entity_position::PositionSyncMetadata,
 };
 
-pub fn spawn_packet(
+pub fn spawn_entity_packet(
     id: EntityId,
+    kind: EntityKind,
     uuid: Uuid,
     pose: &FullEntityPose,
 ) -> valence_protocol::packets::play::EntitySpawnS2c {
@@ -29,7 +31,7 @@ pub fn spawn_packet(
     valence_protocol::packets::play::EntitySpawnS2c {
         entity_id,
         object_uuid: *uuid,
-        kind: VarInt(EntityType::Zombie as i32),
+        kind: VarInt(kind.get()),
         position: pose.position.as_dvec3(),
         pitch: ByteAngle::from_degrees(pose.pitch),
         yaw: ByteAngle::from_degrees(pose.yaw),
@@ -52,6 +54,7 @@ pub fn init_entity(
         Insert<EntityReaction>,
         Insert<Vitals>,
         Insert<ImmuneStatus>,
+        Insert<Display>,
         Spawn,
     )>,
     mut io: Single<&mut IoBufs>,
@@ -71,13 +74,14 @@ pub fn init_entity(
     s.insert(id, ImmuneStatus::default());
     s.insert(id, generate_running_speed());
     s.insert(id, PositionSyncMetadata::default());
+    s.insert(id, Display(event.display));
     s.insert(id, Vitals::ALIVE);
 
-    id_lookup.inner.insert(id.index().0 as i32, id);
+    id_lookup.insert(id.index().0 as i32, id);
 
     let pose = event.pose;
 
-    let pkt = spawn_packet(id, uuid, &pose);
+    let pkt = spawn_entity_packet(id, EntityKind::ZOMBIE, uuid, &pose);
 
     // todo: use shared scratch if possible
     let mut scratch = Scratch::new();

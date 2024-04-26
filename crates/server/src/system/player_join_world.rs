@@ -35,16 +35,14 @@ use crate::{
     bits::BitStorage,
     blocks::AnvilFolder,
     chunk::heightmap,
-    components::{
-        FullEntityPose, InGameName, MinecraftEntity, Player, Uuid, PLAYER_SPAWN_POSITION,
-    },
+    components::{Display, FullEntityPose, InGameName, Player, Uuid, PLAYER_SPAWN_POSITION},
     config,
     event::{PlayerJoinWorld, Scratch, ScratchBuffer},
     global::Global,
     net,
     net::{Broadcast, IoBuf, IoBufs, Packets},
     singleton::{player_id_lookup::EntityIdLookup, player_uuid_lookup::PlayerUuidLookup},
-    system::init_entity::spawn_packet,
+    system::init_entity::spawn_entity_packet,
 };
 
 #[derive(Query, Debug)]
@@ -52,7 +50,7 @@ pub(crate) struct EntityQuery<'a> {
     id: EntityId,
     uuid: &'a Uuid,
     pose: &'a FullEntityPose,
-    _player: With<&'static MinecraftEntity>,
+    skin: &'a Display,
 }
 
 #[derive(Query)]
@@ -111,7 +109,7 @@ pub fn player_join_world(
     let query = r.query;
 
     uuid_lookup.insert(query.uuid.0, query.id);
-    id_lookup.inner.insert(query.id.index().0 as i32, query.id);
+    id_lookup.insert(query.id.index().0 as i32, query.id);
 
     let boots = ItemStack::new(ItemKind::NetheriteBoots, 1, None);
     let leggings = ItemStack::new(ItemKind::NetheriteLeggings, 1, None);
@@ -206,7 +204,8 @@ pub fn player_join_world(
         .unwrap();
 
     for entity in entities {
-        let pkt = spawn_packet(entity.id, *entity.uuid, entity.pose);
+        // todo: handle player?
+        let pkt = spawn_entity_packet(entity.id, entity.skin.0, *entity.uuid, entity.pose);
         local.append(&pkt, io, &mut scratch, compressor).unwrap();
     }
 

@@ -29,7 +29,7 @@ pub fn player_kick(
 
     uuid_lookup.remove(&uuid.0);
     // todo: also remove on socket close
-    id_lookup.inner.remove(&(id.index().0 as i32));
+    id_lookup.remove(&(id.index().0 as i32));
 
     let reason = &r.event.reason;
 

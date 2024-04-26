@@ -6,6 +6,7 @@ use glam::Vec3;
 use rayon_local::RayonLocal;
 use valence_generated::block::BlockState;
 use valence_protocol::{BlockPos, Hand};
+use valence_server::entity::EntityKind;
 use valence_text::Text;
 
 use crate::{
@@ -18,15 +19,23 @@ use crate::{
 pub struct InitEntity {
     /// The pose of the entity.
     pub pose: FullEntityPose,
+    pub display: EntityKind,
+}
+
+#[derive(Event)]
+pub struct Command {
+    #[event(target)]
+    pub by: EntityId,
+    pub raw: String,
 }
 
 #[derive(Event)]
 pub struct PlayerInit {
+    #[event(target)]
     pub entity: EntityId,
 
     /// The name of the player i.e., `Emerald_Explorer`.
     pub username: Box<str>,
-    pub uuid: uuid::Uuid,
     pub pose: FullEntityPose,
 }
 
@@ -180,8 +189,15 @@ pub struct UpdateBlock {
 #[derive(Event)]
 pub struct ChatMessage {
     #[event(target)]
-    pub to: EntityId,
+    pub target: EntityId,
     pub message: Text,
+}
+
+#[derive(Event)]
+pub struct DisguisePlayer {
+    #[event(target)]
+    pub target: EntityId,
+    pub mob: EntityKind,
 }
 
 // todo: why need two life times?
