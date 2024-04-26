@@ -9,7 +9,7 @@ use valence_protocol::math::{Vec2, Vec3};
 
 use crate::{
     components::{EntityReaction, FullEntityPose, MinecraftEntity, RunningSpeed},
-    events::Gametick,
+    event::Gametick,
     singleton::player_aabb_lookup::PlayerBoundingBoxes,
 };
 

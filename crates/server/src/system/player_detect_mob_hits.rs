@@ -9,7 +9,7 @@ use tracing::instrument;
 
 use crate::{
     components::{EntityReaction, FullEntityPose, ImmuneStatus, Player, Vitals},
-    events::Gametick,
+    event::Gametick,
     global::Global,
     singleton::bounding_box::EntityBoundingBoxes,
 };

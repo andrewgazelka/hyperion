@@ -12,7 +12,7 @@ use crate::{
     components::{
         EntityReaction, FullEntityPose, ImmuneStatus, MinecraftEntity, RunningSpeed, Uuid, Vitals,
     },
-    events::{InitEntity, Scratch},
+    event::{InitEntity, Scratch},
     net::{Broadcast, Compressor, IoBufs},
     singleton::player_id_lookup::EntityIdLookup,
     system::sync_entity_position::PositionSyncMetadata,

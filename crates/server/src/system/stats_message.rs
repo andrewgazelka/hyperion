@@ -3,7 +3,7 @@ use tracing::instrument;
 use valence_protocol::text::IntoText;
 
 use crate::{
-    events::StatsEvent,
+    event::StatsEvent,
     net::{Broadcast, Compressor, IoBufs},
 };
 

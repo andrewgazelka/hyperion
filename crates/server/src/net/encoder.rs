@@ -7,7 +7,7 @@ use std::{
 use anyhow::ensure;
 use valence_protocol::{CompressionThreshold, Encode, Packet, VarInt};
 
-use crate::{events::ScratchBuffer, net::MAX_PACKET_SIZE, singleton::ring::Buf};
+use crate::{event::ScratchBuffer, net::MAX_PACKET_SIZE, singleton::ring::Buf};
 
 mod util;
 

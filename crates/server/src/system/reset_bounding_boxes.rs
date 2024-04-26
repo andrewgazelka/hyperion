@@ -9,7 +9,7 @@ use tracing::{instrument, span};
 
 use crate::{
     components::FullEntityPose,
-    events::Gametick,
+    event::Gametick,
     singleton::bounding_box::{EntityBoundingBoxes, Stored},
 };
 

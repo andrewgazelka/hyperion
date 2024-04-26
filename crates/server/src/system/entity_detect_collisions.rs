@@ -8,7 +8,7 @@ use tracing::instrument;
 
 use crate::{
     components::{EntityReaction, FullEntityPose},
-    events::Gametick,
+    event::Gametick,
     singleton::bounding_box::EntityBoundingBoxes,
 };
 

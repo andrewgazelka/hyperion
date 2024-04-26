@@ -4,7 +4,9 @@ use bumpalo::Bump;
 use evenio::{entity::EntityId, event::Event};
 use glam::Vec3;
 use rayon_local::RayonLocal;
-use valence_protocol::Hand;
+use valence_generated::block::BlockState;
+use valence_protocol::{BlockPos, Hand};
+use valence_text::Text;
 
 use crate::{
     components::FullEntityPose,
@@ -142,6 +144,44 @@ impl<A: Allocator> From<A> for Scratch<A> {
             inner: Vec::with_capacity_in(MAX_PACKET_SIZE, allocator),
         }
     }
+}
+
+#[derive(Event)]
+pub struct BlockStartBreak {
+    #[event(target)]
+    pub by: EntityId,
+    pub position: BlockPos,
+    pub sequence: i32,
+}
+
+#[derive(Event)]
+pub struct BlockAbortBreak {
+    #[event(target)]
+    pub by: EntityId,
+    pub position: BlockPos,
+    pub sequence: i32,
+}
+
+#[derive(Event)]
+pub struct BlockFinishBreak {
+    #[event(target)]
+    pub by: EntityId,
+    pub position: BlockPos,
+    pub sequence: i32,
+}
+
+#[derive(Event, Debug)]
+pub struct UpdateBlock {
+    pub position: BlockPos,
+    pub id: BlockState,
+    pub sequence: i32,
+}
+
+#[derive(Event)]
+pub struct ChatMessage {
+    #[event(target)]
+    pub to: EntityId,
+    pub message: Text,
 }
 
 // todo: why need two life times?

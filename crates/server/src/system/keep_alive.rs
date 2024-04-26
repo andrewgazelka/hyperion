@@ -5,7 +5,7 @@ use tracing::{instrument, trace};
 
 use crate::{
     components::KeepAlive,
-    events::{Gametick, KickPlayer},
+    event::{Gametick, KickPlayer},
     global::Global,
     net,
     net::{IoBufs, Packets},

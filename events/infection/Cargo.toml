@@ -1,0 +1,23 @@
+[package]
+name = "infection"
+version = "0.1.0"
+edition = "2021"
+authors = ["Andrew Gazelka <andrew.gazelka@gmail.com>"]
+readme = "README.md"
+publish = false
+
+[dependencies]
+anyhow = "1.0.82"
+server.workspace = true
+
+[lints.clippy]
+complexity = "deny"
+
+nursery = { level = "deny", priority = -1 }
+
+pedantic = { level = "deny", priority = -1 }
+missing_errors_doc = "allow"
+
+perf = "deny"
+style = "deny"
+suspicious = "deny"

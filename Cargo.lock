@@ -1230,6 +1230,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "infection"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "server",
+]
+
+[[package]]
 name = "inferno"
 version = "0.11.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2208,6 +2216,7 @@ dependencies = [
  "tracing-tracy",
  "uuid",
  "valence_anvil",
+ "valence_generated 0.2.0-alpha.1+mc.1.20.1 (git+https://github.com/andrewgazelka/valence?branch=feat-open)",
  "valence_nbt 0.8.0 (git+https://github.com/andrewgazelka/valence?branch=feat-open)",
  "valence_protocol 0.2.0-alpha.1+mc.1.20.1 (git+https://github.com/andrewgazelka/valence?branch=feat-open)",
  "valence_registry",
