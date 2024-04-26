@@ -15,7 +15,7 @@ use crate::{
     events::{InitEntity, Scratch},
     net::{Broadcast, Compressor, IoBufs},
     singleton::player_id_lookup::EntityIdLookup,
-    system::entity_position::PositionSyncMetadata,
+    system::sync_entity_position::PositionSyncMetadata,
 };
 
 pub fn spawn_packet(
