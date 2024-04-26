@@ -195,7 +195,7 @@ impl Game {
         world.add_handler(system::entity_move_logic);
         world.add_handler(system::entity_detect_collisions);
         world.add_handler(system::sync_entity_position);
-        world.add_handler(system::reset_bounding_boxes);
+        world.add_handler(system::recalculate_bounding_boxes);
         world.add_handler(system::update_time);
         world.add_handler(system::update_health);
         world.add_handler(system::sync_players);
