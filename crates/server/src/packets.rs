@@ -23,6 +23,7 @@ use valence_protocol::{
     },
     Decode, Packet,
 };
+use valence_server::entity::EntityKind;
 
 use crate::{
     components::{FullEntityPose, ImmuneStatus, KeepAlive, Vitals},
@@ -166,114 +167,19 @@ impl FromStr for HybridPos {
 
 fn chat_command(
     mut data: &[u8],
-    global: &Global,
+    query: &PacketSwitchQuery,
     // query: PacketSwitchQuery,
-    pose: &FullEntityPose,
     sender: &mut IngressSender,
 ) -> anyhow::Result<()> {
     const BASE_RADIUS: f32 = 4.0;
     let pkt = play::CommandExecutionC2s::decode(&mut data)?;
 
-    let mut cmd = pkt.command.0.split(' ');
+    let event = event::Command {
+        by: query.id,
+        raw: pkt.command.0.to_owned(),
+    };
 
-    let first = cmd.next();
-    let tick = global.tick;
-
-    if first == Some("ka") {
-        sender.send(KillAllEntities);
-    }
-    // else if first == Some("golden_apple") {
-    //     let vitals = query.vitals;
-    //
-    //     let Vitals::Alive {
-    //         absorption,
-    //         regeneration,
-    //         ..
-    //     } = vitals
-    //     else {
-    //         return Ok(());
-    //     };
-    //
-    //     *absorption = Absorption {
-    //         end_tick: tick + 2400,
-    //         bonus_health: 4.0,
-    //     };
-    //     *regeneration = Regeneration {
-    //         end_tick: tick + 100,
-    //     };
-    // } else if first == Some("heal") {
-    //     let args: Vec<_> = cmd.collect();
-    //     let [amount] = args.as_slice() else {
-    //         anyhow::bail!("expected 1 number");
-    //     };
-    //     query.vitals.heal(amount.parse()?);
-    // } else if first == Some("hurt") {
-    //     let args: Vec<_> = cmd.collect();
-    //     let [amount] = args.as_slice() else {
-    //         anyhow::bail!("expected 1 number");
-    //     };
-    //     query.vitals.hurt(global, amount.parse()?, query.immunity);
-    else if first == Some("spawn") {
-        let args: Vec<_> = cmd.collect();
-
-        let loc = pose.position;
-        // let loc = query.pose.position;
-
-        let [x, y, z] = match args.as_slice() {
-            &[x, y, z] => [x.parse()?, y.parse()?, z.parse()?],
-            [x] => {
-                let count = x.parse()?;
-
-                // normalize over the number
-                #[expect(clippy::cast_possible_truncation, reason = "sqrt of f64 is f32")]
-                let radius = BASE_RADIUS * f64::from(count).sqrt() as f32;
-
-                for _ in 0..count {
-                    // spawn in 100 block radius
-                    let x = (rand::random::<f32>() - 0.5).mul_add(radius, loc.x);
-                    let y = loc.y;
-                    let z = (rand::random::<f32>() - 0.5).mul_add(radius, loc.z);
-
-                    sender.send(InitEntity {
-                        pose: FullEntityPose {
-                            position: Vec3::new(x, y, z),
-                            yaw: 0.0,
-                            pitch: 0.0,
-                            bounding: Aabb::create(Vec3::new(x, y, z), 0.6, 1.8),
-                        },
-                    });
-                }
-
-                return Ok(());
-            }
-            [] => [HybridPos::Relative(0.0); 3],
-            _ => bail!("expected 3 numbers"),
-        };
-
-        let x = match x {
-            HybridPos::Absolute(x) => x,
-            HybridPos::Relative(x) => loc.x + x,
-        };
-
-        let y = match y {
-            HybridPos::Absolute(y) => y,
-            HybridPos::Relative(y) => loc.y + y,
-        };
-
-        let z = match z {
-            HybridPos::Absolute(z) => z,
-            HybridPos::Relative(z) => loc.z + z,
-        };
-
-        sender.send(InitEntity {
-            pose: FullEntityPose {
-                position: Vec3::new(x, y, z),
-                yaw: 0.0,
-                pitch: 0.0,
-                bounding: Aabb::create(Vec3::new(x, y, z), 0.6, 1.8),
-            },
-        });
-    }
+    sender.send(event);
 
     Ok(())
 }
@@ -312,7 +218,7 @@ fn player_interact_entity(
 
     let target = packet.entity_id.0;
 
-    if let Some(&target) = id_lookup.inner.get(&target) {
+    if let Some(&target) = id_lookup.get(&target) {
         sender.send(AttackEntity { target, from_pos });
     }
 
@@ -334,7 +240,7 @@ fn player_interact_block(
     sender: &mut IngressSender,
 ) -> anyhow::Result<()> {
     let packet = play::PlayerInteractBlockC2s::decode(&mut data)?;
-    
+
     // todo!()
     Ok(())
 }
@@ -406,9 +312,7 @@ pub fn switch(
             player_interact_entity(data, id_lookup, query.pose.position, sender)?;
         }
         // play::KeepAliveC2s::ID => keep_alive(query.keep_alive)?,
-        play::CommandExecutionC2s::ID => {
-            chat_command(data, global, query.pose, sender)?;
-        }
+        play::CommandExecutionC2s::ID => chat_command(data, query, sender)?,
         _ => {
             // info!("unknown packet id: 0x{:02X}", packet_id)
         }

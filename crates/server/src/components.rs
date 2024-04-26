@@ -4,6 +4,7 @@ use bvh::aabb::Aabb;
 use derive_more::{Deref, Display, From};
 use evenio::component::Component;
 use glam::Vec3;
+use valence_server::entity::EntityKind;
 
 use crate::{
     components::vitals::{Absorption, Regeneration},
@@ -74,6 +75,9 @@ impl Vitals {
 pub struct ImmuneStatus {
     pub until: i64,
 }
+
+#[derive(Component, Debug, Eq, PartialEq, Default)]
+pub struct Display(pub EntityKind);
 
 impl ImmuneStatus {
     #[must_use]

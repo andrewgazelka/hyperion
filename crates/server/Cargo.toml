@@ -32,8 +32,6 @@ valence_server = { git = "https://github.com/andrewgazelka/valence", branch = "f
 valence_nbt = { git = "https://github.com/andrewgazelka/valence", features = ["serde"], branch = "feat-open" }
 valence_generated = { git = "https://github.com/andrewgazelka/valence", branch = "feat-open" }
 
-generator.workspace = true
-
 #chunk.workspace = true
 
 # no secure alloc

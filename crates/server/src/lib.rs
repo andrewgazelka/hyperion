@@ -140,8 +140,15 @@ impl Game {
         // TODO
     }
 
-    /// Initialize the server.
     pub fn init(address: impl ToSocketAddrs + Send + Sync + 'static) -> anyhow::Result<Self> {
+        Self::init_with(address, |_| {})
+    }
+
+    /// Initialize the server.
+    pub fn init_with(
+        address: impl ToSocketAddrs + Send + Sync + 'static,
+        handlers: impl FnOnce(&mut World) + Send + Sync + 'static,
+    ) -> anyhow::Result<Self> {
         info!("Starting hyperion");
         Lazy::force(&config::CONFIG);
 
@@ -171,6 +178,8 @@ impl Game {
         });
 
         let mut world = World::new();
+
+        handlers(&mut world);
 
         let compressor_id = world.spawn();
         world.insert(compressor_id, Compressor::new(shared.compression_level));
@@ -208,6 +217,7 @@ impl Game {
 
         world.add_handler(system::block_update);
         world.add_handler(system::chat_message);
+        world.add_handler(system::disguise_player);
 
         world.add_handler(system::pkt_hand_swing);
 
