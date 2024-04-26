@@ -334,8 +334,9 @@ fn player_interact_block(
     sender: &mut IngressSender,
 ) -> anyhow::Result<()> {
     let packet = play::PlayerInteractBlockC2s::decode(&mut data)?;
-
-    todo!()
+    
+    // todo!()
+    Ok(())
 }
 
 fn player_action(

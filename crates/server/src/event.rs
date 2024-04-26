@@ -7,6 +7,7 @@ use rayon_local::RayonLocal;
 use valence_generated::block::BlockState;
 use valence_protocol::{BlockPos, Hand};
 use valence_text::Text;
+use generator::EntityType;
 
 use crate::{
     components::FullEntityPose,
@@ -182,6 +183,13 @@ pub struct ChatMessage {
     #[event(target)]
     pub to: EntityId,
     pub message: Text,
+}
+
+#[derive(Event)]
+pub struct DisguisePlayer {
+    #[event(target)]
+    pub target: EntityId,
+    pub mob: EntityType,
 }
 
 // todo: why need two life times?

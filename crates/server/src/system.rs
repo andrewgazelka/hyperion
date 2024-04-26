@@ -26,6 +26,7 @@ mod sync_players;
 mod update_health;
 mod update_time;
 mod voice_chat;
+mod disguise_player;
 
 pub use block_update::block_update;
 pub use chat_message::chat_message;
