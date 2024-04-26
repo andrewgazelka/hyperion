@@ -11,6 +11,7 @@
 #![feature(maybe_uninit_slice)]
 #![expect(clippy::type_complexity, reason = "evenio uses a lot of complex types")]
 
+mod blocks;
 mod chunk;
 mod singleton;
 

@@ -23,6 +23,7 @@ mod sync_entity_position;
 mod sync_players;
 mod update_health;
 mod update_time;
+mod voice_chat;
 
 pub use egress::egress;
 pub use entity_detect_collisions::entity_detect_collisions;

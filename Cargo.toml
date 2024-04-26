@@ -7,7 +7,6 @@ resolver = "2"
 
 members = [
     "crates/bvh",
-    "crates/chunk",
     "crates/generator",
     "crates/generator-build",
     "crates/rayon-local",
@@ -40,7 +39,6 @@ codegen-units = 1
 
 [workspace.dependencies]
 bvh = { path = "crates/bvh" }
-chunk = { path = "crates/chunk" }
 generator = { path = "crates/generator" }
 generator-build = { path = "crates/generator-build" }
 glam = "0.26.0"

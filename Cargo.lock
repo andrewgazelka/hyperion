@@ -38,7 +38,7 @@ dependencies = [
  "getrandom",
  "once_cell",
  "version_check",
- "zerocopy 0.7.32",
+ "zerocopy",
 ]
 
 [[package]]
@@ -356,6 +356,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf4b9d6a944f767f8e5e0db018570623c85f3d925ac718db4e06d0187adb21c1"
 
 [[package]]
+name = "bitvec"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1bc2832c24239b0141d5674bb9174f9d68a8b5b3f2753311927c172ca46f7e9c"
+dependencies = [
+ "funty",
+ "radium",
+ "tap",
+ "wyz",
+]
+
+[[package]]
 name = "block-buffer"
 version = "0.10.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -383,7 +395,7 @@ dependencies = [
  "ordered-float",
  "plotters",
  "plotters-bitmap",
- "rand 0.8.5",
+ "rand",
  "rayon",
  "tango-bench 0.4.0",
  "tracing",
@@ -467,17 +479,6 @@ dependencies = [
  "iana-time-zone",
  "num-traits",
  "windows-targets 0.52.5",
-]
-
-[[package]]
-name = "chunk"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "arrayvec",
- "rand 0.9.0-alpha.1",
- "valence_protocol",
- "valence_registry",
 ]
 
 [[package]]
@@ -788,6 +789,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "dirs-next"
+version = "2.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b98cf8ebf19c3d1b223e151f99a4f9f0690dca41414773390fc824184ac833e1"
+dependencies = [
+ "cfg-if",
+ "dirs-sys-next",
+]
+
+[[package]]
+name = "dirs-sys-next"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4ebda144c4fe02d1f7ea1a7d9641b6fc6b580adcfa024ae48797ecdeb6825b4d"
+dependencies = [
+ "libc",
+ "redox_users",
+ "winapi",
+]
+
+[[package]]
 name = "divan"
 version = "0.1.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -945,6 +967,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "funty"
+version = "2.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e6d5a32815ae3f33302d95fdcb2ce17862f8c65363dcfd29360480ba1001fc9c"
+
+[[package]]
 name = "futures-core"
 version = "0.3.30"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1000,7 +1028,7 @@ dependencies = [
  "anyhow",
  "generator-build",
  "tar",
- "valence_protocol",
+ "valence_protocol 0.2.0-alpha.1+mc.1.20.1 (git+https://github.com/valence-rs/valence)",
  "zip",
  "zstd 0.13.1",
 ]
@@ -1361,6 +1389,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4ec2a862134d2a7d32d7983ddcdd1c4923530833c9f2ea1a44fc5fa473989058"
 
 [[package]]
+name = "libredox"
+version = "0.1.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c0ff37bd590ca25063e35af745c343cb7a0271906fb7b37e4813e8f79f00268d"
+dependencies = [
+ "bitflags 2.5.0",
+ "libc",
+]
+
+[[package]]
 name = "libz-ng-sys"
 version = "1.1.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1403,6 +1441,15 @@ dependencies = [
  "scoped-tls",
  "tracing",
  "tracing-subscriber",
+]
+
+[[package]]
+name = "lru"
+version = "0.12.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d3262e75e648fce39813cb56ac41f3c3e3f65217ebf3844d818d1f9398cfb0dc"
+dependencies = [
+ "hashbrown",
 ]
 
 [[package]]
@@ -1639,9 +1686,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7676374caaee8a325c9e7a2ae557f216c5563a171d6997b0ef8a65af35147700"
 dependencies = [
  "base64ct",
- "rand_core 0.6.4",
+ "rand_core",
  "subtle",
 ]
+
+[[package]]
+name = "paste"
+version = "1.0.14"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "de3145af08024dea9fa9914f381a17b8fc6034dfb00f3a84013f7ff43f29ed4c"
 
 [[package]]
 name = "pbkdf2"
@@ -1814,25 +1867,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "radium"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dc33ff2d4973d518d823d61aa239014831e521c75da58e3df4840d3f47749d09"
+
+[[package]]
 name = "rand"
 version = "0.8.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "34af8d1a0e25924bc5b7c43c079c942339d8f0a8b57c39049bef581b46327404"
 dependencies = [
  "libc",
- "rand_chacha 0.3.1",
- "rand_core 0.6.4",
-]
-
-[[package]]
-name = "rand"
-version = "0.9.0-alpha.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8d31e63ea85be51c423e52ba8f2e68a3efd53eed30203ee029dd09947333693e"
-dependencies = [
- "rand_chacha 0.9.0-alpha.1",
- "rand_core 0.9.0-alpha.1",
- "zerocopy 0.8.0-alpha.6",
+ "rand_chacha",
+ "rand_core",
 ]
 
 [[package]]
@@ -1842,17 +1890,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e6c10a63a0fa32252be49d21e7709d4d4baf8d231c2dbce1eaa8141b9b127d88"
 dependencies = [
  "ppv-lite86",
- "rand_core 0.6.4",
-]
-
-[[package]]
-name = "rand_chacha"
-version = "0.9.0-alpha.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "78674ef918c19451dbd250f8201f8619b494f64c9aa6f3adb28fd8a0f1f6da46"
-dependencies = [
- "ppv-lite86",
- "rand_core 0.9.0-alpha.1",
+ "rand_core",
 ]
 
 [[package]]
@@ -1865,23 +1903,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "rand_core"
-version = "0.9.0-alpha.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cc89dffba8377c5ec847d12bb41492bda235dba31a25e8b695cd0fe6589eb8c9"
-dependencies = [
- "getrandom",
- "zerocopy 0.8.0-alpha.6",
-]
-
-[[package]]
 name = "rand_distr"
 version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32cb0b9bc82b0a0876c2dd994a7e7a2683d3e7390ca40e6886785ef0c7e3ee31"
 dependencies = [
  "num-traits",
- "rand 0.8.5",
+ "rand",
 ]
 
 [[package]]
@@ -1926,6 +1954,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4722d768eff46b75989dd134e5c353f0d6296e5aaa3132e776cbdb56be7731aa"
 dependencies = [
  "bitflags 1.3.2",
+]
+
+[[package]]
+name = "redox_users"
+version = "0.4.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bd283d9651eeda4b2a83a43c1c91b266c40fd76ecd39a50a8c630ae69dc72891"
+dependencies = [
+ "getrandom",
+ "libredox",
+ "thiserror",
 ]
 
 [[package]]
@@ -2128,9 +2167,9 @@ dependencies = [
  "bumpalo",
  "bvh",
  "bytes",
- "chunk",
  "clap",
  "derive_more 0.99.17",
+ "dirs-next",
  "divan",
  "evenio",
  "fastrand 2.0.2",
@@ -2149,7 +2188,7 @@ dependencies = [
  "no_denormals",
  "once_cell",
  "pprof",
- "rand 0.8.5",
+ "rand",
  "rand_distr",
  "rayon",
  "rayon-local",
@@ -2168,9 +2207,12 @@ dependencies = [
  "tracing-subscriber",
  "tracing-tracy",
  "uuid",
- "valence_protocol",
+ "valence_anvil",
+ "valence_nbt 0.8.0 (git+https://github.com/andrewgazelka/valence?branch=feat-open)",
+ "valence_protocol 0.2.0-alpha.1+mc.1.20.1 (git+https://github.com/andrewgazelka/valence?branch=feat-open)",
  "valence_registry",
- "valence_text",
+ "valence_server",
+ "valence_text 0.2.0-alpha.1+mc.1.20.1 (git+https://github.com/andrewgazelka/valence?branch=feat-open)",
 ]
 
 [[package]]
@@ -2365,7 +2407,7 @@ dependencies = [
  "libloading",
  "log",
  "num-traits",
- "rand 0.8.5",
+ "rand",
  "scroll",
  "tempfile",
  "thiserror",
@@ -2386,11 +2428,17 @@ dependencies = [
  "libloading",
  "log",
  "num-traits",
- "rand 0.8.5",
+ "rand",
  "scroll",
  "tempfile",
  "thiserror",
 ]
+
+[[package]]
+name = "tap"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "55937e1799185b12863d447f42597ed69d9928686b8d88a1df17376a097d8369"
 
 [[package]]
 name = "tar"
@@ -2705,6 +2753,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "valence_anvil"
+version = "0.1.0"
+source = "git+https://github.com/andrewgazelka/valence?branch=feat-open#69bd8d86634e60185e0099f506f1e942e7a5a732"
+dependencies = [
+ "bitfield-struct",
+ "bitvec",
+ "byteorder",
+ "flate2",
+ "lru",
+ "thiserror",
+ "valence_nbt 0.8.0 (git+https://github.com/andrewgazelka/valence?branch=feat-open)",
+ "valence_server",
+]
+
+[[package]]
+name = "valence_build_utils"
+version = "0.2.0-alpha.1+mc.1.20.1"
+source = "git+https://github.com/andrewgazelka/valence?branch=feat-open#69bd8d86634e60185e0099f506f1e942e7a5a732"
+dependencies = [
+ "anyhow",
+ "proc-macro2",
+ "syn 2.0.59",
+]
+
+[[package]]
 name = "valence_build_utils"
 version = "0.2.0-alpha.1+mc.1.20.1"
 source = "git+https://github.com/valence-rs/valence#7e91ca0f6d4608258524052bd521c5a6cbf221d4"
@@ -2712,6 +2785,52 @@ dependencies = [
  "anyhow",
  "proc-macro2",
  "syn 2.0.59",
+]
+
+[[package]]
+name = "valence_entity"
+version = "0.2.0-alpha.1+mc.1.20.1"
+source = "git+https://github.com/andrewgazelka/valence?branch=feat-open#69bd8d86634e60185e0099f506f1e942e7a5a732"
+dependencies = [
+ "anyhow",
+ "bevy_app",
+ "bevy_ecs",
+ "bitfield-struct",
+ "derive_more 1.0.0-beta.6",
+ "heck",
+ "indexmap",
+ "paste",
+ "proc-macro2",
+ "quote",
+ "rustc-hash",
+ "serde",
+ "serde_json",
+ "syn 2.0.59",
+ "tracing",
+ "uuid",
+ "valence_build_utils 0.2.0-alpha.1+mc.1.20.1 (git+https://github.com/andrewgazelka/valence?branch=feat-open)",
+ "valence_generated 0.2.0-alpha.1+mc.1.20.1 (git+https://github.com/andrewgazelka/valence?branch=feat-open)",
+ "valence_math 0.2.0-alpha.1+mc.1.20.1 (git+https://github.com/andrewgazelka/valence?branch=feat-open)",
+ "valence_nbt 0.8.0 (git+https://github.com/andrewgazelka/valence?branch=feat-open)",
+ "valence_protocol 0.2.0-alpha.1+mc.1.20.1 (git+https://github.com/andrewgazelka/valence?branch=feat-open)",
+ "valence_server_common",
+]
+
+[[package]]
+name = "valence_generated"
+version = "0.2.0-alpha.1+mc.1.20.1"
+source = "git+https://github.com/andrewgazelka/valence?branch=feat-open#69bd8d86634e60185e0099f506f1e942e7a5a732"
+dependencies = [
+ "anyhow",
+ "heck",
+ "proc-macro2",
+ "quote",
+ "serde",
+ "serde_json",
+ "uuid",
+ "valence_build_utils 0.2.0-alpha.1+mc.1.20.1 (git+https://github.com/andrewgazelka/valence?branch=feat-open)",
+ "valence_ident 0.2.0-alpha.1+mc.1.20.1 (git+https://github.com/andrewgazelka/valence?branch=feat-open)",
+ "valence_math 0.2.0-alpha.1+mc.1.20.1 (git+https://github.com/andrewgazelka/valence?branch=feat-open)",
 ]
 
 [[package]]
@@ -2726,9 +2845,19 @@ dependencies = [
  "serde",
  "serde_json",
  "uuid",
- "valence_build_utils",
- "valence_ident",
- "valence_math",
+ "valence_build_utils 0.2.0-alpha.1+mc.1.20.1 (git+https://github.com/valence-rs/valence)",
+ "valence_ident 0.2.0-alpha.1+mc.1.20.1 (git+https://github.com/valence-rs/valence)",
+ "valence_math 0.2.0-alpha.1+mc.1.20.1 (git+https://github.com/valence-rs/valence)",
+]
+
+[[package]]
+name = "valence_ident"
+version = "0.2.0-alpha.1+mc.1.20.1"
+source = "git+https://github.com/andrewgazelka/valence?branch=feat-open#69bd8d86634e60185e0099f506f1e942e7a5a732"
+dependencies = [
+ "serde",
+ "thiserror",
+ "valence_ident_macros 0.2.0-alpha.1+mc.1.20.1 (git+https://github.com/andrewgazelka/valence?branch=feat-open)",
 ]
 
 [[package]]
@@ -2738,7 +2867,17 @@ source = "git+https://github.com/valence-rs/valence#7e91ca0f6d4608258524052bd521
 dependencies = [
  "serde",
  "thiserror",
- "valence_ident_macros",
+ "valence_ident_macros 0.2.0-alpha.1+mc.1.20.1 (git+https://github.com/valence-rs/valence)",
+]
+
+[[package]]
+name = "valence_ident_macros"
+version = "0.2.0-alpha.1+mc.1.20.1"
+source = "git+https://github.com/andrewgazelka/valence?branch=feat-open#69bd8d86634e60185e0099f506f1e942e7a5a732"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.59",
 ]
 
 [[package]]
@@ -2754,6 +2893,14 @@ dependencies = [
 [[package]]
 name = "valence_math"
 version = "0.2.0-alpha.1+mc.1.20.1"
+source = "git+https://github.com/andrewgazelka/valence?branch=feat-open#69bd8d86634e60185e0099f506f1e942e7a5a732"
+dependencies = [
+ "glam",
+]
+
+[[package]]
+name = "valence_math"
+version = "0.2.0-alpha.1+mc.1.20.1"
 source = "git+https://github.com/valence-rs/valence#7e91ca0f6d4608258524052bd521c5a6cbf221d4"
 dependencies = [
  "glam",
@@ -2762,7 +2909,7 @@ dependencies = [
 [[package]]
 name = "valence_nbt"
 version = "0.8.0"
-source = "git+https://github.com/valence-rs/valence#7e91ca0f6d4608258524052bd521c5a6cbf221d4"
+source = "git+https://github.com/andrewgazelka/valence?branch=feat-open#69bd8d86634e60185e0099f506f1e942e7a5a732"
 dependencies = [
  "byteorder",
  "cesu8",
@@ -2773,9 +2920,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "valence_nbt"
+version = "0.8.0"
+source = "git+https://github.com/valence-rs/valence#7e91ca0f6d4608258524052bd521c5a6cbf221d4"
+dependencies = [
+ "byteorder",
+ "cesu8",
+ "uuid",
+]
+
+[[package]]
 name = "valence_protocol"
 version = "0.2.0-alpha.1+mc.1.20.1"
-source = "git+https://github.com/valence-rs/valence#7e91ca0f6d4608258524052bd521c5a6cbf221d4"
+source = "git+https://github.com/andrewgazelka/valence?branch=feat-open#69bd8d86634e60185e0099f506f1e942e7a5a732"
 dependencies = [
  "anyhow",
  "base64",
@@ -2791,12 +2948,49 @@ dependencies = [
  "tracing",
  "url",
  "uuid",
- "valence_generated",
- "valence_ident",
- "valence_math",
- "valence_nbt",
- "valence_protocol_macros",
- "valence_text",
+ "valence_generated 0.2.0-alpha.1+mc.1.20.1 (git+https://github.com/andrewgazelka/valence?branch=feat-open)",
+ "valence_ident 0.2.0-alpha.1+mc.1.20.1 (git+https://github.com/andrewgazelka/valence?branch=feat-open)",
+ "valence_math 0.2.0-alpha.1+mc.1.20.1 (git+https://github.com/andrewgazelka/valence?branch=feat-open)",
+ "valence_nbt 0.8.0 (git+https://github.com/andrewgazelka/valence?branch=feat-open)",
+ "valence_protocol_macros 0.2.0-alpha.1+mc.1.20.1 (git+https://github.com/andrewgazelka/valence?branch=feat-open)",
+ "valence_text 0.2.0-alpha.1+mc.1.20.1 (git+https://github.com/andrewgazelka/valence?branch=feat-open)",
+]
+
+[[package]]
+name = "valence_protocol"
+version = "0.2.0-alpha.1+mc.1.20.1"
+source = "git+https://github.com/valence-rs/valence#7e91ca0f6d4608258524052bd521c5a6cbf221d4"
+dependencies = [
+ "anyhow",
+ "base64",
+ "bevy_ecs",
+ "bitfield-struct",
+ "byteorder",
+ "bytes",
+ "derive_more 1.0.0-beta.6",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tracing",
+ "url",
+ "uuid",
+ "valence_generated 0.2.0-alpha.1+mc.1.20.1 (git+https://github.com/valence-rs/valence)",
+ "valence_ident 0.2.0-alpha.1+mc.1.20.1 (git+https://github.com/valence-rs/valence)",
+ "valence_math 0.2.0-alpha.1+mc.1.20.1 (git+https://github.com/valence-rs/valence)",
+ "valence_nbt 0.8.0 (git+https://github.com/valence-rs/valence)",
+ "valence_protocol_macros 0.2.0-alpha.1+mc.1.20.1 (git+https://github.com/valence-rs/valence)",
+ "valence_text 0.2.0-alpha.1+mc.1.20.1 (git+https://github.com/valence-rs/valence)",
+]
+
+[[package]]
+name = "valence_protocol_macros"
+version = "0.2.0-alpha.1+mc.1.20.1"
+source = "git+https://github.com/andrewgazelka/valence?branch=feat-open#69bd8d86634e60185e0099f506f1e942e7a5a732"
+dependencies = [
+ "heck",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.59",
 ]
 
 [[package]]
@@ -2813,7 +3007,7 @@ dependencies = [
 [[package]]
 name = "valence_registry"
 version = "0.2.0-alpha.1+mc.1.20.1"
-source = "git+https://github.com/valence-rs/valence#7e91ca0f6d4608258524052bd521c5a6cbf221d4"
+source = "git+https://github.com/andrewgazelka/valence?branch=feat-open#69bd8d86634e60185e0099f506f1e942e7a5a732"
 dependencies = [
  "anyhow",
  "bevy_app",
@@ -2822,23 +3016,64 @@ dependencies = [
  "serde",
  "serde_json",
  "tracing",
- "valence_ident",
- "valence_nbt",
- "valence_protocol",
+ "valence_ident 0.2.0-alpha.1+mc.1.20.1 (git+https://github.com/andrewgazelka/valence?branch=feat-open)",
+ "valence_nbt 0.8.0 (git+https://github.com/andrewgazelka/valence?branch=feat-open)",
+ "valence_protocol 0.2.0-alpha.1+mc.1.20.1 (git+https://github.com/andrewgazelka/valence?branch=feat-open)",
+ "valence_server_common",
+]
+
+[[package]]
+name = "valence_server"
+version = "0.2.0-alpha.1+mc.1.20.1"
+source = "git+https://github.com/andrewgazelka/valence?branch=feat-open#69bd8d86634e60185e0099f506f1e942e7a5a732"
+dependencies = [
+ "anyhow",
+ "arrayvec",
+ "bevy_app",
+ "bevy_ecs",
+ "bevy_utils",
+ "bitfield-struct",
+ "byteorder",
+ "bytes",
+ "derive_more 1.0.0-beta.6",
+ "parking_lot",
+ "rand",
+ "rustc-hash",
+ "tracing",
+ "uuid",
+ "valence_entity",
+ "valence_generated 0.2.0-alpha.1+mc.1.20.1 (git+https://github.com/andrewgazelka/valence?branch=feat-open)",
+ "valence_math 0.2.0-alpha.1+mc.1.20.1 (git+https://github.com/andrewgazelka/valence?branch=feat-open)",
+ "valence_nbt 0.8.0 (git+https://github.com/andrewgazelka/valence?branch=feat-open)",
+ "valence_protocol 0.2.0-alpha.1+mc.1.20.1 (git+https://github.com/andrewgazelka/valence?branch=feat-open)",
+ "valence_registry",
  "valence_server_common",
 ]
 
 [[package]]
 name = "valence_server_common"
 version = "0.2.0-alpha.1+mc.1.20.1"
-source = "git+https://github.com/valence-rs/valence#7e91ca0f6d4608258524052bd521c5a6cbf221d4"
+source = "git+https://github.com/andrewgazelka/valence?branch=feat-open#69bd8d86634e60185e0099f506f1e942e7a5a732"
 dependencies = [
  "bevy_app",
  "bevy_ecs",
  "derive_more 1.0.0-beta.6",
- "rand 0.8.5",
+ "rand",
  "uuid",
- "valence_protocol",
+ "valence_protocol 0.2.0-alpha.1+mc.1.20.1 (git+https://github.com/andrewgazelka/valence?branch=feat-open)",
+]
+
+[[package]]
+name = "valence_text"
+version = "0.2.0-alpha.1+mc.1.20.1"
+source = "git+https://github.com/andrewgazelka/valence?branch=feat-open#69bd8d86634e60185e0099f506f1e942e7a5a732"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror",
+ "uuid",
+ "valence_ident 0.2.0-alpha.1+mc.1.20.1 (git+https://github.com/andrewgazelka/valence?branch=feat-open)",
+ "valence_nbt 0.8.0 (git+https://github.com/andrewgazelka/valence?branch=feat-open)",
 ]
 
 [[package]]
@@ -2850,8 +3085,8 @@ dependencies = [
  "serde_json",
  "thiserror",
  "uuid",
- "valence_ident",
- "valence_nbt",
+ "valence_ident 0.2.0-alpha.1+mc.1.20.1 (git+https://github.com/valence-rs/valence)",
+ "valence_nbt 0.8.0 (git+https://github.com/valence-rs/valence)",
 ]
 
 [[package]]
@@ -3177,6 +3412,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "wyz"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "05f360fc0b24296329c78fda852a1e9ae82de9cf7b27dae4b7f62f118f77b9ed"
+dependencies = [
+ "tap",
+]
+
+[[package]]
 name = "xattr"
 version = "1.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3193,16 +3437,7 @@ version = "0.7.32"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "74d4d3961e53fa4c9a25a8637fc2bfaf2595b3d3ae34875568a5cf64787716be"
 dependencies = [
- "zerocopy-derive 0.7.32",
-]
-
-[[package]]
-name = "zerocopy"
-version = "0.8.0-alpha.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "db678a6ee512bd06adf35c35be471cae2f9c82a5aed2b5d15e03628c98bddd57"
-dependencies = [
- "zerocopy-derive 0.8.0-alpha.6",
+ "zerocopy-derive",
 ]
 
 [[package]]
@@ -3210,17 +3445,6 @@ name = "zerocopy-derive"
 version = "0.7.32"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9ce1b18ccd8e73a9321186f97e46f9f04b778851177567b1975109d26a08d2a6"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.59",
-]
-
-[[package]]
-name = "zerocopy-derive"
-version = "0.8.0-alpha.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "201585ea96d37ee69f2ac769925ca57160cef31acb137c16f38b02b76f4c1e62"
 dependencies = [
  "proc-macro2",
  "quote",

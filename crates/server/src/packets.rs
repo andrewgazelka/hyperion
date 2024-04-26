@@ -9,6 +9,9 @@
 
 //! <https://wiki.vg/index.php?title=Protocol&oldid=18375>
 
+pub mod vanilla;
+pub mod voicechat;
+
 use std::str::FromStr;
 
 use anyhow::{bail, ensure};
@@ -28,8 +31,6 @@ use crate::{
     singleton::player_id_lookup::EntityIdLookup,
     system::ingress::IngressSender,
 };
-
-pub mod def;
 
 const fn confirm_teleport(_pkt: &[u8]) {
     // ignore
