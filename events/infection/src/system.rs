@@ -10,6 +10,10 @@ use server::{
     },
 };
 
+#[allow(
+    clippy::needless_pass_by_value,
+    reason = "this is used in the event loop"
+)]
 pub fn deny_block_break(
     r: Receiver<event::BlockFinishBreak, EntityId>,
     mut s: Sender<(event::UpdateBlock, event::ChatMessage)>,

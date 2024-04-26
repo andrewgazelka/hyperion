@@ -30,12 +30,12 @@ mod player_packet_buffer;
 
 use crate::{
     components::{FullEntityPose, ImmuneStatus, KeepAlive, LoginState, Vitals},
+    event::{BumpScratch, ScratchBuffer},
     net::{Compressor, Fd, IoBuf, IoBufs, Packets, MINECRAFT_VERSION, PROTOCOL_VERSION},
     packets::PacketSwitchQuery,
     singleton::player_id_lookup::EntityIdLookup,
     system::ingress::player_packet_buffer::DecodeBuffer,
 };
-use crate::event::{BumpScratch, ScratchBuffer};
 
 pub type IngressSender<'a> = Sender<
     'a,

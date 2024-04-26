@@ -351,17 +351,29 @@ fn player_action(
 
     match packet.action {
         PlayerAction::StartDestroyBlock => {
-            sender.send(event::BlockStartBreak { by: id, position, sequence });
+            sender.send(event::BlockStartBreak {
+                by: id,
+                position,
+                sequence,
+            });
         }
         PlayerAction::AbortDestroyBlock => {
-            sender.send(event::BlockAbortBreak { by: id, position, sequence });
+            sender.send(event::BlockAbortBreak {
+                by: id,
+                position,
+                sequence,
+            });
         }
         PlayerAction::StopDestroyBlock => {
-            sender.send(event::BlockFinishBreak { by: id, position, sequence });
+            sender.send(event::BlockFinishBreak {
+                by: id,
+                position,
+                sequence,
+            });
         }
         _ => {}
     }
-    
+
     Ok(())
 }
 

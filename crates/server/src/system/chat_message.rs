@@ -1,8 +1,8 @@
 use evenio::{
-    event::{EventMut, Receiver, ReceiverMut},
+    event::{EventMut, ReceiverMut},
     fetch::Single,
 };
-use valence_protocol::{packets::play, VarInt};
+use valence_protocol::packets::play;
 
 use crate::{
     event,
