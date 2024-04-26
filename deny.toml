@@ -252,14 +252,13 @@ allow-registry = ["https://github.com/rust-lang/crates.io-index"]
 allow-git = [
     "https://github.com/rj00a/evenio",
     "https://github.com/andrewgazelka/io-uring",
+    "https://github.com/andrewgazelka/valence",
 #    "https://github.com/andrewgazelka/rust-mc-bot"
 ]
 
 [sources.allow-org]
 # 1 or more github.com organizations to allow git sources for
-github = [
-    "valence-rs",
-]
+github = []
 # 1 or more gitlab.com organizations to allow git sources for
 gitlab = []
 # 1 or more bitbucket.org organizations to allow git sources for
