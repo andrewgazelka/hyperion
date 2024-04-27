@@ -1,9 +1,11 @@
 use std::path::PathBuf;
 
 use anyhow::Context;
+use tracing::info;
 use valence_anvil::parsing::DimensionFolder;
 use valence_registry::BiomeRegistry;
 
+#[derive(Debug)]
 pub struct AnvilFolder {
     pub dim: DimensionFolder,
 }
@@ -22,11 +24,7 @@ fn dot_minecraft_path() -> anyhow::Result<PathBuf> {
     if cfg!(target_os = "linux") {
         // todo: I do not know if this is correct
         let home_dir = dirs_next::home_dir().unwrap();
-        let dir = home_dir
-            .join(".minecraft")
-            .join("saves")
-            .join("World")
-            .join("anvil");
+        let dir = home_dir.join(".minecraft");
 
         return Ok(dir);
     }
@@ -58,7 +56,7 @@ fn get_latest_save() -> anyhow::Result<PathBuf> {
 impl AnvilFolder {
     pub fn new(biomes: &BiomeRegistry) -> anyhow::Result<Self> {
         let latest_save = get_latest_save()?;
-
+        info!("loading world from {latest_save:?}");
         // todo: probs not true
         let dim = DimensionFolder::new(latest_save, biomes);
 

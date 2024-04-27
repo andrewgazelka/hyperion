@@ -642,7 +642,7 @@ fn encode_chunk_packet(
     let dimension_height = 384;
 
     let map = heightmap(dimension_height, dimension_height - 3);
-    let map: Vec<_> = map.into_iter().map(i64::try_from).try_collect()?;
+    let map = map.into_iter().map(i64::try_from).try_collect()?;
 
     // convert section_count + 2 0b1s into u64 array
     let mut bits = BitStorage::new(1, section_count + 2, None).unwrap();
