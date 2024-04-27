@@ -135,11 +135,6 @@ pub struct LinuxServer {
     phantom: PhantomData<*const ()>,
 }
 
-// TODO: REMOVE
-#[expect(clippy::non_send_fields_in_send_ty, reason = "this is not a send type")]
-unsafe impl Send for LinuxServer {}
-unsafe impl Sync for LinuxServer {}
-
 impl ServerDef for LinuxServer {
     fn new(address: impl ToSocketAddrs) -> anyhow::Result<Self> {
         let Some(address) = address.to_socket_addrs()?.next() else {
