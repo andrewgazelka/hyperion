@@ -103,6 +103,6 @@ mod tests {
             .unwrap();
 
         let pretty = serde_json::to_string_pretty(&res).unwrap();
-        println!("{}", pretty);
+        println!("{pretty}");
     }
 }
