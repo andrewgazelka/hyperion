@@ -5,7 +5,7 @@ use evenio::prelude::*;
 use itertools::Itertools;
 use libdeflater::Compressor;
 use serde::Deserialize;
-use tracing::{debug, error, info, instrument};
+use tracing::{debug, error, info, instrument, warn};
 use valence_nbt::{value::ValueRef, Value};
 use valence_protocol::{
     game_mode::OptGameMode,
@@ -629,11 +629,20 @@ fn encode_chunk_packet(
     let chunk = anvil_folder.dim.get_chunk(location);
 
     let Ok(chunk) = chunk else {
-        error!("failed to get chunk at {location:?}");
+        error!("failed to get chunk at chunk location {location:?}");
         return Ok(());
     };
 
     let Some(chunk) = chunk else {
+        let path = anvil_folder.folder_path.display();
+
+        let chunk_location = glam::IVec2::new(location.x, location.z);
+        let game_location = chunk_location << 4;
+
+        warn!(
+            "failed to get chunk at chunk location {chunk_location} ... is the world {path} \
+             loaded there? This is the same as the normal location {game_location}."
+        );
         return Ok(());
     };
 

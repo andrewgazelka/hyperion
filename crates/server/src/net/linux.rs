@@ -248,7 +248,7 @@ impl ServerDef for LinuxServer {
                 }
                 1 => {
                     if result < 0 {
-                        error!("there was an error in socket shutdown: {}", result);
+                        error!("there was an error in socket close: {}", result);
                     }
                 }
                 write if write & SEND_MARKER != 0 => {
@@ -258,13 +258,13 @@ impl ServerDef for LinuxServer {
 
                     match result.cmp(&0) {
                         cmp::Ordering::Less => {
-                            error!(
-                                "there was an error in write, shutting down socket: {}",
-                                result
-                            );
-                            Self::shutdown(&mut submission, fd);
-
-                            f(ServerEvent::RemovePlayer { fd: Fd(fd) });
+                            error!("there was an error in write: {}", result);
+                            // Nothing is done here. It's assumed that if there is a write error,
+                            // read will error too, and all of the error handling occurs in read.
+                            // This code intentionally does not shutdown nor close the socket
+                            // because read may close the socket before this does, and if this code
+                            // closes the socket afterwards, it could close another player's
+                            // socket.
                         }
                         cmp::Ordering::Equal => {
                             // This should never happen as long as write is never passed an empty buffer:
@@ -282,38 +282,55 @@ impl ServerDef for LinuxServer {
                 }
                 read if read & RECV_MARKER != 0 => {
                     let fd = Fixed((read & !RECV_MARKER) as u32);
-                    let disconnected = result == 0;
+                    let more = event.flags() & IORING_CQE_F_MORE != 0;
 
-                    if event.flags() & IORING_CQE_F_MORE == 0 && !disconnected {
-                        trace!("socket recv rerequested");
-                        Self::request_recv(&mut submission, fd);
-                    }
+                    if result == -libc::ECONNRESET || result == -libc::ETIMEDOUT || result == 0 {
+                        info!("player {fd:?} disconnected during recv (code {result})");
 
-                    if disconnected {
-                        info!("disconnected during recv");
+                        assert!(
+                            !more,
+                            "errors and EOF should result in no longer reading the socket. this \
+                             check is needed to avoid removing the same player multiple times"
+                        );
+
                         f(ServerEvent::RemovePlayer { fd: Fd(fd) });
-                    } else if result < 0 {
-                        // -104
-                        error!("there was an error in recv: {}", result);
-                        continue;
+                        Self::close(&mut submission, fd);
                     } else {
-                        #[expect(clippy::cast_sign_loss, reason = "we are checking if < 0")]
-                        let bytes_received = result as usize;
-                        let buffer_id =
-                            buffer_select(event.flags()).expect("there should be a buffer");
-                        assert!((buffer_id as usize) < C2S_RING_BUFFER_COUNT);
-                        // SAFETY: as_mut_ptr doesn't take a reference to the slice in c2s_buffer.
-                        // buffer_id is in bounds of c2s_buffer, so all the
-                        // safety requirements for add is met.
-                        let buffer_ptr =
-                            unsafe { self.c2s_buffer.as_mut_ptr().add(buffer_id as usize) };
-                        // SAFETY: buffer_id is in bounds, so buffer_ptr is valid
-                        let buffer = unsafe { &(*buffer_ptr)[..bytes_received] };
-                        self.c2s_local_tail = self.c2s_local_tail.wrapping_add(1);
-                        f(ServerEvent::RecvData {
-                            fd: Fd(fd),
-                            data: buffer,
-                        });
+                        // The player is not getting disconnected, but there still may be errors
+
+                        if !more {
+                            // No more completion events will occur from this multishot recv. This
+                            // will need to request another multishot recv.
+                            warn!("socket recv rerequested");
+                            Self::request_recv(&mut submission, fd);
+                        }
+
+                        if result > 0 {
+                            #[expect(clippy::cast_sign_loss, reason = "we are checking if < 0")]
+                            let bytes_received = result as usize;
+                            let buffer_id =
+                                buffer_select(event.flags()).expect("there should be a buffer");
+                            assert!((buffer_id as usize) < C2S_RING_BUFFER_COUNT);
+                            // SAFETY: as_mut_ptr doesn't take a reference to the slice in c2s_buffer.
+                            // buffer_id is in bounds of c2s_buffer, so all the
+                            // safety requirements for add is met.
+                            let buffer_ptr =
+                                unsafe { self.c2s_buffer.as_mut_ptr().add(buffer_id as usize) };
+                            // SAFETY: buffer_id is in bounds, so buffer_ptr is valid
+                            let buffer = unsafe { &(*buffer_ptr)[..bytes_received] };
+                            self.c2s_local_tail = self.c2s_local_tail.wrapping_add(1);
+                            f(ServerEvent::RecvData {
+                                fd: Fd(fd),
+                                data: buffer,
+                            });
+                        } else if result == -libc::ENOBUFS {
+                            warn!(
+                                "ran out of c2s buffers which will negatively impact performance; \
+                                 consider increasing C2S_RING_BUFFER_COUNT"
+                            );
+                        } else {
+                            error!("unhandled recv error: {result}");
+                        }
                     }
                 }
                 _ => {
@@ -420,13 +437,13 @@ impl LinuxServer {
         }
     }
 
-    fn shutdown(submission: &mut SubmissionQueue, fd: Fixed) {
+    /// Calling `close` on the same fd should not be done multiple times to avoid shutting down
+    /// other fds that may take the place of the fd that was closed.
+    fn close(submission: &mut SubmissionQueue, fd: Fixed) {
         unsafe {
             Self::push_entry(
                 submission,
-                &io_uring::opcode::Shutdown::new(fd, libc::SHUT_RDWR)
-                    .build()
-                    .user_data(1),
+                &io_uring::opcode::Close::new(fd).build().user_data(1),
             );
         }
     }
