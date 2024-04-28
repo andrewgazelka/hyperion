@@ -1,7 +1,8 @@
-use std::{alloc::Allocator, fmt::Debug};
+use std::{alloc::Allocator, cell::RefCell, fmt::Debug};
 
 use bumpalo::Bump;
-use evenio::{entity::EntityId, event::Event};
+use derive_more::{Deref, DerefMut};
+use evenio::{component::Component, entity::EntityId, event::Event};
 use glam::Vec3;
 use rayon_local::RayonLocal;
 use valence_generated::block::BlockState;
@@ -228,6 +229,11 @@ pub struct DisguisePlayer {
     #[event(target)]
     pub target: EntityId,
     pub mob: EntityKind,
+}
+
+#[derive(Component, Deref, DerefMut, Default)]
+pub struct Scratches {
+    inner: RayonLocal<RefCell<Scratch>>,
 }
 
 // todo: why need two life times?

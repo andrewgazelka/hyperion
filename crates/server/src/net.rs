@@ -1,16 +1,15 @@
 //! All the networking related code.
 
-use std::{collections::VecDeque, hash::Hash, net::ToSocketAddrs};
+use std::{cell::RefCell, collections::VecDeque, hash::Hash, net::ToSocketAddrs};
 
 use derive_more::{Deref, DerefMut, From};
-use evenio::prelude::Component;
+use evenio::{fetch::Single, handler::HandlerParam, prelude::Component};
 use libc::iovec;
 use libdeflater::CompressionLvl;
 use tracing::debug;
-use valence_protocol::{CompressionThreshold, Encode};
+use valence_protocol::CompressionThreshold;
 
 use crate::{
-    event::ScratchBuffer,
     global::Global,
     net::encoder::PacketWriteInfo,
     singleton::ring::{Buf, Ring},
@@ -164,7 +163,10 @@ mod encoder;
 pub use decoder::PacketDecoder;
 use rayon_local::RayonLocal;
 
-use crate::{net::encoder::append_packet_without_compression, singleton::ring::register_rings};
+use crate::{
+    event::Scratches, net::encoder::append_packet_without_compression,
+    singleton::ring::register_rings,
+};
 
 const NUM_PLAYERS: usize = 10;
 const S2C_BUFFER_SIZE: usize = 1024 * 1024 * NUM_PLAYERS;
@@ -178,21 +180,21 @@ pub struct IoBuf {
 }
 
 #[derive(Component, Deref, DerefMut)]
-pub struct Compressor {
-    compressors: RayonLocal<libdeflater::Compressor>,
+pub struct Compressors {
+    compressors: RayonLocal<RefCell<libdeflater::Compressor>>,
 }
 
-impl Compressor {
+impl Compressors {
     pub fn new(level: CompressionLvl) -> Self {
         Self {
-            compressors: RayonLocal::init(|| libdeflater::Compressor::new(level)),
+            compressors: RayonLocal::init(|| libdeflater::Compressor::new(level).into()),
         }
     }
 }
 
 #[derive(Component, Debug, Deref, DerefMut)]
 pub struct IoBufs {
-    locals: RayonLocal<IoBuf>,
+    locals: RayonLocal<RefCell<IoBuf>>,
 }
 
 impl IoBufs {
@@ -201,6 +203,8 @@ impl IoBufs {
 
         let rings = locals.get_all_mut().iter_mut().map(IoBuf::buf_mut);
         register_rings(server_def, rings);
+
+        let locals = locals.map(RefCell::new);
 
         Self { locals }
     }
@@ -222,6 +226,13 @@ impl IoBuf {
     pub fn buf_mut(&mut self) -> &mut Ring {
         &mut self.buf
     }
+}
+
+#[derive(HandlerParam, Copy, Clone)]
+pub struct Compose<'a> {
+    pub bufs: Single<'a, &'static IoBufs>,
+    pub compressor: Single<'a, &'static Compressors>,
+    pub scratch: Single<'a, &'static Scratches>,
 }
 
 /// This is useful for the ECS so we can use Single<&mut Broadcast> instead of having to use a marker struct
@@ -296,7 +307,7 @@ impl Packets {
 
     pub fn append_pre_compression_packet<P>(&self, pkt: &P, buf: &mut IoBuf) -> anyhow::Result<()>
     where
-        P: valence_protocol::Packet + Encode,
+        P: valence_protocol::Packet + valence_protocol::Encode,
     {
         let compression = buf.enc.compression_threshold();
         // none
@@ -312,19 +323,24 @@ impl Packets {
         Ok(())
     }
 
-    pub fn append<P>(
-        &self,
-        pkt: &P,
-        buf: &mut IoBuf,
-        scratch: &mut impl ScratchBuffer,
-        compressor: &mut libdeflater::Compressor,
-    ) -> anyhow::Result<()>
+    pub fn append<P>(&self, pkt: &P, compose: &Compose) -> anyhow::Result<()>
     where
-        P: valence_protocol::Packet + Encode,
+        P: valence_protocol::Packet + valence_protocol::Encode,
     {
+        let buf = compose.bufs.get_local();
+
+        let scratch = compose.scratch.get_local();
+        let mut scratch = scratch.borrow_mut();
+
+        let compressor = compose.compressor.get_local();
+        let mut compressor = compressor.borrow_mut();
+
+        let mut buf = buf.borrow_mut();
+        let buf = &mut *buf;
+
         let result = buf
             .enc
-            .append_packet(pkt, &mut buf.buf, scratch, compressor)?;
+            .append_packet(pkt, &mut buf.buf, &mut *scratch, &mut compressor)?;
 
         self.push(result, buf);
         Ok(())

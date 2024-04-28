@@ -11,8 +11,7 @@ use valence_protocol::packets::play;
 use crate::{
     components::{FullEntityPose, Uuid},
     event,
-    event::Scratch,
-    net::{Broadcast, Compressor, IoBufs},
+    net::{Broadcast, Compose},
     system::init_entity::spawn_entity_packet,
 };
 
@@ -29,8 +28,7 @@ pub struct DisguisePlayerQuery<'a> {
 )]
 pub fn disguise_player(
     r: ReceiverMut<event::DisguisePlayer, DisguisePlayerQuery>,
-    mut io: Single<&mut IoBufs>,
-    mut compressor: Single<&mut Compressor>,
+    compose: Compose,
     broadcast: Single<&Broadcast>,
 ) {
     let event = EventMut::take(r.event);
@@ -42,16 +40,10 @@ pub fn disguise_player(
         uuids: Cow::Borrowed(uuids),
     };
 
-    let mut scratch = Scratch::new();
-
-    broadcast
-        .append(&pkt, io.one(), &mut scratch, compressor.one())
-        .unwrap();
+    broadcast.append(&pkt, &compose).unwrap();
 
     // spawn entity with same id
     let pkt = spawn_entity_packet(query.id, event.mob, *query.uuid, query.pose);
 
-    broadcast
-        .append(&pkt, io.one(), &mut scratch, compressor.one())
-        .unwrap();
+    broadcast.append(&pkt, &compose).unwrap();
 }

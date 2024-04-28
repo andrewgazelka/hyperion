@@ -6,7 +6,7 @@ use crate::{
     event,
     event::Gametick,
     global::Global,
-    net::{Compressor, IoBufs, Packets},
+    net::{Compose, Packets},
     tracker::Prev,
     Vitals,
 };
@@ -29,24 +29,13 @@ pub struct SyncPlayersQuery<'a> {
 
 #[instrument(skip_all)]
 pub fn sync_players(
-    gametick: ReceiverMut<Gametick>,
+    _: Receiver<Gametick>,
     global: Single<&Global>,
     mut fetcher: Fetcher<SyncPlayersQuery>,
-    mut compressor: Single<&mut Compressor>,
-    mut io: Single<&mut IoBufs>,
     mut s: Sender<event::Death>,
+    compose: Compose,
 ) {
     let tick = global.tick;
-
-    let mut gametick = gametick.event;
-
-    #[expect(clippy::mut_mut, reason = "I do not know a way around this")]
-    let scratch = &mut gametick.scratch;
-
-    let scratch = scratch.one();
-    let compressor = compressor.one();
-
-    let io = io.one();
 
     fetcher.iter_mut().for_each(|query| {
         let entity_id = VarInt(query.id.index().0 as i32);
@@ -78,9 +67,7 @@ pub fn sync_players(
                             food: VarInt(20),
                             food_saturation: 5.0,
                         },
-                        io,
-                        scratch,
-                        compressor,
+                        &compose,
                     );
                 }
 
@@ -95,9 +82,7 @@ pub fn sync_players(
                                 .with_show_icon(true),
                             factor_codec: None,
                         },
-                        io,
-                        scratch,
-                        compressor,
+                        &compose,
                     );
                 }
             }
@@ -105,20 +90,13 @@ pub fn sync_players(
                 s.send(event::Death { target: query.id });
             }
             (Vitals::Dead, Vitals::Alive { health, .. }) => {
-                let _ = packets.append(
-                    &play::ClearTitleS2c { reset: true },
-                    io,
-                    scratch,
-                    compressor,
-                );
+                let _ = packets.append(&play::ClearTitleS2c { reset: true }, &compose);
                 let _ = packets.append(
                     &play::GameStateChangeS2c {
                         kind: play::game_state_change_s2c::GameEventKind::ChangeGameMode,
                         value: SURVIVAL,
                     },
-                    io,
-                    scratch,
-                    compressor,
+                    &compose,
                 );
                 let _ = packets.append(
                     &play::HealthUpdateS2c {
@@ -126,9 +104,7 @@ pub fn sync_players(
                         food: VarInt(20),
                         food_saturation: 5.0,
                     },
-                    io,
-                    scratch,
-                    compressor,
+                    &compose,
                 );
                 // TODO: Update absorption and regeneration
             }

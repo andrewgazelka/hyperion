@@ -7,8 +7,7 @@ use valence_protocol::{
 
 use crate::{
     event,
-    event::Scratch,
-    net::{Compressor, IoBufs, Packets},
+    net::{Compose, Packets},
 };
 
 #[derive(Query)]
@@ -17,19 +16,13 @@ pub struct TeleportQuery<'a> {
 }
 
 #[instrument(skip_all)]
-pub fn teleport(
-    r: Receiver<event::Teleport, TeleportQuery>,
-    mut io: Single<&mut IoBufs>,
-    mut compressor: Single<&mut Compressor>,
-) {
+pub fn teleport(r: Receiver<event::Teleport, TeleportQuery>, compose: Compose) {
     // todo: other players should see this instantly. we need to figure out the best way to do this.
     // don't want to make it seem like the player is cheating when they are not and just have not gotten
     // update yet.
     // To do this, we shuold probably use teleport_id correctly.
     let event = r.event;
     let query = r.query;
-
-    let mut scratch = Scratch::new();
 
     // PlayerPositionLookS2CPacket
 
@@ -46,9 +39,7 @@ pub fn teleport(
                 flags: PlayerPositionLookFlags::default(),
                 teleport_id,
             },
-            io.one(),
-            &mut scratch,
-            compressor.one(),
+            &compose,
         )
         .unwrap();
 }

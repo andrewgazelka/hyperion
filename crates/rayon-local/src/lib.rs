@@ -240,6 +240,21 @@ impl<S> RayonLocal<S> {
         RayonLocal { thread_locals }
     }
 
+    pub fn map<T, F>(self, f: F) -> RayonLocal<T>
+    where
+        F: Fn(S) -> T,
+    {
+        let thread_locals = self.thread_locals.into_vec();
+        let thread_locals = thread_locals
+            .into_iter()
+            .map(UnsafeCell::into_inner)
+            .map(f)
+            .map(UnsafeCell::new)
+            .collect();
+
+        RayonLocal { thread_locals }
+    }
+
     #[must_use]
     pub fn idx(&self) -> usize {
         // this is so the main thread will still have a place to put data
