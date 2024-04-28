@@ -43,9 +43,6 @@ impl PacketWriteInfo {
     }
 }
 
-unsafe impl Send for PacketWriteInfo {}
-unsafe impl Sync for PacketWriteInfo {}
-
 pub fn append_packet_without_compression<P>(
     pkt: &P,
     buf: &mut impl Buf,

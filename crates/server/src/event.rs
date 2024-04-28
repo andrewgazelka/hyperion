@@ -130,14 +130,6 @@ pub struct Stats<'a, 'b> {
     pub scratch: &'b mut BumpScratch<'a>,
 }
 
-// todo: REMOVE
-#[expect(
-    clippy::non_send_fields_in_send_ty,
-    reason = "this will be removed in the future"
-)]
-unsafe impl<'a, 'b> Send for Stats<'a, 'b> {}
-unsafe impl<'a, 'b> Sync for Stats<'a, 'b> {}
-
 // todo: naming? this seems bad
 #[derive(Debug)]
 pub struct Scratch<A: Allocator = std::alloc::Global> {
@@ -245,19 +237,8 @@ pub struct Gametick<'a, 'b> {
     pub scratch: &'b mut RayonLocal<BumpScratch<'a>>,
 }
 
-unsafe impl<'a, 'b> Send for Gametick<'a, 'b> {}
-unsafe impl<'a, 'b> Sync for Gametick<'a, 'b> {}
-
 /// An event that is sent when it is time to send packets to clients.
 #[derive(Event)]
 pub struct Egress<'a> {
     pub server: &'a mut Server,
 }
-
-// todo: remove
-#[allow(
-    clippy::non_send_fields_in_send_ty,
-    reason = "this will be removed in the future"
-)]
-unsafe impl<'a> Send for Egress<'a> {}
-unsafe impl<'a> Sync for Egress<'a> {}

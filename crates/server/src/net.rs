@@ -206,10 +206,6 @@ impl IoBufs {
     }
 }
 
-// todo: not valid we should remove
-unsafe impl Send for IoBuf {}
-unsafe impl Sync for IoBuf {}
-
 impl IoBuf {
     pub fn new(threshold: CompressionThreshold, index: usize) -> Self {
         Self {
