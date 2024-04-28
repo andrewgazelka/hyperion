@@ -194,7 +194,7 @@ impl PacketEncoder {
     }
 
     pub fn append_packet<P>(
-        &mut self,
+        &self,
         pkt: &P,
         buf: &mut impl Buf,
         scratch: &mut impl ScratchBuffer,

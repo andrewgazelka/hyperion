@@ -7,26 +7,18 @@ use crate::{
     components::KeepAlive,
     event::{Gametick, KickPlayer},
     global::Global,
-    net,
-    net::{IoBufs, Packets},
+    net::{Compose, Packets},
     system::player_join_world::send_keep_alive,
 };
 
 #[instrument(skip_all, level = "trace")]
 pub fn keep_alive(
-    gametick: ReceiverMut<Gametick>,
+    _: Receiver<Gametick>,
     global: Single<&Global>,
-    mut io: Single<&mut IoBufs>,
     mut fetcher: Fetcher<(EntityId, &mut KeepAlive, &mut Packets)>,
     mut s: Sender<KickPlayer>,
-    mut compressor: Single<&mut net::Compressor>,
+    compose: Compose,
 ) {
-    let mut gametick = gametick.event;
-
-    #[expect(clippy::mut_mut, reason = "I do not know a way around this")]
-    let scratch = &mut gametick.scratch;
-    let compressor = compressor.one();
-
     fetcher.iter_mut().for_each(|(id, keep_alive, packets)| {
         let Some(sent) = &mut keep_alive.last_sent else {
             keep_alive.last_sent = Some(Instant::now());
@@ -48,9 +40,7 @@ pub fn keep_alive(
         if !keep_alive.unresponded && elapsed.as_secs() >= 5 {
             *sent = Instant::now();
 
-            // todo: handle and disconnect
-            let scratch = scratch.one();
-            send_keep_alive(packets, io.one(), scratch, compressor).unwrap();
+            send_keep_alive(packets, &compose).unwrap();
 
             trace!("keep alive");
         }

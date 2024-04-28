@@ -4,8 +4,8 @@ use valence_protocol::VarInt;
 
 use crate::{
     components::{Npc, Player},
-    event::{KillAllEntities, Scratch},
-    net::{Broadcast, Compressor, IoBufs},
+    event::KillAllEntities,
+    net::{Broadcast, Compose},
 };
 
 #[instrument(skip_all)]
@@ -13,9 +13,8 @@ pub fn kill_all(
     _r: ReceiverMut<KillAllEntities>,
     entities: Fetcher<(EntityId, &Npc, Not<&Player>)>,
     broadcast: Single<&Broadcast>,
-    mut io: Single<&mut IoBufs>,
-    mut compressor: Single<&mut Compressor>,
     mut s: Sender<Despawn>,
+    compose: Compose,
 ) {
     let ids = entities.iter().map(|(id, ..)| id).collect::<Vec<_>>();
 
@@ -25,10 +24,7 @@ pub fn kill_all(
     let despawn_packet = valence_protocol::packets::play::EntitiesDestroyS2c { entity_ids };
 
     // todo: use shared scratch if possible
-    let mut scratch = Scratch::new();
-    broadcast
-        .append(&despawn_packet, io.one(), &mut scratch, compressor.one())
-        .unwrap();
+    broadcast.append(&despawn_packet, &compose).unwrap();
 
     for id in ids {
         s.send(Despawn(id));

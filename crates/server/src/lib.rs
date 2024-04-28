@@ -10,6 +10,8 @@
 #![feature(core_io_borrowed_buf)]
 #![feature(maybe_uninit_slice)]
 #![expect(clippy::type_complexity, reason = "evenio uses a lot of complex types")]
+// todo: we could remove this
+#![feature(anonymous_lifetime_in_impl_trait)]
 
 pub use evenio;
 
@@ -39,9 +41,9 @@ pub use valence_server;
 
 use crate::{
     components::Vitals,
-    event::{BumpScratch, Egress, Gametick, Stats},
+    event::{BumpScratch, Egress, Gametick, Scratches, Stats},
     global::Global,
-    net::{Broadcast, Compressor, IoBufs, Server, ServerDef},
+    net::{Broadcast, Compressors, IoBufs, Server, ServerDef},
     singleton::{
         fd_lookup::FdLookup, player_aabb_lookup::PlayerBoundingBoxes,
         player_id_lookup::EntityIdLookup, player_uuid_lookup::PlayerUuidLookup,
@@ -182,7 +184,7 @@ impl Game {
         handlers(&mut world);
 
         let compressor_id = world.spawn();
-        world.insert(compressor_id, Compressor::new(shared.compression_level));
+        world.insert(compressor_id, Compressors::new(shared.compression_level));
 
         let mut server_def = Server::new(address)?;
 
@@ -233,6 +235,9 @@ impl Game {
 
         let global = world.spawn();
         world.insert(global, Global::new(shared.clone()));
+
+        let scratches = world.spawn();
+        world.insert(scratches, Scratches::default());
 
         let bounding_boxes = world.spawn();
         world.insert(bounding_boxes, bounding_box::EntityBoundingBoxes::default());

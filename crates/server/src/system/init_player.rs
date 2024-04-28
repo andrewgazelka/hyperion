@@ -11,8 +11,8 @@ use crate::{
         AiTargetable, EntityReaction, FullEntityPose, ImmuneStatus, InGameName, KeepAlive, Player,
         Uuid, Vitals,
     },
-    event::{PlayerInit, PlayerJoinWorld, Scratch},
-    net::{Compressor, IoBufs, Packets},
+    event::{PlayerInit, PlayerJoinWorld},
+    net::{Compose, Packets},
     system::sync_entity_position::PositionSyncMetadata,
     tracker::Prev,
 };
@@ -30,8 +30,7 @@ fn offline_uuid(username: &str) -> anyhow::Result<uuid::Uuid> {
 #[instrument(skip_all)]
 pub fn init_player(
     r: ReceiverMut<PlayerInit, &Packets>,
-    mut io: Single<&mut IoBufs>,
-    mut compressor: Single<&mut Compressor>,
+    compose: Compose,
     mut s: Sender<(
         Insert<FullEntityPose>,
         Insert<PositionSyncMetadata>,
@@ -66,10 +65,7 @@ pub fn init_player(
 
     let packets = r.query;
 
-    let mut scratch = Scratch::new();
-    packets
-        .append(&pkt, io.one(), &mut scratch, compressor.one())
-        .unwrap();
+    packets.append(&pkt, &compose).unwrap();
 
     info!("PlayerInit: {username}");
 

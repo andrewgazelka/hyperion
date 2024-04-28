@@ -3,16 +3,15 @@ use tracing::instrument;
 use valence_protocol::{packets::play, Hand, VarInt};
 
 use crate::{
-    event::{Scratch, SwingArm},
-    net::{Broadcast, Compressor, IoBufs},
+    event::SwingArm,
+    net::{Broadcast, Compose},
 };
 
 #[instrument(skip_all, level = "trace")]
 pub fn pkt_hand_swing(
     swing_arm: Receiver<SwingArm, EntityId>,
     broadcast: Single<&mut Broadcast>,
-    mut io: Single<&mut IoBufs>,
-    mut compressor: Single<&mut Compressor>,
+    compose: Compose,
 ) {
     let entity_id = swing_arm.query;
     let entity_id = VarInt(entity_id.index().0 as i32);
@@ -28,8 +27,5 @@ pub fn pkt_hand_swing(
         animation,
     };
 
-    let mut scratch = Scratch::new();
-    broadcast
-        .append(&pkt, io.one(), &mut scratch, compressor.one())
-        .unwrap();
+    broadcast.append(&pkt, &compose).unwrap();
 }

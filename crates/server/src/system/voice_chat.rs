@@ -8,8 +8,7 @@ use evenio::{
 
 use crate::{
     components::{Player, Uuid},
-    event::Scratch,
-    net::Packets,
+    net::{Compose, Packets},
     packets::voicechat::{Codec, Msg},
 };
 
@@ -44,8 +43,7 @@ pub struct PlayerQuery<'a> {
 pub fn voice_chat(
     r: Receiver<InitVoiceChat, PlayerQuery>,
     global: Single<&VoiceChatGlobal>,
-    mut io: Single<&mut crate::net::IoBufs>,
-    mut compressor: Single<&mut crate::net::Compressor>,
+    compose: Compose,
 ) {
     let PlayerQuery { packets, uuid, .. } = r.query;
 
@@ -66,10 +64,5 @@ pub fn voice_chat(
     }
     .to_plugin_message();
 
-    let mut scratch = Scratch::new();
-    let compressor = compressor.one();
-
-    packets
-        .append(&pkt, io.one(), &mut scratch, compressor)
-        .unwrap();
+    packets.append(&pkt, &compose).unwrap();
 }

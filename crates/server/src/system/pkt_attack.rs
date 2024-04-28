@@ -4,8 +4,8 @@ use valence_protocol::{packets::play, VarInt};
 
 use crate::{
     components::{EntityReaction, FullEntityPose, ImmuneStatus, Player, Vitals},
-    event::{AttackEntity, Scratch},
-    net::{Broadcast, Compressor, IoBufs, Packets},
+    event::AttackEntity,
+    net::{Broadcast, Compose, Packets},
 };
 
 #[derive(Query)]
@@ -37,11 +37,7 @@ pub fn check_immunity(
 
 /// send Packet to player encoder
 #[instrument(skip_all, level = "trace")]
-pub fn pkt_attack_player(
-    mut io: Single<&mut IoBufs>,
-    attack: Receiver<AttackEntity, AttackPlayerQuery>,
-    mut compressor: Single<&mut Compressor>,
-) {
+pub fn pkt_attack_player(attack: Receiver<AttackEntity, AttackPlayerQuery>, compose: Compose) {
     let AttackPlayerQuery {
         id: entity_id,
         packets,
@@ -51,11 +47,8 @@ pub fn pkt_attack_player(
     let mut damage_broadcast = get_package(entity_id);
     // local is id 0
     damage_broadcast.entity_id = VarInt(0);
-    let mut scratch = Scratch::new();
 
-    packets
-        .append(&damage_broadcast, io.one(), &mut scratch, compressor.one())
-        .unwrap();
+    packets.append(&damage_broadcast, &compose).unwrap();
 }
 
 /// Handle Damage and knockback
@@ -64,8 +57,7 @@ pub fn pkt_attack_entity(
     global: Single<&crate::global::Global>,
     attack: Receiver<AttackEntity, AttackEntityQuery>,
     broadcast: Single<&Broadcast>,
-    mut compressor: Single<&mut Compressor>,
-    mut io: Single<&mut IoBufs>,
+    compose: Compose,
 ) {
     let AttackEntityQuery {
         id: entity_id,
@@ -77,10 +69,7 @@ pub fn pkt_attack_entity(
 
     let damage_broadcast = get_package(entity_id);
 
-    let mut scratch = Scratch::new();
-    broadcast
-        .append(&damage_broadcast, io.one(), &mut scratch, compressor.one())
-        .unwrap();
+    broadcast.append(&damage_broadcast, &compose).unwrap();
 
     let event = attack.event;
 

@@ -1,14 +1,13 @@
 use evenio::prelude::*;
 use glam::{Vec2, Vec3};
 use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
-use rayon_local::locals::RayonIterExt;
 use tracing::instrument;
 use valence_protocol::{packets::play, ByteAngle, VarInt};
 
 use crate::{
     components::{FullEntityPose, Uuid},
-    event::{Gametick, ScratchBuffer},
-    net::{Broadcast, Compressor, IoBuf, IoBufs, Packets},
+    event::Gametick,
+    net::{Broadcast, Compose, Packets},
     singleton::broadcast::{PacketMetadata, PacketNecessity},
 };
 
@@ -30,111 +29,99 @@ pub struct PositionSyncMetadata {
 
 #[instrument(skip_all, level = "trace")]
 pub fn sync_entity_position(
-    gametick: ReceiverMut<Gametick>,
+    _: Receiver<Gametick>,
     mut entities: Fetcher<EntityQuery>,
-    mut io: Single<&mut IoBufs>,
     broadcast: Single<&Broadcast>,
-    mut compressor: Single<&mut Compressor>,
+    compose: Compose,
 ) {
-    let mut gametick = gametick.event;
-    let scratch = &mut *gametick.scratch;
-
-    let io = &mut ***io;
     let broadcast = &***broadcast;
-    let compressor = &mut ***compressor;
 
-    entities
-        .par_iter_mut()
-        .with_locals((io, scratch, compressor))
-        .for_each(|(mut io, mut scratch, mut compressor, query)| {
-            let EntityQuery {
-                id,
-                uuid,
-                pose,
-                last_pose: sync_meta,
-            } = query;
-            let pos = pose.position;
-            let pitch = ByteAngle::from_degrees(pose.pitch);
-            let yaw = ByteAngle::from_degrees(pose.yaw);
+    entities.par_iter_mut().for_each(|query| {
+        let EntityQuery {
+            id,
+            uuid,
+            pose,
+            last_pose: sync_meta,
+        } = query;
+        let pos = pose.position;
+        let pitch = ByteAngle::from_degrees(pose.pitch);
+        let yaw = ByteAngle::from_degrees(pose.yaw);
 
-            let movement = if let PositionSyncMetadata {
-                last_pose: Some(last_pose),
-                rounding_error,
-                needs_resync,
-            } = sync_meta
+        let movement = if let PositionSyncMetadata {
+            last_pose: Some(last_pose),
+            rounding_error,
+            needs_resync,
+        } = sync_meta
+        {
+            // Account for past rounding errors
+            let last_pos = last_pose.position + *rounding_error;
+
+            if *needs_resync
+                || (pos.x - last_pos.x).abs() > 8.0
+                || (pos.y - last_pos.y).abs() > 8.0
+                || (pos.z - last_pos.z).abs() > 8.0
             {
-                // Account for past rounding errors
-                let last_pos = last_pose.position + *rounding_error;
-
-                if *needs_resync
-                    || (pos.x - last_pos.x).abs() > 8.0
-                    || (pos.y - last_pos.y).abs() > 8.0
-                    || (pos.z - last_pos.z).abs() > 8.0
-                {
-                    EntityMovement::Teleport { pos, pitch, yaw }
-                } else {
-                    #[expect(clippy::float_cmp, reason = "Change detection")]
-                    let (position, rotation) = {
-                        let position = last_pose.position != pose.position;
-                        let rotation = last_pose.yaw != pose.yaw || last_pose.pitch != pose.pitch;
-
-                        (position, rotation)
-                    };
-
-                    #[expect(
-                        clippy::suboptimal_flops,
-                        clippy::cast_lossless,
-                        reason = "Calculate it the same way as Minecraft"
-                    )]
-                    let delta = {
-                        // From wiki.vg
-                        let delta_x = (pos.x * 32.0 - last_pos.x * 32.0) * 128.0;
-                        let delta_y = (pos.y * 32.0 - last_pos.y * 32.0) * 128.0;
-                        let delta_z = (pos.z * 32.0 - last_pos.z * 32.0) * 128.0;
-                        let delta = [delta_x as i16, delta_y as i16, delta_z as i16];
-
-                        // Prevent desync due to rounding error
-                        *rounding_error = Vec3::new(
-                            (delta_x / 128.0 - delta[0] as f32 / 128.0) / 32.0,
-                            (delta_y / 128.0 - delta[1] as f32 / 128.0) / 32.0,
-                            (delta_z / 128.0 - delta[2] as f32 / 128.0) / 32.0,
-                        );
-
-                        delta
-                    };
-
-                    match (position, rotation) {
-                        (true, true) => EntityMovement::PositionAndRotation { delta, pitch, yaw },
-                        (true, false) => EntityMovement::Position { delta },
-                        (false, true) => EntityMovement::Rotation { pitch, yaw },
-                        (false, false) => EntityMovement::None,
-                    }
-                }
-            } else {
                 EntityMovement::Teleport { pos, pitch, yaw }
-            };
+            } else {
+                #[expect(clippy::float_cmp, reason = "Change detection")]
+                let (position, rotation) = {
+                    let position = last_pose.position != pose.position;
+                    let rotation = last_pose.yaw != pose.yaw || last_pose.pitch != pose.pitch;
 
-            // FIXME: Relative move packets arent really dropable. Use some kind of an LOD system?
-            // FIXME: Currenly passes normal entities to excluse as well players. Is this a problem?
-            let metadata = PacketMetadata {
-                necessity: PacketNecessity::Droppable {
-                    prioritize_location: Vec2::new(pose.position.x, pose.position.y),
-                },
-                exclude_player: Some(uuid.0),
-            };
+                    (position, rotation)
+                };
 
-            let scratch = &mut *scratch;
-            let compressor = &mut *compressor;
+                #[expect(
+                    clippy::suboptimal_flops,
+                    clippy::cast_lossless,
+                    reason = "Calculate it the same way as Minecraft"
+                )]
+                let delta = {
+                    // From wiki.vg
+                    let delta_x = (pos.x * 32.0 - last_pos.x * 32.0) * 128.0;
+                    let delta_y = (pos.y * 32.0 - last_pos.y * 32.0) * 128.0;
+                    let delta_z = (pos.z * 32.0 - last_pos.z * 32.0) * 128.0;
+                    let delta = [delta_x as i16, delta_y as i16, delta_z as i16];
 
-            movement.write_packets(id, broadcast, metadata, scratch, compressor, &mut io);
+                    // Prevent desync due to rounding error
+                    *rounding_error = Vec3::new(
+                        (delta_x / 128.0 - delta[0] as f32 / 128.0) / 32.0,
+                        (delta_y / 128.0 - delta[1] as f32 / 128.0) / 32.0,
+                        (delta_z / 128.0 - delta[2] as f32 / 128.0) / 32.0,
+                    );
 
-            if let EntityMovement::Teleport { .. } = movement {
-                sync_meta.rounding_error = Vec3::ZERO;
-                sync_meta.needs_resync = false;
+                    delta
+                };
+
+                match (position, rotation) {
+                    (true, true) => EntityMovement::PositionAndRotation { delta, pitch, yaw },
+                    (true, false) => EntityMovement::Position { delta },
+                    (false, true) => EntityMovement::Rotation { pitch, yaw },
+                    (false, false) => EntityMovement::None,
+                }
             }
+        } else {
+            EntityMovement::Teleport { pos, pitch, yaw }
+        };
 
-            sync_meta.last_pose = Some(*pose);
-        });
+        // FIXME: Relative move packets arent really dropable. Use some kind of an LOD system?
+        // FIXME: Currenly passes normal entities to excluse as well players. Is this a problem?
+        let metadata = PacketMetadata {
+            necessity: PacketNecessity::Droppable {
+                prioritize_location: Vec2::new(pose.position.x, pose.position.y),
+            },
+            exclude_player: Some(uuid.0),
+        };
+
+        movement.write_packets(id, broadcast, metadata, &compose);
+
+        if let EntityMovement::Teleport { .. } = movement {
+            sync_meta.rounding_error = Vec3::ZERO;
+            sync_meta.needs_resync = false;
+        }
+
+        sync_meta.last_pose = Some(*pose);
+    });
 }
 
 pub enum EntityMovement {
@@ -164,9 +151,7 @@ impl EntityMovement {
         id: EntityId,
         broadcast: &Packets,
         _metadata: PacketMetadata,
-        scratch: &mut impl ScratchBuffer,
-        compressor: &mut libdeflater::Compressor,
-        io: &mut IoBuf,
+        compose: &Compose,
     ) {
         #[expect(
             clippy::cast_possible_wrap,
@@ -191,8 +176,8 @@ impl EntityMovement {
                     head_yaw: yaw,
                 };
 
-                broadcast.append(&pos, io, scratch, compressor).unwrap();
-                broadcast.append(&look, io, scratch, compressor).unwrap();
+                broadcast.append(&pos, compose).unwrap();
+                broadcast.append(&look, compose).unwrap();
             }
             Self::Position { delta } => {
                 let pos = play::MoveRelativeS2c {
@@ -201,7 +186,7 @@ impl EntityMovement {
                     on_ground: false,
                 };
 
-                broadcast.append(&pos, io, scratch, compressor).unwrap();
+                broadcast.append(&pos, compose).unwrap();
             }
             Self::Rotation { pitch, yaw } => {
                 let pos = play::RotateS2c {
@@ -216,8 +201,8 @@ impl EntityMovement {
                     head_yaw: yaw,
                 };
 
-                broadcast.append(&pos, io, scratch, compressor).unwrap();
-                broadcast.append(&look, io, scratch, compressor).unwrap();
+                broadcast.append(&pos, compose).unwrap();
+                broadcast.append(&look, compose).unwrap();
             }
             Self::Teleport { pos, pitch, yaw } => {
                 let pos = play::EntityPositionS2c {
@@ -233,8 +218,8 @@ impl EntityMovement {
                     head_yaw: yaw,
                 };
 
-                broadcast.append(&pos, io, scratch, compressor).unwrap();
-                broadcast.append(&look, io, scratch, compressor).unwrap();
+                broadcast.append(&pos, compose).unwrap();
+                broadcast.append(&look, compose).unwrap();
             }
             Self::None => {}
         }

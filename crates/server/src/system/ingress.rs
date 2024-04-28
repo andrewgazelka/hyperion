@@ -224,6 +224,7 @@ pub fn recv_data(
         match *login_state {
             LoginState::Handshake => process_handshake(login_state, &frame).unwrap(),
             LoginState::Status => {
+                let io = io.get_mut();
                 process_status(login_state, &frame, packets, io).unwrap();
             }
             LoginState::Terminate => {
@@ -235,6 +236,7 @@ pub fn recv_data(
                 sender.despawn(id);
             }
             LoginState::Login => {
+                let io = io.get_mut();
                 process_login(
                     id,
                     login_state,

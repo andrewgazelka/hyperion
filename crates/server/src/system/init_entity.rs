@@ -12,8 +12,8 @@ use crate::{
     components::{
         Display, EntityReaction, FullEntityPose, ImmuneStatus, Npc, RunningSpeed, Uuid, Vitals,
     },
-    event::{InitEntity, Scratch},
-    net::{Broadcast, Compressor, IoBufs},
+    event::InitEntity,
+    net::{Broadcast, Compose},
     singleton::player_id_lookup::EntityIdLookup,
     system::sync_entity_position::PositionSyncMetadata,
 };
@@ -56,9 +56,8 @@ pub fn init_entity(
         Insert<Display>,
         Spawn,
     )>,
-    mut io: Single<&mut IoBufs>,
     broadcast: Single<&Broadcast>,
-    mut compressor: Single<&mut Compressor>,
+    compose: Compose,
 ) {
     let event = r.event;
 
@@ -83,10 +82,7 @@ pub fn init_entity(
     let pkt = spawn_entity_packet(id, EntityKind::ZOMBIE, uuid, &pose);
 
     // todo: use shared scratch if possible
-    let mut scratch = Scratch::new();
-    broadcast
-        .append(&pkt, io.one(), &mut scratch, compressor.one())
-        .unwrap();
+    broadcast.append(&pkt, &compose).unwrap();
 }
 
 fn generate_running_speed() -> RunningSpeed {

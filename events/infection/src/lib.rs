@@ -1,4 +1,5 @@
 #![feature(lint_reasons)]
+#![feature(allocator_api)]
 
 use server::{valence_server::protocol::anyhow, Game};
 

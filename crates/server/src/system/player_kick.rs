@@ -9,9 +9,9 @@ use valence_protocol::{
 
 use crate::{
     components::Uuid,
-    event::{KickPlayer, Scratch},
+    event::KickPlayer,
     global::Global,
-    net::{Compressor, IoBufs, Packets},
+    net::{Compose, Packets},
     singleton::{player_id_lookup::EntityIdLookup, player_uuid_lookup::PlayerUuidLookup},
 };
 
@@ -20,9 +20,8 @@ pub fn player_kick(
     r: Receiver<KickPlayer, (EntityId, &Uuid, &mut Packets)>,
     global: Single<&Global>,
     mut uuid_lookup: Single<&mut PlayerUuidLookup>,
-    mut io: Single<&mut IoBufs>,
     mut id_lookup: Single<&mut EntityIdLookup>,
-    mut compressor: Single<&mut Compressor>,
+    send_info: Compose,
     mut s: Sender<Despawn>,
 ) {
     let (id, uuid, packets) = r.query;
@@ -36,15 +35,12 @@ pub fn player_kick(
     let reason = reason.into_text().color(Color::RED);
 
     // todo: remove
-    let mut scratch = Scratch::new();
     packets
         .append(
             &play::DisconnectS2c {
                 reason: reason.into(),
             },
-            io.one(),
-            &mut scratch,
-            compressor.one(),
+            &send_info,
         )
         .unwrap();
 

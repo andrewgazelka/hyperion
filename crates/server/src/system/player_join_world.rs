@@ -3,7 +3,6 @@ use std::{borrow::Cow, collections::BTreeSet, io::Write};
 use anyhow::{bail, Context};
 use evenio::prelude::*;
 use itertools::Itertools;
-use libdeflater::Compressor;
 use serde::Deserialize;
 use tracing::{debug, error, info, instrument, warn};
 use valence_nbt::{value::ValueRef, Value};
@@ -37,10 +36,9 @@ use crate::{
     chunk::heightmap,
     components::{Display, FullEntityPose, InGameName, Player, Uuid, PLAYER_SPAWN_POSITION},
     config,
-    event::{PlayerJoinWorld, Scratch, ScratchBuffer},
+    event::PlayerJoinWorld,
     global::Global,
-    net,
-    net::{Broadcast, IoBuf, IoBufs, Packets},
+    net::{Broadcast, Compose, Packets},
     singleton::{player_id_lookup::EntityIdLookup, player_uuid_lookup::PlayerUuidLookup},
     system::init_entity::spawn_entity_packet,
 };
@@ -83,13 +81,9 @@ pub fn player_join_world(
     mut uuid_lookup: Single<&mut PlayerUuidLookup>,
     mut id_lookup: Single<&mut EntityIdLookup>,
     broadcast: Single<&Broadcast>,
-    mut io: Single<&mut IoBufs>,
-    mut compressor: Single<&mut net::Compressor>,
+    compose: Compose,
 ) {
     static CACHED_DATA: once_cell::sync::OnceCell<bytes::Bytes> = once_cell::sync::OnceCell::new();
-
-    // todo: remove
-    let mut scratch = Scratch::new();
 
     let compression_level = global.0.shared.compression_threshold;
 
@@ -163,17 +157,14 @@ pub fn player_join_world(
         overlay: false,
     };
 
-    let compressor = compressor.one();
-
-    let io = io.one();
-
-    broadcast
-        .append(&text, io, &mut scratch, compressor)
-        .unwrap();
+    broadcast.append(&text, &compose).unwrap();
 
     let local = query.packets;
-
-    local.append_raw(cached_data, io);
+    {
+        let mut buf = compose.bufs.get_local().borrow_mut();
+        let buf = &mut *buf;
+        local.append_raw(cached_data, buf);
+    }
 
     info!("appending cached data");
 
@@ -183,9 +174,7 @@ pub fn player_join_world(
                 entity_id: VarInt(0),
                 equipment: Cow::Borrowed(&equipment),
             },
-            io,
-            &mut scratch,
-            compressor,
+            &compose,
         )
         .unwrap();
 
@@ -199,14 +188,12 @@ pub fn player_join_world(
         entries: Cow::Borrowed(entries),
     };
 
-    broadcast
-        .append(&info, io, &mut scratch, compressor)
-        .unwrap();
+    broadcast.append(&info, &compose).unwrap();
 
     for entity in entities {
         // todo: handle player?
         let pkt = spawn_entity_packet(entity.id, entity.skin.0, *entity.uuid, entity.pose);
-        local.append(&pkt, io, &mut scratch, compressor).unwrap();
+        local.append(&pkt, &compose).unwrap();
     }
 
     // todo: cache
@@ -237,9 +224,7 @@ pub fn player_join_world(
                     entities: player_names,
                 },
             },
-            io,
-            &mut scratch,
-            compressor,
+            &compose,
         )
         .unwrap();
 
@@ -253,9 +238,7 @@ pub fn player_join_world(
                     entities: vec![current_name],
                 },
             },
-            io,
-            &mut scratch,
-            compressor,
+            &compose,
         )
         .unwrap();
 
@@ -265,9 +248,7 @@ pub fn player_join_world(
                 actions,
                 entries: Cow::Owned(entries),
             },
-            io,
-            &mut scratch,
-            compressor,
+            &compose,
         )
         .unwrap();
 
@@ -280,9 +261,7 @@ pub fn player_join_world(
                 world_age: tick,
                 time_of_day,
             },
-            io,
-            &mut scratch,
-            compressor,
+            &compose,
         )
         .unwrap();
 
@@ -302,13 +281,13 @@ pub fn player_join_world(
             pitch: ByteAngle::from_degrees(pose.pitch),
         };
 
-        local.append(&pkt, io, &mut scratch, compressor).unwrap();
+        local.append(&pkt, &compose).unwrap();
 
         let pkt = crate::packets::vanilla::EntityEquipmentUpdateS2c {
             entity_id,
             equipment: Cow::Borrowed(&equipment),
         };
-        local.append(&pkt, io, &mut scratch, compressor).unwrap();
+        local.append(&pkt, &compose).unwrap();
     }
 
     global
@@ -334,15 +313,11 @@ pub fn player_join_world(
                 flags: PlayerPositionLookFlags::default(),
                 teleport_id: 1.into(),
             },
-            io,
-            &mut scratch,
-            compressor,
+            &compose,
         )
         .unwrap();
 
-    broadcast
-        .append(&spawn_player, io, &mut scratch, compressor)
-        .unwrap();
+    broadcast.append(&spawn_player, &compose).unwrap();
 
     broadcast
         .append(
@@ -350,9 +325,7 @@ pub fn player_join_world(
                 entity_id: current_entity_id,
                 equipment: Cow::Borrowed(&equipment),
             },
-            io,
-            &mut scratch,
-            compressor,
+            &compose,
         )
         .unwrap();
 
@@ -406,18 +379,13 @@ impl<T, const N: usize> Array3d for [T; N] {
     }
 }
 
-pub fn send_keep_alive(
-    packets: &Packets,
-    io: &mut IoBuf,
-    scratch: &mut impl ScratchBuffer,
-    compressor: &mut Compressor,
-) -> anyhow::Result<()> {
+pub fn send_keep_alive(packets: &Packets, compose: &Compose) -> anyhow::Result<()> {
     let pkt = play::KeepAliveS2c {
         // The ID can be set to zero because it doesn't matter
         id: 0,
     };
 
-    packets.append(&pkt, io, scratch, compressor)?;
+    packets.append(&pkt, compose)?;
 
     Ok(())
 }
