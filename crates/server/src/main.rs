@@ -43,6 +43,8 @@ fn init() -> anyhow::Result<()> {
         .build_global()
         .context("failed to build thread pool")?;
 
+    // Denormals (numbers very close to 0) are flushed to zero because doing computations on them
+    // is slow.
     no_denormals::no_denormals(|| {
         let mut game = Game::init(default_address)?;
         game.game_loop();
