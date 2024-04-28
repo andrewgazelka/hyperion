@@ -223,7 +223,7 @@ skip = [
     "toml_edit",
     "winnow",
     "derive_more",
-    "generator" # TODO THIS SHOULD BE FIXED
+    "redox_syscall",
     #{ crate = "ansi_term@0.11.0", reason = "you can specify a reason why it can't be updated/removed" },
 ]
 # Similarly to `skip` allows you to skip certain crates during duplicate
