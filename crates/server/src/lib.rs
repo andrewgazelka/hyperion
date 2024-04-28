@@ -222,6 +222,7 @@ impl Game {
         world.add_handler(system::disguise_player);
         world.add_handler(system::teleport);
         world.add_handler(system::shoved_reaction);
+        world.add_handler(system::pose_update);
 
         world.add_handler(system::pkt_hand_swing);
 

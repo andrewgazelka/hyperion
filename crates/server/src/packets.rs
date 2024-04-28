@@ -11,24 +11,25 @@
 
 use std::str::FromStr;
 
-use anyhow::{bail, ensure};
-use bvh::aabb::Aabb;
+use anyhow::ensure;
 use evenio::{entity::EntityId, query::Query};
 use valence_protocol::{
     decode::PacketFrame,
     math::Vec3,
     packets::{
         play,
-        play::{player_action_c2s::PlayerAction, player_interact_entity_c2s::EntityInteraction},
+        play::{
+            client_command_c2s::ClientCommand, player_action_c2s::PlayerAction,
+            player_interact_entity_c2s::EntityInteraction,
+        },
     },
     Decode, Packet,
 };
-use valence_server::entity::EntityKind;
 
 use crate::{
     components::{FullEntityPose, ImmuneStatus, KeepAlive, Vitals},
     event,
-    event::{AttackEntity, AttackType, InitEntity, KillAllEntities, SwingArm},
+    event::{AttackEntity, AttackType, Pose, SwingArm},
     global::Global,
     singleton::player_id_lookup::EntityIdLookup,
     system::ingress::IngressSender,
@@ -291,6 +292,35 @@ fn player_action(
     Ok(())
 }
 
+// for sneaking
+fn client_command(
+    mut data: &[u8],
+    sender: &mut IngressSender,
+    query: &PacketSwitchQuery,
+) -> anyhow::Result<()> {
+    let packet = play::ClientCommandC2s::decode(&mut data)?;
+
+    let id = query.id;
+
+    match packet.action {
+        ClientCommand::StartSneaking => {
+            sender.send(event::PoseUpdate {
+                target: id,
+                state: Pose::Sneaking,
+            });
+        }
+        ClientCommand::StopSneaking => {
+            sender.send(event::PoseUpdate {
+                target: id,
+                state: Pose::Standing,
+            });
+        }
+        _ => {}
+    }
+
+    Ok(())
+}
+
 pub fn switch(
     raw: PacketFrame,
     global: &Global,
@@ -306,6 +336,7 @@ pub fn switch(
         play::HandSwingC2s::ID => hand_swing(data, query, sender)?,
         play::TeleportConfirmC2s::ID => confirm_teleport(data),
         play::PlayerInteractBlockC2s::ID => player_interact_block(data, id_lookup, sender)?,
+        play::ClientCommandC2s::ID => client_command(data, sender, query)?,
         // play::ClientSettingsC2s::ID => client_settings(data, player)?,
         // play::CustomPayloadC2s::ID => custom_payload(data),
         play::FullC2s::ID => full(data, query.pose)?,
