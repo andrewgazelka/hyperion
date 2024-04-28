@@ -44,13 +44,12 @@ pub type IngressSender<'a> = Sender<
         event::PlayerInit,
         event::KickPlayer,
         event::InitEntity,
-        // event::KillAllEntities,
         event::SwingArm,
         event::AttackEntity,
         event::BlockStartBreak,
         event::BlockAbortBreak,
         event::BlockFinishBreak,
-        event::Command,
+        (event::Command, event::PoseUpdate),
     ),
 >;
 
