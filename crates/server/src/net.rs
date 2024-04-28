@@ -185,6 +185,7 @@ pub struct Compressors {
 }
 
 impl Compressors {
+    #[must_use]
     pub fn new(level: CompressionLvl) -> Self {
         Self {
             compressors: RayonLocal::init(|| libdeflater::Compressor::new(level).into()),
@@ -211,6 +212,7 @@ impl IoBufs {
 }
 
 impl IoBuf {
+    #[must_use]
     pub fn new(threshold: CompressionThreshold, index: usize) -> Self {
         Self {
             enc: encoder::PacketEncoder::new(threshold),
@@ -219,6 +221,7 @@ impl IoBuf {
         }
     }
 
+    #[must_use]
     pub const fn index(&self) -> usize {
         self.index
     }
@@ -260,7 +263,7 @@ impl Packets {
         &mut self.to_write
     }
 
-    pub fn can_send(&self) -> bool {
+    #[must_use] pub fn can_send(&self) -> bool {
         if self.number_sending != 0 {
             return false;
         }

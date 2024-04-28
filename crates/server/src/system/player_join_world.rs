@@ -21,8 +21,8 @@ use valence_protocol::{
         },
     },
     text::IntoText,
-    BlockPos, BlockState, ByteAngle, ChunkPos, Encode, FixedArray, GameMode, Ident, ItemKind,
-    ItemStack, PacketEncoder, VarInt,
+    BlockState, ByteAngle, ChunkPos, Encode, FixedArray, GameMode, Ident, ItemKind, ItemStack,
+    PacketEncoder, VarInt,
 };
 use valence_registry::{
     biome::{Biome, BiomeEffects},
@@ -396,11 +396,7 @@ fn registry_codec_raw() -> anyhow::Result<Compound> {
     Ok(compound)
 }
 
-pub fn send_game_join_packet(encoder: &mut PacketEncoder) -> anyhow::Result<BiomeRegistry> {
-    // recv ack
-
-    let codec = RegistryCodec::default();
-
+pub fn generate_biome_registry() -> anyhow::Result<BiomeRegistry> {
     let registry_codec = registry_codec_raw()?;
 
     // minecraft:worldgen/biome
@@ -424,13 +420,6 @@ pub fn send_game_join_packet(encoder: &mut PacketEncoder) -> anyhow::Result<Biom
         let ValueRef::Compound(biome) = biome else {
             bail!("expected biome to be compound");
         };
-
-        // let id = biome.get("id").context("expected biome to have id")?;
-        // let Value::Int(id) = id else {
-        //     bail!("expected biome id to be int");
-        // };
-
-        // let id = BiomeId::from_index(*id as usize);
 
         let name = biome.get("name").context("expected biome to have name")?;
         let Value::String(name) = name else {
@@ -490,6 +479,15 @@ pub fn send_game_join_packet(encoder: &mut PacketEncoder) -> anyhow::Result<Biom
         biome_registry.insert(ident, biome);
     }
 
+    Ok(biome_registry)
+}
+
+pub fn send_game_join_packet(encoder: &mut PacketEncoder) -> anyhow::Result<()> {
+    // recv ack
+
+    let registry_codec = registry_codec_raw()?;
+    let codec = RegistryCodec::default();
+
     let dimension_names: BTreeSet<Ident<Cow<str>>> = codec
         .registry(BiomeRegistry::KEY)
         .iter()
@@ -522,7 +520,7 @@ pub fn send_game_join_packet(encoder: &mut PacketEncoder) -> anyhow::Result<Biom
 
     encoder.append_packet(&pkt)?;
 
-    Ok(biome_registry)
+    Ok(())
 }
 
 fn send_commands(encoder: &mut PacketEncoder) -> anyhow::Result<()> {
@@ -676,7 +674,7 @@ fn send_sync_tags(encoder: &mut PacketEncoder) -> anyhow::Result<()> {
 }
 
 fn inner(encoder: &mut PacketEncoder) -> anyhow::Result<()> {
-    let biome_registry = send_game_join_packet(encoder)?;
+    send_game_join_packet(encoder)?;
     send_sync_tags(encoder)?;
 
     let center_chunk = PLAYER_SPAWN_POSITION.as_ivec3() / 16;
@@ -687,6 +685,7 @@ fn inner(encoder: &mut PacketEncoder) -> anyhow::Result<()> {
         chunk_z: center_chunk.z.into(),
     })?;
 
+    let biome_registry = generate_biome_registry()?;
     let mut anvil = AnvilFolder::new(&biome_registry).context("failed to get anvil data")?;
 
     for x in -16..16 {
@@ -702,7 +701,7 @@ fn inner(encoder: &mut PacketEncoder) -> anyhow::Result<()> {
     send_commands(encoder)?;
 
     encoder.append_packet(&play::PlayerSpawnPositionS2c {
-        position: BlockPos::default(),
+        position: PLAYER_SPAWN_POSITION.as_dvec3().into(),
         angle: 3.0,
     })?;
 

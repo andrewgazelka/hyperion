@@ -30,6 +30,7 @@ mod teleport;
 mod update_health;
 mod update_time;
 mod voice_chat;
+mod set_player_skin;
 
 pub use block_update::block_update;
 pub use chat_message::chat_message;
@@ -37,6 +38,7 @@ pub use disguise_player::disguise_player;
 pub use egress::egress;
 pub use entity_detect_collisions::entity_detect_collisions;
 pub use entity_move_logic::entity_move_logic;
+pub use set_player_skin::set_player_skin;
 pub use generate_egress_packets::generate_egress_packets;
 pub use ingress::generate_ingress_events;
 pub use init_entity::init_entity;

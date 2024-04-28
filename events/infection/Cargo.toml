@@ -10,8 +10,11 @@ publish = false
 anyhow = "1.0.82"
 evenio.workspace = true
 fastrand = "2.0.2"
+serde_json = "1.0.116"
 server.workspace = true
+tokio = { version = "1.37.0", features = ["full"] }
 tracing = "0.1.40"
+tracing-subscriber = "0.3.18"
 
 [lints.clippy]
 complexity = "deny"

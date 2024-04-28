@@ -15,6 +15,7 @@ use server::{
     },
     event,
     event::Shoved,
+    util::player_skin::PlayerSkin,
     valence_server::{
         entity::EntityKind,
         text::{Color, IntoText},
@@ -85,7 +86,11 @@ pub fn respawn_on_death(
 
 pub fn zombie_command(
     r: ReceiverMut<event::Command, (EntityId, &mut Team)>,
-    mut s: Sender<(event::DisguisePlayer, event::ChatMessage)>,
+    mut s: Sender<(
+        event::DisguisePlayer,
+        event::ChatMessage,
+        event::SetPlayerSkin,
+    )>,
 ) {
     // todo: permissions
     let raw = &r.event.raw;
@@ -102,6 +107,14 @@ pub fn zombie_command(
     s.send(event::ChatMessage {
         target,
         message: Text::text("Turning into zombie"),
+    });
+
+    let zombie_skin = include_bytes!("zombie_skin.json");
+    let zombie_skin: PlayerSkin = serde_json::from_slice(zombie_skin).unwrap();
+
+    s.send(event::SetPlayerSkin {
+        target,
+        skin: zombie_skin,
     });
 
     s.send(event::DisguisePlayer {
