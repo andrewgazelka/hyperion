@@ -130,8 +130,6 @@ pub struct Stats<'a, 'b> {
     pub scratch: &'b mut BumpScratch<'a>,
 }
 
-
-
 // todo: naming? this seems bad
 #[derive(Debug)]
 pub struct Scratch<A: Allocator = std::alloc::Global> {
