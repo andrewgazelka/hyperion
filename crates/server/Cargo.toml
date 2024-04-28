@@ -70,6 +70,8 @@ mio = { version = "0.8.11", features = ["net", "os-poll"] }
 rayon-local = { version = "0.1.0", path = "../rayon-local" }
 dirs-next = "2.0.0"
 fastrand = "2.0.2"
+reqwest = "0.12.4"
+tokio = { version = "1.37.0", features = ["full"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 io-uring = { git = "https://github.com/andrewgazelka/io-uring", branch = "feat-more-fixed-derive" }

@@ -16,6 +16,7 @@ pub struct PacketDecoder {
 
 impl PacketDecoder {
     #[allow(dead_code, reason = "this might be used in the future")]
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
@@ -126,7 +127,7 @@ impl PacketDecoder {
         }))
     }
 
-    #[expect(dead_code, reason = "this might be used in the future")]
+    #[must_use]
     pub const fn compression(&self) -> CompressionThreshold {
         self.threshold
     }
@@ -135,7 +136,6 @@ impl PacketDecoder {
         self.threshold = threshold;
     }
 
-    #[expect(dead_code, reason = "this might be used in the future")]
     pub fn queue_bytes(&mut self, bytes: BytesMut) {
         self.buf.unsplit(bytes);
     }
@@ -144,12 +144,10 @@ impl PacketDecoder {
         self.buf.extend_from_slice(bytes);
     }
 
-    #[expect(dead_code, reason = "this might be used in the future")]
     pub fn take_capacity(&mut self) -> BytesMut {
         self.buf.split_off(self.buf.len())
     }
 
-    #[expect(dead_code, reason = "this might be used in the future")]
     pub fn reserve(&mut self, additional: usize) {
         self.buf.reserve(additional);
     }

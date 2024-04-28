@@ -10,14 +10,14 @@
 #![feature(core_io_borrowed_buf)]
 #![feature(maybe_uninit_slice)]
 #![expect(clippy::type_complexity, reason = "evenio uses a lot of complex types")]
-// todo: we could remove this
-#![feature(anonymous_lifetime_in_impl_trait)]
 
 pub use evenio;
+pub use uuid;
 
 mod blocks;
 mod chunk;
 mod singleton;
+pub mod util;
 
 use std::{
     collections::VecDeque,
@@ -55,7 +55,7 @@ pub mod components;
 pub mod event;
 
 pub mod global;
-mod net;
+pub mod net;
 
 mod packets;
 mod system;
@@ -72,6 +72,10 @@ const MSPT_HISTORY_SIZE: usize = 100;
 /// on macOS, the soft limit for the number of open file descriptors is often 256. This is far too low
 /// to test 10k players with.
 /// This attempts to the specified `recommended_min` value.
+#[allow(
+    clippy::cognitive_complexity,
+    reason = "I have no idea why the cognitive complexity is calcualted as being high"
+)]
 pub fn adjust_file_limits(recommended_min: u64) -> std::io::Result<()> {
     let mut limits = libc::rlimit {
         rlim_cur: 0, // Initialize soft limit to 0
@@ -216,6 +220,7 @@ impl Game {
         world.add_handler(system::check_immunity);
         world.add_handler(system::pkt_attack_player);
         world.add_handler(system::pkt_attack_entity);
+        world.add_handler(system::set_player_skin);
 
         world.add_handler(system::block_update);
         world.add_handler(system::chat_message);
