@@ -629,7 +629,15 @@ fn encode_chunk_packet(
     let chunk = anvil_folder.dim.get_chunk(location);
 
     let Ok(chunk) = chunk else {
-        error!("failed to get chunk at {location:?}");
+        let path = anvil_folder.folder_path.display();
+
+        let chunk_location = glam::IVec2::new(location.x, location.z);
+        let game_location = chunk_location << 4;
+
+        error!(
+            "failed to get chunk at chunk location {chunk_location} ... is the world {path} \
+             loaded there? This is the same as the normal location {game_location}."
+        );
         return Ok(());
     };
 

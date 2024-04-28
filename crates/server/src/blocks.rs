@@ -8,6 +8,7 @@ use valence_registry::BiomeRegistry;
 #[derive(Debug)]
 pub struct AnvilFolder {
     pub dim: DimensionFolder,
+    pub folder_path: PathBuf,
 }
 
 fn dot_minecraft_path() -> anyhow::Result<PathBuf> {
@@ -58,9 +59,12 @@ impl AnvilFolder {
         let latest_save = get_latest_save()?;
         info!("loading world from {latest_save:?}");
         // todo: probs not true
-        let dim = DimensionFolder::new(latest_save, biomes);
+        let dim = DimensionFolder::new(latest_save.clone(), biomes);
 
-        Ok(Self { dim })
+        Ok(Self {
+            dim,
+            folder_path: latest_save,
+        })
     }
 }
 
