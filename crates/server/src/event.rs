@@ -13,8 +13,8 @@ use valence_text::Text;
 use crate::{
     components::FullEntityPose,
     net::{Server, MAX_PACKET_SIZE},
+    util::player_skin::PlayerSkin,
 };
-use crate::util::player_skin::PlayerSkin;
 
 /// Initialize a Minecraft entity (like a zombie) with a given pose.
 #[derive(Event)]

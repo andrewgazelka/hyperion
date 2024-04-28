@@ -263,7 +263,8 @@ impl Packets {
         &mut self.to_write
     }
 
-    #[must_use] pub fn can_send(&self) -> bool {
+    #[must_use]
+    pub fn can_send(&self) -> bool {
         if self.number_sending != 0 {
             return false;
         }

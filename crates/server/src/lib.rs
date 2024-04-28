@@ -72,7 +72,10 @@ const MSPT_HISTORY_SIZE: usize = 100;
 /// on macOS, the soft limit for the number of open file descriptors is often 256. This is far too low
 /// to test 10k players with.
 /// This attempts to the specified `recommended_min` value.
-#[allow(clippy::cognitive_complexity, reason = "I have no idea why the cognitive complexity is calcualted as being high")]
+#[allow(
+    clippy::cognitive_complexity,
+    reason = "I have no idea why the cognitive complexity is calcualted as being high"
+)]
 pub fn adjust_file_limits(recommended_min: u64) -> std::io::Result<()> {
     let mut limits = libc::rlimit {
         rlim_cur: 0, // Initialize soft limit to 0
