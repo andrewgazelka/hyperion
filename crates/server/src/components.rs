@@ -187,7 +187,7 @@ pub struct LastSentChunk {
     pub chunk: ChunkPos,
 }
 
-pub const PLAYER_SPAWN_POSITION: Vec3 = Vec3::new(-656.0, 18.0, -1695.0);
+pub const PLAYER_SPAWN_POSITION: Vec3 = Vec3::new(-464.0, -16.0, -60.0);
 
 impl FullEntityPose {
     #[must_use]
