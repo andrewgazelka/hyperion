@@ -6,14 +6,10 @@ use derive_more::{Deref, DerefMut, From};
 use evenio::{fetch::Single, handler::HandlerParam, prelude::Component};
 use libc::iovec;
 use libdeflater::CompressionLvl;
-use tracing::debug;
+use tracing::{debug, info};
 use valence_protocol::CompressionThreshold;
 
-use crate::{
-    global::Global,
-    net::encoder::PacketWriteInfo,
-    singleton::ring::{Buf, Ring},
-};
+use crate::{global::Global, net::encoder::PacketWriteInfo, singleton::ring::Ring};
 
 #[cfg(target_os = "linux")]
 mod linux;
@@ -158,7 +154,7 @@ pub const MAX_PACKET_SIZE: usize = valence_protocol::MAX_PACKET_SIZE as usize;
 pub const MINECRAFT_VERSION: &str = "1.20.1";
 
 mod decoder;
-mod encoder;
+pub mod encoder;
 
 pub use decoder::PacketDecoder;
 use rayon_local::RayonLocal;
@@ -219,6 +215,15 @@ impl IoBuf {
             buf: Ring::new(S2C_BUFFER_SIZE),
             index,
         }
+    }
+
+    #[must_use]
+    pub const fn enc(&self) -> &encoder::PacketEncoder {
+        &self.enc
+    }
+
+    pub fn enc_mut(&mut self) -> &mut encoder::PacketEncoder {
+        &mut self.enc
     }
 
     #[must_use]
@@ -319,6 +324,8 @@ impl Packets {
 
         let result = append_packet_without_compression(pkt, &mut buf.buf)?;
 
+        info!("without compression: {result:?}");
+
         self.push(result, buf);
 
         // reset
@@ -350,7 +357,7 @@ impl Packets {
         Ok(())
     }
 
-    pub fn append_raw(&mut self, data: &[u8], buf: &mut IoBuf) {
+    pub fn append_raw(&self, data: &[u8], buf: &mut IoBuf) {
         let start_ptr = buf.buf.append(data);
 
         let writer = PacketWriteInfo {

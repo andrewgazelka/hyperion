@@ -2617,6 +2617,7 @@ dependencies = [
  "ndarray",
  "no_denormals",
  "once_cell",
+ "parking_lot",
  "pprof",
  "rand",
  "rand_distr",

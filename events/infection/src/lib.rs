@@ -14,7 +14,7 @@ pub fn init_game() -> anyhow::Result<()> {
 
         world.add_handler(system::disable_attack_team);
 
-        world.add_handler(system::deny_block_break);
+        // world.add_handler(system::deny_block_break);
 
         world.add_handler(system::respawn_on_death);
 

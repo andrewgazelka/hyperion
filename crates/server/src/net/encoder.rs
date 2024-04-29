@@ -5,6 +5,7 @@ use std::{
 };
 
 use anyhow::ensure;
+use tracing::info;
 use valence_protocol::{CompressionThreshold, Encode, Packet, VarInt};
 
 use crate::{event::ScratchBuffer, net::MAX_PACKET_SIZE, singleton::ring::Buf};
@@ -37,16 +38,19 @@ pub struct PacketWriteInfo {
 }
 
 impl PacketWriteInfo {
+    /// # Safety
+    /// todo
     #[allow(dead_code, reason = "nice for unit tests")]
+    #[must_use]
     pub const unsafe fn as_slice(&self) -> &[u8] {
         std::slice::from_raw_parts(self.start_ptr, self.len as usize)
     }
 }
 
-pub fn append_packet_without_compression<P>(
+pub fn append_packet_without_compression<P, B: Buf>(
     pkt: &P,
-    buf: &mut impl Buf,
-) -> anyhow::Result<PacketWriteInfo>
+    buf: &mut B,
+) -> anyhow::Result<B::Output>
 where
     P: valence_protocol::Packet + Encode,
 {
@@ -81,33 +85,31 @@ where
     let slice = cursor.into_inner();
     let entire_slice = &slice[..packet_len_size + data_len];
 
-    let start_ptr = entire_slice.as_ptr();
     let len = entire_slice.len();
 
-    buf.advance(len);
+    info!("without compresion: {len} bytes");
 
-    Ok(PacketWriteInfo {
-        start_ptr: start_ptr.cast(),
-        len: len as u32,
-    })
+    Ok(buf.advance(len))
 }
 
 impl PacketEncoder {
+    #[must_use]
     pub const fn new(threshold: CompressionThreshold) -> Self {
         Self { threshold }
     }
 
+    #[must_use]
     pub const fn compression_threshold(&self) -> CompressionThreshold {
         self.threshold
     }
 
-    pub fn append_packet_with_compression<P>(
+    pub fn append_packet_with_compression<P, B: Buf>(
         &self,
         pkt: &P,
-        buf: &mut impl Buf,
+        buf: &mut B,
         scratch: &mut impl ScratchBuffer,
         compressor: &mut libdeflater::Compressor,
-    ) -> anyhow::Result<PacketWriteInfo>
+    ) -> anyhow::Result<B::Output>
     where
         P: valence_protocol::Packet + Encode,
     {
@@ -162,13 +164,7 @@ impl PacketEncoder {
 
             let len = write.position();
 
-            let start_ptr = slice.as_ptr();
-            buf.advance(len as usize);
-
-            return Ok(PacketWriteInfo {
-                start_ptr,
-                len: len as u32,
-            });
+            return Ok(buf.advance(len as usize));
         }
 
         let data_len_0 = VarInt(0);
@@ -187,19 +183,16 @@ impl PacketEncoder {
 
         let len = pos as u32 + (end_data_position_exclusive - data_write_start) as u32;
 
-        let start_ptr = slice.as_ptr();
-        buf.advance(len as usize);
-
-        Ok(PacketWriteInfo { start_ptr, len })
+        Ok(buf.advance(len as usize))
     }
 
-    pub fn append_packet<P>(
+    pub fn append_packet<P, B: Buf>(
         &self,
         pkt: &P,
-        buf: &mut impl Buf,
+        buf: &mut B,
         scratch: &mut impl ScratchBuffer,
         compressor: &mut libdeflater::Compressor,
-    ) -> anyhow::Result<PacketWriteInfo>
+    ) -> anyhow::Result<B::Output>
     where
         P: Packet + Encode,
     {
