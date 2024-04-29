@@ -2,6 +2,7 @@ use std::{borrow::Cow, collections::BTreeSet};
 
 use anyhow::{bail, Context};
 use evenio::prelude::*;
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use serde::Deserialize;
 use tracing::{debug, info, instrument, warn};
 use valence_nbt::{value::ValueRef, Value};
@@ -566,17 +567,25 @@ fn inner(encoder: &mut PacketEncoder, chunks: &Chunks, compose: &Compose) -> any
 
     let radius = CONFIG.view_distance;
 
-    for x in -radius..radius {
-        for z in -radius..radius {
-            let x = center_chunk.x + x;
-            let z = center_chunk.z + z;
+    // todo: right number?
+    let number_chunks = (radius * 2 + 1) * (radius * 2 + 1);
+    let bytes_to_append = crossbeam_queue::ArrayQueue::new(usize::try_from(number_chunks).unwrap());
 
-            let pos = ChunkPos::new(x, z);
-            let chunk = chunks.get(pos, compose)?;
-            if let Some(chunk) = chunk {
-                encoder.append_bytes(&chunk);
-            }
+    (0..number_chunks).into_par_iter().for_each(|i| {
+        let x = i % (radius * 2 + 1);
+        let z = i / (radius * 2 + 1);
+
+        let x = center_chunk.x + x - radius;
+        let z = center_chunk.z + z - radius;
+
+        let chunk = ChunkPos::new(x, z);
+        if let Ok(Some(chunk)) = chunks.get(chunk, compose) {
+            bytes_to_append.push(chunk).unwrap();
         }
+    });
+
+    for elem in bytes_to_append {
+        encoder.append_bytes(&elem);
     }
 
     send_commands(encoder)?;
