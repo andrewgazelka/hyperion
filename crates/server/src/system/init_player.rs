@@ -8,8 +8,8 @@ use valence_protocol::{packets::login, Bounded};
 
 use crate::{
     components::{
-        AiTargetable, EntityReaction, FullEntityPose, ImmuneStatus, InGameName, KeepAlive, Player,
-        Uuid, Vitals,
+        AiTargetable, EntityReaction, FullEntityPose, ImmuneStatus, InGameName, KeepAlive,
+        LastSentChunk, Player, Uuid, Vitals,
     },
     event::{PlayerInit, PlayerJoinWorld},
     net::{Compose, Packets},
@@ -41,6 +41,7 @@ pub fn init_player(
         Insert<Vitals>,
         Insert<Prev<Vitals>>,
         Insert<KeepAlive>,
+        Insert<LastSentChunk>,
         Insert<AiTargetable>,
         Insert<InGameName>,
         PlayerJoinWorld,
@@ -81,7 +82,12 @@ pub fn init_player(
     s.insert(entity, Prev::from(Vitals::ALIVE));
     s.insert(entity, Vitals::ALIVE);
 
+    let pose = FullEntityPose::player();
+    let chunk = pose.chunk_pos();
+
     s.insert(entity, FullEntityPose::player());
+    s.insert(entity, LastSentChunk { chunk });
+
     s.insert(entity, EntityReaction::default());
 
     s.send(PlayerJoinWorld { target: entity });

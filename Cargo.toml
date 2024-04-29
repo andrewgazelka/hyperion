@@ -40,7 +40,6 @@ codegen-units = 1
 
 [workspace.dependencies]
 bvh = { path = "crates/bvh" }
-generator = { path = "crates/generator" }
 generator-build = { path = "crates/generator-build" }
 glam = "0.26.0"
 server = { path = "crates/server" }

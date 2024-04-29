@@ -1,15 +1,14 @@
-use std::{borrow::Cow, collections::BTreeSet, io::Write};
+use std::{borrow::Cow, collections::BTreeSet};
 
 use anyhow::{bail, Context};
 use evenio::prelude::*;
-use itertools::Itertools;
 use serde::Deserialize;
-use tracing::{debug, error, info, instrument, warn};
+use tracing::{debug, info, instrument, warn};
 use valence_nbt::{value::ValueRef, Value};
 use valence_protocol::{
     game_mode::OptGameMode,
     ident,
-    nbt::{compound, Compound, List},
+    nbt::Compound,
     packets::{
         play,
         play::{
@@ -21,21 +20,19 @@ use valence_protocol::{
         },
     },
     text::IntoText,
-    BlockState, ByteAngle, ChunkPos, Encode, FixedArray, GameMode, Ident, ItemKind, ItemStack,
-    PacketEncoder, VarInt,
+    ByteAngle, ChunkPos, GameMode, Ident, ItemKind, ItemStack, PacketEncoder, VarInt,
 };
 use valence_registry::{
     biome::{Biome, BiomeEffects},
-    BiomeRegistry, RegistryCodec, RegistryIdx,
+    BiomeRegistry, RegistryCodec,
 };
-use valence_server::layer::chunk::{bit_width, BiomeContainer, BlockStateContainer};
 
 use crate::{
-    bits::BitStorage,
-    blocks::AnvilFolder,
-    chunk::heightmap,
-    components::{Display, FullEntityPose, InGameName, Player, Uuid, PLAYER_SPAWN_POSITION},
+    components::{
+        chunks::Chunks, Display, FullEntityPose, InGameName, Player, Uuid, PLAYER_SPAWN_POSITION,
+    },
     config,
+    config::CONFIG,
     event::PlayerJoinWorld,
     global::Global,
     net::{Broadcast, Compose, Packets},
@@ -81,9 +78,12 @@ pub fn player_join_world(
     mut uuid_lookup: Single<&mut PlayerUuidLookup>,
     mut id_lookup: Single<&mut EntityIdLookup>,
     broadcast: Single<&Broadcast>,
+    chunks: Single<&Chunks>,
     compose: Compose,
 ) {
     static CACHED_DATA: once_cell::sync::OnceCell<bytes::Bytes> = once_cell::sync::OnceCell::new();
+
+    info!("oi");
 
     let compression_level = global.0.shared.compression_threshold;
 
@@ -92,7 +92,7 @@ pub fn player_join_world(
         encoder.set_compression(compression_level);
 
         info!("Caching world data for new players");
-        inner(&mut encoder).unwrap();
+        inner(&mut encoder, &chunks, &compose).unwrap();
 
         let bytes = encoder.take();
         bytes.freeze()
@@ -146,7 +146,7 @@ pub fn player_join_world(
         chat_data: None,
         listed: true,
         ping: 0,
-        game_mode: GameMode::Survival,
+        game_mode: GameMode::Adventure,
         display_name: Some(query.name.to_string().into_cow_text()),
     }];
 
@@ -206,7 +206,7 @@ pub fn player_join_world(
             chat_data: None,
             listed: true,
             ping: 20,
-            game_mode: GameMode::Survival,
+            game_mode: GameMode::Adventure,
             display_name: Some(query.name.to_string().into_cow_text()),
         })
         .collect::<Vec<_>>();
@@ -330,53 +330,6 @@ pub fn player_join_world(
         .unwrap();
 
     info!("Player {} joined the world", query.name);
-}
-
-fn write_block_states(states: &BlockStateContainer, writer: &mut impl Write) -> anyhow::Result<()> {
-    states.encode_mc_format(
-        writer,
-        |b| b.to_raw().into(),
-        4,
-        8,
-        bit_width(BlockState::max_raw().into()),
-    )?;
-    Ok(())
-}
-
-fn write_biomes(biomes: &BiomeContainer, writer: &mut impl Write) -> anyhow::Result<()> {
-    biomes.encode_mc_format(
-        writer,
-        |b| b.to_index() as u64,
-        0,
-        3,
-        6, // bit_width(info.biome_registry_len - 1),
-    )?;
-    Ok(())
-}
-
-trait Array3d {
-    type Item;
-    #[expect(dead_code, reason = "unused")]
-    fn get3(&self, x: usize, y: usize, z: usize) -> &Self::Item;
-
-    #[expect(dead_code, reason = "unused")]
-    fn get3_mut(&mut self, x: usize, y: usize, z: usize) -> &mut Self::Item;
-}
-
-#[expect(
-    clippy::indexing_slicing,
-    reason = "the signature of the trait allows for panics"
-)]
-impl<T, const N: usize> Array3d for [T; N] {
-    type Item = T;
-
-    fn get3(&self, x: usize, y: usize, z: usize) -> &Self::Item {
-        &self[x + z * 16 + y * 16 * 16]
-    }
-
-    fn get3_mut(&mut self, x: usize, y: usize, z: usize) -> &mut Self::Item {
-        &mut self[x + z * 16 + y * 16 * 16]
-    }
 }
 
 pub fn send_keep_alive(packets: &Packets, compose: &Compose) -> anyhow::Result<()> {
@@ -509,11 +462,11 @@ pub fn send_game_join_packet(encoder: &mut PacketEncoder) -> anyhow::Result<()> 
         enable_respawn_screen: false,
         dimension_name: dimension_name.into(),
         hashed_seed: 0,
-        game_mode: GameMode::Survival,
+        game_mode: GameMode::Adventure,
         is_flat: false,
         last_death_location: None,
         portal_cooldown: 60.into(),
-        previous_game_mode: OptGameMode(Some(GameMode::Survival)),
+        previous_game_mode: OptGameMode(Some(GameMode::Adventure)),
         dimension_type_name: "minecraft:overworld".try_into()?,
         is_debug: false,
     };
@@ -587,80 +540,6 @@ fn send_commands(encoder: &mut PacketEncoder) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn encode_chunk_packet(
-    anvil_folder: &mut AnvilFolder,
-    location: ChunkPos,
-    encoder: &mut PacketEncoder,
-) -> anyhow::Result<()> {
-    let chunk = anvil_folder.dim.get_chunk(location);
-
-    let Ok(chunk) = chunk else {
-        error!("failed to get chunk at chunk location {location:?}");
-        return Ok(());
-    };
-
-    let Some(chunk) = chunk else {
-        let path = anvil_folder.folder_path.display();
-
-        let chunk_location = glam::IVec2::new(location.x, location.z);
-        let game_location = chunk_location << 4;
-
-        warn!(
-            "failed to get chunk at chunk location {chunk_location} ... is the world {path} \
-             loaded there? This is the same as the normal location {game_location}."
-        );
-        return Ok(());
-    };
-
-    let section_count = 384 / 16_usize;
-    let chunk = chunk.chunk;
-    let dimension_height = 384;
-
-    let map = heightmap(dimension_height, dimension_height - 3);
-    let map = map.into_iter().map(i64::try_from).try_collect()?;
-
-    // convert section_count + 2 0b1s into u64 array
-    let mut bits = BitStorage::new(1, section_count + 2, None).unwrap();
-
-    for i in 0..section_count + 2 {
-        bits.set(i, 1);
-    }
-
-    // 2048 bytes per section -> long count = 2048 / 8 = 256
-    let sky_light_array = FixedArray([0xFF_u8; 2048]);
-    let sky_light_arrays = vec![sky_light_array; section_count + 2];
-
-    let mut section_bytes = Vec::new();
-
-    for section in chunk.sections {
-        let non_air_blocks: u16 = 42;
-        non_air_blocks.encode(&mut section_bytes).unwrap();
-
-        write_block_states(&section.block_states, &mut section_bytes).unwrap();
-        write_biomes(&section.biomes, &mut section_bytes).unwrap();
-    }
-
-    let pkt = play::ChunkDataS2c {
-        pos: location,
-        heightmaps: Cow::Owned(compound! {
-            "MOTION_BLOCKING" => List::Long(map),
-        }),
-        blocks_and_biomes: &section_bytes,
-        block_entities: Cow::Borrowed(&[]),
-
-        sky_light_mask: Cow::Owned(bits.into_data()),
-        block_light_mask: Cow::Borrowed(&[]),
-        empty_sky_light_mask: Cow::Borrowed(&[]),
-        empty_block_light_mask: Cow::Borrowed(&[]),
-        sky_light_arrays: Cow::Owned(sky_light_arrays),
-        block_light_arrays: Cow::Borrowed(&[]),
-    };
-
-    encoder.append_packet(&pkt)?;
-
-    Ok(())
-}
-
 fn send_sync_tags(encoder: &mut PacketEncoder) -> anyhow::Result<()> {
     let bytes = include_bytes!("tags.json");
 
@@ -673,7 +552,7 @@ fn send_sync_tags(encoder: &mut PacketEncoder) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn inner(encoder: &mut PacketEncoder) -> anyhow::Result<()> {
+fn inner(encoder: &mut PacketEncoder, chunks: &Chunks, compose: &Compose) -> anyhow::Result<()> {
     send_game_join_packet(encoder)?;
     send_sync_tags(encoder)?;
 
@@ -685,16 +564,18 @@ fn inner(encoder: &mut PacketEncoder) -> anyhow::Result<()> {
         chunk_z: center_chunk.z.into(),
     })?;
 
-    let biome_registry = generate_biome_registry()?;
-    let mut anvil = AnvilFolder::new(&biome_registry).context("failed to get anvil data")?;
+    let radius = CONFIG.view_distance;
 
-    for x in -16..16 {
-        for z in -16..16 {
+    for x in -radius..radius {
+        for z in -radius..radius {
             let x = center_chunk.x + x;
             let z = center_chunk.z + z;
 
             let pos = ChunkPos::new(x, z);
-            encode_chunk_packet(&mut anvil, pos, encoder)?;
+            let chunk = chunks.get(pos, compose)?;
+            if let Some(chunk) = chunk {
+                encoder.append_bytes(&chunk);
+            }
         }
     }
 

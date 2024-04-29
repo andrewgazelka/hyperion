@@ -40,7 +40,7 @@ use valence_protocol::CompressionThreshold;
 pub use valence_server;
 
 use crate::{
-    components::Vitals,
+    components::{chunks::Chunks, Vitals},
     event::{BumpScratch, Egress, Gametick, Scratches, Stats},
     global::Global,
     net::{Broadcast, Compressors, IoBufs, Server, ServerDef},
@@ -48,7 +48,7 @@ use crate::{
         fd_lookup::FdLookup, player_aabb_lookup::PlayerBoundingBoxes,
         player_id_lookup::EntityIdLookup, player_uuid_lookup::PlayerUuidLookup,
     },
-    system::generate_ingress_events,
+    system::{generate_biome_registry, generate_ingress_events},
 };
 
 pub mod components;
@@ -179,7 +179,7 @@ impl Game {
         let shared = Arc::new(global::Shared {
             player_count: AtomicU32::new(0),
             compression_threshold: CompressionThreshold(256),
-            compression_level: CompressionLvl::new(12)
+            compression_level: CompressionLvl::new(9)
                 .map_err(|_| anyhow::anyhow!("failed to create compression level"))?,
         });
 
@@ -203,6 +203,7 @@ impl Game {
         world.add_handler(system::ingress::recv_data);
         world.add_handler(system::ingress::sent_data);
 
+        world.add_handler(system::send_chunk_updates);
         world.add_handler(system::init_player);
         world.add_handler(system::player_join_world);
         world.add_handler(system::player_kick);
@@ -250,6 +251,11 @@ impl Game {
 
         let uuid_lookup = world.spawn();
         world.insert(uuid_lookup, PlayerUuidLookup::default());
+
+        let chunks = world.spawn();
+        let biome_registry =
+            generate_biome_registry().context("failed to generate biome registry")?;
+        world.insert(chunks, Chunks::new(&biome_registry)?);
 
         let player_id_lookup = world.spawn();
         world.insert(player_id_lookup, EntityIdLookup::default());
