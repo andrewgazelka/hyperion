@@ -1,7 +1,7 @@
 use evenio::prelude::*;
 use rayon::iter::{ParallelBridge, ParallelIterator};
 use tracing::{instrument, trace};
-use valence_protocol::ChunkPos;
+use valence_protocol::{packets::play, ChunkPos};
 
 use crate::{
     components::{chunks::Chunks, FullEntityPose, LastSentChunk},
@@ -27,6 +27,14 @@ pub fn send_chunk_updates(
         if last_sent_chunk == current_chunk {
             return;
         }
+
+        // center chunk
+        let center_chunk = play::ChunkRenderDistanceCenterS2c {
+            chunk_x: current_chunk.x.into(),
+            chunk_z: current_chunk.z.into(),
+        };
+
+        packets.append(&center_chunk, &compose).unwrap();
 
         last_sent.chunk = current_chunk;
 
