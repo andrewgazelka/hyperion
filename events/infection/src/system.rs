@@ -41,32 +41,6 @@ pub fn assign_team_on_join(
     s.insert(r.event.target, Team::Human);
 }
 
-// pub fn deny_block_break(
-//     r: Receiver<event::BlockFinishBreak, EntityId>,
-//     chunks: Single<&Chunks>,
-//     mut s: Sender<(event::UpdateBlock, event::ChatMessage)>,
-// ) {
-//     let position = r.event.position;
-//
-//     let position_ivec = IVec3::new(position.x, position.y, position.z);
-//     let block = chunks.get_block(position_ivec).unwrap().unwrap();
-//
-//     info!("sending update block: {position:?} -> {block:?}");
-//
-//     s.send(event::UpdateBlock {
-//         position: r.event.position,
-//         id: block,
-//         sequence: r.event.sequence,
-//     });
-//
-//     let message = Text::text("You cannot break this block").color(Color::RED);
-//
-//     s.send(event::ChatMessage {
-//         target: r.event.by,
-//         message,
-//     });
-// }
-
 pub fn respawn_on_death(
     r: Receiver<event::Death, (EntityId, &mut Team, &mut Vitals)>,
     mut s: Sender<(event::DisguisePlayer, event::Teleport)>,
