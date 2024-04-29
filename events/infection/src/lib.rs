@@ -7,7 +7,7 @@ mod components;
 mod system;
 
 pub fn init_game() -> anyhow::Result<()> {
-    let mut game = Game::init_with("127.0.0.1:25567", |world| {
+    let mut game = Game::init_with("0.0.0.0:25565", |world| {
         // join events
         world.add_handler(system::scramble_player_name);
         world.add_handler(system::assign_team_on_join);

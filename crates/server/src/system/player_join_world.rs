@@ -84,8 +84,6 @@ pub fn player_join_world(
 ) {
     static CACHED_DATA: once_cell::sync::OnceCell<bytes::Bytes> = once_cell::sync::OnceCell::new();
 
-    info!("oi");
-
     let compression_level = global.0.shared.compression_threshold;
 
     let cached_data = CACHED_DATA.get_or_init(|| {
