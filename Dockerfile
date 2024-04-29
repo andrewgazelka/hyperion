@@ -64,10 +64,17 @@ COPY --from=debug /build/infection /infection
 
 RUN apt-get update && apt-get install -y \
     openssl \
-    libssl3
+    libssl3 \
+    ca-certificates
 
 ENTRYPOINT ["/infection"]
 
 FROM debian:bookworm-slim as release-bin
+
+RUN apt-get update && apt-get install -y \
+    openssl \
+    libssl3 \
+    ca-certificates
+
 COPY --from=release /build/infection /infection
 ENTRYPOINT ["/infection"]
