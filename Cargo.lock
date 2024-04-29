@@ -1444,6 +1444,7 @@ name = "infection"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "clap",
  "evenio",
  "fastrand 2.0.2",
  "serde_json",
