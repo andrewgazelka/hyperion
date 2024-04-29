@@ -17,6 +17,8 @@ RUN apt-get update && \
     mold \
     cmake \
     git \
+    libssl-dev \
+    pkg-config \
     ca-certificates  # Adding ca-certificates here
 
 # Ensure certificates are updated
