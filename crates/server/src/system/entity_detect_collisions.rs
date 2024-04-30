@@ -8,7 +8,7 @@ use rayon::prelude::*;
 use tracing::instrument;
 
 use crate::{
-    components::{EntityReaction, FullEntityPose, Npc},
+    components::{EntityReaction, FullEntityPose, Mob},
     event::Gametick,
     singleton::bounding_box::EntityBoundingBoxes,
 };
@@ -17,7 +17,7 @@ use crate::{
 pub fn entity_detect_collisions(
     _: Receiver<Gametick>,
     entity_bounding_boxes: Single<&EntityBoundingBoxes>,
-    mut poses_fetcher: Fetcher<(EntityId, &FullEntityPose, &mut EntityReaction, With<&Npc>)>,
+    mut poses_fetcher: Fetcher<(EntityId, &FullEntityPose, &mut EntityReaction, With<&Mob>)>,
 ) {
     const MAX_COLLISIONS: usize = 4;
 

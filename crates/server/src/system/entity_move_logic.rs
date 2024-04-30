@@ -8,7 +8,7 @@ use tracing::instrument;
 use valence_protocol::math::{Vec2, Vec3};
 
 use crate::{
-    components::{EntityReaction, FullEntityPose, Npc, RunningSpeed},
+    components::{EntityReaction, FullEntityPose, Mob, RunningSpeed},
     event::Gametick,
     singleton::player_aabb_lookup::PlayerBoundingBoxes,
 };
@@ -18,7 +18,7 @@ pub struct EntityQuery<'a> {
     running_speed: Option<&'a RunningSpeed>,
     reaction: &'a mut EntityReaction,
     pose: &'a mut FullEntityPose,
-    _entity: With<&'static Npc>,
+    _entity: With<&'static Mob>,
 }
 
 #[instrument(skip_all, level = "trace")]

@@ -144,11 +144,11 @@ impl Vitals {
 #[component(immutable)]
 pub struct Uuid(pub uuid::Uuid);
 
-/// Any living minecraft entity that is NOT a player.
+/// Any living mobile minecraft entity that is NOT a player.
 ///
 /// Example: zombie, skeleton, etc.
 #[derive(Component, Debug)]
-pub struct Npc;
+pub struct Mob;
 
 /// The running multiplier of the entity. This defaults to 1.0.
 #[derive(Component, Debug, Copy, Clone)]
@@ -164,7 +164,7 @@ impl Default for RunningSpeed {
 #[derive(Component)]
 pub struct AiTargetable;
 
-/// The full pose of an entity. This is used for both [`Player`] and [`Npc`].
+/// The full pose of an entity. This is used for both [`Player`] and [`Mob`].
 #[derive(Component, Copy, Clone, Debug)]
 pub struct FullEntityPose {
     /// The (x, y, z) position of the entity.
