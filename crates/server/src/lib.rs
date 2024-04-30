@@ -28,6 +28,7 @@ use std::{
 
 use anyhow::Context;
 use evenio::prelude::*;
+use humansize::{SizeFormatter, BINARY};
 use libc::{getrlimit, setrlimit, RLIMIT_NOFILE};
 use libdeflater::CompressionLvl;
 use ndarray::s;
@@ -43,7 +44,7 @@ use crate::{
     components::{chunks::Chunks, Vitals},
     event::{BumpScratch, Egress, Gametick, Scratches, Stats},
     global::Global,
-    net::{Broadcast, Compressors, IoBufs, Server, ServerDef},
+    net::{Broadcast, Compressors, IoBufs, Server, ServerDef, S2C_BUFFER_SIZE},
     singleton::{
         fd_lookup::FdLookup, player_aabb_lookup::PlayerBoundingBoxes,
         player_id_lookup::EntityIdLookup, player_uuid_lookup::PlayerUuidLookup,
@@ -76,15 +77,19 @@ const MSPT_HISTORY_SIZE: usize = 100;
     clippy::cognitive_complexity,
     reason = "I have no idea why the cognitive complexity is calcualted as being high"
 )]
-pub fn adjust_file_limits(recommended_min: u64) -> std::io::Result<()> {
+#[instrument(skip_all)]
+pub fn adjust_file_descriptor_limits(recommended_min: u64) -> std::io::Result<()> {
     let mut limits = libc::rlimit {
         rlim_cur: 0, // Initialize soft limit to 0
         rlim_max: 0, // Initialize hard limit to 0
     };
 
     if unsafe { getrlimit(RLIMIT_NOFILE, &mut limits) } == 0 {
-        info!("Current file handle soft limit: {}", limits.rlim_cur);
-        info!("Current file handle hard limit: {}", limits.rlim_max);
+        let rlim_cur = SizeFormatter::new(limits.rlim_cur, BINARY);
+        let rlim_max = SizeFormatter::new(limits.rlim_max, BINARY);
+
+        info!("current soft limit: {rlim_cur}");
+        info!("current hard limit: {rlim_max}");
     } else {
         error!("Failed to get the current file handle limits");
         return Err(std::io::Error::last_os_error());
@@ -98,7 +103,8 @@ pub fn adjust_file_limits(recommended_min: u64) -> std::io::Result<()> {
     }
 
     limits.rlim_cur = limits.rlim_max;
-    info!("Setting soft limit to: {}", limits.rlim_cur);
+    let new_limit = SizeFormatter::new(limits.rlim_cur, BINARY);
+    info!("setting soft limit to: {new_limit}");
 
     if unsafe { setrlimit(RLIMIT_NOFILE, &limits) } != 0 {
         error!("Failed to set the file handle limits");
@@ -108,8 +114,50 @@ pub fn adjust_file_limits(recommended_min: u64) -> std::io::Result<()> {
     Ok(())
 }
 
-/// The central [`Game`] struct which owns and manages the entire server.
-pub struct Game {
+#[instrument(skip_all)]
+fn set_memlock_limit(limit: u64) -> anyhow::Result<()> {
+    let mut rlim_current = libc::rlimit {
+        rlim_cur: 0,
+        rlim_max: 0,
+    };
+
+    let result = unsafe { getrlimit(libc::RLIMIT_MEMLOCK, &mut rlim_current) };
+
+    if result != 0 {
+        return Err(std::io::Error::last_os_error()).context("failed to get memlock limit");
+    }
+
+    if result == 0 {
+        let rlim_cur = SizeFormatter::new(rlim_current.rlim_cur, BINARY);
+        let rlim_max = SizeFormatter::new(rlim_current.rlim_max, BINARY);
+        info!("current soft limit: {rlim_cur}");
+        info!("current hard limit: {rlim_max}");
+
+        // we do not have to set because we are already above the limit
+        if rlim_current.rlim_cur > limit {
+            let limit = SizeFormatter::new(limit, BINARY);
+            info!("current limit is already above the requested limit of {limit}");
+            return Ok(());
+        }
+    }
+
+    let rlim = libc::rlimit {
+        rlim_cur: limit,
+        rlim_max: limit,
+    };
+
+    let result = unsafe { setrlimit(libc::RLIMIT_MEMLOCK, &rlim) };
+    if result == 0 {
+        let limit = SizeFormatter::new(limit, BINARY);
+        info!("set limit to {limit}");
+        Ok(())
+    } else {
+        Err(std::io::Error::last_os_error()).context("failed to set memlock limit")
+    }
+}
+
+/// The central [`Hyperion`] struct which owns and manages the entire server.
+pub struct Hyperion {
     /// The shared state between the ECS framework and the I/O thread.
     shared: Arc<global::Shared>,
     /// The manager of the ECS framework.
@@ -124,7 +172,7 @@ pub struct Game {
     server: Server,
 }
 
-impl Game {
+impl Hyperion {
     /// Get the [`World`] which is the core part of the ECS framework.
     pub const fn world(&self) -> &World {
         &self.world
@@ -135,7 +183,7 @@ impl Game {
         &self.shared
     }
 
-    /// See [`Game::world`].
+    /// See [`Hyperion::world`].
     pub fn world_mut(&mut self) -> &mut World {
         &mut self.world
     }
@@ -150,12 +198,39 @@ impl Game {
         Self::init_with(address, |_| {})
     }
 
-    /// Initialize the server.
     pub fn init_with(
         address: impl ToSocketAddrs + Send + Sync + 'static,
         handlers: impl FnOnce(&mut World) + Send + Sync + 'static,
     ) -> anyhow::Result<Self> {
-        info!("Starting hyperion");
+        // Denormals (numbers very close to 0) are flushed to zero because doing computations on them
+        // is slow.
+        rayon::ThreadPoolBuilder::new()
+            .spawn_handler(|thread| {
+                std::thread::spawn(|| {
+                    no_denormals::no_denormals(|| {
+                        thread.run();
+                    });
+                });
+                Ok(())
+            })
+            .build_global()
+            .context("failed to build thread pool")?;
+
+        no_denormals::no_denormals(|| Self::init_with_helper(address, handlers))
+    }
+
+    /// Initialize the server.
+    fn init_with_helper(
+        address: impl ToSocketAddrs + Send + Sync + 'static,
+        handlers: impl FnOnce(&mut World) + Send + Sync + 'static,
+    ) -> anyhow::Result<Self> {
+        // 10k players * 2 file handles / player  = 20,000. We can probably get away with 16,384 file handles
+        adjust_file_descriptor_limits(32_768).context("failed to set file limits")?;
+
+        // we want at least S2C_BUFFER_SIZE memlock limit
+        set_memlock_limit(S2C_BUFFER_SIZE as u64).context("failed to set memlock limit.")?;
+
+        info!("starting hyperion");
         Lazy::force(&config::CONFIG);
 
         let current_threads = rayon::current_num_threads();
@@ -179,7 +254,7 @@ impl Game {
         let shared = Arc::new(global::Shared {
             player_count: AtomicU32::new(0),
             compression_threshold: CompressionThreshold(256),
-            compression_level: CompressionLvl::new(9)
+            compression_level: CompressionLvl::new(12)
                 .map_err(|_| anyhow::anyhow!("failed to create compression level"))?,
         });
 
@@ -399,5 +474,5 @@ impl Game {
 }
 
 // todo: remove static and make this an `Arc` to prevent weird behavior with multiple `Game`s
-/// A shutdown atomic which is used to shut down the [`Game`] gracefully.
+/// A shutdown atomic which is used to shut down the [`Hyperion`] gracefully.
 static SHUTDOWN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
