@@ -118,26 +118,26 @@ pub fn player_join_world(
     // 5: Helmet
     let mainhand = EquipmentEntry {
         slot: 0,
-        item: sword,
+        item: sword.clone(),
     };
-    let boots = EquipmentEntry {
+    let boots2 = EquipmentEntry {
         slot: 2,
-        item: boots,
+        item: boots.clone(),
     };
-    let leggings = EquipmentEntry {
+    let leggings2 = EquipmentEntry {
         slot: 3,
-        item: leggings,
+        item: leggings.clone(),
     };
-    let chestplate = EquipmentEntry {
+    let chestplate2 = EquipmentEntry {
         slot: 4,
-        item: chestplate,
+        item: chestplate.clone(),
     };
-    let helmet = EquipmentEntry {
+    let helmet2 = EquipmentEntry {
         slot: 5,
-        item: helmet,
+        item: helmet.clone(),
     };
 
-    let equipment = vec![mainhand, boots, leggings, chestplate, helmet];
+    let equipment = vec![mainhand, boots2, leggings2, chestplate2, helmet2];
 
     let entries = &[play::player_list_s2c::PlayerListEntry {
         player_uuid: query.uuid.0,
@@ -168,15 +168,25 @@ pub fn player_join_world(
 
     info!("appending cached data");
 
-    local
-        .append(
-            &crate::packets::vanilla::EntityEquipmentUpdateS2c {
-                entity_id: VarInt(0),
-                equipment: Cow::Borrowed(&equipment),
-            },
-            &compose,
-        )
-        .unwrap();
+    let items = [sword.clone(), boots, leggings, chestplate, helmet];
+
+    let pack_inv = play::InventoryS2c {
+        window_id: 0,
+        state_id: VarInt(0),
+        slots: Cow::Borrowed(&items),
+        carried_item: Cow::Borrowed(&ItemStack::EMPTY),
+    };
+    local.append(&pack_inv, &compose).unwrap();
+
+    // local
+    //     .append(
+    //         &crate::packets::vanilla::EntityEquipmentUpdateS2c {
+    //             entity_id: VarInt(0),
+    //             equipment: Cow::Borrowed(&equipment),
+    //         },
+    //         &compose,
+    //     )
+    //     .unwrap();
 
     let actions = PlayerListActions::default()
         .with_add_player(true)
