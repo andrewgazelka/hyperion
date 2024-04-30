@@ -159,7 +159,6 @@ impl<S: Default> Default for RayonLocal<S> {
 
 pub struct RayonLocalIter<'a, S> {
     local: &'a mut RayonLocal<S>,
-    // idx: usize,
 }
 
 impl<'a, S> ParallelIterator for RayonLocalIter<'a, S>
@@ -209,6 +208,10 @@ impl<S> RayonLocal<S> {
         let thread_locals = (0..=num_threads).map(|_| UnsafeCell::new(f())).collect();
 
         Self { thread_locals }
+    }
+
+    pub fn par_iter_mut(&mut self) -> RayonLocalIter<S> {
+        RayonLocalIter { local: self }
     }
 
     pub fn init_with_index(mut f: impl FnMut(usize) -> S) -> Self {

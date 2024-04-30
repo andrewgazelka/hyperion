@@ -48,7 +48,10 @@ use crate::{
     components::{chunks::Chunks, Vitals},
     event::{BumpScratch, Egress, Gametick, Scratches, Stats},
     global::Global,
-    net::{buffers::BufferAllocator, Broadcast, Compressors, Server, ServerDef, S2C_BUFFER_SIZE},
+    net::{
+        buffers::BufferAllocator, Broadcast, Compressors, Server, ServerDef, Servers,
+        S2C_BUFFER_SIZE,
+    },
     singleton::{
         fd_lookup::FdLookup, player_aabb_lookup::PlayerBoundingBoxes,
         player_id_lookup::EntityIdLookup, player_uuid_lookup::PlayerUuidLookup,
@@ -185,7 +188,7 @@ pub struct Hyperion {
     /// The tick of the game. This is incremented every 50 ms.
     tick_on: u64,
 
-    server: Server,
+    server: Servers,
 }
 
 impl Hyperion {
@@ -281,7 +284,9 @@ impl Hyperion {
         let compressor_id = world.spawn();
         world.insert(compressor_id, Compressors::new(shared.compression_level));
 
-        let mut server_def = Server::new(address)?;
+        let address = address.to_socket_addrs().unwrap().next().unwrap();
+
+        let mut server_def = Servers::new(address);
 
         world.add_handler(system::ingress::add_player);
         world.add_handler(system::ingress::remove_player);

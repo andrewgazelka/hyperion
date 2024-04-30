@@ -32,6 +32,9 @@ use crate::{
     singleton::player_id_lookup::EntityIdLookup,
     system::ingress::player_packet_buffer::DecodeBuffer,
 };
+use crate::net::Servers;
+
+use rayon::iter::ParallelIterator;
 
 pub type IngressSender<'a> = Sender<
     'a,
@@ -80,10 +83,17 @@ pub struct SentData {
 #[instrument(skip_all, level = "trace")]
 pub fn generate_ingress_events(
     world: &mut World,
-    server: &mut Server,
+    servers: &mut Servers,
     scratch: &mut RayonLocal<BumpScratch>,
 ) {
     let mut decrease_count = FxHashMap::default();
+    
+    
+    let servers = servers.par_iter_mut()
+        .for_each(|x| {
+            
+        });
+    
 
     server
         .drain(|event| match event {

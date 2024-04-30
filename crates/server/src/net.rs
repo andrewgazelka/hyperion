@@ -3,7 +3,7 @@
 use std::{
     cell::RefCell,
     hash::Hash,
-    net::ToSocketAddrs,
+    net::{SocketAddr, ToSocketAddrs},
     sync::{atomic, atomic::AtomicUsize},
 };
 
@@ -38,6 +38,24 @@ pub enum ServerEvent<'a> {
     SentData { fd: Fd },
 }
 
+#[derive(Deref, DerefMut)]
+pub struct Servers {
+    inner: RayonLocal<Server>,
+}
+
+impl Servers {
+    pub fn new(address: SocketAddr) -> Self {
+        let inner = RayonLocal::init(|| Server::new(address).unwrap());
+        Self { inner }
+    }
+
+    pub fn allocate_buffers(&mut self, buffers: &[iovec]) {
+        for elem in self.inner.iter_mut() {
+            elem.allocate_buffers(buffers);
+        }
+    }
+}
+
 pub struct Server {
     #[cfg(target_os = "linux")]
     server: linux::LinuxServer,
@@ -47,7 +65,7 @@ pub struct Server {
 
 impl ServerDef for Server {
     #[allow(unused, reason = "this has to do with cross-platform code")]
-    fn new(address: impl ToSocketAddrs) -> anyhow::Result<Self>
+    fn new(address: SocketAddr) -> anyhow::Result<Self>
     where
         Self: Sized,
     {
@@ -109,7 +127,7 @@ pub struct RefreshItems<'a> {
 }
 
 pub trait ServerDef {
-    fn new(address: impl ToSocketAddrs) -> anyhow::Result<Self>
+    fn new(address: SocketAddr) -> anyhow::Result<Self>
     where
         Self: Sized;
     fn drain(&mut self, f: impl FnMut(ServerEvent)) -> std::io::Result<()>;
@@ -129,7 +147,7 @@ pub trait ServerDef {
 struct NotImplemented;
 
 impl ServerDef for NotImplemented {
-    fn new(_address: impl ToSocketAddrs) -> anyhow::Result<Self>
+    fn new(_address: SocketAddr) -> anyhow::Result<Self>
     where
         Self: Sized,
     {

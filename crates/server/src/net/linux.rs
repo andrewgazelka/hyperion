@@ -136,10 +136,7 @@ pub struct LinuxServer {
 }
 
 impl ServerDef for LinuxServer {
-    fn new(address: impl ToSocketAddrs) -> anyhow::Result<Self> {
-        let Some(address) = address.to_socket_addrs()?.next() else {
-            anyhow::bail!("no addresses specified")
-        };
+    fn new(address: SocketAddr) -> anyhow::Result<Self> {
         let domain = match address {
             SocketAddr::V4(_) => socket2::Domain::IPV4,
             SocketAddr::V6(_) => socket2::Domain::IPV6,
@@ -147,6 +144,7 @@ impl ServerDef for LinuxServer {
 
         let listener = Socket::new(domain, socket2::Type::STREAM, None)?;
         listener.set_nonblocking(true)?;
+        listener.set_reuse_port(true)?;
         // listener.set_send_buffer_size(SEND_BUFFER_SIZE)?;
         listener.bind(&address.into())?;
         listener.listen(LISTEN_BACKLOG)?;

@@ -13,7 +13,7 @@ use thiserror::Error;
 use tracing::{debug, instrument, trace};
 
 use crate::{
-    net::{ServerDef, MAX_PACKET_SIZE},
+    net::{ServerDef, Servers, MAX_PACKET_SIZE},
     singleton::ring::Ring,
 };
 
@@ -42,8 +42,11 @@ impl BufferAllocator {
             trace!("buffers left: {buffers_left}");
         }
 
-
-        let index = self.inner.available.lock().pop_front()
+        let index = self
+            .inner
+            .available
+            .lock()
+            .pop_front()
             .ok_or(BufferAllocationError::AllBuffersInUse)?;
 
         Ok(BufRef {
@@ -52,7 +55,7 @@ impl BufferAllocator {
         })
     }
 
-    pub fn new(server_def: &mut impl ServerDef) -> Self {
+    pub fn new(server_def: &mut Servers) -> Self {
         let inner = BufferAllocatorInner::new(server_def);
         Self {
             inner: Arc::new(inner),
@@ -114,7 +117,7 @@ impl BufferAllocatorInner {
         clippy::large_stack_frames,
         reason = "todo probs remove somehow but idk how"
     )]
-    fn new(server_def: &mut impl ServerDef) -> Self {
+    fn new(server_def: &mut Servers) -> Self {
         trace!("initializing buffer allocator");
         let available: [u16; COUNT] = std::array::from_fn(|i| i as u16);
 
