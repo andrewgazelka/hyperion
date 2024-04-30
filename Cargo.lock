@@ -2643,6 +2643,7 @@ dependencies = [
  "more-asserts",
  "ndarray",
  "no_denormals",
+ "num-format",
  "once_cell",
  "parking_lot",
  "pprof",
