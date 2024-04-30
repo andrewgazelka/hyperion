@@ -69,7 +69,8 @@ pub struct RecvDataBulk<'a> {
 
 #[derive(Event)]
 pub struct SentData {
-    decrease_count: FxHashMap<Fd, u8>,
+    fd: Fd,
+    bytes_sent: u32,
 }
 
 #[instrument(skip_all, level = "trace")]
@@ -89,11 +90,8 @@ pub fn generate_ingress_events(world: &mut World, server: &mut Server) {
             ServerEvent::RecvData { fd, data } => {
                 recv_data_elements.entry(fd).or_default().push(data);
             }
-            ServerEvent::SentData { fd } => {
-                decrease_count
-                    .entry(fd)
-                    .and_modify(|x| *x += 1)
-                    .or_insert(1);
+            ServerEvent::SentData { fd, bytes_sent } => {
+                world.send(SentData { fd, bytes_sent });
             }
         }
     }
@@ -184,7 +182,7 @@ pub fn sent_data(
             return;
         };
 
-        pkts.set_successfully_sent(*count);
+        pkts.set_successfully_sent(event.bytes_sent);
     });
 }
 

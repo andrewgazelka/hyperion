@@ -27,7 +27,7 @@ const SUBMISSION_QUEUE_SIZE: u32 = 32768;
 const IO_URING_FILE_COUNT: u32 = 32768;
 const C2S_RING_BUFFER_COUNT: usize = 16384;
 const LISTEN_BACKLOG: libc::c_int = 128;
-// const SEND_BUFFER_SIZE: usize = 128 * 1024 * 1024;
+const SEND_BUFFER_SIZE: usize = 128 * 1024 * 1024;
 
 /// Size of each buffer in bytes
 const C2S_RING_BUFFER_LEN: usize = 64;
@@ -92,7 +92,6 @@ impl<T> PageAlignedMemory<T> {
         Self { data, layout }
     }
 
-    #[expect(dead_code, reason = "this is not used")]
     const fn as_mut_ptr(&self) -> *mut T {
         self.data
     }
@@ -310,7 +309,7 @@ impl ServerDef for LinuxServer {
         let listener = Socket::new(domain, socket2::Type::STREAM, None)?;
         listener.set_nonblocking(true)?;
         listener.set_reuse_address(true)?;
-        // listener.set_send_buffer_size(SEND_BUFFER_SIZE)?;
+        listener.set_send_buffer_size(SEND_BUFFER_SIZE)?;
         listener.bind(&address.into())?;
         listener.listen(LISTEN_BACKLOG)?;
 
@@ -359,7 +358,7 @@ impl ServerDef for LinuxServer {
         // SAFETY: c2s_buffer_entries is valid to write to for C2S_RING_BUFFER_COUNT BufRingEntry structs
         unsafe {
             submitter.register_buf_ring(
-                c2s_buffer_entries.data as u64,
+                c2s_buffer_entries.as_mut_ptr() as u64,
                 C2S_RING_BUFFER_COUNT as u16,
                 C2S_BUFFER_GROUP_ID,
             )?;
@@ -476,6 +475,8 @@ impl LinuxServer {
     }
 
     pub fn write_raw(&mut self, fd: Fixed, buf: *const u8, len: u32, buf_index: u16) {
+        info!("attempting write({fd:?}) len {len}");
+        assert!(len > 0);
         self.pending_writes += 1;
         unsafe {
             Self::push_entry(

@@ -1,6 +1,6 @@
 //! All the networking related code.
 
-use std::{cell::RefCell, hash::Hash, net::SocketAddr};
+use std::{cell::RefCell, collections::VecDeque, hash::Hash, net::ToSocketAddrs, net::SocketAddr, sync::Mutex};
 
 use anyhow::Context;
 use arrayvec::ArrayVec;
@@ -33,7 +33,7 @@ pub enum ServerEvent<'a> {
     AddPlayer { fd: Fd },
     RemovePlayer { fd: Fd },
     RecvData { fd: Fd, data: &'a [u8] },
-    SentData { fd: Fd },
+    SentData { fd: Fd, bytes_sent: u32 },
 }
 
 pub struct Server {
@@ -181,96 +181,58 @@ impl<'a> Compose<'a> {
 /// Stores indices of packets
 #[derive(Component)]
 pub struct Packets {
-    buffer: BufRef,
-    pub local_to_write: ArrayVec<DataWriteInfo, 2>,
-    pub number_sending: u8,
+    to_write: Mutex<Vec<u8>>,
+    currently_sending: bool
 }
 
 impl Packets {
-    #[instrument(skip_all)]
-    pub fn new(allocator: &mut BufferAllocator) -> anyhow::Result<Self> {
-        Ok(Self {
-            buffer: allocator.obtain().context("failed to obtain buffer")?,
-            local_to_write: ArrayVec::new(),
-            number_sending: 0,
-        })
+    /// To avoid locking a mutex, `other` is borrowed as `mut`, but `other` is not changed.
+    pub fn extend(&mut self, other: &mut Self) {
+        let this = self.to_write.get_mut().unwrap();
+        let other = other.to_write.get_mut().unwrap();
+
+        this.extend_from_slice(other);
     }
 
-    #[must_use]
-    pub const fn index(&self) -> u16 {
-        self.buffer.index()
+    pub fn set_successfully_sent(&mut self, bytes_sent: u32) {
+        debug_assert!(
+            self.currently_sending,
+            "set_successfully_sent was called while not waiting for a send completion"
+        );
+        self.currently_sending = false;
+
+        let buf = self.to_write.get_mut().unwrap();
+        // Remove all data that was sent. Any data that was unsent this time will be sent
+        // on the next sent.
+        buf.drain(0..(bytes_sent as usize));
     }
 
-    pub fn elems_mut(&mut self) -> &mut ArrayVec<DataWriteInfo, 2> {
-        &mut self.local_to_write
-    }
-
-    #[must_use]
-    pub const fn elems(&self) -> &ArrayVec<DataWriteInfo, 2> {
-        &self.local_to_write
-    }
-
-    pub fn set_successfully_sent(&mut self, d_count: u8) {
-        debug_assert!(self.number_sending >= d_count);
-        self.number_sending -= d_count;
-    }
-
-    pub fn append<P>(&mut self, pkt: &P, compose: &Compose) -> anyhow::Result<()>
-    where
-        P: valence_protocol::Packet + valence_protocol::Encode,
-    {
-        let scratch = compose.scratch.get_local();
-        let mut scratch = scratch.borrow_mut();
-
-        let compressor = compose.compressor.get_local();
-        let mut compressor = compressor.borrow_mut();
-
-        let enc = compose.encoder();
-
-        let result = enc.append_packet(pkt, &mut *self.buffer, &mut *scratch, &mut compressor)?;
-
-        self.push(result);
-        Ok(())
-    }
-
-    pub fn append_pre_compression_packet<P>(&mut self, pkt: &P) -> anyhow::Result<()>
-    where
-        P: valence_protocol::Packet + valence_protocol::Encode,
-    {
-        // todo: why need DerefMut?
-        let buf = &mut self.buffer;
-        let buf = &mut **buf;
-
-        let result = append_packet_without_compression(pkt, buf)?;
-
-        self.push(result);
-        Ok(())
-    }
-
-    pub fn append_raw(&mut self, data: &[u8]) {
-        let buffer = &mut *self.buffer;
-        let start_ptr = buffer.append(data);
-
-        let writer = DataWriteInfo {
-            start_ptr,
-            len: data.len() as u32,
-        };
-
-        self.push(writer);
-    }
-
-    fn push(&mut self, writer: DataWriteInfo) {
-        let to_write = &mut self.local_to_write;
-
-        if let Some(last) = to_write.last_mut() {
-            let start_pointer_if_contiguous = unsafe { last.start_ptr.add(last.len as usize) };
-            if start_pointer_if_contiguous == writer.start_ptr {
-                last.len += writer.len;
-                return;
-            }
+    /// `f` is called with the data to send. If there is no data that needs to be sent or data
+    /// cannot be sent at this moment, `f` is not called and nothing else is done. `f` should not
+    /// panic.
+    pub fn prepare_for_send<F: FnOnce(&[u8])>(&mut self, mut f: F) {
+        if self.currently_sending {
+            // Since this needs to handle truncated writes which are not treated as an error by the
+            // kernel, this cannot send multiple writes at once.
+            return;
         }
 
-        to_write.push(writer);
+        let to_write = self.to_write.get_mut().unwrap();
+        if to_write.is_empty() {
+            // Nothing needs to be sent
+            return;
+        }
+
+        self.currently_sending = true;
+        f(to_write);
+    }
+
+    fn push(&self, writer: PacketWriteInfo) {
+        let to_write = self.to_write.get_mut().unwrap();
+
+        // TODO: This is unsound because this function doesn't have safety contract
+        let data = unsafe { std::slice::from_raw_parts(writer.start_ptr, writer.len as usize) };
+        to_write.extend_from_slice(data);
     }
 
     pub fn add_successful_send(&mut self, d_count: usize) {
@@ -345,6 +307,7 @@ impl Broadcast {
 
         encoder.append_packet(pkt, buf, &mut *scratch, &mut compressor)?;
 
+        self.push(result);
         Ok(())
     }
 
@@ -352,8 +315,12 @@ impl Broadcast {
         let local = self.packets.get_local_raw();
         let local = unsafe { &mut *local.get() };
 
-        let buf = &mut local.data;
-        buf.extend_from_slice(data);
+        let writer = PacketWriteInfo {
+            start_ptr,
+            len: data.len() as u32,
+        };
+
+        self.push(writer);
     }
 }
 

@@ -71,6 +71,7 @@ where
     pkt.encode_with_id(&mut cursor)?;
 
     let data_len = cursor.position() as usize - data_write_start as usize;
+    dbg!(data_len);
 
     let packet_len_size = VarInt(data_len as i32).written_size();
 
