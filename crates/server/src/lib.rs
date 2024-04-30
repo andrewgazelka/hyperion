@@ -144,6 +144,11 @@ fn set_memlock_limit(limit: u64) -> anyhow::Result<()> {
         //
     }
 
+    if limit<rlim_current.rlim_cur {
+        info!("current limit is already greater than requested limit");
+        return Ok(());
+    }
+
     let rlim = libc::rlimit {
         rlim_cur: limit,
         rlim_max: limit,
