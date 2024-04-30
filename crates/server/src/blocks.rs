@@ -33,7 +33,7 @@ fn get_nyc_save() -> anyhow::Result<PathBuf> {
     let new_york_dir = hyperion.join("NewYork");
 
     if new_york_dir.exists() {
-        info!("Restoring from existing .hyperion/NewYork");
+        info!("using cached NewYork load");
     } else {
         // download
         info!("downloading NewYork.tar.gz");

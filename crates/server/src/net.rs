@@ -164,8 +164,8 @@ use crate::{
     singleton::ring::register_rings,
 };
 
-const NUM_PLAYERS: usize = 10;
-const S2C_BUFFER_SIZE: usize = 1024 * 1024 * NUM_PLAYERS;
+const NUM_PLAYERS: usize = 1024;
+pub const S2C_BUFFER_SIZE: usize = 1024 * 1024 * NUM_PLAYERS;
 
 #[derive(Debug)]
 pub struct IoBuf {

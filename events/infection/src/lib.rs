@@ -3,13 +3,13 @@
 
 use std::net::ToSocketAddrs;
 
-use server::{valence_server::protocol::anyhow, Game};
+use server::{valence_server::protocol::anyhow, Hyperion};
 
 mod components;
 mod system;
 
 pub fn init_game(address: impl ToSocketAddrs + Send + Sync + 'static) -> anyhow::Result<()> {
-    let mut game = Game::init_with(address, |world| {
+    let mut game = Hyperion::init_with(address, |world| {
         // join events
         world.add_handler(system::scramble_player_name);
         world.add_handler(system::assign_team_on_join);
