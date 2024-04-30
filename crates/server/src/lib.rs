@@ -144,7 +144,7 @@ fn set_memlock_limit(limit: u64) -> anyhow::Result<()> {
         //
     }
 
-    if limit<rlim_current.rlim_cur {
+    if limit < rlim_current.rlim_cur {
         info!("current limit is already greater than requested limit");
         return Ok(());
     }
