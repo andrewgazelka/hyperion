@@ -46,6 +46,13 @@ pub enum LoginState {
     Terminate,
 }
 
+impl LoginState {
+    #[must_use]
+    pub const fn is_play(&self) -> bool {
+        matches!(self, Self::Play)
+    }
+}
+
 #[derive(Copy, Clone, PartialEq, Debug, Component)]
 pub enum Vitals {
     /// If the player is alive

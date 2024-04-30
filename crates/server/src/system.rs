@@ -31,7 +31,7 @@ mod sync_entity_position;
 mod sync_players;
 mod teleport;
 mod update_health;
-mod update_time;
+mod time;
 mod voice_chat;
 
 pub use block_update::block_update;
@@ -63,4 +63,4 @@ pub use sync_entity_position::sync_entity_position;
 pub use sync_players::sync_players;
 pub use teleport::teleport;
 pub use update_health::update_health;
-pub use update_time::update_time;
+pub use time::{send_time, update_time};

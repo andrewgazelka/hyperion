@@ -187,7 +187,7 @@ impl ServerDef for GenericServer {
         writers: impl Iterator<Item = RefreshItems<'a>>,
     ) {
         for writer in writers {
-            let RefreshItems { write, fd } = writer;
+            let RefreshItems { local: write, fd } = writer;
             todo!()
 
             // let Some(to_write) = self.connections.get_mut(&fd.0) else {

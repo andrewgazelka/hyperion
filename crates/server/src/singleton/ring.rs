@@ -6,7 +6,7 @@ use tracing::debug;
 use crate::net::{encoder::PacketWriteInfo, ServerDef};
 
 // todo: see if it makes sense to use MaybeUninit
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub struct Ring<const N: usize> {
     data: [u8; N],
     head: usize,
@@ -85,6 +85,12 @@ impl <const N: usize> Buf for Ring<N> {
 
         let len = len as u32;
         PacketWriteInfo { start_ptr, len }
+    }
+}
+
+impl <const N: usize> Default for Ring<N> {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

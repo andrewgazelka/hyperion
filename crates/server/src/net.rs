@@ -7,15 +7,16 @@ use std::{
     sync::{atomic, atomic::AtomicUsize},
 };
 
+use anyhow::Context;
 use derive_more::{Deref, DerefMut};
 use evenio::{fetch::Single, handler::HandlerParam, prelude::Component};
 use libc::iovec;
 use libdeflater::CompressionLvl;
-use tracing::{debug, trace};
+use tracing::{debug, instrument, trace};
 
 use crate::{global::Global, net::encoder::PacketWriteInfo};
 
-mod buffers;
+pub mod buffers;
 
 #[cfg(target_os = "linux")]
 mod linux;
@@ -93,9 +94,17 @@ impl ServerDef for Server {
     }
 }
 
+pub struct GlobalPacketWriteInfo {
+    pub start_ptr: *const u8,
+    pub len: u32,
+    pub buffer_idx: u16,
+}
+
 #[allow(unused, reason = "this is used on linux")]
 pub struct RefreshItems<'a> {
-    pub write: &'a [PacketWriteInfo],
+    pub local: &'a mut Vec<PacketWriteInfo>,
+    pub global: Option<&'a Vec<GlobalPacketWriteInfo>>,
+    pub buffer_idx: u16,
     pub fd: Fd,
 }
 
@@ -169,7 +178,7 @@ use rayon_local::RayonLocal;
 use crate::{
     event::Scratches,
     net::{
-        buffers::BufRef,
+        buffers::{BufRef, BufferAllocator},
         encoder::{append_packet_without_compression, PacketEncoder},
     },
 };
@@ -206,14 +215,6 @@ impl<'a> Compose<'a> {
     }
 }
 
-/// This is useful for the ECS so we can use Single<&mut Broadcast> instead of having to use a marker struct
-#[derive(Component)]
-pub struct Broadcast {
-    buffers: RayonLocal<BufRef>,
-    to_write: RayonLocal<Vec<PacketWriteInfo>>,
-    number_sending: AtomicUsize,
-}
-
 /// Stores indices of packets
 #[derive(Component)]
 pub struct Packets {
@@ -223,6 +224,19 @@ pub struct Packets {
 }
 
 impl Packets {
+    #[instrument(skip_all)]
+    pub fn new(allocator: &mut BufferAllocator) -> anyhow::Result<Self> {
+        Ok(Self {
+            buffer: allocator.obtain().context("failed to obtain buffer")?,
+            local_to_write: Vec::new(),
+            number_sending: AtomicUsize::new(0),
+        })
+    }
+
+    pub fn index(&self) -> u16 {
+        self.buffer.index()
+    }
+
     pub fn append<P>(&mut self, pkt: &P, compose: &Compose) -> anyhow::Result<()>
     where
         P: valence_protocol::Packet + valence_protocol::Encode,
@@ -293,86 +307,69 @@ impl Packets {
             .fetch_sub(d_count, atomic::Ordering::Relaxed);
     }
 
-    pub fn get_write_mut(&self) -> &[PacketWriteInfo] {
-        &self.local_to_write
+    pub fn get_write_mut(&mut self) -> &mut Vec<PacketWriteInfo> {
+        &mut self.local_to_write
     }
 
     #[must_use]
-    pub fn can_send(&self) -> bool {
+    pub fn can_send(&self, broadcast_count: usize) -> bool {
         if self.number_sending.load(atomic::Ordering::Relaxed) != 0 {
             return false;
         }
 
-        !self.local_to_write.is_empty()
+        let total_len = self.local_to_write.len() + broadcast_count;
+        total_len > 0
     }
 
-    pub fn prepare_for_send(&mut self) -> usize {
+    pub fn prepare_for_send(&mut self, extra: usize) -> usize {
         debug_assert!(
             self.number_sending.load(atomic::Ordering::Relaxed) == 0,
             "number sending is not 0 even though we are preparing for send"
         );
-        let count = self.local_to_write.len();
+        let count = self.local_to_write.len() + extra;
         self.number_sending = AtomicUsize::new(count);
         count
-    }
-
-    pub fn extend(&mut self, other: &Broadcast) {
-        todo!()
     }
 }
 
+pub struct LocalBroadcast {
+    pub buffer: BufRef,
+    pub local_to_write: Vec<PacketWriteInfo>,
+}
+
+/// This is useful for the ECS so we can use Single<&mut Broadcast> instead of having to use a marker struct
+#[derive(Component, Deref, DerefMut)]
+pub struct Broadcast {
+    packets: RayonLocal<LocalBroadcast>,
+}
+
 impl Broadcast {
-    pub fn extend(&mut self, other: &Self) {
-        let this = self.to_write.iter_mut();
-        let other = other.to_write.iter();
+    #[instrument(skip_all)]
+    pub fn new(allocator: &mut BufferAllocator) -> anyhow::Result<Self> {
+        trace!("initializing broadcast buffers");
+        // todo: try_init
+        let packets = RayonLocal::init(|| {
+            let buffer = allocator.obtain().unwrap();
+            LocalBroadcast {
+                buffer,
+                local_to_write: Vec::new(),
+            }
+        });
 
-        for (this, other) in this.zip(other) {
-            this.extend(other);
-        }
-    }
-
-    pub fn get_write_mut(&mut self) -> &mut RayonLocal<Vec<PacketWriteInfo>> {
-        &mut self.to_write
-    }
-
-    #[must_use]
-    pub fn can_send(&self) -> bool {
-        if self.number_sending.load(atomic::Ordering::Relaxed) != 0 {
-            return false;
-        }
-
-        self.to_write.iter().any(|x| !x.is_empty())
-    }
-
-    pub fn set_successfully_sent(&self, d_count: usize) {
-        debug_assert!(
-            self.number_sending.load(atomic::Ordering::Relaxed) > 0,
-            "somehow number sending is 0 even though we just marked a successful send"
-        );
-
-        self.number_sending
-            .fetch_sub(d_count, atomic::Ordering::Relaxed);
-    }
-
-    pub fn prepare_for_send(&mut self) -> usize {
-        debug_assert!(
-            self.number_sending.load(atomic::Ordering::Relaxed) == 0,
-            "number sending is not 0 even though we are preparing for send"
-        );
-        let count = self.to_write.iter().map(Vec::len).sum();
-        self.number_sending = AtomicUsize::new(count);
-        count
+        Ok(Self { packets })
     }
 
     pub fn clear(&mut self) {
-        self.to_write.iter_mut().for_each(Vec::clear);
+        for packet in &mut self.packets {
+            packet.local_to_write.clear();
+        }
     }
 
     fn push(&self, writer: PacketWriteInfo) {
-        let to_write = self.to_write.get_local_raw();
+        let to_write = self.packets.get_local_raw();
         let to_write = unsafe { &mut *to_write.get() };
 
-        if let Some(last) = to_write.last_mut() {
+        if let Some(last) = to_write.local_to_write.last_mut() {
             let start_pointer_if_contiguous = unsafe { last.start_ptr.add(last.len as usize) };
             if start_pointer_if_contiguous == writer.start_ptr {
                 last.len += writer.len;
@@ -380,16 +377,17 @@ impl Broadcast {
             }
         }
 
-        to_write.push(writer);
+        to_write.local_to_write.push(writer);
     }
 
     pub fn append_pre_compression_packet<P>(&self, pkt: &P) -> anyhow::Result<()>
     where
         P: valence_protocol::Packet + valence_protocol::Encode,
     {
-        let buf = self.buffers.get_local_raw();
-        let buf = unsafe { &mut *buf.get() };
-        let buf = &mut **buf;
+        let local = self.packets.get_local_raw();
+        let local = unsafe { &mut *local.get() };
+
+        let buf = &mut *local.buffer;
 
         let result = append_packet_without_compression(pkt, buf)?;
 
@@ -412,9 +410,10 @@ impl Broadcast {
 
         let encoder = compose.encoder();
 
-        let buf = self.buffers.get_local_raw();
-        let buf = unsafe { &mut *buf.get() };
-        let buf = &mut **buf;
+        let local = self.packets.get_local_raw();
+        let local = unsafe { &mut *local.get() };
+
+        let buf = &mut *local.buffer;
 
         let result = encoder.append_packet(pkt, buf, &mut *scratch, &mut compressor)?;
 
@@ -423,9 +422,10 @@ impl Broadcast {
     }
 
     pub fn append_raw(&self, data: &[u8]) {
-        let buf = self.buffers.get_local_raw();
-        let buf = unsafe { &mut *buf.get() };
-        let buf = &mut **buf;
+        let local = self.packets.get_local_raw();
+        let local = unsafe { &mut *local.get() };
+
+        let buf = &mut *local.buffer;
 
         let start_ptr = buf.append(data);
 

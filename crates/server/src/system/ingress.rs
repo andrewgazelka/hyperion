@@ -27,7 +27,7 @@ mod player_packet_buffer;
 use crate::{
     components::{FullEntityPose, ImmuneStatus, KeepAlive, LoginState, Vitals},
     event::BumpScratch,
-    net::{Fd, Packets, MINECRAFT_VERSION, PROTOCOL_VERSION},
+    net::{buffers::BufferAllocator, Fd, Packets, MINECRAFT_VERSION, PROTOCOL_VERSION},
     packets::PacketSwitchQuery,
     singleton::player_id_lookup::EntityIdLookup,
     system::ingress::player_packet_buffer::DecodeBuffer,
@@ -114,15 +114,17 @@ pub fn generate_ingress_events(
 pub fn add_player(
     r: ReceiverMut<AddPlayer>,
     mut fd_lookup: Single<&mut FdLookup>,
+    mut buffer_allocator: Single<&mut BufferAllocator>,
     mut sender: IngressSender,
 ) {
     let event = r.event;
 
     let new_player = sender.spawn();
+
     sender.insert(new_player, LoginState::Handshake);
     sender.insert(new_player, DecodeBuffer::default());
+    sender.insert(new_player, Packets::new(&mut buffer_allocator).unwrap());
 
-    // sender.insert(new_player, Packets::default());
     let fd = event.fd;
     sender.insert(new_player, fd);
 

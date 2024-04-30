@@ -10,6 +10,7 @@
 #![feature(core_io_borrowed_buf)]
 #![feature(maybe_uninit_slice)]
 #![feature(duration_millis_float)]
+#![feature(new_uninit)]
 #![expect(clippy::type_complexity, reason = "evenio uses a lot of complex types")]
 #![allow(clippy::mut_mut, reason = "ideally remove this")]
 
@@ -47,7 +48,7 @@ use crate::{
     components::{chunks::Chunks, Vitals},
     event::{BumpScratch, Egress, Gametick, Scratches, Stats},
     global::Global,
-    net::{Compressors, Server, ServerDef, S2C_BUFFER_SIZE},
+    net::{buffers::BufferAllocator, Broadcast, Compressors, Server, ServerDef, S2C_BUFFER_SIZE},
     singleton::{
         fd_lookup::FdLookup, player_aabb_lookup::PlayerBoundingBoxes,
         player_id_lookup::EntityIdLookup, player_uuid_lookup::PlayerUuidLookup,
@@ -280,8 +281,7 @@ impl Hyperion {
         let compressor_id = world.spawn();
         world.insert(compressor_id, Compressors::new(shared.compression_level));
 
-        let server_def = Server::new(address)?;
-
+        let mut server_def = Server::new(address)?;
 
         world.add_handler(system::ingress::add_player);
         world.add_handler(system::ingress::remove_player);
@@ -298,6 +298,7 @@ impl Hyperion {
         world.add_handler(system::entity_detect_collisions);
         world.add_handler(system::sync_entity_position);
         world.add_handler(system::recalculate_bounding_boxes);
+        world.add_handler(system::send_time);
         world.add_handler(system::update_time);
         world.add_handler(system::update_health);
         world.add_handler(system::sync_players);
@@ -326,6 +327,13 @@ impl Hyperion {
         world.add_handler(system::stats_message);
         world.add_handler(system::kill_all);
 
+        let buffer_allocator_id = world.spawn();
+        let mut buffer_allocator = BufferAllocator::new(&mut server_def);
+
+        let broadcast = world.spawn();
+        world.insert(broadcast, Broadcast::new(&mut buffer_allocator)?);
+        world.insert(buffer_allocator_id, buffer_allocator);
+
         let global = world.spawn();
         world.insert(global, Global::new(shared.clone()));
 
@@ -351,9 +359,6 @@ impl Hyperion {
 
         let fd_lookup = world.spawn();
         world.insert(fd_lookup, FdLookup::default());
-
-        // let broadcast = world.spawn();
-        // world.insert(broadcast, Broadcast::default());
 
         let mut game = Self {
             shared,

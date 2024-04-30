@@ -2503,6 +2503,7 @@ dependencies = [
  "spin_sleep",
  "tango-bench 0.5.0",
  "tar",
+ "thiserror",
  "tokio",
  "toml",
  "tracing",

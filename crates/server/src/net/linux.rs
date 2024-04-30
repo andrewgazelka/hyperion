@@ -366,17 +366,32 @@ impl ServerDef for LinuxServer {
         writers: impl Iterator<Item = RefreshItems<'a>>,
     ) {
         writers.for_each(|item| {
-            let RefreshItems { write, fd } = item;
+            let RefreshItems {
+                local: write,
+                fd,
+                buffer_idx,
+                global,
+            } = item;
 
             let fd = fd.0;
 
-            for (idx, buf) in write.iter_mut().enumerate() {
-                for elem in buf.iter() {
-                    let PacketWriteInfo { start_ptr, len } = *elem;
-                    self.write_raw(fd, start_ptr, len, idx as u16);
-                }
-                buf.clear();
+            for elem in write.iter_mut() {
+                let PacketWriteInfo { start_ptr, len } = *elem;
+                self.write_raw(fd, start_ptr, len, buffer_idx);
             }
+            
+            if let Some(global) = global {
+                for elem in global {
+                    let start_ptr = elem.start_ptr;
+                    let len = elem.len;
+                    let index = elem.buffer_idx;
+                    
+                    self.write_raw(fd, start_ptr, len, index);
+                }
+            }
+
+            write.clear();
+            
         });
     }
 

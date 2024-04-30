@@ -1,6 +1,7 @@
 use std::{
     cell::UnsafeCell,
     ffi::c_void,
+    mem::MaybeUninit,
     ops::{Deref, DerefMut},
     sync::Arc,
 };
@@ -8,12 +9,17 @@ use std::{
 use arraydeque::ArrayDeque;
 use evenio::prelude::Component;
 use libc::iovec;
+use thiserror::Error;
+use tracing::{debug, instrument, trace};
 
-use crate::{net::ServerDef, singleton::ring::Ring};
+use crate::{
+    net::{ServerDef, MAX_PACKET_SIZE},
+    singleton::ring::Ring,
+};
 
-const COUNT: usize = 1024;
+const COUNT: usize = 200;
 
-const BUFFER_SIZE: usize = 1024 * 1024;
+const BUFFER_SIZE: usize = MAX_PACKET_SIZE * 2;
 
 #[derive(Component)]
 pub struct BufferAllocator {
@@ -21,11 +27,26 @@ pub struct BufferAllocator {
     inner: Arc<BufferAllocatorInner>,
 }
 
-impl BufferAllocator {
-    pub fn obtain(&self) -> Option<BufRef> {
-        let index = unsafe { &mut *self.inner.available.get() }.pop_front()?;
+#[derive(Error, Debug)]
+pub enum BufferAllocationError {
+    #[error("all buffers are being used")]
+    AllBuffersInUse,
+}
 
-        Some(BufRef {
+impl BufferAllocator {
+    #[instrument(skip_all)]
+    pub fn obtain(&mut self) -> Result<BufRef, BufferAllocationError> {
+        #[cfg(debug_assertions)]
+        {
+            let buffers_left = self.inner.available.lock().len();
+            trace!("buffers left: {buffers_left}");
+        }
+
+
+        let index = self.inner.available.lock().pop_front()
+            .ok_or(BufferAllocationError::AllBuffersInUse)?;
+
+        Ok(BufRef {
             index,
             allocator: self.inner.clone(),
         })
@@ -43,10 +64,10 @@ struct BufferAllocatorInner {
     // todo: try on stack? will probs need to increase stack size. idk if this even makes sense to do though.
     // todo: probs just have one continuous buffer and then something that is similar to an arrayvec but references it
     buffers: Box<[UnsafeCell<Ring<BUFFER_SIZE>>]>,
-    available: UnsafeCell<ArrayDeque<u16, COUNT>>,
+    available: parking_lot::Mutex<ArrayDeque<u16, COUNT>>,
 }
 
-// todo: is this correct?
+// I think this is safe because indices of buffer are never accessed concurrently
 unsafe impl Send for BufferAllocatorInner {}
 unsafe impl Sync for BufferAllocatorInner {}
 
@@ -56,6 +77,7 @@ pub struct BufRef {
 }
 
 impl BufRef {
+    #[must_use]
     pub const fn index(&self) -> u16 {
         self.index
     }
@@ -65,7 +87,9 @@ impl Drop for BufRef {
     fn drop(&mut self) {
         // we are pushing back so we give the buffer the maximum lifetime
         // in io-uring
-        unsafe { &mut *self.allocator.available.get() }
+        self.allocator
+            .available
+            .lock()
             .push_back(self.index)
             .unwrap();
     }
@@ -91,9 +115,13 @@ impl BufferAllocatorInner {
         reason = "todo probs remove somehow but idk how"
     )]
     fn new(server_def: &mut impl ServerDef) -> Self {
+        trace!("initializing buffer allocator");
         let available: [u16; COUNT] = std::array::from_fn(|i| i as u16);
 
-        let buffers: Box<_> = (0..COUNT).map(|_| UnsafeCell::new(Ring::new())).collect();
+        let buffers = Box::new_zeroed_slice(COUNT);
+        let buffers: Box<[UnsafeCell<Ring<BUFFER_SIZE>>]> = unsafe { buffers.assume_init() };
+
+        trace!("got buffers");
 
         let iovecs = buffers
             .iter()
@@ -107,7 +135,7 @@ impl BufferAllocatorInner {
 
         Self {
             buffers,
-            available: UnsafeCell::new(ArrayDeque::from(available)),
+            available: parking_lot::Mutex::new(ArrayDeque::from(available)),
         }
     }
 }

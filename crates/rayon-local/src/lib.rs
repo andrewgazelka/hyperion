@@ -1,6 +1,7 @@
 #![feature(allocator_api)]
 #![feature(lint_reasons)]
 #![feature(impl_trait_in_assoc_type)]
+#![feature(iterator_try_collect)]
 //! A simple thread-local storage abstraction for Rayon.
 
 extern crate core;
