@@ -1,5 +1,3 @@
-use std::sync::atomic::Ordering;
-
 use evenio::prelude::*;
 use tracing::instrument;
 use valence_protocol::{
@@ -10,7 +8,6 @@ use valence_protocol::{
 use crate::{
     components::Uuid,
     event::KickPlayer,
-    global::Global,
     net::{Compose, Packets},
     singleton::{player_id_lookup::EntityIdLookup, player_uuid_lookup::PlayerUuidLookup},
 };
@@ -18,7 +15,6 @@ use crate::{
 #[instrument(skip_all)]
 pub fn player_kick(
     r: Receiver<KickPlayer, (EntityId, &Uuid, &mut Packets)>,
-    global: Single<&Global>,
     mut uuid_lookup: Single<&mut PlayerUuidLookup>,
     mut id_lookup: Single<&mut EntityIdLookup>,
     send_info: Compose,
@@ -43,10 +39,6 @@ pub fn player_kick(
             &send_info,
         )
         .unwrap();
-
-    // todo: also handle disconnecting without kicking, io socket being closed, etc
-
-    global.0.shared.player_count.fetch_sub(1, Ordering::Relaxed);
 
     s.send(Despawn(id));
 }

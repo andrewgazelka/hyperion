@@ -7,8 +7,6 @@ resolver = "2"
 
 members = [
     "crates/bvh",
-    "crates/generator",
-    "crates/generator-build",
     "crates/rayon-local",
     "crates/server",
     "events/infection",

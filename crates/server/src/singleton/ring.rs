@@ -1,7 +1,7 @@
 use std::mem::MaybeUninit;
 
 use libc::iovec;
-use tracing::warn;
+use tracing::debug;
 
 use crate::net::{encoder::PacketWriteInfo, ServerDef};
 
@@ -66,7 +66,8 @@ impl Buf for Ring {
 
         let len_until_end = self.len_until_end();
         if len_until_end < len {
-            warn!("rotating buffer because {len_until_end} < {len}");
+            let ptr = self.data.as_ptr();
+            debug!("rotating buffer {ptr:?} because {len_until_end} < {len}");
             self.head = 0;
             &mut self.data[..len]
         } else {

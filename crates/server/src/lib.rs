@@ -9,6 +9,7 @@
 #![feature(read_buf)]
 #![feature(core_io_borrowed_buf)]
 #![feature(maybe_uninit_slice)]
+#![feature(duration_millis_float)]
 #![expect(clippy::type_complexity, reason = "evenio uses a lot of complex types")]
 
 pub use evenio;
@@ -140,13 +141,7 @@ fn set_memlock_limit(limit: u64) -> anyhow::Result<()> {
         let rlim_max = SizeFormatter::new(rlim_current.rlim_max, BINARY);
         info!("current soft limit: {rlim_cur}");
         info!("current hard limit: {rlim_max}");
-
-        // we do not have to set because we are already above the limit
-        if rlim_current.rlim_cur > limit {
-            let limit = SizeFormatter::new(limit, BINARY);
-            info!("current limit is already above the requested limit of {limit}");
-            return Ok(());
-        }
+        //
     }
 
     let rlim = libc::rlimit {
@@ -156,8 +151,14 @@ fn set_memlock_limit(limit: u64) -> anyhow::Result<()> {
 
     let result = unsafe { setrlimit(libc::RLIMIT_MEMLOCK, &rlim) };
     if result == 0 {
-        let limit = SizeFormatter::new(limit, BINARY);
-        info!("set limit to {limit}");
+        let limit_fmt = SizeFormatter::new(limit, BINARY);
+        info!("set limit to {limit_fmt}");
+
+        let count = rayon_local::count();
+        let expected = limit * count as u64;
+        let expected_fmt = SizeFormatter::new(expected, BINARY);
+        info!("expected to allocate {count}×{limit_fmt} = {expected_fmt} bytes of memory");
+
         Ok(())
     } else {
         Err(std::io::Error::last_os_error()).context("failed to set memlock limit")
@@ -288,6 +289,7 @@ impl Hyperion {
 
         world.add_handler(system::send_chunk_updates);
         world.add_handler(system::init_player);
+        world.add_handler(system::despawn_player);
         world.add_handler(system::player_join_world);
         world.add_handler(system::player_kick);
         world.add_handler(system::init_entity);
@@ -379,7 +381,9 @@ impl Hyperion {
         let now = Instant::now();
 
         if time_for_20_tps < now {
-            warn!("tick took full 50ms; skipping sleep");
+            let off_by = now - time_for_20_tps;
+            let off_by = off_by.as_millis_f64();
+            warn!("off by {off_by:.2}ms → skipping sleep");
             return None;
         }
 
@@ -397,17 +401,15 @@ impl Hyperion {
     /// Run the main game loop at 20 ticks per second.
     pub fn game_loop(&mut self) {
         while !SHUTDOWN.load(std::sync::atomic::Ordering::Relaxed) {
-            self.tick();
-
-            if let Some(wait_duration) = self.wait_duration() {
+            if let Some(wait_duration) = self.tick() {
                 spin_sleep::sleep(wait_duration);
             }
         }
     }
 
     /// Run one tick of the game loop.
-    #[instrument(skip(self), fields(tick_on = self.tick_on))]
-    pub fn tick(&mut self) {
+    #[instrument(skip(self), fields(on = self.tick_on))]
+    pub fn tick(&mut self) -> Option<Duration> {
         /// The length of history to keep in the moving average.
         const LAST_TICK_HISTORY_SIZE: usize = 100;
 
@@ -419,7 +421,7 @@ impl Hyperion {
 
             let ms = last.elapsed().as_nanos() as f64 / 1_000_000.0;
             if ms > 60.0 {
-                warn!("tick took too long: {ms}ms");
+                warn!("took too long: {ms:.2}ms");
             }
 
             self.last_ticks.pop_front().unwrap();
@@ -452,6 +454,7 @@ impl Hyperion {
         )]
         let ms = now.elapsed().as_nanos() as f64 / 1_000_000.0;
         self.update_tick_stats(ms, scratch.one());
+        self.wait_duration()
     }
 
     #[instrument(skip_all, level = "trace")]

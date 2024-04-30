@@ -4,6 +4,7 @@ use evenio::{
     prelude::{EntityId, ReceiverMut},
     world::World,
 };
+use fxhash::FxHashMap;
 use rayon_local::RayonLocal;
 use serde_json::json;
 use tracing::{info, instrument, trace, warn};
@@ -73,15 +74,17 @@ pub struct RecvData<'a, 'b, 'c> {
 
 #[derive(Event)]
 pub struct SentData {
-    fd: Fd,
+    decrease_count: FxHashMap<Fd, usize>,
 }
 
-#[instrument(skip_all)]
+#[instrument(skip_all, level = "trace")]
 pub fn generate_ingress_events(
     world: &mut World,
     server: &mut Server,
     scratch: &mut RayonLocal<BumpScratch>,
 ) {
+    let mut decrease_count = FxHashMap::default();
+
     server
         .drain(|event| match event {
             ServerEvent::AddPlayer { fd } => {
@@ -94,10 +97,15 @@ pub fn generate_ingress_events(
                 world.send(RecvData { fd, data, scratch });
             }
             ServerEvent::SentData { fd } => {
-                world.send(SentData { fd });
+                decrease_count
+                    .entry(fd)
+                    .and_modify(|x| *x += 1)
+                    .or_insert(1);
             }
         })
         .unwrap();
+
+    world.send(SentData { decrease_count });
 }
 
 // The `Receiver<Tick>` parameter tells our handler to listen for the `Tick` event.
@@ -119,7 +127,7 @@ pub fn add_player(
     sender.insert(new_player, fd);
 
     fd_lookup.insert(fd, new_player);
-    info!("got a player with fd {:?}", fd);
+    trace!("got a player with fd {:?}", fd);
 }
 
 // The `Receiver<Tick>` parameter tells our handler to listen for the `Tick` event.
@@ -134,49 +142,44 @@ pub fn remove_player(
 
     let fd = event.fd;
     let Some(id) = fd_lookup.remove(&fd) else {
-        warn!(
-            "tried to remove player with fd {:?} but it seemed to already be removed",
-            fd
-        );
+        warn!("tried to remove player with fd {fd:?} but it seemed to already be removed",);
         return;
     };
 
     sender.despawn(id);
 
-    info!("removed a player with fd {:?}", fd);
+    trace!("removed a player with fd {:?}", fd);
 }
 
 // The `Receiver<Tick>` parameter tells our handler to listen for the `Tick` event.
 #[instrument(skip_all, level = "trace")]
 #[allow(clippy::too_many_arguments, reason = "todo")]
-pub fn sent_data(
-    r: Receiver<SentData>,
-    mut players: Fetcher<&mut Packets>,
-    fd_lookup: Single<&FdLookup>,
-) {
+pub fn sent_data(r: Receiver<SentData>, players: Fetcher<&Packets>, fd_lookup: Single<&FdLookup>) {
     let event = r.event;
 
-    let fd = event.fd;
-    let Some(id) = fd_lookup.get(&fd) else {
-        warn!(
-            "tried to get id for fd {:?} but it seemed to already be removed",
-            fd
-        );
-        return;
-    };
+    // todo: par iter
+    event.decrease_count.iter().for_each(|(fd, count)| {
+        let Some(&id) = fd_lookup.get(fd) else {
+            warn!(
+                "tried to get id for fd {:?} but it seemed to already be removed",
+                fd
+            );
+            return;
+        };
 
-    let Ok(pkts) = players.get_mut(*id) else {
-        warn!(
-            "tried to get pkts for id {:?} but it seemed to already be removed",
-            id
-        );
-        return;
-    };
+        let Ok(pkts) = players.get(id) else {
+            warn!(
+                "tried to get pkts for id {:?} but it seemed to already be removed",
+                id
+            );
+            return;
+        };
 
-    pkts.set_successfully_sent();
+        pkts.set_successfully_sent(*count);
+    });
 }
 
-#[instrument(skip_all)]
+#[instrument(skip_all, level = "trace")]
 #[allow(clippy::too_many_arguments, reason = "todo")]
 pub fn recv_data(
     r: ReceiverMut<RecvData>,
@@ -286,7 +289,7 @@ fn process_handshake(login_state: &mut LoginState, packet: &PacketFrame) -> anyh
 
     let handshake: packets::handshaking::HandshakeC2s = packet.decode()?;
 
-    info!("received handshake: {:?}", handshake);
+    trace!("received handshake: {:?}", handshake);
 
     // todo: check version is correct
 
@@ -317,7 +320,7 @@ fn process_login(
 
     let login::LoginHelloC2s { username, .. } = packet.decode()?;
 
-    info!("received LoginHello for {username}");
+    trace!("received LoginHello for {username}");
 
     let username = username.0;
 

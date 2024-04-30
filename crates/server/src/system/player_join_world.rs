@@ -4,7 +4,7 @@ use anyhow::{bail, Context};
 use evenio::prelude::*;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use serde::Deserialize;
-use tracing::{debug, info, instrument, warn};
+use tracing::{debug, info, instrument, trace, warn};
 use valence_nbt::{value::ValueRef, Value};
 use valence_protocol::{
     game_mode::OptGameMode,
@@ -70,7 +70,7 @@ pub(crate) struct PlayerQuery<'a> {
 
 // todo: clean up player_join_world; the file is super super super long and hard to understand
 #[allow(clippy::too_many_arguments, reason = "todo")]
-#[instrument(skip_all)]
+#[instrument(skip_all, level = "trace")]
 pub fn player_join_world(
     r: Receiver<PlayerJoinWorld, PlayerJoinWorldQuery>,
     entities: Fetcher<EntityQuery>,
@@ -90,14 +90,14 @@ pub fn player_join_world(
         let mut encoder = PacketEncoder::new();
         encoder.set_compression(compression_level);
 
-        info!("Caching world data for new players");
+        info!("caching world data for new players");
         inner(&mut encoder, &chunks, &compose).unwrap();
 
         let bytes = encoder.take();
         bytes.freeze()
     });
 
-    info!("got cached data");
+    trace!("got cached data");
 
     let query = r.query;
 
@@ -165,7 +165,7 @@ pub fn player_join_world(
         local.append_raw(cached_data, buf);
     }
 
-    info!("appending cached data");
+    trace!("appending cached data");
 
     local
         .append(
@@ -328,7 +328,7 @@ pub fn player_join_world(
         )
         .unwrap();
 
-    info!("Player {} joined the world", query.name);
+    info!("{} joined the world", query.name);
 }
 
 pub fn send_keep_alive(packets: &Packets, compose: &Compose) -> anyhow::Result<()> {

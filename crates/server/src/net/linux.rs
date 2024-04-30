@@ -285,7 +285,7 @@ impl ServerDef for LinuxServer {
                     let more = event.flags() & IORING_CQE_F_MORE != 0;
 
                     if result == -libc::ECONNRESET || result == -libc::ETIMEDOUT || result == 0 {
-                        info!("player {fd:?} disconnected during recv (code {result})");
+                        trace!("player {fd:?} disconnected during recv (code {result})");
 
                         assert!(
                             !more,
@@ -355,9 +355,11 @@ impl ServerDef for LinuxServer {
     fn allocate_buffers(&mut self, buffers: &[iovec]) {
         info!("allocating buffers");
         unsafe { self.register_buffers(buffers) };
+        info!("finished allocating buffers");
     }
 
     /// Impl with local sends BEFORE broadcasting
+    #[instrument(skip_all, level = "trace", name = "iou-write-all")]
     fn write_all<'a>(
         &mut self,
         _global: &mut Global,
@@ -378,6 +380,7 @@ impl ServerDef for LinuxServer {
         });
     }
 
+    #[instrument(skip_all, level = "trace", name = "iou-submit-events")]
     fn submit_events(&mut self) {
         if let Err(err) = self.uring.submit() {
             error!("unexpected io_uring error during submit: {err}");
