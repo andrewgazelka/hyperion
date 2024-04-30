@@ -12,16 +12,9 @@ use crate::{event::ScratchBuffer, net::MAX_PACKET_SIZE, singleton::ring::Buf};
 
 mod util;
 
+#[derive(Copy, Clone, Debug, Default)]
 pub struct PacketEncoder {
     threshold: CompressionThreshold,
-}
-
-impl Debug for PacketEncoder {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("PacketEncoder")
-            .field("threshold", &self.threshold)
-            .finish()
-    }
 }
 
 // todo:

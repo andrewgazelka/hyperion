@@ -7,7 +7,7 @@ use valence_protocol::{packets::play, ByteAngle, VarInt};
 use crate::{
     components::{FullEntityPose, Uuid},
     event::Gametick,
-    net::{Broadcast, Compose, Packets},
+    net::{Broadcast, Compose},
     singleton::broadcast::{PacketMetadata, PacketNecessity},
 };
 
@@ -34,7 +34,6 @@ pub fn sync_entity_position(
     broadcast: Single<&Broadcast>,
     compose: Compose,
 ) {
-    let broadcast = &***broadcast;
 
     entities.par_iter_mut().for_each(|query| {
         let EntityQuery {
@@ -113,7 +112,7 @@ pub fn sync_entity_position(
             exclude_player: Some(uuid.0),
         };
 
-        movement.write_packets(id, broadcast, metadata, &compose);
+        movement.write_packets(id, &broadcast, metadata, &compose);
 
         if let EntityMovement::Teleport { .. } = movement {
             sync_meta.rounding_error = Vec3::ZERO;
@@ -149,7 +148,7 @@ impl EntityMovement {
     fn write_packets(
         &self,
         id: EntityId,
-        broadcast: &Packets,
+        broadcast: &Broadcast,
         _metadata: PacketMetadata,
         compose: &Compose,
     ) {

@@ -2,20 +2,20 @@
 
 use std::{
     cell::RefCell,
-    collections::VecDeque,
     hash::Hash,
     net::ToSocketAddrs,
     sync::{atomic, atomic::AtomicUsize},
 };
 
-use derive_more::{Deref, DerefMut, From};
+use derive_more::{Deref, DerefMut};
 use evenio::{fetch::Single, handler::HandlerParam, prelude::Component};
 use libc::iovec;
 use libdeflater::CompressionLvl;
 use tracing::{debug, trace};
-use valence_protocol::CompressionThreshold;
 
-use crate::{global::Global, net::encoder::PacketWriteInfo, singleton::ring::Ring};
+use crate::{global::Global, net::encoder::PacketWriteInfo};
+
+mod buffers;
 
 #[cfg(target_os = "linux")]
 mod linux;
@@ -95,7 +95,7 @@ impl ServerDef for Server {
 
 #[allow(unused, reason = "this is used on linux")]
 pub struct RefreshItems<'a> {
-    pub write: &'a mut RayonLocal<VecDeque<PacketWriteInfo>>,
+    pub write: &'a [PacketWriteInfo],
     pub fd: Fd,
 }
 
@@ -167,20 +167,15 @@ pub use decoder::PacketDecoder;
 use rayon_local::RayonLocal;
 
 use crate::{
-    event::Scratches, net::encoder::append_packet_without_compression,
-    singleton::ring::register_rings,
+    event::Scratches,
+    net::{
+        buffers::BufRef,
+        encoder::{append_packet_without_compression, PacketEncoder},
+    },
 };
 
 // 128 MiB * num_cores
 pub const S2C_BUFFER_SIZE: usize = 1024 * 1024 * 128;
-
-#[derive(Debug)]
-pub struct IoBuf {
-    /// The encoding buffer and logic
-    enc: encoder::PacketEncoder,
-    buf: Ring,
-    index: usize,
-}
 
 #[derive(Component, Deref, DerefMut)]
 pub struct Compressors {
@@ -196,72 +191,137 @@ impl Compressors {
     }
 }
 
-#[derive(Component, Debug, Deref, DerefMut)]
-pub struct IoBufs {
-    locals: RayonLocal<RefCell<IoBuf>>,
-}
-
-impl IoBufs {
-    pub fn init(threshold: CompressionThreshold, server_def: &mut impl ServerDef) -> Self {
-        let mut locals = RayonLocal::init_with_index(|i| IoBuf::new(threshold, i));
-
-        let rings = locals.get_all_mut().iter_mut().map(IoBuf::buf_mut);
-        register_rings(server_def, rings);
-
-        let locals = locals.map(RefCell::new);
-
-        Self { locals }
-    }
-}
-
-impl IoBuf {
-    #[must_use]
-    pub fn new(threshold: CompressionThreshold, index: usize) -> Self {
-        Self {
-            enc: encoder::PacketEncoder::new(threshold),
-            buf: Ring::new(S2C_BUFFER_SIZE),
-            index,
-        }
-    }
-
-    #[must_use]
-    pub const fn enc(&self) -> &encoder::PacketEncoder {
-        &self.enc
-    }
-
-    pub fn enc_mut(&mut self) -> &mut encoder::PacketEncoder {
-        &mut self.enc
-    }
-
-    #[must_use]
-    pub const fn index(&self) -> usize {
-        self.index
-    }
-
-    pub fn buf_mut(&mut self) -> &mut Ring {
-        &mut self.buf
-    }
-}
-
 #[derive(HandlerParam, Copy, Clone)]
 pub struct Compose<'a> {
-    pub bufs: Single<'a, &'static IoBufs>,
     pub compressor: Single<'a, &'static Compressors>,
     pub scratch: Single<'a, &'static Scratches>,
+    pub global: Single<'a, &'static Global>,
+}
+
+impl<'a> Compose<'a> {
+    #[must_use]
+    pub fn encoder(&self) -> PacketEncoder {
+        let threshold = self.global.shared.compression_threshold;
+        PacketEncoder::new(threshold)
+    }
 }
 
 /// This is useful for the ECS so we can use Single<&mut Broadcast> instead of having to use a marker struct
-#[derive(Component, From, Deref, DerefMut, Default)]
-pub struct Broadcast(Packets);
+#[derive(Component)]
+pub struct Broadcast {
+    buffers: RayonLocal<BufRef>,
+    to_write: RayonLocal<Vec<PacketWriteInfo>>,
+    number_sending: AtomicUsize,
+}
 
 /// Stores indices of packets
-#[derive(Component, Default)]
+#[derive(Component)]
 pub struct Packets {
-    to_write: RayonLocal<VecDeque<PacketWriteInfo>>,
+    buffer: BufRef,
+    local_to_write: Vec<PacketWriteInfo>,
     number_sending: AtomicUsize,
 }
 
 impl Packets {
+    pub fn append<P>(&mut self, pkt: &P, compose: &Compose) -> anyhow::Result<()>
+    where
+        P: valence_protocol::Packet + valence_protocol::Encode,
+    {
+        let scratch = compose.scratch.get_local();
+        let mut scratch = scratch.borrow_mut();
+
+        let compressor = compose.compressor.get_local();
+        let mut compressor = compressor.borrow_mut();
+
+        let enc = compose.encoder();
+
+        let result = enc.append_packet(pkt, &mut *self.buffer, &mut *scratch, &mut compressor)?;
+
+        self.push(result);
+        Ok(())
+    }
+
+    pub fn append_pre_compression_packet<P>(&mut self, pkt: &P) -> anyhow::Result<()>
+    where
+        P: valence_protocol::Packet + valence_protocol::Encode,
+    {
+        // todo: why need DerefMut?
+        let buf = &mut self.buffer;
+        let buf = &mut **buf;
+
+        let result = append_packet_without_compression(pkt, buf)?;
+
+        trace!("without compression: {result:?}");
+
+        self.push(result);
+        Ok(())
+    }
+
+    pub fn append_raw(&mut self, data: &[u8]) {
+        let buffer = &mut *self.buffer;
+        let start_ptr = buffer.append(data);
+
+        let writer = PacketWriteInfo {
+            start_ptr,
+            len: data.len() as u32,
+        };
+
+        self.push(writer);
+    }
+
+    fn push(&mut self, writer: PacketWriteInfo) {
+        let to_write = &mut self.local_to_write;
+
+        if let Some(last) = to_write.last_mut() {
+            let start_pointer_if_contiguous = unsafe { last.start_ptr.add(last.len as usize) };
+            if start_pointer_if_contiguous == writer.start_ptr {
+                last.len += writer.len;
+                return;
+            }
+        }
+
+        to_write.push(writer);
+    }
+
+    pub fn set_successfully_sent(&self, d_count: usize) {
+        debug_assert!(
+            self.number_sending.load(atomic::Ordering::Relaxed) > 0,
+            "somehow number sending is 0 even though we just marked a successful send"
+        );
+
+        self.number_sending
+            .fetch_sub(d_count, atomic::Ordering::Relaxed);
+    }
+
+    pub fn get_write_mut(&self) -> &[PacketWriteInfo] {
+        &self.local_to_write
+    }
+
+    #[must_use]
+    pub fn can_send(&self) -> bool {
+        if self.number_sending.load(atomic::Ordering::Relaxed) != 0 {
+            return false;
+        }
+
+        !self.local_to_write.is_empty()
+    }
+
+    pub fn prepare_for_send(&mut self) -> usize {
+        debug_assert!(
+            self.number_sending.load(atomic::Ordering::Relaxed) == 0,
+            "number sending is not 0 even though we are preparing for send"
+        );
+        let count = self.local_to_write.len();
+        self.number_sending = AtomicUsize::new(count);
+        count
+    }
+
+    pub fn extend(&mut self, other: &Broadcast) {
+        todo!()
+    }
+}
+
+impl Broadcast {
     pub fn extend(&mut self, other: &Self) {
         let this = self.to_write.iter_mut();
         let other = other.to_write.iter();
@@ -271,7 +331,7 @@ impl Packets {
         }
     }
 
-    pub fn get_write_mut(&mut self) -> &mut RayonLocal<VecDeque<PacketWriteInfo>> {
+    pub fn get_write_mut(&mut self) -> &mut RayonLocal<Vec<PacketWriteInfo>> {
         &mut self.to_write
     }
 
@@ -299,20 +359,20 @@ impl Packets {
             self.number_sending.load(atomic::Ordering::Relaxed) == 0,
             "number sending is not 0 even though we are preparing for send"
         );
-        let count = self.to_write.iter().map(VecDeque::len).sum();
+        let count = self.to_write.iter().map(Vec::len).sum();
         self.number_sending = AtomicUsize::new(count);
         count
     }
 
     pub fn clear(&mut self) {
-        self.to_write.iter_mut().for_each(VecDeque::clear);
+        self.to_write.iter_mut().for_each(Vec::clear);
     }
 
-    fn push(&self, writer: PacketWriteInfo, buf: &IoBuf) {
-        let idx = buf.index();
-        let to_write = unsafe { &mut *self.to_write.get_raw(idx).get() };
+    fn push(&self, writer: PacketWriteInfo) {
+        let to_write = self.to_write.get_local_raw();
+        let to_write = unsafe { &mut *to_write.get() };
 
-        if let Some(last) = to_write.back_mut() {
+        if let Some(last) = to_write.last_mut() {
             let start_pointer_if_contiguous = unsafe { last.start_ptr.add(last.len as usize) };
             if start_pointer_if_contiguous == writer.start_ptr {
                 last.len += writer.len;
@@ -320,25 +380,22 @@ impl Packets {
             }
         }
 
-        to_write.push_back(writer);
+        to_write.push(writer);
     }
 
-    pub fn append_pre_compression_packet<P>(&self, pkt: &P, buf: &mut IoBuf) -> anyhow::Result<()>
+    pub fn append_pre_compression_packet<P>(&self, pkt: &P) -> anyhow::Result<()>
     where
         P: valence_protocol::Packet + valence_protocol::Encode,
     {
-        let compression = buf.enc.compression_threshold();
-        // none
-        buf.enc.set_compression(CompressionThreshold::DEFAULT);
+        let buf = self.buffers.get_local_raw();
+        let buf = unsafe { &mut *buf.get() };
+        let buf = &mut **buf;
 
-        let result = append_packet_without_compression(pkt, &mut buf.buf)?;
+        let result = append_packet_without_compression(pkt, buf)?;
 
         trace!("without compression: {result:?}");
 
-        self.push(result, buf);
-
-        // reset
-        buf.enc.set_compression(compression);
+        self.push(result);
 
         Ok(())
     }
@@ -347,34 +404,37 @@ impl Packets {
     where
         P: valence_protocol::Packet + valence_protocol::Encode,
     {
-        let buf = compose.bufs.get_local();
-
         let scratch = compose.scratch.get_local();
         let mut scratch = scratch.borrow_mut();
 
         let compressor = compose.compressor.get_local();
         let mut compressor = compressor.borrow_mut();
 
-        let mut buf = buf.borrow_mut();
-        let buf = &mut *buf;
+        let encoder = compose.encoder();
 
-        let result = buf
-            .enc
-            .append_packet(pkt, &mut buf.buf, &mut *scratch, &mut compressor)?;
+        let buf = self.buffers.get_local_raw();
+        let buf = unsafe { &mut *buf.get() };
+        let buf = &mut **buf;
 
-        self.push(result, buf);
+        let result = encoder.append_packet(pkt, buf, &mut *scratch, &mut compressor)?;
+
+        self.push(result);
         Ok(())
     }
 
-    pub fn append_raw(&self, data: &[u8], buf: &mut IoBuf) {
-        let start_ptr = buf.buf.append(data);
+    pub fn append_raw(&self, data: &[u8]) {
+        let buf = self.buffers.get_local_raw();
+        let buf = unsafe { &mut *buf.get() };
+        let buf = &mut **buf;
+
+        let start_ptr = buf.append(data);
 
         let writer = PacketWriteInfo {
             start_ptr,
             len: data.len() as u32,
         };
 
-        self.push(writer, buf);
+        self.push(writer);
     }
 }
 

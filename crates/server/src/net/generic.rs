@@ -188,23 +188,24 @@ impl ServerDef for GenericServer {
     ) {
         for writer in writers {
             let RefreshItems { write, fd } = writer;
+            todo!()
 
-            let Some(to_write) = self.connections.get_mut(&fd.0) else {
-                warn!("no connection for fd {fd:?}");
-                continue;
-            };
-
-            for (idx, write) in write.iter_mut().enumerate() {
-                let (a, b) = write.as_slices();
-
-                let to_write = &mut to_write.to_write[idx];
-                to_write.reserve(a.len() + b.len());
-
-                to_write.extend_from_slice(a);
-                to_write.extend_from_slice(b);
-
-                write.clear();
-            }
+            // let Some(to_write) = self.connections.get_mut(&fd.0) else {
+            //     warn!("no connection for fd {fd:?}");
+            //     continue;
+            // };
+            // 
+            // for (idx, write) in write.iter_mut().enumerate() {
+            //     let (a, b) = write.as_slices();
+            // 
+            //     let to_write = &mut to_write.to_write[idx];
+            //     to_write.reserve(a.len() + b.len());
+            // 
+            //     to_write.extend_from_slice(a);
+            //     to_write.extend_from_slice(b);
+            // 
+            //     write.clear();
+            // }
         }
     }
 

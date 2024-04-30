@@ -1,3 +1,4 @@
+
 use evenio::{
     event::ReceiverMut,
     fetch::{Fetcher, Single},
@@ -18,11 +19,11 @@ pub fn egress(
     mut broadcast: Single<&mut Broadcast>,
     mut global: Single<&mut Global>,
 ) {
+    let broadcast = &mut *broadcast;
     // todo: idk how inefficient this is
     tracing::span!(tracing::Level::TRACE, "extend-from-broadcast").in_scope(|| {
         for (pkts, _, login_state) in &mut players {
             if *login_state == LoginState::Play {
-                let broadcast = &mut ***broadcast;
                 pkts.extend(broadcast);
             }
         }

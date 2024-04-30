@@ -27,7 +27,7 @@ mod player_packet_buffer;
 use crate::{
     components::{FullEntityPose, ImmuneStatus, KeepAlive, LoginState, Vitals},
     event::BumpScratch,
-    net::{Fd, IoBuf, IoBufs, Packets, MINECRAFT_VERSION, PROTOCOL_VERSION},
+    net::{Fd, Packets, MINECRAFT_VERSION, PROTOCOL_VERSION},
     packets::PacketSwitchQuery,
     singleton::player_id_lookup::EntityIdLookup,
     system::ingress::player_packet_buffer::DecodeBuffer,
@@ -122,7 +122,7 @@ pub fn add_player(
     sender.insert(new_player, LoginState::Handshake);
     sender.insert(new_player, DecodeBuffer::default());
 
-    sender.insert(new_player, Packets::default());
+    // sender.insert(new_player, Packets::default());
     let fd = event.fd;
     sender.insert(new_player, fd);
 
@@ -197,7 +197,6 @@ pub fn recv_data(
         Option<&mut ImmuneStatus>,
     )>,
     id_lookup: Single<&EntityIdLookup>,
-    mut io: Single<&mut IoBufs>,
 ) {
     let mut event = r.event;
 
@@ -219,15 +218,12 @@ pub fn recv_data(
 
     let scratch = scratch.one();
 
-    let io = io.one();
-
     // todo: error  on low compression: "decompressed packet length of 2 is <= the compression threshold of 2"
     while let Some(frame) = decoder.try_next_packet(scratch).unwrap() {
         match *login_state {
             LoginState::Handshake => process_handshake(login_state, &frame).unwrap(),
             LoginState::Status => {
-                let io = io.get_mut();
-                process_status(login_state, &frame, packets, io).unwrap();
+                process_status(login_state, &frame, packets).unwrap();
             }
             LoginState::Terminate => {
                 // todo: does this properly terminate the connection? I don't think so probably
@@ -238,7 +234,6 @@ pub fn recv_data(
                 sender.despawn(id);
             }
             LoginState::Login => {
-                let io = io.get_mut();
                 process_login(
                     id,
                     login_state,
@@ -246,7 +241,6 @@ pub fn recv_data(
                     packets,
                     decoder,
                     &global,
-                    io,
                     &mut sender,
                 )
                 .unwrap();
@@ -310,10 +304,9 @@ fn process_login(
     id: EntityId,
     login_state: &mut LoginState,
     packet: &PacketFrame,
-    packets: &Packets,
+    packets: &mut Packets,
     decoder: &mut DecodeBuffer,
     global: &Global,
-    io: &mut IoBuf,
     sender: &mut IngressSender,
 ) -> anyhow::Result<()> {
     debug_assert!(*login_state == LoginState::Login);
@@ -328,7 +321,7 @@ fn process_login(
         threshold: VarInt(global.shared.compression_threshold.0),
     };
 
-    packets.append_pre_compression_packet(&pkt, io)?;
+    packets.append_pre_compression_packet(&pkt)?;
 
     decoder.set_compression(global.shared.compression_threshold);
 
@@ -351,8 +344,7 @@ fn process_login(
 fn process_status(
     login_state: &mut LoginState,
     packet: &PacketFrame,
-    packets: &Packets,
-    io: &mut IoBuf,
+    packets: &mut Packets,
 ) -> anyhow::Result<()> {
     debug_assert!(*login_state == LoginState::Status);
 
@@ -381,7 +373,7 @@ fn process_status(
 
             info!("sent query response: {query_request:?}");
             //
-            packets.append_pre_compression_packet(&send, io)?;
+            packets.append_pre_compression_packet(&send)?;
 
             // send pong
             // we send this right away so our ping looks better
@@ -399,7 +391,7 @@ fn process_status(
 
             let send = packets::status::QueryPongS2c { payload };
 
-            packets.append_pre_compression_packet(&send, io)?;
+            packets.append_pre_compression_packet(&send)?;
 
             info!("sent query pong: {query_ping:?}");
             *login_state = LoginState::Terminate;

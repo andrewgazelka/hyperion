@@ -11,6 +11,7 @@
 #![feature(maybe_uninit_slice)]
 #![feature(duration_millis_float)]
 #![expect(clippy::type_complexity, reason = "evenio uses a lot of complex types")]
+#![allow(clippy::mut_mut, reason = "ideally remove this")]
 
 pub use evenio;
 pub use uuid;
@@ -46,7 +47,7 @@ use crate::{
     components::{chunks::Chunks, Vitals},
     event::{BumpScratch, Egress, Gametick, Scratches, Stats},
     global::Global,
-    net::{Broadcast, Compressors, IoBufs, Server, ServerDef, S2C_BUFFER_SIZE},
+    net::{Compressors, Server, ServerDef, S2C_BUFFER_SIZE},
     singleton::{
         fd_lookup::FdLookup, player_aabb_lookup::PlayerBoundingBoxes,
         player_id_lookup::EntityIdLookup, player_uuid_lookup::PlayerUuidLookup,
@@ -279,13 +280,8 @@ impl Hyperion {
         let compressor_id = world.spawn();
         world.insert(compressor_id, Compressors::new(shared.compression_level));
 
-        let mut server_def = Server::new(address)?;
+        let server_def = Server::new(address)?;
 
-        let io_id = world.spawn();
-
-        let io = IoBufs::init(shared.compression_threshold, &mut server_def);
-
-        world.insert(io_id, io);
 
         world.add_handler(system::ingress::add_player);
         world.add_handler(system::ingress::remove_player);
@@ -356,8 +352,8 @@ impl Hyperion {
         let fd_lookup = world.spawn();
         world.insert(fd_lookup, FdLookup::default());
 
-        let broadcast = world.spawn();
-        world.insert(broadcast, Broadcast::default());
+        // let broadcast = world.spawn();
+        // world.insert(broadcast, Broadcast::default());
 
         let mut game = Self {
             shared,
