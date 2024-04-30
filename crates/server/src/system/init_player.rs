@@ -3,7 +3,7 @@ use std::borrow::Cow;
 use anyhow::Context;
 use evenio::prelude::*;
 use sha2::Digest;
-use tracing::{info, instrument};
+use tracing::{instrument, trace};
 use valence_protocol::{packets::login, Bounded};
 
 use crate::{
@@ -27,7 +27,7 @@ fn offline_uuid(username: &str) -> anyhow::Result<uuid::Uuid> {
     uuid::Uuid::from_slice(slice).context("failed to create uuid")
 }
 
-#[instrument(skip_all)]
+#[instrument(skip_all, level = "trace")]
 pub fn init_player(
     r: ReceiverMut<PlayerInit, &Packets>,
     compose: Compose,
@@ -68,7 +68,7 @@ pub fn init_player(
 
     packets.append(&pkt, &compose).unwrap();
 
-    info!("PlayerInit: {username}");
+    trace!("PlayerInit: {username}");
 
     s.insert(entity, pose);
     s.insert(entity, Player);

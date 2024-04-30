@@ -26,9 +26,19 @@ use crate::components::Team;
 pub fn scramble_player_name(mut r: ReceiverMut<event::PlayerInit, ()>) {
     // 10 alphanumeric name using fastrand
 
-    let mut name = String::new();
-    for _ in 0..10 {
-        name.push(fastrand::alphanumeric());
+    let mut name = r.event.username.to_string();
+
+    // mutate the name
+    if name.len() < 16 {
+        // append a random letter
+        let c = fastrand::alphabetic();
+        name.push(c);
+    } else {
+        let mut buffer = [0; 1]; // Buffer large enough for any ASCII character
+        let c = fastrand::alphabetic();
+        let result = c.encode_utf8(&mut buffer);
+
+        name.replace_range(..1, result);
     }
 
     r.event.username = name.into_boxed_str();

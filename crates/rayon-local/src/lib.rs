@@ -53,6 +53,11 @@ pub struct RayonLocal<S> {
     main_thread_id: ThreadId,
 }
 
+#[must_use]
+pub fn count() -> usize {
+    rayon::current_num_threads() + 1
+}
+
 impl<'a, S> IntoIterator for &'a RayonLocal<S> {
     type Item = &'a S;
 

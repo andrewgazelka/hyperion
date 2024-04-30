@@ -5,7 +5,7 @@ use std::{
 };
 
 use anyhow::ensure;
-use tracing::info;
+use tracing::trace;
 use valence_protocol::{CompressionThreshold, Encode, Packet, VarInt};
 
 use crate::{event::ScratchBuffer, net::MAX_PACKET_SIZE, singleton::ring::Buf};
@@ -87,7 +87,7 @@ where
 
     let len = entire_slice.len();
 
-    info!("without compresion: {len} bytes");
+    trace!("without compression: {len} bytes");
 
     Ok(buf.advance(len))
 }

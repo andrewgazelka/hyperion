@@ -6,6 +6,7 @@ use evenio::component::Component;
 use fxhash::FxBuildHasher;
 use itertools::Itertools;
 use rayon_local::RayonLocal;
+use tracing::instrument;
 use valence_generated::block::BlockState;
 use valence_nbt::{compound, List};
 use valence_protocol::{packets::play, ChunkPos, Encode, FixedArray};
@@ -110,6 +111,7 @@ impl Chunks {
     }
 }
 
+#[instrument(skip_all, level = "trace", fields(location = ?location))]
 fn encode_chunk_packet(
     chunk: &UnloadedChunk,
     location: ChunkPos,

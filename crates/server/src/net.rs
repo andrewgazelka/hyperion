@@ -1,12 +1,18 @@
 //! All the networking related code.
 
-use std::{cell::RefCell, collections::VecDeque, hash::Hash, net::ToSocketAddrs};
+use std::{
+    cell::RefCell,
+    collections::VecDeque,
+    hash::Hash,
+    net::ToSocketAddrs,
+    sync::{atomic, atomic::AtomicUsize},
+};
 
 use derive_more::{Deref, DerefMut, From};
 use evenio::{fetch::Single, handler::HandlerParam, prelude::Component};
 use libc::iovec;
 use libdeflater::CompressionLvl;
-use tracing::{debug, info};
+use tracing::{debug, trace};
 use valence_protocol::CompressionThreshold;
 
 use crate::{global::Global, net::encoder::PacketWriteInfo, singleton::ring::Ring};
@@ -66,7 +72,8 @@ impl ServerDef for Server {
         for (idx, elem) in buffers.iter().enumerate() {
             let ptr = elem.iov_base as *const u8;
             let len = elem.iov_len;
-            debug!("allocating buffer {idx} {ptr:?} {len:?}");
+            let len_readable = humansize::SizeFormatter::new(len, humansize::BINARY);
+            debug!("buffer {idx} {ptr:?} of len {len} = {len_readable}");
         }
 
         self.server.allocate_buffers(buffers);
@@ -164,8 +171,8 @@ use crate::{
     singleton::ring::register_rings,
 };
 
-const NUM_PLAYERS: usize = 1024;
-pub const S2C_BUFFER_SIZE: usize = 1024 * 1024 * NUM_PLAYERS;
+// 128 MiB * num_cores
+pub const S2C_BUFFER_SIZE: usize = 1024 * 1024 * 128;
 
 #[derive(Debug)]
 pub struct IoBuf {
@@ -251,7 +258,7 @@ pub struct Broadcast(Packets);
 #[derive(Component, Default)]
 pub struct Packets {
     to_write: RayonLocal<VecDeque<PacketWriteInfo>>,
-    number_sending: usize,
+    number_sending: AtomicUsize,
 }
 
 impl Packets {
@@ -270,29 +277,31 @@ impl Packets {
 
     #[must_use]
     pub fn can_send(&self) -> bool {
-        if self.number_sending != 0 {
+        if self.number_sending.load(atomic::Ordering::Relaxed) != 0 {
             return false;
         }
 
         self.to_write.iter().any(|x| !x.is_empty())
     }
 
-    pub fn set_successfully_sent(&mut self) {
+    pub fn set_successfully_sent(&self, d_count: usize) {
         debug_assert!(
-            self.number_sending > 0,
+            self.number_sending.load(atomic::Ordering::Relaxed) > 0,
             "somehow number sending is 0 even though we just marked a successful send"
         );
 
-        self.number_sending -= 1;
+        self.number_sending
+            .fetch_sub(d_count, atomic::Ordering::Relaxed);
     }
 
-    pub fn prepare_for_send(&mut self) {
+    pub fn prepare_for_send(&mut self) -> usize {
         debug_assert!(
-            self.number_sending == 0,
+            self.number_sending.load(atomic::Ordering::Relaxed) == 0,
             "number sending is not 0 even though we are preparing for send"
         );
         let count = self.to_write.iter().map(VecDeque::len).sum();
-        self.number_sending = count;
+        self.number_sending = AtomicUsize::new(count);
+        count
     }
 
     pub fn clear(&mut self) {
@@ -324,7 +333,7 @@ impl Packets {
 
         let result = append_packet_without_compression(pkt, &mut buf.buf)?;
 
-        info!("without compression: {result:?}");
+        trace!("without compression: {result:?}");
 
         self.push(result, buf);
 
