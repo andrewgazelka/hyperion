@@ -32,6 +32,7 @@ use humansize::{SizeFormatter, BINARY};
 use libc::{getrlimit, setrlimit, RLIMIT_NOFILE};
 use libdeflater::CompressionLvl;
 use ndarray::s;
+use num_format::Locale;
 use rayon_local::RayonLocal;
 use signal_hook::iterator::Signals;
 use singleton::bounding_box;
@@ -85,10 +86,15 @@ pub fn adjust_file_descriptor_limits(recommended_min: u64) -> std::io::Result<()
     };
 
     if unsafe { getrlimit(RLIMIT_NOFILE, &mut limits) } == 0 {
-        let rlim_cur = SizeFormatter::new(limits.rlim_cur, BINARY);
-        let rlim_max = SizeFormatter::new(limits.rlim_max, BINARY);
+        // Create a stack-allocated buffer...
+        let mut rlim_cur = num_format::Buffer::default();
+        rlim_cur.write_formatted(&limits.rlim_cur, &Locale::en);
 
         info!("current soft limit: {rlim_cur}");
+
+        let mut rlim_max = num_format::Buffer::default();
+        rlim_max.write_formatted(&limits.rlim_max, &Locale::en);
+
         info!("current hard limit: {rlim_max}");
     } else {
         error!("Failed to get the current file handle limits");
@@ -103,7 +109,9 @@ pub fn adjust_file_descriptor_limits(recommended_min: u64) -> std::io::Result<()
     }
 
     limits.rlim_cur = limits.rlim_max;
-    let new_limit = SizeFormatter::new(limits.rlim_cur, BINARY);
+    let mut new_limit = num_format::Buffer::default();
+    new_limit.write_formatted(&limits.rlim_cur, &Locale::en);
+
     info!("setting soft limit to: {new_limit}");
 
     if unsafe { setrlimit(RLIMIT_NOFILE, &limits) } != 0 {
