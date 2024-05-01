@@ -16,7 +16,7 @@ use mio::{
     Events, Interest, Poll, Registry, Token,
 };
 use rayon_local::RayonLocal;
-use tracing::warn;
+use tracing::{info, warn};
 
 use crate::{
     global::Global,
@@ -70,6 +70,7 @@ impl ServerDef for GenericServer {
             .next()
             .context("could not get first address")?;
 
+        info!("using generic I/O server and listening on {address}");
         let mut server = TcpListener::bind(address)?;
 
         // Register the server with poll we can receive events for it.

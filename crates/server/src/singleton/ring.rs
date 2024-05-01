@@ -1,7 +1,9 @@
-use libc::iovec;
-use tracing::warn;
+use std::mem::MaybeUninit;
 
-use crate::net::ServerDef;
+use libc::iovec;
+use tracing::debug;
+
+use crate::net::{encoder::PacketWriteInfo, ServerDef};
 
 // todo: see if it makes sense to use MaybeUninit
 #[derive(Debug)]
@@ -12,18 +14,47 @@ pub struct Ring {
 }
 
 pub trait Buf {
-    fn len_until_end(&self) -> usize;
+    type Output;
     fn get_contiguous(&mut self, len: usize) -> &mut [u8];
-    fn advance(&mut self, len: usize);
+    fn advance(&mut self, len: usize) -> Self::Output;
+}
 
-    /// Returns a pointer to the first byte of the appended data.
-    fn append(&mut self, data: &[u8]) -> *const u8;
+impl Buf for bytes::BytesMut {
+    type Output = Self;
+
+    fn get_contiguous(&mut self, len: usize) -> &mut [u8] {
+        // self.resize(len, 0);
+        // self
+        self.reserve(len);
+        let cap = self.spare_capacity_mut();
+        let cap = unsafe { MaybeUninit::slice_assume_init_mut(cap) };
+        cap
+    }
+
+    fn advance(&mut self, len: usize) -> Self::Output {
+        unsafe { self.set_len(self.len() + len) };
+        self.split_to(len)
+    }
+}
+
+impl Ring {
+    const fn len_until_end(&self) -> usize {
+        self.max_len - self.head
+    }
+
+    pub fn append(&mut self, data: &[u8]) -> *const u8 {
+        debug_assert!(data.len() <= self.max_len);
+        let len = data.len();
+        let contiguous = self.get_contiguous(len);
+        contiguous.copy_from_slice(data);
+        let ptr = contiguous.as_ptr();
+        self.advance(len);
+        ptr
+    }
 }
 
 impl Buf for Ring {
-    fn len_until_end(&self) -> usize {
-        self.max_len - self.head
-    }
+    type Output = PacketWriteInfo;
 
     fn get_contiguous(&mut self, len: usize) -> &mut [u8] {
         debug_assert!(
@@ -35,7 +66,8 @@ impl Buf for Ring {
 
         let len_until_end = self.len_until_end();
         if len_until_end < len {
-            warn!("rotating buffer because {len_until_end} < {len}");
+            let ptr = self.data.as_ptr();
+            debug!("rotating buffer {ptr:?} because {len_until_end} < {len}");
             self.head = 0;
             &mut self.data[..len]
         } else {
@@ -45,19 +77,15 @@ impl Buf for Ring {
     }
 
     /// **Does not advice head unless it needs to move to the beginning**
-    fn advance(&mut self, len: usize) {
+    fn advance(&mut self, len: usize) -> Self::Output {
         debug_assert!(len <= self.max_len);
-        self.head = (self.head + len) % self.max_len;
-    }
 
-    fn append(&mut self, data: &[u8]) -> *const u8 {
-        debug_assert!(data.len() <= self.max_len);
-        let len = data.len();
-        let contiguous = self.get_contiguous(len);
-        contiguous.copy_from_slice(data);
-        let ptr = contiguous.as_ptr();
-        self.advance(len);
-        ptr
+        let start_ptr = unsafe { self.data.as_ptr().add(self.head) };
+
+        self.head = (self.head + len) % self.max_len;
+
+        let len = len as u32;
+        PacketWriteInfo { start_ptr, len }
     }
 }
 

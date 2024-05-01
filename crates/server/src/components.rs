@@ -4,6 +4,7 @@ use bvh::aabb::Aabb;
 use derive_more::{Deref, Display, From};
 use evenio::component::Component;
 use glam::Vec3;
+use valence_protocol::ChunkPos;
 use valence_server::entity::EntityKind;
 
 use crate::{
@@ -11,6 +12,7 @@ use crate::{
     global::Global,
 };
 
+pub mod chunks;
 pub mod pose;
 pub mod vitals;
 
@@ -180,7 +182,12 @@ pub struct FullEntityPose {
     pub bounding: Aabb,
 }
 
-pub const PLAYER_SPAWN_POSITION: Vec3 = Vec3::new(-656.0, 18.0, -1695.0);
+#[derive(Component, Debug, Copy, Clone)]
+pub struct LastSentChunk {
+    pub chunk: ChunkPos,
+}
+
+pub const PLAYER_SPAWN_POSITION: Vec3 = Vec3::new(-464.0, -16.0, -60.0);
 
 impl FullEntityPose {
     #[must_use]
@@ -191,6 +198,14 @@ impl FullEntityPose {
             pitch: 0.0,
             bounding: Aabb::create(PLAYER_SPAWN_POSITION, 0.6, 1.8),
         }
+    }
+
+    #[must_use]
+    pub fn chunk_pos(&self) -> ChunkPos {
+        let position = self.position.as_ivec3();
+        let x = position.x >> 4;
+        let z = position.z >> 4;
+        ChunkPos::new(x, z)
     }
 }
 

@@ -9,15 +9,16 @@
 #![feature(read_buf)]
 #![feature(core_io_borrowed_buf)]
 #![feature(maybe_uninit_slice)]
+#![feature(duration_millis_float)]
 #![expect(clippy::type_complexity, reason = "evenio uses a lot of complex types")]
-// todo: we could remove this
-#![feature(anonymous_lifetime_in_impl_trait)]
 
 pub use evenio;
+pub use uuid;
 
 mod blocks;
 mod chunk;
 mod singleton;
+pub mod util;
 
 use std::{
     collections::VecDeque,
@@ -28,9 +29,11 @@ use std::{
 
 use anyhow::Context;
 use evenio::prelude::*;
+use humansize::{SizeFormatter, BINARY};
 use libc::{getrlimit, setrlimit, RLIMIT_NOFILE};
 use libdeflater::CompressionLvl;
 use ndarray::s;
+use num_format::Locale;
 use rayon_local::RayonLocal;
 use signal_hook::iterator::Signals;
 use singleton::bounding_box;
@@ -40,22 +43,22 @@ use valence_protocol::CompressionThreshold;
 pub use valence_server;
 
 use crate::{
-    components::Vitals,
+    components::{chunks::Chunks, Vitals},
     event::{BumpScratch, Egress, Gametick, Scratches, Stats},
     global::Global,
-    net::{Broadcast, Compressors, IoBufs, Server, ServerDef},
+    net::{Broadcast, Compressors, IoBufs, Server, ServerDef, S2C_BUFFER_SIZE},
     singleton::{
         fd_lookup::FdLookup, player_aabb_lookup::PlayerBoundingBoxes,
         player_id_lookup::EntityIdLookup, player_uuid_lookup::PlayerUuidLookup,
     },
-    system::generate_ingress_events,
+    system::{generate_biome_registry, generate_ingress_events},
 };
 
 pub mod components;
 pub mod event;
 
 pub mod global;
-mod net;
+pub mod net;
 
 mod packets;
 mod system;
@@ -72,15 +75,28 @@ const MSPT_HISTORY_SIZE: usize = 100;
 /// on macOS, the soft limit for the number of open file descriptors is often 256. This is far too low
 /// to test 10k players with.
 /// This attempts to the specified `recommended_min` value.
-pub fn adjust_file_limits(recommended_min: u64) -> std::io::Result<()> {
+#[allow(
+    clippy::cognitive_complexity,
+    reason = "I have no idea why the cognitive complexity is calcualted as being high"
+)]
+#[instrument(skip_all)]
+pub fn adjust_file_descriptor_limits(recommended_min: u64) -> std::io::Result<()> {
     let mut limits = libc::rlimit {
         rlim_cur: 0, // Initialize soft limit to 0
         rlim_max: 0, // Initialize hard limit to 0
     };
 
     if unsafe { getrlimit(RLIMIT_NOFILE, &mut limits) } == 0 {
-        info!("Current file handle soft limit: {}", limits.rlim_cur);
-        info!("Current file handle hard limit: {}", limits.rlim_max);
+        // Create a stack-allocated buffer...
+        let mut rlim_cur = num_format::Buffer::default();
+        rlim_cur.write_formatted(&limits.rlim_cur, &Locale::en);
+
+        info!("current soft limit: {rlim_cur}");
+
+        let mut rlim_max = num_format::Buffer::default();
+        rlim_max.write_formatted(&limits.rlim_max, &Locale::en);
+
+        info!("current hard limit: {rlim_max}");
     } else {
         error!("Failed to get the current file handle limits");
         return Err(std::io::Error::last_os_error());
@@ -94,7 +110,10 @@ pub fn adjust_file_limits(recommended_min: u64) -> std::io::Result<()> {
     }
 
     limits.rlim_cur = limits.rlim_max;
-    info!("Setting soft limit to: {}", limits.rlim_cur);
+    let mut new_limit = num_format::Buffer::default();
+    new_limit.write_formatted(&limits.rlim_cur, &Locale::en);
+
+    info!("setting soft limit to: {new_limit}");
 
     if unsafe { setrlimit(RLIMIT_NOFILE, &limits) } != 0 {
         error!("Failed to set the file handle limits");
@@ -104,8 +123,55 @@ pub fn adjust_file_limits(recommended_min: u64) -> std::io::Result<()> {
     Ok(())
 }
 
-/// The central [`Game`] struct which owns and manages the entire server.
-pub struct Game {
+#[instrument(skip_all)]
+fn set_memlock_limit(limit: u64) -> anyhow::Result<()> {
+    let mut rlim_current = libc::rlimit {
+        rlim_cur: 0,
+        rlim_max: 0,
+    };
+
+    let result = unsafe { getrlimit(libc::RLIMIT_MEMLOCK, &mut rlim_current) };
+
+    if result != 0 {
+        return Err(std::io::Error::last_os_error()).context("failed to get memlock limit");
+    }
+
+    if result == 0 {
+        let rlim_cur = SizeFormatter::new(rlim_current.rlim_cur, BINARY);
+        let rlim_max = SizeFormatter::new(rlim_current.rlim_max, BINARY);
+        info!("current soft limit: {rlim_cur}");
+        info!("current hard limit: {rlim_max}");
+        //
+    }
+
+    if limit < rlim_current.rlim_cur {
+        info!("current limit is already greater than requested limit");
+        return Ok(());
+    }
+
+    let rlim = libc::rlimit {
+        rlim_cur: limit,
+        rlim_max: limit,
+    };
+
+    let result = unsafe { setrlimit(libc::RLIMIT_MEMLOCK, &rlim) };
+    if result == 0 {
+        let limit_fmt = SizeFormatter::new(limit, BINARY);
+        info!("set limit to {limit_fmt}");
+
+        let count = rayon_local::count();
+        let expected = limit * count as u64;
+        let expected_fmt = SizeFormatter::new(expected, BINARY);
+        info!("expected to allocate {count}×{limit_fmt} = {expected_fmt} bytes of memory");
+
+        Ok(())
+    } else {
+        Err(std::io::Error::last_os_error()).context("failed to set memlock limit")
+    }
+}
+
+/// The central [`Hyperion`] struct which owns and manages the entire server.
+pub struct Hyperion {
     /// The shared state between the ECS framework and the I/O thread.
     shared: Arc<global::Shared>,
     /// The manager of the ECS framework.
@@ -120,7 +186,7 @@ pub struct Game {
     server: Server,
 }
 
-impl Game {
+impl Hyperion {
     /// Get the [`World`] which is the core part of the ECS framework.
     pub const fn world(&self) -> &World {
         &self.world
@@ -131,7 +197,7 @@ impl Game {
         &self.shared
     }
 
-    /// See [`Game::world`].
+    /// See [`Hyperion::world`].
     pub fn world_mut(&mut self) -> &mut World {
         &mut self.world
     }
@@ -146,12 +212,39 @@ impl Game {
         Self::init_with(address, |_| {})
     }
 
-    /// Initialize the server.
     pub fn init_with(
         address: impl ToSocketAddrs + Send + Sync + 'static,
         handlers: impl FnOnce(&mut World) + Send + Sync + 'static,
     ) -> anyhow::Result<Self> {
-        info!("Starting hyperion");
+        // Denormals (numbers very close to 0) are flushed to zero because doing computations on them
+        // is slow.
+        rayon::ThreadPoolBuilder::new()
+            .spawn_handler(|thread| {
+                std::thread::spawn(|| {
+                    no_denormals::no_denormals(|| {
+                        thread.run();
+                    });
+                });
+                Ok(())
+            })
+            .build_global()
+            .context("failed to build thread pool")?;
+
+        no_denormals::no_denormals(|| Self::init_with_helper(address, handlers))
+    }
+
+    /// Initialize the server.
+    fn init_with_helper(
+        address: impl ToSocketAddrs + Send + Sync + 'static,
+        handlers: impl FnOnce(&mut World) + Send + Sync + 'static,
+    ) -> anyhow::Result<Self> {
+        // 10k players * 2 file handles / player  = 20,000. We can probably get away with 16,384 file handles
+        adjust_file_descriptor_limits(32_768).context("failed to set file limits")?;
+
+        // we want at least S2C_BUFFER_SIZE memlock limit
+        set_memlock_limit(S2C_BUFFER_SIZE as u64).context("failed to set memlock limit.")?;
+
+        info!("starting hyperion");
         Lazy::force(&config::CONFIG);
 
         let current_threads = rayon::current_num_threads();
@@ -199,7 +292,9 @@ impl Game {
         world.add_handler(system::ingress::recv_data);
         world.add_handler(system::ingress::sent_data);
 
+        world.add_handler(system::send_chunk_updates);
         world.add_handler(system::init_player);
+        world.add_handler(system::despawn_player);
         world.add_handler(system::player_join_world);
         world.add_handler(system::player_kick);
         world.add_handler(system::init_entity);
@@ -216,6 +311,7 @@ impl Game {
         world.add_handler(system::check_immunity);
         world.add_handler(system::pkt_attack_player);
         world.add_handler(system::pkt_attack_entity);
+        world.add_handler(system::set_player_skin);
 
         world.add_handler(system::block_update);
         world.add_handler(system::chat_message);
@@ -245,6 +341,11 @@ impl Game {
 
         let uuid_lookup = world.spawn();
         world.insert(uuid_lookup, PlayerUuidLookup::default());
+
+        let chunks = world.spawn();
+        let biome_registry =
+            generate_biome_registry().context("failed to generate biome registry")?;
+        world.insert(chunks, Chunks::new(&biome_registry)?);
 
         let player_id_lookup = world.spawn();
         world.insert(player_id_lookup, EntityIdLookup::default());
@@ -285,7 +386,9 @@ impl Game {
         let now = Instant::now();
 
         if time_for_20_tps < now {
-            warn!("tick took full 50ms; skipping sleep");
+            let off_by = now - time_for_20_tps;
+            let off_by = off_by.as_millis_f64();
+            warn!("off by {off_by:.2}ms → skipping sleep");
             return None;
         }
 
@@ -303,17 +406,15 @@ impl Game {
     /// Run the main game loop at 20 ticks per second.
     pub fn game_loop(&mut self) {
         while !SHUTDOWN.load(std::sync::atomic::Ordering::Relaxed) {
-            self.tick();
-
-            if let Some(wait_duration) = self.wait_duration() {
+            if let Some(wait_duration) = self.tick() {
                 spin_sleep::sleep(wait_duration);
             }
         }
     }
 
     /// Run one tick of the game loop.
-    #[instrument(skip(self), fields(tick_on = self.tick_on))]
-    pub fn tick(&mut self) {
+    #[instrument(skip(self), fields(on = self.tick_on))]
+    pub fn tick(&mut self) -> Option<Duration> {
         /// The length of history to keep in the moving average.
         const LAST_TICK_HISTORY_SIZE: usize = 100;
 
@@ -325,7 +426,7 @@ impl Game {
 
             let ms = last.elapsed().as_nanos() as f64 / 1_000_000.0;
             if ms > 60.0 {
-                warn!("tick took too long: {ms}ms");
+                warn!("took too long: {ms:.2}ms");
             }
 
             self.last_ticks.pop_front().unwrap();
@@ -358,6 +459,7 @@ impl Game {
         )]
         let ms = now.elapsed().as_nanos() as f64 / 1_000_000.0;
         self.update_tick_stats(ms, scratch.one());
+        self.wait_duration()
     }
 
     #[instrument(skip_all, level = "trace")]
@@ -388,5 +490,5 @@ impl Game {
 }
 
 // todo: remove static and make this an `Arc` to prevent weird behavior with multiple `Game`s
-/// A shutdown atomic which is used to shut down the [`Game`] gracefully.
+/// A shutdown atomic which is used to shut down the [`Hyperion`] gracefully.
 static SHUTDOWN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);

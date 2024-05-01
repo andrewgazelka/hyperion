@@ -1,19 +1,21 @@
 //! All the networking related code.
 
-use std::{cell::RefCell, collections::VecDeque, hash::Hash, net::ToSocketAddrs};
+use std::{
+    cell::RefCell,
+    collections::VecDeque,
+    hash::Hash,
+    net::ToSocketAddrs,
+    sync::{atomic, atomic::AtomicUsize},
+};
 
 use derive_more::{Deref, DerefMut, From};
 use evenio::{fetch::Single, handler::HandlerParam, prelude::Component};
 use libc::iovec;
 use libdeflater::CompressionLvl;
-use tracing::debug;
+use tracing::{debug, trace};
 use valence_protocol::CompressionThreshold;
 
-use crate::{
-    global::Global,
-    net::encoder::PacketWriteInfo,
-    singleton::ring::{Buf, Ring},
-};
+use crate::{global::Global, net::encoder::PacketWriteInfo, singleton::ring::Ring};
 
 #[cfg(target_os = "linux")]
 mod linux;
@@ -70,7 +72,8 @@ impl ServerDef for Server {
         for (idx, elem) in buffers.iter().enumerate() {
             let ptr = elem.iov_base as *const u8;
             let len = elem.iov_len;
-            debug!("allocating buffer {idx} {ptr:?} {len:?}");
+            let len_readable = humansize::SizeFormatter::new(len, humansize::BINARY);
+            debug!("buffer {idx} {ptr:?} of len {len} = {len_readable}");
         }
 
         self.server.allocate_buffers(buffers);
@@ -158,7 +161,7 @@ pub const MAX_PACKET_SIZE: usize = valence_protocol::MAX_PACKET_SIZE as usize;
 pub const MINECRAFT_VERSION: &str = "1.20.1";
 
 mod decoder;
-mod encoder;
+pub mod encoder;
 
 pub use decoder::PacketDecoder;
 use rayon_local::RayonLocal;
@@ -168,8 +171,8 @@ use crate::{
     singleton::ring::register_rings,
 };
 
-const NUM_PLAYERS: usize = 10;
-const S2C_BUFFER_SIZE: usize = 1024 * 1024 * NUM_PLAYERS;
+// 128 MiB * num_cores
+pub const S2C_BUFFER_SIZE: usize = 1024 * 1024 * 128;
 
 #[derive(Debug)]
 pub struct IoBuf {
@@ -185,6 +188,7 @@ pub struct Compressors {
 }
 
 impl Compressors {
+    #[must_use]
     pub fn new(level: CompressionLvl) -> Self {
         Self {
             compressors: RayonLocal::init(|| libdeflater::Compressor::new(level).into()),
@@ -211,6 +215,7 @@ impl IoBufs {
 }
 
 impl IoBuf {
+    #[must_use]
     pub fn new(threshold: CompressionThreshold, index: usize) -> Self {
         Self {
             enc: encoder::PacketEncoder::new(threshold),
@@ -219,6 +224,16 @@ impl IoBuf {
         }
     }
 
+    #[must_use]
+    pub const fn enc(&self) -> &encoder::PacketEncoder {
+        &self.enc
+    }
+
+    pub fn enc_mut(&mut self) -> &mut encoder::PacketEncoder {
+        &mut self.enc
+    }
+
+    #[must_use]
     pub const fn index(&self) -> usize {
         self.index
     }
@@ -243,7 +258,7 @@ pub struct Broadcast(Packets);
 #[derive(Component, Default)]
 pub struct Packets {
     to_write: RayonLocal<VecDeque<PacketWriteInfo>>,
-    number_sending: usize,
+    number_sending: AtomicUsize,
 }
 
 impl Packets {
@@ -260,30 +275,33 @@ impl Packets {
         &mut self.to_write
     }
 
+    #[must_use]
     pub fn can_send(&self) -> bool {
-        if self.number_sending != 0 {
+        if self.number_sending.load(atomic::Ordering::Relaxed) != 0 {
             return false;
         }
 
         self.to_write.iter().any(|x| !x.is_empty())
     }
 
-    pub fn set_successfully_sent(&mut self) {
+    pub fn set_successfully_sent(&self, d_count: usize) {
         debug_assert!(
-            self.number_sending > 0,
+            self.number_sending.load(atomic::Ordering::Relaxed) > 0,
             "somehow number sending is 0 even though we just marked a successful send"
         );
 
-        self.number_sending -= 1;
+        self.number_sending
+            .fetch_sub(d_count, atomic::Ordering::Relaxed);
     }
 
-    pub fn prepare_for_send(&mut self) {
+    pub fn prepare_for_send(&mut self) -> usize {
         debug_assert!(
-            self.number_sending == 0,
+            self.number_sending.load(atomic::Ordering::Relaxed) == 0,
             "number sending is not 0 even though we are preparing for send"
         );
         let count = self.to_write.iter().map(VecDeque::len).sum();
-        self.number_sending = count;
+        self.number_sending = AtomicUsize::new(count);
+        count
     }
 
     pub fn clear(&mut self) {
@@ -314,6 +332,8 @@ impl Packets {
         buf.enc.set_compression(CompressionThreshold::DEFAULT);
 
         let result = append_packet_without_compression(pkt, &mut buf.buf)?;
+
+        trace!("without compression: {result:?}");
 
         self.push(result, buf);
 
@@ -346,7 +366,7 @@ impl Packets {
         Ok(())
     }
 
-    pub fn append_raw(&mut self, data: &[u8], buf: &mut IoBuf) {
+    pub fn append_raw(&self, data: &[u8], buf: &mut IoBuf) {
         let start_ptr = buf.buf.append(data);
 
         let writer = PacketWriteInfo {

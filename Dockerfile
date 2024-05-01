@@ -31,16 +31,18 @@ COPY Cargo.toml Cargo.lock ./
 
 COPY crates ./crates
 
+COPY events ./events
+
 FROM builder as release
 
 RUN --mount=type=cache,target=/root/.cargo/registry \
     --mount=type=cache,target=/root/.cargo/git \
     --mount=type=cache,target=/app/target \
-    CARGO_TERM_COLOR=never cargo build --release --locked -p server -F trace-simple
+    CARGO_TERM_COLOR=never cargo build --release --locked -p infection
 
 RUN --mount=type=cache,target=/app/target \
     mkdir -p /build && \
-    cp target/release/server /build/server
+    cp target/release/infection /build/infection
 
 FROM builder as debug
 
@@ -51,17 +53,28 @@ ENV RUSTFLAGS="-Ctarget-cpu=native -Clinker=/usr/bin/clang -Clink-arg=--ld-path=
 RUN --mount=type=cache,target=/root/.cargo/registry \
     --mount=type=cache,target=/root/.cargo/git \
     --mount=type=cache,target=/app/target \
-    CARGO_TERM_COLOR=never cargo build --locked -p server
+    CARGO_TERM_COLOR=never cargo build --locked -p infection
 
 RUN --mount=type=cache,target=/app/target \
     mkdir -p /build && \
-    cp target/debug/server /build/server && \
-    cp target/cargo-timings/cargo-timing.html /build/cargo-timing.html
+    cp target/debug/infection /build/infection
 
 FROM debian:bookworm-slim as debug-bin
-COPY --from=debug /build/server /hyperion
-ENTRYPOINT ["/hyperion"]
+COPY --from=debug /build/infection /infection
+
+RUN apt-get update && apt-get install -y \
+    openssl \
+    libssl3 \
+    ca-certificates
+
+ENTRYPOINT ["/infection"]
 
 FROM debian:bookworm-slim as release-bin
-COPY --from=release /build/server /hyperion
-ENTRYPOINT ["/hyperion"]
+
+RUN apt-get update && apt-get install -y \
+    openssl \
+    libssl3 \
+    ca-certificates
+
+COPY --from=release /build/infection /infection
+ENTRYPOINT ["/infection"]

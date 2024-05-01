@@ -222,6 +222,7 @@ skip = [
 #    "glam",
     "toml_edit",
     "winnow",
+    "windows-core",
     "derive_more",
     "redox_syscall",
     #{ crate = "ansi_term@0.11.0", reason = "you can specify a reason why it can't be updated/removed" },

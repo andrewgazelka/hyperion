@@ -15,11 +15,8 @@ use server::{
     },
     event,
     event::Shoved,
-    valence_server::{
-        entity::EntityKind,
-        text::{Color, IntoText},
-        BlockState, Text,
-    },
+    util::player_skin::PlayerSkin,
+    valence_server::{entity::EntityKind, Text},
 };
 use tracing::warn;
 
@@ -29,9 +26,19 @@ use crate::components::Team;
 pub fn scramble_player_name(mut r: ReceiverMut<event::PlayerInit, ()>) {
     // 10 alphanumeric name using fastrand
 
-    let mut name = String::new();
-    for _ in 0..10 {
-        name.push(fastrand::alphanumeric());
+    let mut name = r.event.username.to_string();
+
+    // mutate the name
+    if name.len() < 16 {
+        // append a random letter
+        let c = fastrand::alphabetic();
+        name.push(c);
+    } else {
+        let mut buffer = [0; 1]; // Buffer large enough for any ASCII character
+        let c = fastrand::alphabetic();
+        let result = c.encode_utf8(&mut buffer);
+
+        name.replace_range(..1, result);
     }
 
     r.event.username = name.into_boxed_str();
@@ -42,24 +49,6 @@ pub fn assign_team_on_join(
     mut s: Sender<Insert<Team>>,
 ) {
     s.insert(r.event.target, Team::Human);
-}
-
-pub fn deny_block_break(
-    r: Receiver<event::BlockFinishBreak, EntityId>,
-    mut s: Sender<(event::UpdateBlock, event::ChatMessage)>,
-) {
-    s.send(event::UpdateBlock {
-        position: r.event.position,
-        id: BlockState::STONE,
-        sequence: r.event.sequence,
-    });
-
-    let message = Text::text("You cannot break this block").color(Color::RED);
-
-    s.send(event::ChatMessage {
-        target: r.event.by,
-        message,
-    });
 }
 
 pub fn respawn_on_death(
@@ -85,7 +74,11 @@ pub fn respawn_on_death(
 
 pub fn zombie_command(
     r: ReceiverMut<event::Command, (EntityId, &mut Team)>,
-    mut s: Sender<(event::DisguisePlayer, event::ChatMessage)>,
+    mut s: Sender<(
+        event::DisguisePlayer,
+        event::ChatMessage,
+        event::SetPlayerSkin,
+    )>,
 ) {
     // todo: permissions
     let raw = &r.event.raw;
@@ -102,6 +95,14 @@ pub fn zombie_command(
     s.send(event::ChatMessage {
         target,
         message: Text::text("Turning into zombie"),
+    });
+
+    let zombie_skin = include_bytes!("zombie_skin.json");
+    let zombie_skin: PlayerSkin = serde_json::from_slice(zombie_skin).unwrap();
+
+    s.send(event::SetPlayerSkin {
+        target,
+        skin: zombie_skin,
     });
 
     s.send(event::DisguisePlayer {

@@ -13,6 +13,7 @@ use valence_text::Text;
 use crate::{
     components::FullEntityPose,
     net::{Server, MAX_PACKET_SIZE},
+    util::player_skin::PlayerSkin,
 };
 
 /// Initialize a Minecraft entity (like a zombie) with a given pose.
@@ -275,4 +276,11 @@ pub struct Gametick<'a, 'b> {
 #[derive(Event)]
 pub struct Egress<'a> {
     pub server: &'a mut Server,
+}
+
+#[derive(Event)]
+pub struct SetPlayerSkin {
+    #[event(target)]
+    pub target: EntityId,
+    pub skin: PlayerSkin,
 }

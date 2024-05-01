@@ -6,5 +6,12 @@
   "mounts": [
     "type=volume,target=${containerWorkspaceFolder}/target"
   ],
-  "forwardPorts": [25565]
+  "forwardPorts": [25565],
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "rust-lang.rust-analyzer"
+      ]
+    }
+  }
 }

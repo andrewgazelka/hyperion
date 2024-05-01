@@ -1,4 +1,4 @@
-//! Defined the [`Global`] struct which is used to store global data which defines a [`crate::Game`]
+//! Defined the [`Global`] struct which is used to store global data which defines a [`crate::Hyperion`]
 use std::{
     sync::{atomic::AtomicU32, Arc},
     time::Duration,

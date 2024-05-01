@@ -1,6 +1,8 @@
-use std::path::PathBuf;
+use std::{io::BufReader, path::PathBuf};
 
 use anyhow::Context;
+use flate2::bufread::GzDecoder;
+use tar::Archive;
 use tracing::info;
 use valence_anvil::parsing::DimensionFolder;
 use valence_registry::BiomeRegistry;
@@ -8,71 +10,61 @@ use valence_registry::BiomeRegistry;
 #[derive(Debug)]
 pub struct AnvilFolder {
     pub dim: DimensionFolder,
-    pub folder_path: PathBuf,
 }
 
-fn dot_minecraft_path() -> anyhow::Result<PathBuf> {
-    if cfg!(target_os = "macos") {
-        let home_dir = dirs_next::home_dir().context("could not find home directory")?;
-        let dir = home_dir
-            .join("Library")
-            .join("Application Support")
-            .join("minecraft");
+#[allow(
+    clippy::cognitive_complexity,
+    reason = "todo break up into smaller functions"
+)]
+fn get_nyc_save() -> anyhow::Result<PathBuf> {
+    // $HOME/.hyperion
+    let home_dir = dirs_next::home_dir().context("could not find home directory")?;
 
-        return Ok(dir);
+    let hyperion = home_dir.join(".hyperion");
+
+    if !hyperion.exists() {
+        // create
+        info!("creating .hyperion");
+        std::fs::create_dir_all(&hyperion).context("failed to create .hyperion")?;
     }
 
-    if cfg!(target_os = "linux") {
-        // todo: I do not know if this is correct
-        let home_dir = dirs_next::home_dir().unwrap();
-        let dir = home_dir.join(".minecraft");
+    // NewYork.tar.gz
 
-        return Ok(dir);
+    let new_york_dir = hyperion.join("NewYork");
+
+    if new_york_dir.exists() {
+        info!("using cached NewYork load");
+    } else {
+        // download
+        info!("downloading NewYork.tar.gz");
+
+        // https://github.com/andrewgazelka/maps/raw/main/NewYork.tar.gz
+        let url = "https://github.com/andrewgazelka/maps/raw/main/NewYork.tar.gz";
+
+        let response = reqwest::blocking::get(url).context("failed to get NewYork.tar.gz")?;
+
+        info!("extracting NewYork.tar.gz");
+
+        let decompressed = GzDecoder::new(BufReader::new(response));
+
+        // Create a new archive from the decompressed file.
+        let mut archive = Archive::new(decompressed);
+
+        archive
+            .unpack(&hyperion)
+            .context("failed to unpack NewYork.tar.gz")?;
     }
 
-    unimplemented!("unimplemented for this OS")
-}
-
-fn get_latest_save() -> anyhow::Result<PathBuf> {
-    let minecraft = dot_minecraft_path()?;
-    let saves_dir = minecraft.join("saves");
-
-    let mut saves: Vec<_> = saves_dir
-        .read_dir()
-        .context("could not read saves directory")?
-        .flatten()
-        .filter(|entry| {
-            let path = entry.path();
-            path.is_dir()
-        })
-        .collect();
-
-    saves.sort_unstable_by_key(|entry| entry.metadata().unwrap().modified().unwrap());
-
-    let path = saves.last().context("no saves found")?.path();
-
-    Ok(path)
+    Ok(new_york_dir)
 }
 
 impl AnvilFolder {
     pub fn new(biomes: &BiomeRegistry) -> anyhow::Result<Self> {
-        let latest_save = get_latest_save()?;
-        info!("loading world from {latest_save:?}");
-        // todo: probs not true
-        let dim = DimensionFolder::new(latest_save.clone(), biomes);
+        // let latest_save = get_latest_save()?;
+        let world = get_nyc_save()?;
+        info!("loading world from {world:?}");
+        let dim = DimensionFolder::new(world, biomes);
 
-        Ok(Self {
-            dim,
-            folder_path: latest_save,
-        })
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn test_get_latest_save() {
-        let path = super::get_latest_save();
-        println!("{path:?}");
+        Ok(Self { dim })
     }
 }
