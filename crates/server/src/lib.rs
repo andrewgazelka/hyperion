@@ -60,6 +60,8 @@ pub mod event;
 pub mod global;
 pub mod net;
 
+pub mod inventory;
+
 mod packets;
 mod system;
 
@@ -296,6 +298,7 @@ impl Hyperion {
         world.add_handler(system::init_player);
         world.add_handler(system::despawn_player);
         world.add_handler(system::player_join_world);
+        world.add_handler(system::send_player_info);
         world.add_handler(system::player_kick);
         world.add_handler(system::init_entity);
         world.add_handler(system::entity_move_logic);

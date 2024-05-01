@@ -13,7 +13,6 @@ use valence_protocol::{
     packets::{
         play,
         play::{
-            entity_equipment_update_s2c::EquipmentEntry,
             player_list_s2c::PlayerListActions,
             player_position_look_s2c::PlayerPositionLookFlags,
             team_s2c::{CollisionRule, Mode, NameTagVisibility, TeamColor, TeamFlags},
@@ -32,10 +31,10 @@ use crate::{
     components::{
         chunks::Chunks, Display, FullEntityPose, InGameName, Player, Uuid, PLAYER_SPAWN_POSITION,
     },
-    config,
-    config::CONFIG,
+    config::{self, CONFIG},
     event::PlayerJoinWorld,
     global::Global,
+    inventory::PlayerInventory,
     net::{Broadcast, Compose, Packets},
     singleton::{player_id_lookup::EntityIdLookup, player_uuid_lookup::PlayerUuidLookup},
     system::init_entity::spawn_entity_packet,
@@ -52,6 +51,7 @@ pub(crate) struct EntityQuery<'a> {
 #[derive(Query)]
 pub(crate) struct PlayerJoinWorldQuery<'a> {
     id: EntityId,
+    inventory: &'a mut PlayerInventory,
     uuid: &'a Uuid,
     pose: &'a FullEntityPose,
     packets: &'a mut Packets,
@@ -60,12 +60,62 @@ pub(crate) struct PlayerJoinWorldQuery<'a> {
 }
 
 #[derive(Query)]
+pub(crate) struct PlayerJoinWorldQueryReduced<'a> {
+    packets: &'a mut Packets,
+    _player: With<&'static Player>,
+}
+
+#[derive(Query)]
 pub(crate) struct PlayerQuery<'a> {
+    uuid: &'a Uuid,
+    name: &'a InGameName,
+    //  inventory: &'a PlayerInventory,
+    _player: With<&'static Player>,
+}
+
+#[derive(Query)]
+pub(crate) struct PlayerInventoryQuery<'a> {
     id: EntityId,
     uuid: &'a Uuid,
     pose: &'a FullEntityPose,
-    name: &'a InGameName,
+    inventory: &'a PlayerInventory,
     _player: With<&'static Player>,
+}
+
+// This needs to be a separate system
+// or else there are multiple (mut) references to inventory
+pub fn send_player_info(
+    r: Receiver<PlayerJoinWorld, PlayerJoinWorldQueryReduced>,
+    players: Fetcher<PlayerInventoryQuery>,
+    compose: Compose,
+) {
+    let local = r.query.packets;
+    // todo: cache
+    for current_query in &players {
+        let id = current_query.id;
+        let pose = current_query.pose;
+        let uuid = current_query.uuid;
+        let inv = current_query.inventory;
+
+        let entity_id = VarInt(id.index().0 as i32);
+
+        let pkt = play::PlayerSpawnS2c {
+            entity_id,
+            player_uuid: uuid.0,
+            position: pose.position.as_dvec3(),
+            yaw: ByteAngle::from_degrees(pose.yaw),
+            pitch: ByteAngle::from_degrees(pose.pitch),
+        };
+
+        local.append(&pkt, &compose).unwrap();
+
+        let equipment = inv.get_entity_equipment();
+        let pkt = crate::packets::vanilla::EntityEquipmentUpdateS2c {
+            entity_id,
+            equipment: Cow::Borrowed(&equipment),
+        };
+        local.append(&pkt, &compose).unwrap();
+    }
 }
 
 // todo: clean up player_join_world; the file is super super super long and hard to understand
@@ -104,40 +154,6 @@ pub fn player_join_world(
     uuid_lookup.insert(query.uuid.0, query.id);
     id_lookup.insert(query.id.index().0 as i32, query.id);
 
-    let boots = ItemStack::new(ItemKind::NetheriteBoots, 1, None);
-    let leggings = ItemStack::new(ItemKind::NetheriteLeggings, 1, None);
-    let chestplate = ItemStack::new(ItemKind::NetheriteChestplate, 1, None);
-    let helmet = ItemStack::new(ItemKind::NetheriteHelmet, 1, None);
-    let sword = ItemStack::new(ItemKind::NetheriteSword, 1, None);
-
-    // 0: Mainhand
-    // 2: Boots
-    // 3: Leggings
-    // 4: Chestplate
-    // 5: Helmet
-    let mainhand = EquipmentEntry {
-        slot: 0,
-        item: sword.clone(),
-    };
-    let boots2 = EquipmentEntry {
-        slot: 2,
-        item: boots.clone(),
-    };
-    let leggings2 = EquipmentEntry {
-        slot: 3,
-        item: leggings.clone(),
-    };
-    let chestplate2 = EquipmentEntry {
-        slot: 4,
-        item: chestplate.clone(),
-    };
-    let helmet2 = EquipmentEntry {
-        slot: 5,
-        item: helmet.clone(),
-    };
-
-    let equipment = vec![mainhand, boots2, leggings2, chestplate2, helmet2];
-
     let entries = &[play::player_list_s2c::PlayerListEntry {
         player_uuid: query.uuid.0,
         username: query.name,
@@ -167,25 +183,23 @@ pub fn player_join_world(
 
     trace!("appending cached data");
 
-    let items = [sword.clone(), boots, leggings, chestplate, helmet];
+    let inv = query.inventory;
+
+    // give players the items
+    inv.set_first_available(ItemStack::new(ItemKind::NetheriteSword, 1, None));
+    inv.set_first_available(ItemStack::new(ItemKind::Book, 15, None));
+    inv.set_boots(ItemStack::new(ItemKind::NetheriteBoots, 1, None));
+    inv.set_leggings(ItemStack::new(ItemKind::NetheriteLeggings, 1, None));
+    inv.set_chestplate(ItemStack::new(ItemKind::NetheriteChestplate, 1, None));
+    inv.set_helmet(ItemStack::new(ItemKind::NetheriteHelmet, 1, None));
 
     let pack_inv = play::InventoryS2c {
         window_id: 0,
         state_id: VarInt(0),
-        slots: Cow::Borrowed(&items),
+        slots: Cow::Borrowed(inv.items.get_items()),
         carried_item: Cow::Borrowed(&ItemStack::EMPTY),
     };
     local.append(&pack_inv, &compose).unwrap();
-
-    // local
-    //     .append(
-    //         &crate::packets::vanilla::EntityEquipmentUpdateS2c {
-    //             entity_id: VarInt(0),
-    //             equipment: Cow::Borrowed(&equipment),
-    //         },
-    //         &compose,
-    //     )
-    //     .unwrap();
 
     let actions = PlayerListActions::default()
         .with_add_player(true)
@@ -274,31 +288,6 @@ pub fn player_join_world(
         )
         .unwrap();
 
-    // todo: cache
-    for current_query in &players {
-        let id = current_query.id;
-        let pose = current_query.pose;
-        let uuid = current_query.uuid;
-
-        let entity_id = VarInt(id.index().0 as i32);
-
-        let pkt = play::PlayerSpawnS2c {
-            entity_id,
-            player_uuid: uuid.0,
-            position: pose.position.as_dvec3(),
-            yaw: ByteAngle::from_degrees(pose.yaw),
-            pitch: ByteAngle::from_degrees(pose.pitch),
-        };
-
-        local.append(&pkt, &compose).unwrap();
-
-        let pkt = crate::packets::vanilla::EntityEquipmentUpdateS2c {
-            entity_id,
-            equipment: Cow::Borrowed(&equipment),
-        };
-        local.append(&pkt, &compose).unwrap();
-    }
-
     global
         .0
         .shared
@@ -332,7 +321,7 @@ pub fn player_join_world(
         .append(
             &crate::packets::vanilla::EntityEquipmentUpdateS2c {
                 entity_id: current_entity_id,
-                equipment: Cow::Borrowed(&equipment),
+                equipment: Cow::Borrowed(&inv.get_entity_equipment()),
             },
             &compose,
         )

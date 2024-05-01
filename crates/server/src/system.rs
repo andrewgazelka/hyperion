@@ -50,7 +50,7 @@ pub use kill_all::kill_all;
 pub use pkt_attack::{check_immunity, pkt_attack_entity, pkt_attack_player};
 pub use pkt_hand_swing::pkt_hand_swing;
 pub use player_detect_mob_hits::player_detect_mob_hits;
-pub use player_join_world::{generate_biome_registry, player_join_world};
+pub use player_join_world::{generate_biome_registry, player_join_world, send_player_info};
 pub use player_kick::player_kick;
 pub use pose_update::pose_update;
 pub use rebuild_player_location::rebuild_player_location;
