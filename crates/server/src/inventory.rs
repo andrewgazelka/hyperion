@@ -29,12 +29,12 @@ impl<const T: usize> Inventory<T> {
     }
 
     /// Set item at first available spot
-    /// Returns the index of the spot where the item was placed or the item if no spot was found
+    /// Returns Left if the item was placed or the item if no spot was found
     pub fn set_first_available(
         &mut self,
         range: RangeInclusive<usize>,
         item: ItemStack,
-    ) -> Either<usize, ItemStack> {
+    ) -> Either<(), ItemStack> {
         let hotbar = &mut self.slots[range];
         if let Some(found_slot) = hotbar
             .iter_mut()
@@ -44,7 +44,7 @@ impl<const T: usize> Inventory<T> {
             .map(|(_, item)| item)
         {
             *found_slot = item;
-            return Either::Left(36);
+            return Either::Left(());
         }
         Either::Right(item)
     }
@@ -81,16 +81,16 @@ impl PlayerInventory {
     }
 
     /// Set item at first available spot
-    pub fn set_first_available(&mut self, item: ItemStack) -> Either<usize, ItemStack> {
+    pub fn set_first_available(&mut self, item: ItemStack) -> Either<(), ItemStack> {
         // try hotbar
         let item = match self.items.set_first_available(36..=44, item) {
-            Either::Left(index) => return Either::Left(index),
+            Either::Left(_) => return Either::Left(()),
             Either::Right(item) => item,
         };
 
         // try inventory
         let item = match self.items.set_first_available(9..=35, item) {
-            Either::Left(index) => return Either::Left(index),
+            Either::Left(_) => return Either::Left(()),
             Either::Right(item) => item,
         };
 
