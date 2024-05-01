@@ -110,14 +110,6 @@ impl <const N: usize> Ring<N> {
     }
 }
 
-pub fn register_rings<'a, const N: usize>(
-    server_def: &mut impl ServerDef,
-    io_buf: impl Iterator<Item = &'a mut Ring<N>>,
-) {
-    let vec = io_buf.map(Ring::as_iovec).collect::<Vec<_>>();
-    server_def.allocate_buffers(&vec);
-}
-
 #[cfg(test)]
 mod tests {
     

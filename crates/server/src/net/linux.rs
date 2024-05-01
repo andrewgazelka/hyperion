@@ -348,12 +348,13 @@ impl ServerDef for LinuxServer {
 
         Ok(())
     }
-
+    
+    /// To register new buffers, unregister must be called first
+    /// # Safety
+    /// buffers must be valid
     #[instrument(skip_all, level = "trace", name = "iou-allocate-buffers")]
-    fn allocate_buffers(&mut self, buffers: &[iovec]) {
-        info!("allocating buffers");
-        unsafe { self.register_buffers(buffers) };
-        info!("finished allocating buffers");
+    unsafe fn register_buffers(&mut self, buffers: &[iovec]) {
+        self.uring.submitter().register_buffers(buffers).unwrap();
     }
 
     #[instrument(skip_all, level = "trace", name = "iou-submit-events")]
@@ -479,12 +480,6 @@ impl LinuxServer {
             .unwrap();
     }
 
-    /// To register new buffers, unregister must be called first
-    /// # Safety
-    /// buffers must be valid
-    pub unsafe fn register_buffers(&mut self, buffers: &[iovec]) {
-        self.uring.submitter().register_buffers(buffers).unwrap();
-    }
 
     /// All requests in the submission queue must be finished or cancelled, or else this function
     /// will hang indefinetely.

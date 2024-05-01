@@ -14,6 +14,7 @@ pub mod locals;
 use std::{
     alloc::{AllocError, Allocator, Layout},
     cell::UnsafeCell,
+    mem::MaybeUninit,
     ops::{Deref, DerefMut, Index, IndexMut},
     ptr::NonNull,
 };
@@ -52,6 +53,24 @@ pub struct RayonLocal<S> {
     thread_locals: Box<[UnsafeCell<S>]>,
     #[cfg(debug)]
     main_thread_id: ThreadId,
+}
+
+impl<S> RayonLocal<MaybeUninit<S>> {
+    /// # Safety
+    /// All values must be initialized.
+    #[must_use]
+    pub unsafe fn assume_init(self) -> RayonLocal<S> {
+        self.map(|s| unsafe { s.assume_init() })
+    }
+}
+
+impl<S> RayonLocal<Option<S>> {
+    /// # Panics
+    /// If there are any `None` values.
+    #[must_use]
+    pub fn unwrap_all(self) -> RayonLocal<S> {
+        self.map(|s|  s.unwrap() )
+    }
 }
 
 #[must_use]
@@ -188,7 +207,7 @@ impl<S: Default> RayonLocal<S> {
     pub fn init_with_defaults() -> Self {
         let num_threads = rayon::current_num_threads();
 
-        let thread_locals = (0..=num_threads)
+        let thread_locals = (0..num_threads)
             .map(|_| UnsafeCell::new(S::default()))
             .collect();
 
@@ -205,7 +224,7 @@ impl<S> RayonLocal<S> {
     pub fn init(mut f: impl FnMut() -> S) -> Self {
         let num_threads = rayon::current_num_threads();
 
-        let thread_locals = (0..=num_threads).map(|_| UnsafeCell::new(f())).collect();
+        let thread_locals = (0..num_threads).map(|_| UnsafeCell::new(f())).collect();
 
         Self { thread_locals }
     }
@@ -213,7 +232,7 @@ impl<S> RayonLocal<S> {
     pub fn init_with_index(mut f: impl FnMut(usize) -> S) -> Self {
         let num_threads = rayon::current_num_threads();
 
-        let thread_locals = (0..=num_threads)
+        let thread_locals = (0..num_threads)
             .map(|idx| UnsafeCell::new(f(idx)))
             .collect();
 
@@ -273,11 +292,23 @@ impl<S> RayonLocal<S> {
             .map(|local| unsafe { &*local.get() })
     }
 
+    pub fn uninit() -> RayonLocal<MaybeUninit<S>> {
+        RayonLocal::init(MaybeUninit::uninit)
+    }
+
+    #[must_use]
+    pub fn none() -> RayonLocal<Option<S>> {
+        RayonLocal::init(|| None)
+    }
+
+    /// # Panics
+    /// If the current thread is not a Rayon thread.
     #[must_use]
     pub fn idx(&self) -> usize {
         // this is so the main thread will still have a place to put data
         // todo: priority—this is currently unsafe in the situation where there is another thread beyond the main thread
-        let index = rayon::current_thread_index().unwrap_or(self.thread_locals.len() - 1);
+        // todo: yikes this is hacky and definitely unsafe !!!!
+        let index = rayon::current_thread_index().unwrap_or_default();
 
         #[cfg(debug)]
         if index == self.thread_locals.len() - 1 {
@@ -324,12 +355,6 @@ impl<S> RayonLocal<S> {
         unsafe { core::slice::from_raw_parts(start_ptr.cast(), len) }
     }
 
-    // /// Get a mutable reference to one thread-local value, using a round-robin
-    // pub fn get_round_robin(&mut self) -> &mut S {
-    //     let index = self.idx;
-    //     self.idx = (self.idx + 1) % self.thread_locals.len();
-    //     unsafe { &mut *self.thread_locals[index].get() }
-    // }
     pub fn one(&mut self) -> &mut S {
         unsafe { &mut *self.thread_locals[0].get() }
     }

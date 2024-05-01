@@ -91,7 +91,10 @@ pub fn generate_ingress_events(world: &mut World, servers: &mut Servers) {
     let remove_player = RayonLocal::init(Vec::new);
     let recv_data = RayonLocal::init(Vec::new);
 
-    servers.get_all_mut().par_iter_mut().for_each(|server| {
+    rayon::broadcast(|_| {
+        let server = servers.get_local_raw();
+        let server = unsafe { &mut *server.get() };
+
         let decrease_count = decrease_count.get_local_raw();
         let decrease_count = unsafe { &mut *decrease_count.get() };
 
@@ -263,7 +266,7 @@ pub fn recv_data(
     id_lookup: Single<&EntityIdLookup>,
     compose: Compose,
 ) {
-    let mut event = r.event;
+    let event = r.event;
 
     for (fd, data) in event.inner.iter().flatten().copied() {
         trace!("got data: {data:?}");

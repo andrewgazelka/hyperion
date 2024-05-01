@@ -79,7 +79,9 @@ pub fn egress(
     });
 
     tracing::span!(tracing::Level::TRACE, "submit-events",).in_scope(|| {
-        servers.get_all_mut().iter_mut().for_each(|server| {
+        rayon::broadcast(|_| {
+            let server = servers.get_local_raw();
+            let server = unsafe { &mut *server.get() };
             server.submit_events();
         });
     });

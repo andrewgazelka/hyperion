@@ -174,7 +174,7 @@ impl ServerDef for GenericServer {
     }
 
     // todo: make unsafe
-    fn allocate_buffers(&mut self, buffers: &[iovec]) {
+    fn register_buffers(&mut self, buffers: &[iovec]) {
         if !self.write_iovecs.is_empty() {
             warn!("iovecs are not empty");
         }

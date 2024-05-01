@@ -14,6 +14,7 @@
 #![feature(sync_unsafe_cell)]
 #![expect(clippy::type_complexity, reason = "evenio uses a lot of complex types")]
 #![allow(clippy::mut_mut, reason = "ideally remove this")]
+#![allow(clippy::let_unit_value, clippy::ignored_unit_patterns, reason = "it gets angry at tracing 'rename'")]
 
 pub use evenio;
 pub use uuid;
@@ -49,14 +50,16 @@ use crate::{
     components::{chunks::Chunks, Vitals},
     event::{BumpScratch, Egress, Gametick, Scratches, Stats},
     global::Global,
-    net::{buffers::BufferAllocator, Broadcast, Compressors, Servers, S2C_BUFFER_SIZE},
+    net::{
+        buffers::{BufferAllocator, BufferAllocators},
+        Broadcast, Compressors, Servers, S2C_BUFFER_SIZE,
+    },
     singleton::{
         fd_lookup::FdLookup, player_aabb_lookup::PlayerBoundingBoxes,
         player_id_lookup::EntityIdLookup, player_uuid_lookup::PlayerUuidLookup,
     },
     system::{generate_biome_registry, generate_ingress_events},
 };
-use crate::net::buffers::BufferAllocators;
 
 pub mod components;
 pub mod event;

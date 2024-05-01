@@ -4,6 +4,7 @@ use std::{
     cell::RefCell,
     collections::HashSet,
     hash::Hash,
+    mem::MaybeUninit,
     net::SocketAddr,
     sync::{atomic, atomic::AtomicUsize},
 };
@@ -51,16 +52,21 @@ pub struct Servers {
 impl Servers {
     #[must_use]
     pub fn new(address: SocketAddr) -> Self {
-        let inner = RayonLocal::init(|| Server::new(address).unwrap());
-        Self { inner }
-    }
+        let to_set = RayonLocal::init(MaybeUninit::uninit);
 
-    pub fn allocate_buffers(&mut self, buffers: &[iovec]) {
-        for (idx, elem) in self.inner.iter_mut().enumerate() {
-            span!(Level::INFO, "server", idx = idx).in_scope(|| {
-                elem.allocate_buffers(buffers);
+        rayon::broadcast(|_| {
+            let idx = rayon::current_thread_index().unwrap();
+            span!(Level::TRACE, "server-new", idx = idx).in_scope(|| {
+                let s = Server::new(address).unwrap();
+                let to_set = to_set.get_local_raw();
+                let to_set = unsafe { &mut *to_set.get() };
+                *to_set = MaybeUninit::new(s);
             });
-        }
+        });
+
+        let inner = unsafe { to_set.assume_init() };
+
+        Self { inner }
     }
 }
 
@@ -105,7 +111,7 @@ impl ServerDef for Server {
         self.inner.drain(f)
     }
 
-    fn allocate_buffers(&mut self, buffers: &[iovec]) {
+    unsafe fn register_buffers(&mut self, buffers: &[iovec]) {
         for (idx, elem) in buffers.iter().enumerate() {
             let ptr = elem.iov_base as *const u8;
             let len = elem.iov_len;
@@ -113,7 +119,7 @@ impl ServerDef for Server {
             debug!("buffer {idx} {ptr:?} of len {len} = {len_readable}");
         }
 
-        self.inner.allocate_buffers(buffers);
+        self.inner.register_buffers(buffers);
     }
 
     fn submit_events(&mut self) {
@@ -148,8 +154,7 @@ pub trait ServerDef {
         Self: Sized;
     fn drain(&mut self, f: impl FnMut(ServerEvent)) -> std::io::Result<()>;
 
-    // todo:make unsafe
-    fn allocate_buffers(&mut self, buffers: &[iovec]);
+    unsafe fn register_buffers(&mut self, buffers: &[iovec]);
 
     fn write(&mut self, item: WriteItem);
 
@@ -177,11 +182,10 @@ use rayon_local::RayonLocal;
 use crate::{
     event::Scratches,
     net::{
-        buffers::{BufRef, BufferAllocator},
+        buffers::{BufRef, BufferAllocator, BufferAllocators},
         encoder::{append_packet_without_compression, PacketEncoder},
     },
 };
-use crate::net::buffers::BufferAllocators;
 
 // 128 MiB * num_cores
 pub const S2C_BUFFER_SIZE: usize = 1024 * 1024 * 128;
@@ -344,7 +348,7 @@ pub struct Broadcast {
 }
 
 impl Broadcast {
-    #[instrument(skip_all)]
+    #[instrument(skip_all, rename = "Broadcast::new")]
     pub fn new(allocator: &mut BufferAllocators) -> anyhow::Result<Self> {
         trace!("initializing broadcast buffers");
         // todo: try_init

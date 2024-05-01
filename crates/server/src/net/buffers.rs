@@ -11,7 +11,7 @@ use evenio::prelude::Component;
 use libc::iovec;
 use rayon_local::RayonLocal;
 use thiserror::Error;
-use tracing::{instrument, Level, span, trace};
+use tracing::{instrument, span, trace, Level};
 
 use crate::{
     net::{Server, ServerDef, Servers, MAX_PACKET_SIZE},
@@ -35,12 +35,27 @@ pub struct BufferAllocators {
 impl BufferAllocators {
     #[must_use]
     pub fn new(server_def: &mut Servers) -> Self {
-        let inner = RayonLocal::init_with_index(|idx| {
-            let server = server_def.get_mut(idx).unwrap();
-            span!(Level::TRACE, "buffer allocator", idx = idx).in_scope(|| {
-                BufferAllocator::new(server)
-            })
+        let new_span = span!(Level::TRACE, "BAS");
+        let _enter = new_span.enter();
+
+        let inner = RayonLocal::none();
+
+        rayon::broadcast(|_| {
+            let server = server_def.get_local_raw();
+            let server = unsafe { &mut *server.get() };
+
+            let index = rayon::current_thread_index().unwrap();
+
+            let result = span!(parent: &new_span, Level::TRACE, "new", index = index)
+                .in_scope(|| BufferAllocator::new(server));
+
+            let inner = inner.get_local_raw();
+            let inner = unsafe { &mut *inner.get() };
+
+            *inner = Some(result);
         });
+
+        let inner = inner.unwrap_all();
 
         Self { inner }
     }
@@ -153,7 +168,7 @@ impl BufferAllocatorInner {
             })
             .collect::<Vec<_>>();
 
-        server_def.allocate_buffers(&iovecs);
+        unsafe { server_def.register_buffers(&iovecs) };
 
         Self {
             buffers,
