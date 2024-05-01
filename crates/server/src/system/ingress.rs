@@ -16,7 +16,7 @@ use valence_protocol::{
 };
 
 use crate::{
-    event,
+    event::{self, UpdateSelectedSlot},
     global::Global,
     net::{Server, ServerDef, ServerEvent},
     singleton::fd_lookup::FdLookup,
@@ -50,7 +50,7 @@ pub type IngressSender<'a> = Sender<
         event::BlockStartBreak,
         event::BlockAbortBreak,
         event::BlockFinishBreak,
-        (event::Command, event::PoseUpdate),
+        (event::Command, event::PoseUpdate, UpdateSelectedSlot),
     ),
 >;
 

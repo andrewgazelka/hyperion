@@ -175,7 +175,7 @@ impl PlayerInventory {
         };
         let offhand = EquipmentEntry {
             slot: 1,
-            item: self.get_main_hand().cloned().unwrap_or(ItemStack::EMPTY),
+            item: self.get_offhand().cloned().unwrap_or(ItemStack::EMPTY),
         };
         let boots = EquipmentEntry {
             slot: 2,

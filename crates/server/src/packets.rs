@@ -28,8 +28,7 @@ use valence_protocol::{
 
 use crate::{
     components::{FullEntityPose, ImmuneStatus, KeepAlive, Vitals},
-    event,
-    event::{AttackEntity, AttackType, Pose, SwingArm},
+    event::{self, AttackEntity, AttackType, Pose, SwingArm, UpdateSelectedSlot},
     global::Global,
     singleton::player_id_lookup::EntityIdLookup,
     system::ingress::IngressSender,
@@ -123,8 +122,19 @@ fn update_player_abilities(mut data: &[u8]) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn update_selected_slot(mut data: &[u8]) -> anyhow::Result<()> {
+fn update_selected_slot(
+    mut data: &[u8],
+    sender: &mut IngressSender,
+    player_id: EntityId,
+) -> anyhow::Result<()> {
     let pkt = play::UpdateSelectedSlotC2s::decode(&mut data)?;
+
+    let play::UpdateSelectedSlotC2s { slot } = pkt;
+
+    sender.send(UpdateSelectedSlot {
+        slot: (slot + 36) as usize,
+        id: player_id,
+    });
 
     // debug!("update selected slot packet: {:?}", pkt);
 
@@ -345,7 +355,7 @@ pub fn switch(
         play::LookAndOnGroundC2s::ID => look_and_on_ground(data, query.pose)?,
         // play::ClientCommandC2s::ID => player_command(data),
         // play::UpdatePlayerAbilitiesC2s::ID => update_player_abilities(data)?,
-        // play::UpdateSelectedSlotC2s::ID => update_selected_slot(data)?,
+        play::UpdateSelectedSlotC2s::ID => update_selected_slot(data, sender, query.id)?,
         play::PlayerInteractEntityC2s::ID => {
             player_interact_entity(data, query, id_lookup, query.pose.position, sender)?;
         }

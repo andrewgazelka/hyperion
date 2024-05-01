@@ -32,7 +32,7 @@ use crate::{
         chunks::Chunks, Display, FullEntityPose, InGameName, Player, Uuid, PLAYER_SPAWN_POSITION,
     },
     config::{self, CONFIG},
-    event::PlayerJoinWorld,
+    event::{PlayerJoinWorld, UpdateEquipment},
     global::Global,
     inventory::PlayerInventory,
     net::{Broadcast, Compose, Packets},
@@ -131,6 +131,7 @@ pub fn player_join_world(
     broadcast: Single<&Broadcast>,
     chunks: Single<&Chunks>,
     compose: Compose,
+    mut sender: Sender<UpdateEquipment>,
 ) {
     static CACHED_DATA: once_cell::sync::OnceCell<bytes::Bytes> = once_cell::sync::OnceCell::new();
 
@@ -200,6 +201,10 @@ pub fn player_join_world(
         carried_item: Cow::Borrowed(&ItemStack::EMPTY),
     };
     local.append(&pack_inv, &compose).unwrap();
+
+    sender.send(UpdateEquipment {
+        id: query.id,
+    });
 
     let actions = PlayerListActions::default()
         .with_add_player(true)
@@ -317,15 +322,7 @@ pub fn player_join_world(
 
     broadcast.append(&spawn_player, &compose).unwrap();
 
-    broadcast
-        .append(
-            &crate::packets::vanilla::EntityEquipmentUpdateS2c {
-                entity_id: current_entity_id,
-                equipment: Cow::Borrowed(&inv.get_entity_equipment()),
-            },
-            &compose,
-        )
-        .unwrap();
+    
 
     info!("{} joined the world", query.name);
 }

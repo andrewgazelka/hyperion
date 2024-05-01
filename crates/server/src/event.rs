@@ -216,6 +216,22 @@ impl<A: Allocator> From<A> for Scratch<A> {
 }
 
 #[derive(Event)]
+/// An event that is sent when a player is changes his main hand
+pub struct UpdateSelectedSlot {
+    #[event(target)]
+    pub id: EntityId,
+    pub slot: usize,
+}
+
+/// This event is sent when the payer equipment gets sent to the client.
+#[derive(Event)]
+pub struct UpdateEquipment {
+    #[event(target)]
+    pub id: EntityId,
+}
+
+
+#[derive(Event)]
 pub struct BlockStartBreak {
     #[event(target)]
     pub by: EntityId,

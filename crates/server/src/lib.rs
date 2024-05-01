@@ -298,6 +298,7 @@ impl Hyperion {
         world.add_handler(system::init_player);
         world.add_handler(system::despawn_player);
         world.add_handler(system::player_join_world);
+
         world.add_handler(system::send_player_info);
         world.add_handler(system::player_kick);
         world.add_handler(system::init_entity);
@@ -332,6 +333,9 @@ impl Hyperion {
         world.add_handler(system::keep_alive);
         world.add_handler(system::stats_message);
         world.add_handler(system::kill_all);
+
+        world.add_handler(system::update_main_hand);
+        world.add_handler(system::update_equipment);
 
         let global = world.spawn();
         world.insert(global, Global::new(shared.clone()));
