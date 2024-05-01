@@ -2,14 +2,19 @@
 
 use std::{
     cell::RefCell,
+    collections::HashSet,
     hash::Hash,
-    net::{SocketAddr, ToSocketAddrs},
+    net::SocketAddr,
     sync::{atomic, atomic::AtomicUsize},
 };
 
 use anyhow::Context;
 use derive_more::{Deref, DerefMut};
-use evenio::{fetch::Single, handler::HandlerParam, prelude::Component};
+use evenio::{
+    fetch::Single,
+    handler::HandlerParam,
+    prelude::{Component, EntityId},
+};
 use libc::iovec;
 use libdeflater::CompressionLvl;
 use tracing::{debug, instrument, trace};
@@ -31,10 +36,10 @@ pub struct Fd(
 );
 
 #[allow(unused, reason = "these are used on linux")]
-pub enum ServerEvent<'a> {
+pub enum ServerEvent {
     AddPlayer { fd: Fd },
     RemovePlayer { fd: Fd },
-    RecvData { fd: Fd, data: &'a [u8] },
+    RecvData { fd: Fd, data: &'static [u8] },
     SentData { fd: Fd },
 }
 
@@ -44,6 +49,7 @@ pub struct Servers {
 }
 
 impl Servers {
+    #[must_use]
     pub fn new(address: SocketAddr) -> Self {
         let inner = RayonLocal::init(|| Server::new(address).unwrap());
         Self { inner }
@@ -58,10 +64,16 @@ impl Servers {
 
 pub struct Server {
     #[cfg(target_os = "linux")]
-    server: linux::LinuxServer,
+    pub inner: linux::LinuxServer,
     #[cfg(not(target_os = "linux"))]
-    server: generic::GenericServer,
+    pub inner: generic::GenericServer,
+
+    pub fd_ids: HashSet<EntityId>,
 }
+
+// todo: remove
+unsafe impl Send for Server {}
+unsafe impl Sync for Server {}
 
 impl ServerDef for Server {
     #[allow(unused, reason = "this has to do with cross-platform code")]
@@ -69,22 +81,26 @@ impl ServerDef for Server {
     where
         Self: Sized,
     {
-        #[cfg(target_os = "linux")]
-        {
-            Ok(Self {
-                server: linux::LinuxServer::new(address)?,
-            })
-        }
-        #[cfg(not(target_os = "linux"))]
-        {
-            Ok(Self {
-                server: generic::GenericServer::new(address)?,
-            })
-        }
+        let inner = {
+            #[cfg(target_os = "linux")]
+            {
+                linux::LinuxServer::new(address)?
+            }
+
+            #[cfg(not(target_os = "linux"))]
+            {
+                generic::GenericServer::new(address)?
+            }
+        };
+
+        Ok(Self {
+            inner,
+            fd_ids: HashSet::new(),
+        })
     }
 
     fn drain(&mut self, f: impl FnMut(ServerEvent)) -> std::io::Result<()> {
-        self.server.drain(f)
+        self.inner.drain(f)
     }
 
     fn allocate_buffers(&mut self, buffers: &[iovec]) {
@@ -95,20 +111,15 @@ impl ServerDef for Server {
             debug!("buffer {idx} {ptr:?} of len {len} = {len_readable}");
         }
 
-        self.server.allocate_buffers(buffers);
-    }
-
-    /// Impl with local sends BEFORE broadcasting
-    fn write_all<'a>(
-        &mut self,
-        global: &mut Global,
-        writers: impl Iterator<Item = RefreshItems<'a>>,
-    ) {
-        self.server.write_all(global, writers);
+        self.inner.allocate_buffers(buffers);
     }
 
     fn submit_events(&mut self) {
-        self.server.submit_events();
+        self.inner.submit_events();
+    }
+
+    fn write<'a>(&mut self, item: WriteItem<'a>) {
+        self.inner.write(item);
     }
 }
 
@@ -118,8 +129,11 @@ pub struct GlobalPacketWriteInfo {
     pub buffer_idx: u16,
 }
 
+unsafe impl Send for GlobalPacketWriteInfo {}
+unsafe impl Sync for GlobalPacketWriteInfo {}
+
 #[allow(unused, reason = "this is used on linux")]
-pub struct RefreshItems<'a> {
+pub struct WriteItem<'a> {
     pub local: &'a mut Vec<PacketWriteInfo>,
     pub global: Option<&'a Vec<GlobalPacketWriteInfo>>,
     pub buffer_idx: u16,
@@ -135,44 +149,9 @@ pub trait ServerDef {
     // todo:make unsafe
     fn allocate_buffers(&mut self, buffers: &[iovec]);
 
-    fn write_all<'a>(
-        &mut self,
-        global: &mut Global,
-        writers: impl Iterator<Item = RefreshItems<'a>>,
-    );
+    fn write<'a>(&mut self, item: WriteItem<'a>);
 
     fn submit_events(&mut self);
-}
-
-struct NotImplemented;
-
-impl ServerDef for NotImplemented {
-    fn new(_address: SocketAddr) -> anyhow::Result<Self>
-    where
-        Self: Sized,
-    {
-        unimplemented!("not implemented; use Linux")
-    }
-
-    fn drain(&mut self, _f: impl FnMut(ServerEvent)) -> std::io::Result<()> {
-        unimplemented!("not implemented; use Linux")
-    }
-
-    fn allocate_buffers(&mut self, _buffers: &[iovec]) {
-        unimplemented!("not implemented; use Linux")
-    }
-
-    fn write_all<'a>(
-        &mut self,
-        _global: &mut Global,
-        _writers: impl Iterator<Item = RefreshItems<'a>>,
-    ) {
-        unimplemented!("not implemented; use Linux")
-    }
-
-    fn submit_events(&mut self) {
-        unimplemented!("not implemented; use Linux")
-    }
 }
 
 /// The Minecraft protocol version this library currently targets.

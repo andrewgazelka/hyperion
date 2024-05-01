@@ -210,10 +210,6 @@ impl<S> RayonLocal<S> {
         Self { thread_locals }
     }
 
-    pub fn par_iter_mut(&mut self) -> RayonLocalIter<S> {
-        RayonLocalIter { local: self }
-    }
-
     pub fn init_with_index(mut f: impl FnMut(usize) -> S) -> Self {
         let num_threads = rayon::current_num_threads();
 
@@ -224,11 +220,11 @@ impl<S> RayonLocal<S> {
         Self { thread_locals }
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = &S> {
+    pub fn iter(&self) -> core::slice::Iter<S> {
         self.get_all().iter()
     }
 
-    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut S> {
+    pub fn iter_mut(&mut self) -> core::slice::IterMut<S> {
         self.get_all_mut().iter_mut()
     }
 
@@ -262,6 +258,19 @@ impl<S> RayonLocal<S> {
             .collect();
 
         RayonLocal { thread_locals }
+    }
+
+    pub fn get_mut(&mut self, index: usize) -> Option<&mut S> {
+        self.thread_locals
+            .get_mut(index)
+            .map(|local| unsafe { &mut *local.get() })
+    }
+
+    #[must_use]
+    pub fn get(&self, index: usize) -> Option<&S> {
+        self.thread_locals
+            .get(index)
+            .map(|local| unsafe { &*local.get() })
     }
 
     #[must_use]

@@ -12,7 +12,7 @@ use valence_text::Text;
 
 use crate::{
     components::FullEntityPose,
-    net::{Server, MAX_PACKET_SIZE},
+    net::{Servers, MAX_PACKET_SIZE},
     util::player_skin::PlayerSkin,
 };
 
@@ -275,7 +275,7 @@ pub struct Gametick<'a, 'b> {
 /// An event that is sent when it is time to send packets to clients.
 #[derive(Event)]
 pub struct Egress<'a> {
-    pub server: &'a mut Server,
+    pub server: &'a mut Servers,
 }
 
 #[derive(Event)]

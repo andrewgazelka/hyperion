@@ -3,7 +3,7 @@
 use std::{
     hash::BuildHasherDefault,
     io::{self, Read, Write},
-    net::ToSocketAddrs,
+    net::{SocketAddr, ToSocketAddrs},
     time::Duration,
 };
 
@@ -20,7 +20,7 @@ use tracing::{info, warn};
 
 use crate::{
     global::Global,
-    net::{encoder::PacketWriteInfo, Fd, RefreshItems, ServerDef, ServerEvent, MAX_PACKET_SIZE},
+    net::{encoder::PacketWriteInfo, Fd, ServerDef, ServerEvent, WriteItem, MAX_PACKET_SIZE},
 };
 
 // Setup some tokens to allow us to identify which event is for which socket.
@@ -56,7 +56,7 @@ impl Ids {
 }
 
 impl ServerDef for GenericServer {
-    fn new(address: impl ToSocketAddrs) -> anyhow::Result<Self>
+    fn new(address: SocketAddr) -> anyhow::Result<Self>
     where
         Self: Sized,
     {
@@ -181,32 +181,8 @@ impl ServerDef for GenericServer {
         self.write_iovecs = buffers.to_vec();
     }
 
-    fn write_all<'a>(
-        &mut self,
-        _global: &mut Global,
-        writers: impl Iterator<Item = RefreshItems<'a>>,
-    ) {
-        for writer in writers {
-            let RefreshItems { local: write, fd } = writer;
-            todo!()
-
-            // let Some(to_write) = self.connections.get_mut(&fd.0) else {
-            //     warn!("no connection for fd {fd:?}");
-            //     continue;
-            // };
-            // 
-            // for (idx, write) in write.iter_mut().enumerate() {
-            //     let (a, b) = write.as_slices();
-            // 
-            //     let to_write = &mut to_write.to_write[idx];
-            //     to_write.reserve(a.len() + b.len());
-            // 
-            //     to_write.extend_from_slice(a);
-            //     to_write.extend_from_slice(b);
-            // 
-            //     write.clear();
-            // }
-        }
+    fn write(&mut self, item: WriteItem) {
+        todo!()
     }
 
     fn submit_events(&mut self) {
@@ -315,6 +291,7 @@ fn handle_connection_event(
 
         if bytes_read != 0 {
             let received_data = &received_data[..bytes_read];
+            let received_data = unsafe { make_static(received_data) };
             f(ServerEvent::RecvData {
                 fd: Fd(token.0),
                 data: received_data,
@@ -335,4 +312,8 @@ fn would_block(err: &io::Error) -> bool {
 
 fn interrupted(err: &io::Error) -> bool {
     err.kind() == io::ErrorKind::Interrupted
+}
+
+unsafe fn make_static<T>(t: &[T]) -> &'static [T] {
+    core::mem::transmute(t)
 }

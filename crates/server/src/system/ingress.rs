@@ -5,6 +5,7 @@ use evenio::{
     world::World,
 };
 use fxhash::FxHashMap;
+use mio::unix::pipe::new;
 use rayon_local::RayonLocal;
 use serde_json::json;
 use tracing::{info, instrument, trace, warn};
@@ -24,17 +25,19 @@ use crate::{
 
 mod player_packet_buffer;
 
+use rayon::iter::{IntoParallelRefIterator, IntoParallelRefMutIterator, ParallelIterator};
+
 use crate::{
     components::{FullEntityPose, ImmuneStatus, KeepAlive, LoginState, Vitals},
     event::BumpScratch,
-    net::{buffers::BufferAllocator, Fd, Packets, MINECRAFT_VERSION, PROTOCOL_VERSION},
+    net::{
+        buffers::BufferAllocator, Compose, Fd, Packets, Servers, MINECRAFT_VERSION,
+        PROTOCOL_VERSION,
+    },
     packets::PacketSwitchQuery,
     singleton::player_id_lookup::EntityIdLookup,
     system::ingress::player_packet_buffer::DecodeBuffer,
 };
-use crate::net::Servers;
-
-use rayon::iter::ParallelIterator;
 
 pub type IngressSender<'a> = Sender<
     'a,
@@ -58,109 +61,150 @@ pub type IngressSender<'a> = Sender<
 >;
 
 #[derive(Event)]
-pub struct AddPlayer {
-    fd: Fd,
+pub struct AddPlayers<'a> {
+    fd: RayonLocal<Vec<Fd>>,
+    servers: &'a mut Servers,
 }
 
 #[derive(Event)]
-pub struct RemovePlayer {
-    fd: Fd,
+pub struct RemovePlayers<'a> {
+    fd: RayonLocal<Vec<Fd>>,
+    servers: &'a mut Servers,
 }
 
 // todo: do we really need three different lifetimes here?
 #[derive(Event)]
-pub struct RecvData<'a, 'b, 'c> {
-    fd: Fd,
-    data: &'c [u8],
-    scratch: &'b mut RayonLocal<BumpScratch<'a>>,
+pub struct RecvAllData {
+    inner: RayonLocal<Vec<(Fd, &'static [u8])>>,
 }
 
 #[derive(Event)]
 pub struct SentData {
-    decrease_count: FxHashMap<Fd, usize>,
+    decrease_count: RayonLocal<FxHashMap<Fd, usize>>,
 }
 
 #[instrument(skip_all, level = "trace")]
-pub fn generate_ingress_events(
-    world: &mut World,
-    servers: &mut Servers,
-    scratch: &mut RayonLocal<BumpScratch>,
-) {
-    let mut decrease_count = FxHashMap::default();
-    
-    
-    let servers = servers.par_iter_mut()
-        .for_each(|x| {
-            
-        });
-    
+pub fn generate_ingress_events(world: &mut World, servers: &mut Servers) {
+    let decrease_count = RayonLocal::init(FxHashMap::default);
+    let add_player = RayonLocal::init(Vec::new);
+    let remove_player = RayonLocal::init(Vec::new);
+    let recv_data = RayonLocal::init(Vec::new);
 
-    server
-        .drain(|event| match event {
-            ServerEvent::AddPlayer { fd } => {
-                world.send(AddPlayer { fd });
-            }
-            ServerEvent::RemovePlayer { fd } => {
-                world.send(RemovePlayer { fd });
-            }
-            ServerEvent::RecvData { fd, data } => {
-                world.send(RecvData { fd, data, scratch });
-            }
-            ServerEvent::SentData { fd } => {
-                decrease_count
-                    .entry(fd)
-                    .and_modify(|x| *x += 1)
-                    .or_insert(1);
-            }
-        })
-        .unwrap();
+    servers.get_all_mut().par_iter_mut().for_each(|server| {
+        let decrease_count = decrease_count.get_local_raw();
+        let decrease_count = unsafe { &mut *decrease_count.get() };
 
+        let add_player = add_player.get_local_raw();
+        let add_player = unsafe { &mut *add_player.get() };
+
+        let remove_player = remove_player.get_local_raw();
+        let remove_player = unsafe { &mut *remove_player.get() };
+
+        let recv_data = recv_data.get_local_raw();
+        let recv_data = unsafe { &mut *recv_data.get() };
+
+        server
+            .drain(|event| match event {
+                ServerEvent::AddPlayer { fd } => {
+                    add_player.push(fd);
+                }
+                ServerEvent::RemovePlayer { fd } => {
+                    remove_player.push(fd);
+                }
+                ServerEvent::RecvData { fd, data } => {
+                    recv_data.push((fd, data));
+                }
+                ServerEvent::SentData { fd } => {
+                    decrease_count
+                        .entry(fd)
+                        .and_modify(|x| *x += 1)
+                        .or_insert(1);
+                }
+            })
+            .unwrap();
+    });
+
+    world.send(AddPlayers {
+        fd: add_player,
+        servers,
+    });
+    world.send(RemovePlayers {
+        fd: remove_player,
+        servers,
+    });
     world.send(SentData { decrease_count });
+    world.send(RecvAllData { inner: recv_data });
 }
 
 // The `Receiver<Tick>` parameter tells our handler to listen for the `Tick` event.
 #[instrument(skip_all, level = "trace")]
 #[allow(clippy::too_many_arguments, reason = "todo")]
 pub fn add_player(
-    r: ReceiverMut<AddPlayer>,
+    r: ReceiverMut<AddPlayers>,
     mut fd_lookup: Single<&mut FdLookup>,
     mut buffer_allocator: Single<&mut BufferAllocator>,
     mut sender: IngressSender,
 ) {
-    let event = r.event;
+    let mut event = r.event;
 
-    let new_player = sender.spawn();
+    let event = &mut *event;
 
-    sender.insert(new_player, LoginState::Handshake);
-    sender.insert(new_player, DecodeBuffer::default());
-    sender.insert(new_player, Packets::new(&mut buffer_allocator).unwrap());
+    let fds = &mut event.fd;
+    let servers = &mut event.servers;
 
-    let fd = event.fd;
-    sender.insert(new_player, fd);
+    for (idx, elems) in fds.iter().enumerate() {
+        let server = event.servers.get_mut(idx).unwrap();
 
-    fd_lookup.insert(fd, new_player);
-    trace!("got a player with fd {:?}", fd);
+        for &fd in elems {
+            let new_player = sender.spawn();
+
+            sender.insert(new_player, LoginState::Handshake);
+            sender.insert(new_player, DecodeBuffer::default());
+            sender.insert(new_player, Packets::new(&mut buffer_allocator).unwrap());
+
+            sender.insert(new_player, fd);
+
+            server.fd_ids.insert(new_player);
+
+            fd_lookup.insert(fd, new_player);
+            trace!("got a player with fd {:?}", fd);
+        }
+    }
 }
 
 // The `Receiver<Tick>` parameter tells our handler to listen for the `Tick` event.
 #[instrument(skip_all, level = "trace")]
 #[allow(clippy::too_many_arguments, reason = "todo")]
 pub fn remove_player(
-    r: ReceiverMut<RemovePlayer>,
+    r: ReceiverMut<RemovePlayers>,
     mut fd_lookup: Single<&mut FdLookup>,
     mut sender: IngressSender,
 ) {
-    let event = r.event;
+    for &fd in r.event.fd.iter().flatten() {}
 
-    let fd = event.fd;
-    let Some(id) = fd_lookup.remove(&fd) else {
-        warn!("tried to remove player with fd {fd:?} but it seemed to already be removed",);
-        return;
-    };
+    let mut event = r.event;
 
-    sender.despawn(id);
+    let event = &mut *event;
 
-    trace!("removed a player with fd {:?}", fd);
+    let fds = &mut event.fd;
+    let servers = &mut event.servers;
+
+    for (idx, elems) in fds.iter().enumerate() {
+        let server = event.servers.get_mut(idx).unwrap();
+
+        for &fd in elems {
+            let Some(id) = fd_lookup.remove(&fd) else {
+                warn!("tried to remove player with fd {fd:?} but it seemed to already be removed",);
+                return;
+            };
+
+            server.fd_ids.remove(&id);
+
+            sender.despawn(id);
+
+            trace!("removed a player with fd {:?}", fd);
+        }
+    }
 }
 
 // The `Receiver<Tick>` parameter tells our handler to listen for the `Tick` event.
@@ -169,32 +213,39 @@ pub fn remove_player(
 pub fn sent_data(r: Receiver<SentData>, players: Fetcher<&Packets>, fd_lookup: Single<&FdLookup>) {
     let event = r.event;
 
+    // players.get
+
     // todo: par iter
-    event.decrease_count.iter().for_each(|(fd, count)| {
-        let Some(&id) = fd_lookup.get(fd) else {
-            warn!(
-                "tried to get id for fd {:?} but it seemed to already be removed",
-                fd
-            );
-            return;
-        };
+    event
+        .decrease_count
+        .get_all()
+        .par_iter()
+        .flatten()
+        .for_each(|(fd, count)| {
+            let Some(&id) = fd_lookup.get(fd) else {
+                warn!(
+                    "tried to get id for fd {:?} but it seemed to already be removed",
+                    fd
+                );
+                return;
+            };
 
-        let Ok(pkts) = players.get(id) else {
-            warn!(
-                "tried to get pkts for id {:?} but it seemed to already be removed",
-                id
-            );
-            return;
-        };
+            let Ok(pkts) = players.get(id) else {
+                warn!(
+                    "tried to get pkts for id {:?} but it seemed to already be removed",
+                    id
+                );
+                return;
+            };
 
-        pkts.set_successfully_sent(*count);
-    });
+            pkts.set_successfully_sent(*count);
+        });
 }
 
 #[instrument(skip_all, level = "trace")]
 #[allow(clippy::too_many_arguments, reason = "todo")]
 pub fn recv_data(
-    r: ReceiverMut<RecvData>,
+    r: ReceiverMut<RecvAllData>,
     mut fd_lookup: Single<&mut FdLookup>,
     mut sender: IngressSender,
     global: Single<&Global>,
@@ -209,79 +260,80 @@ pub fn recv_data(
         Option<&mut ImmuneStatus>,
     )>,
     id_lookup: Single<&EntityIdLookup>,
+    compose: Compose,
 ) {
     let mut event = r.event;
 
-    let fd = event.fd;
-    let data = event.data;
-    // todo: again why do we need &mut * ... also seems to borrow the entire event sadly
-    let scratch = &mut *event.scratch;
+    for (fd, data) in event.inner.iter().flatten().copied() {
+        trace!("got data: {data:?}");
+        let Some(&id) = fd_lookup.get(&fd) else {
+            warn!("got data for fd that is not in the fd lookup: {fd:?}");
+            return;
+        };
 
-    trace!("got data: {data:?}");
-    let Some(&id) = fd_lookup.get(&fd) else {
-        warn!("got data for fd that is not in the fd lookup: {fd:?}");
-        return;
-    };
+        let (login_state, decoder, packets, _, mut pose, mut vitals, mut keep_alive, mut immunity) =
+            players.get_mut(id).expect("player with fd not found");
 
-    let (login_state, decoder, packets, _, mut pose, mut vitals, mut keep_alive, mut immunity) =
-        players.get_mut(id).expect("player with fd not found");
+        decoder.queue_slice(data);
 
-    decoder.queue_slice(data);
+        // todo: error  on low compression: "decompressed packet length of 2 is <= the compression threshold of 2"
+        let scratch = compose.scratch.get_local();
+        let mut scratch = scratch.borrow_mut();
+        let scratch = &mut *scratch;
 
-    let scratch = scratch.one();
-
-    // todo: error  on low compression: "decompressed packet length of 2 is <= the compression threshold of 2"
-    while let Some(frame) = decoder.try_next_packet(scratch).unwrap() {
-        match *login_state {
-            LoginState::Handshake => process_handshake(login_state, &frame).unwrap(),
-            LoginState::Status => {
-                process_status(login_state, &frame, packets).unwrap();
-            }
-            LoginState::Terminate => {
-                // todo: does this properly terminate the connection? I don't think so probably
-                let Some(id) = fd_lookup.remove(&fd) else {
-                    return;
-                };
-
-                sender.despawn(id);
-            }
-            LoginState::Login => {
-                process_login(
-                    id,
-                    login_state,
-                    &frame,
-                    packets,
-                    decoder,
-                    &global,
-                    &mut sender,
-                )
-                .unwrap();
-            }
-            LoginState::TransitioningPlay { .. } | LoginState::Play => {
-                if let LoginState::TransitioningPlay {
-                    packets_to_transition,
-                } = login_state
-                {
-                    if *packets_to_transition == 0 {
-                        *login_state = LoginState::Play;
-                    } else {
-                        *packets_to_transition -= 1;
-                    }
+        while let Some(frame) = decoder.try_next_packet(scratch).unwrap() {
+            match *login_state {
+                LoginState::Handshake => process_handshake(login_state, &frame).unwrap(),
+                LoginState::Status => {
+                    process_status(login_state, &frame, packets).unwrap();
                 }
-
-                if let Some((pose, vitals, keep_alive, immunity)) =
-                    itertools::izip!(&mut pose, &mut vitals, &mut keep_alive, &mut immunity).next()
-                {
-                    let mut query = PacketSwitchQuery {
-                        id,
-                        pose,
-                        vitals,
-                        keep_alive,
-                        immunity,
+                LoginState::Terminate => {
+                    // todo: does this properly terminate the connection? I don't think so probably
+                    let Some(id) = fd_lookup.remove(&fd) else {
+                        return;
                     };
 
-                    crate::packets::switch(frame, &global, &mut sender, &id_lookup, &mut query)
-                        .unwrap();
+                    sender.despawn(id);
+                }
+                LoginState::Login => {
+                    process_login(
+                        id,
+                        login_state,
+                        &frame,
+                        packets,
+                        decoder,
+                        &global,
+                        &mut sender,
+                    )
+                    .unwrap();
+                }
+                LoginState::TransitioningPlay { .. } | LoginState::Play => {
+                    if let LoginState::TransitioningPlay {
+                        packets_to_transition,
+                    } = login_state
+                    {
+                        if *packets_to_transition == 0 {
+                            *login_state = LoginState::Play;
+                        } else {
+                            *packets_to_transition -= 1;
+                        }
+                    }
+
+                    if let Some((pose, vitals, keep_alive, immunity)) =
+                        itertools::izip!(&mut pose, &mut vitals, &mut keep_alive, &mut immunity)
+                            .next()
+                    {
+                        let mut query = PacketSwitchQuery {
+                            id,
+                            pose,
+                            vitals,
+                            keep_alive,
+                            immunity,
+                        };
+
+                        crate::packets::switch(frame, &global, &mut sender, &id_lookup, &mut query)
+                            .unwrap();
+                    }
                 }
             }
         }

@@ -18,7 +18,7 @@ use libc::iovec;
 use socket2::Socket;
 use tracing::{error, info, instrument, trace, warn};
 
-use super::RefreshItems;
+use super::WriteItem;
 use crate::{
     global::Global,
     net::{encoder::PacketWriteInfo, Fd, ServerDef, ServerEvent},
@@ -361,10 +361,10 @@ impl ServerDef for LinuxServer {
     fn write_all<'a>(
         &mut self,
         _global: &mut Global,
-        writers: impl Iterator<Item = RefreshItems<'a>>,
+        writers: impl Iterator<Item = WriteItem<'a>>,
     ) {
         writers.for_each(|item| {
-            let RefreshItems {
+            let WriteItem {
                 local: write,
                 fd,
                 buffer_idx,

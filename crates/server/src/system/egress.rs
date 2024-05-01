@@ -1,22 +1,23 @@
-use std::ops::DerefMut;
+use std::cell::SyncUnsafeCell;
 
 use evenio::{
     event::ReceiverMut,
     fetch::{Fetcher, Single},
 };
-use tracing::{instrument, trace};
+use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
+use tracing::{instrument, log::warn, trace};
 
 use crate::{
     components::LoginState,
     event::Egress,
     global::Global,
-    net::{Broadcast, Fd, GlobalPacketWriteInfo, Packets, RefreshItems, ServerDef},
+    net::{Broadcast, Fd, GlobalPacketWriteInfo, Packets, ServerDef, WriteItem},
 };
 
 #[instrument(skip_all, level = "trace")]
 pub fn egress(
     r: ReceiverMut<Egress>,
-    mut players: Fetcher<(&mut Packets, &Fd, &LoginState)>,
+    mut players: Fetcher<(&SyncUnsafeCell<Packets>, &Fd, &LoginState)>,
     mut broadcast: Single<&mut Broadcast>,
     mut global: Single<&mut Global>,
 ) {
@@ -37,58 +38,49 @@ pub fn egress(
         }
     });
 
-    trace!("global send size: {}", global_send.len());
-
-    let mut total_items = 0;
-
-    let local_items =
-        tracing::span!(tracing::Level::TRACE, "generate-refresh-items").in_scope(|| {
-            players
-                .iter_mut()
-                .filter(|(pkts, _, login)| {
-                    let extra = if login.is_play() {
-                        global_send.len()
-                    } else {
-                        0
-                    };
-                    pkts.can_send(extra)
-                })
-                .map(|(pkts, fd, login)| {
-                    let extra = if login.is_play() {
-                        global_send.len()
-                    } else {
-                        0
-                    };
-                    total_items += pkts.prepare_for_send(extra); // todo: should we not do this in a map for clarity?
-                    let buffer_idx = pkts.index();
-
-                    let global = login.is_play().then_some(&global_send);
-
-                    RefreshItems {
-                        local: pkts.get_write_mut(),
-                        global,
-                        fd: *fd,
-                        buffer_idx,
-                    }
-                })
-        });
-
     let mut event = r.event;
-    let server = &mut *event.server;
+    let servers = &mut *event.server;
 
-    server.write_all(&mut global, local_items);
+    servers.get_all_mut().par_iter_mut().for_each(|server| {
+        for &id in &server.fd_ids {
+            let Ok((pkts, fd, login)) = players.get(id) else {
+                warn!("no player found for id {id:?}");
+                return;
+            };
 
-    let player_count = players.iter_mut().len();
-    let per_player = total_items as f64 / player_count as f64;
+            let pkts = unsafe { &mut *pkts.get() };
 
-    tracing::span!(
-        tracing::Level::TRACE,
-        "submit-events",
-        total_items,
-        per_player
-    )
-    .in_scope(|| {
-        server.submit_events();
+            let extra = if login.is_play() {
+                global_send.len()
+            } else {
+                0
+            };
+            let can_send = pkts.can_send(extra);
+
+            if !can_send {
+                continue;
+            }
+
+            pkts.prepare_for_send(extra);
+            let buffer_idx = pkts.index();
+
+            let global = login.is_play().then_some(&global_send);
+
+            let write_item = WriteItem {
+                local: pkts.get_write_mut(),
+                global,
+                fd: *fd,
+                buffer_idx,
+            };
+
+            server.inner.write(write_item);
+        }
+    });
+
+    tracing::span!(tracing::Level::TRACE, "submit-events",).in_scope(|| {
+        servers.get_all_mut().par_iter_mut().for_each(|server| {
+            server.submit_events();
+        });
     });
 
     // now clear

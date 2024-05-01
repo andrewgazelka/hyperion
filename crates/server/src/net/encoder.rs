@@ -30,6 +30,9 @@ pub struct PacketWriteInfo {
     pub len: u32,
 }
 
+unsafe impl Send for PacketWriteInfo {}
+unsafe impl Sync for PacketWriteInfo {}
+
 impl PacketWriteInfo {
     /// # Safety
     /// todo

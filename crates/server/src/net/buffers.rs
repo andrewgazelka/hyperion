@@ -1,7 +1,6 @@
 use std::{
     cell::UnsafeCell,
     ffi::c_void,
-    mem::MaybeUninit,
     ops::{Deref, DerefMut},
     sync::Arc,
 };
@@ -10,7 +9,7 @@ use arraydeque::ArrayDeque;
 use evenio::prelude::Component;
 use libc::iovec;
 use thiserror::Error;
-use tracing::{debug, instrument, trace};
+use tracing::{instrument, trace};
 
 use crate::{
     net::{ServerDef, Servers, MAX_PACKET_SIZE},

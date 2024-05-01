@@ -11,6 +11,7 @@
 #![feature(maybe_uninit_slice)]
 #![feature(duration_millis_float)]
 #![feature(new_uninit)]
+#![feature(sync_unsafe_cell)]
 #![expect(clippy::type_complexity, reason = "evenio uses a lot of complex types")]
 #![allow(clippy::mut_mut, reason = "ideally remove this")]
 
@@ -48,10 +49,7 @@ use crate::{
     components::{chunks::Chunks, Vitals},
     event::{BumpScratch, Egress, Gametick, Scratches, Stats},
     global::Global,
-    net::{
-        buffers::BufferAllocator, Broadcast, Compressors, Server, ServerDef, Servers,
-        S2C_BUFFER_SIZE,
-    },
+    net::{buffers::BufferAllocator, Broadcast, Compressors, Servers, S2C_BUFFER_SIZE},
     singleton::{
         fd_lookup::FdLookup, player_aabb_lookup::PlayerBoundingBoxes,
         player_id_lookup::EntityIdLookup, player_uuid_lookup::PlayerUuidLookup,
@@ -443,7 +441,7 @@ impl Hyperion {
         let bump = RayonLocal::init(bumpalo::Bump::new);
         let mut scratch = bump.map_ref(event::Scratch::from);
 
-        generate_ingress_events(&mut self.world, &mut self.server, &mut scratch);
+        generate_ingress_events(&mut self.world, &mut self.server);
 
         tracing::span!(tracing::Level::TRACE, "gametick").in_scope(|| {
             self.world.send(Gametick {

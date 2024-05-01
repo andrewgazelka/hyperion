@@ -44,4 +44,4 @@ server = { path = "crates/server" }
 
 # todo: re-enable rayon
 #evenio = { git = "https://github.com/kuviman/evenio", features = [], branch = "non-send" }
-evenio = { git = "https://github.com/rj00a/evenio", features = ["rayon"] }
+evenio = { git = "https://github.com/andrewgazelka/evenio", features = ["rayon"], branch = "feat-unsafe-cell" }
