@@ -6,24 +6,44 @@ use std::{
 };
 
 use arraydeque::ArrayDeque;
+use derive_more::{Deref, DerefMut};
 use evenio::prelude::Component;
 use libc::iovec;
+use rayon_local::RayonLocal;
 use thiserror::Error;
-use tracing::{instrument, trace};
+use tracing::{instrument, Level, span, trace};
 
 use crate::{
-    net::{ServerDef, Servers, MAX_PACKET_SIZE},
+    net::{Server, ServerDef, Servers, MAX_PACKET_SIZE},
     singleton::ring::Ring,
 };
 
-const COUNT: usize = 200;
+const COUNT: usize = 20;
 
 const BUFFER_SIZE: usize = MAX_PACKET_SIZE * 2;
 
-#[derive(Component)]
 pub struct BufferAllocator {
     // todo: see if there is a way to avoid Rc and just use &'a BufferAllocatorInner
     inner: Arc<BufferAllocatorInner>,
+}
+
+#[derive(Component, Deref, DerefMut)]
+pub struct BufferAllocators {
+    inner: RayonLocal<BufferAllocator>,
+}
+
+impl BufferAllocators {
+    #[must_use]
+    pub fn new(server_def: &mut Servers) -> Self {
+        let inner = RayonLocal::init_with_index(|idx| {
+            let server = server_def.get_mut(idx).unwrap();
+            span!(Level::TRACE, "buffer allocator", idx = idx).in_scope(|| {
+                BufferAllocator::new(server)
+            })
+        });
+
+        Self { inner }
+    }
 }
 
 #[derive(Error, Debug)]
@@ -54,7 +74,7 @@ impl BufferAllocator {
         })
     }
 
-    pub fn new(server_def: &mut Servers) -> Self {
+    pub fn new(server_def: &mut Server) -> Self {
         let inner = BufferAllocatorInner::new(server_def);
         Self {
             inner: Arc::new(inner),
@@ -116,7 +136,7 @@ impl BufferAllocatorInner {
         clippy::large_stack_frames,
         reason = "todo probs remove somehow but idk how"
     )]
-    fn new(server_def: &mut Servers) -> Self {
+    fn new(server_def: &mut Server) -> Self {
         trace!("initializing buffer allocator");
         let available: [u16; COUNT] = std::array::from_fn(|i| i as u16);
 

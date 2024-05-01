@@ -56,6 +56,7 @@ use crate::{
     },
     system::{generate_biome_registry, generate_ingress_events},
 };
+use crate::net::buffers::BufferAllocators;
 
 pub mod components;
 pub mod event;
@@ -331,7 +332,7 @@ impl Hyperion {
         world.add_handler(system::kill_all);
 
         let buffer_allocator_id = world.spawn();
-        let mut buffer_allocator = BufferAllocator::new(&mut server_def);
+        let mut buffer_allocator = BufferAllocators::new(&mut server_def);
 
         let broadcast = world.spawn();
         world.insert(broadcast, Broadcast::new(&mut buffer_allocator)?);

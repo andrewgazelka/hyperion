@@ -19,7 +19,6 @@ pub fn egress(
     r: ReceiverMut<Egress>,
     mut players: Fetcher<(&SyncUnsafeCell<Packets>, &Fd, &LoginState)>,
     mut broadcast: Single<&mut Broadcast>,
-    mut global: Single<&mut Global>,
 ) {
     let broadcast = &mut *broadcast;
 
@@ -73,12 +72,14 @@ pub fn egress(
                 buffer_idx,
             };
 
+            trace!("writing to {fd:?}");
+
             server.inner.write(write_item);
         }
     });
 
     tracing::span!(tracing::Level::TRACE, "submit-events",).in_scope(|| {
-        servers.get_all_mut().par_iter_mut().for_each(|server| {
+        servers.get_all_mut().iter_mut().for_each(|server| {
             server.submit_events();
         });
     });

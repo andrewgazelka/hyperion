@@ -17,7 +17,7 @@ use evenio::{
 };
 use libc::iovec;
 use libdeflater::CompressionLvl;
-use tracing::{debug, instrument, trace};
+use tracing::{debug, instrument, span, trace, Level};
 
 use crate::{global::Global, net::encoder::PacketWriteInfo};
 
@@ -56,8 +56,10 @@ impl Servers {
     }
 
     pub fn allocate_buffers(&mut self, buffers: &[iovec]) {
-        for elem in self.inner.iter_mut() {
-            elem.allocate_buffers(buffers);
+        for (idx, elem) in self.inner.iter_mut().enumerate() {
+            span!(Level::INFO, "server", idx = idx).in_scope(|| {
+                elem.allocate_buffers(buffers);
+            });
         }
     }
 }
@@ -118,7 +120,7 @@ impl ServerDef for Server {
         self.inner.submit_events();
     }
 
-    fn write<'a>(&mut self, item: WriteItem<'a>) {
+    fn write(&mut self, item: WriteItem) {
         self.inner.write(item);
     }
 }
@@ -149,7 +151,7 @@ pub trait ServerDef {
     // todo:make unsafe
     fn allocate_buffers(&mut self, buffers: &[iovec]);
 
-    fn write<'a>(&mut self, item: WriteItem<'a>);
+    fn write(&mut self, item: WriteItem);
 
     fn submit_events(&mut self);
 }
@@ -179,6 +181,7 @@ use crate::{
         encoder::{append_packet_without_compression, PacketEncoder},
     },
 };
+use crate::net::buffers::BufferAllocators;
 
 // 128 MiB * num_cores
 pub const S2C_BUFFER_SIZE: usize = 1024 * 1024 * 128;
@@ -342,10 +345,11 @@ pub struct Broadcast {
 
 impl Broadcast {
     #[instrument(skip_all)]
-    pub fn new(allocator: &mut BufferAllocator) -> anyhow::Result<Self> {
+    pub fn new(allocator: &mut BufferAllocators) -> anyhow::Result<Self> {
         trace!("initializing broadcast buffers");
         // todo: try_init
-        let packets = RayonLocal::init(|| {
+        let packets = RayonLocal::init_with_index(|idx| {
+            let allocator = allocator.get_mut(idx).unwrap();
             let buffer = allocator.obtain().unwrap();
             LocalBroadcast {
                 buffer,

@@ -356,48 +356,40 @@ impl ServerDef for LinuxServer {
         info!("finished allocating buffers");
     }
 
-    /// Impl with local sends BEFORE broadcasting
-    #[instrument(skip_all, level = "trace", name = "iou-write-all")]
-    fn write_all<'a>(
-        &mut self,
-        _global: &mut Global,
-        writers: impl Iterator<Item = WriteItem<'a>>,
-    ) {
-        writers.for_each(|item| {
-            let WriteItem {
-                local: write,
-                fd,
-                buffer_idx,
-                global,
-            } = item;
-
-            let fd = fd.0;
-
-            for elem in write.iter_mut() {
-                let PacketWriteInfo { start_ptr, len } = *elem;
-                self.write_raw(fd, start_ptr, len, buffer_idx);
-            }
-            
-            if let Some(global) = global {
-                for elem in global {
-                    let start_ptr = elem.start_ptr;
-                    let len = elem.len;
-                    let index = elem.buffer_idx;
-                    
-                    self.write_raw(fd, start_ptr, len, index);
-                }
-            }
-
-            write.clear();
-            
-        });
-    }
-
     #[instrument(skip_all, level = "trace", name = "iou-submit-events")]
     fn submit_events(&mut self) {
         if let Err(err) = self.uring.submit() {
             error!("unexpected io_uring error during submit: {err}");
         }
+    }
+
+    #[instrument(skip_all, level = "trace", name = "iou-write")]
+    fn write<'a>(&mut self, item: WriteItem<'a>) {
+        let WriteItem {
+            local: write,
+            fd,
+            buffer_idx,
+            global,
+        } = item;
+
+        let fd = fd.0;
+
+        for elem in write.iter_mut() {
+            let PacketWriteInfo { start_ptr, len } = *elem;
+            self.write_raw(fd, start_ptr, len, buffer_idx);
+        }
+
+        if let Some(global) = global {
+            for elem in global {
+                let start_ptr = elem.start_ptr;
+                let len = elem.len;
+                let index = elem.buffer_idx;
+
+                self.write_raw(fd, start_ptr, len, index);
+            }
+        }
+
+        write.clear();
     }
 }
 

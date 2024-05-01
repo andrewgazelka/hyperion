@@ -38,6 +38,7 @@ use crate::{
     singleton::player_id_lookup::EntityIdLookup,
     system::ingress::player_packet_buffer::DecodeBuffer,
 };
+use crate::net::buffers::BufferAllocators;
 
 pub type IngressSender<'a> = Sender<
     'a,
@@ -142,7 +143,7 @@ pub fn generate_ingress_events(world: &mut World, servers: &mut Servers) {
 pub fn add_player(
     r: ReceiverMut<AddPlayers>,
     mut fd_lookup: Single<&mut FdLookup>,
-    mut buffer_allocator: Single<&mut BufferAllocator>,
+    mut buffer_allocator: Single<&mut BufferAllocators>,
     mut sender: IngressSender,
 ) {
     let mut event = r.event;
@@ -154,13 +155,14 @@ pub fn add_player(
 
     for (idx, elems) in fds.iter().enumerate() {
         let server = event.servers.get_mut(idx).unwrap();
+        let allocator = buffer_allocator.get_mut(idx).unwrap();
 
         for &fd in elems {
             let new_player = sender.spawn();
 
             sender.insert(new_player, LoginState::Handshake);
             sender.insert(new_player, DecodeBuffer::default());
-            sender.insert(new_player, Packets::new(&mut buffer_allocator).unwrap());
+            sender.insert(new_player, Packets::new(allocator).unwrap());
 
             sender.insert(new_player, fd);
 
@@ -187,7 +189,6 @@ pub fn remove_player(
     let event = &mut *event;
 
     let fds = &mut event.fd;
-    let servers = &mut event.servers;
 
     for (idx, elems) in fds.iter().enumerate() {
         let server = event.servers.get_mut(idx).unwrap();
@@ -198,11 +199,11 @@ pub fn remove_player(
                 return;
             };
 
-            server.fd_ids.remove(&id);
+            debug_assert!(server.fd_ids.remove(&id));
 
             sender.despawn(id);
 
-            trace!("removed a player with fd {:?}", fd);
+            trace!("removed a player with id {id:?}");
         }
     }
 }
