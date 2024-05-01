@@ -12,9 +12,10 @@
 #![feature(duration_millis_float)]
 #![feature(new_uninit)]
 #![feature(sync_unsafe_cell)]
+#![feature(stmt_expr_attributes)]
+#![feature(proc_macro_hygiene)]
 #![expect(clippy::type_complexity, reason = "evenio uses a lot of complex types")]
 #![allow(clippy::mut_mut, reason = "ideally remove this")]
-#![allow(clippy::let_unit_value, clippy::ignored_unit_patterns, reason = "it gets angry at tracing 'rename'")]
 
 pub use evenio;
 pub use uuid;

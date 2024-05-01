@@ -256,7 +256,17 @@ impl ServerDef for LinuxServer {
 
                     match result.cmp(&0) {
                         cmp::Ordering::Less => {
-                            error!("there was an error in write: {}", result);
+                            let result = -result;
+
+                            assert_ne!(
+                                result,
+                                libc::EFAULT,
+                                "EFAULT... most likely trying to send to an buffer not registered \
+                                 with this io_uring instance"
+                            );
+
+                            let err = std::io::Error::from_raw_os_error(result);
+                            error!("there was an error in write: {err:?}");
                             // Nothing is done here. It's assumed that if there is a write error,
                             // read will error too, and all of the error handling occurs in read.
                             // This code intentionally does not shutdown nor close the socket
@@ -348,7 +358,7 @@ impl ServerDef for LinuxServer {
 
         Ok(())
     }
-    
+
     /// To register new buffers, unregister must be called first
     /// # Safety
     /// buffers must be valid
@@ -365,7 +375,7 @@ impl ServerDef for LinuxServer {
     }
 
     #[instrument(skip_all, level = "trace", name = "iou-write")]
-    fn write<'a>(&mut self, item: WriteItem<'a>) {
+    fn write(&mut self, item: WriteItem) {
         let WriteItem {
             local: write,
             fd,
@@ -381,13 +391,11 @@ impl ServerDef for LinuxServer {
         }
 
         if let Some(global) = global {
-            for elem in global {
-                let start_ptr = elem.start_ptr;
-                let len = elem.len;
-                let index = elem.buffer_idx;
+            let start_ptr = global.start_ptr;
+            let len = global.len;
+            let index = global.buffer_idx;
 
-                self.write_raw(fd, start_ptr, len, index);
-            }
+            self.write_raw(fd, start_ptr, len, index);
         }
 
         write.clear();
@@ -457,7 +465,9 @@ impl LinuxServer {
         }
     }
 
+    #[instrument(skip(self), level = "trace", name = "write-raw")]
     pub fn write_raw(&mut self, fd: Fixed, buf: *const u8, len: u32, buf_index: u16) {
+        // trace!("writing");
         self.pending_writes += 1;
         unsafe {
             Self::push_entry(
@@ -479,7 +489,6 @@ impl LinuxServer {
             .register_sync_cancel(None, cancel_builder)
             .unwrap();
     }
-
 
     /// All requests in the submission queue must be finished or cancelled, or else this function
     /// will hang indefinetely.

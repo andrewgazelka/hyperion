@@ -18,7 +18,7 @@ use evenio::{
 };
 use libc::iovec;
 use libdeflater::CompressionLvl;
-use tracing::{debug, instrument, span, trace, Level};
+use tracing::{debug, instrument, span, trace, Level, info};
 
 use crate::{global::Global, net::encoder::PacketWriteInfo};
 
@@ -131,6 +131,7 @@ impl ServerDef for Server {
     }
 }
 
+#[derive(Debug, Copy, Clone)]
 pub struct GlobalPacketWriteInfo {
     pub start_ptr: *const u8,
     pub len: u32,
@@ -143,7 +144,7 @@ unsafe impl Sync for GlobalPacketWriteInfo {}
 #[allow(unused, reason = "this is used on linux")]
 pub struct WriteItem<'a> {
     pub local: &'a mut Vec<PacketWriteInfo>,
-    pub global: Option<&'a Vec<GlobalPacketWriteInfo>>,
+    pub global: Option<GlobalPacketWriteInfo>,
     pub buffer_idx: u16,
     pub fd: Fd,
 }
@@ -269,7 +270,6 @@ impl Packets {
 
         let result = append_packet_without_compression(pkt, buf)?;
 
-        trace!("without compression: {result:?}");
 
         self.push(result);
         Ok(())
@@ -307,8 +307,12 @@ impl Packets {
             "somehow number sending is 0 even though we just marked a successful send"
         );
 
-        self.number_sending
+        let before = self.number_sending
             .fetch_sub(d_count, atomic::Ordering::Relaxed);
+        
+        let after = before - d_count;
+        
+        // trace!("number sending: {before:?} -> {after:?}");
     }
 
     pub fn get_write_mut(&mut self) -> &mut Vec<PacketWriteInfo> {
@@ -318,10 +322,12 @@ impl Packets {
     #[must_use]
     pub fn can_send(&self, broadcast_count: usize) -> bool {
         if self.number_sending.load(atomic::Ordering::Relaxed) != 0 {
+            // trace!("cannot send because iou is busy");
             return false;
         }
 
         let total_len = self.local_to_write.len() + broadcast_count;
+        // trace!("total len: {total_len}");
         total_len > 0
     }
 
@@ -338,7 +344,8 @@ impl Packets {
 
 pub struct LocalBroadcast {
     pub buffer: BufRef,
-    pub local_to_write: Vec<PacketWriteInfo>,
+    pub local_to_write: PacketWriteInfo,
+    pub data: Vec<u8>,
 }
 
 /// This is useful for the ECS so we can use Single<&mut Broadcast> instead of having to use a marker struct
@@ -348,65 +355,29 @@ pub struct Broadcast {
 }
 
 impl Broadcast {
-    #[instrument(skip_all, rename = "Broadcast::new")]
+    #[instrument(skip_all, name = "Broadcast::new")]
     pub fn new(allocator: &mut BufferAllocators) -> anyhow::Result<Self> {
-        trace!("initializing broadcast buffers");
+        // trace!("initializing broadcast buffers");
         // todo: try_init
         let packets = RayonLocal::init_with_index(|idx| {
             let allocator = allocator.get_mut(idx).unwrap();
             let buffer = allocator.obtain().unwrap();
             LocalBroadcast {
                 buffer,
-                local_to_write: Vec::new(),
+                local_to_write: PacketWriteInfo::NULL,
+                data: Vec::new(),
             }
         });
 
         Ok(Self { packets })
     }
 
-    pub fn clear(&mut self) {
-        for packet in &mut self.packets {
-            packet.local_to_write.clear();
-        }
-    }
-
-    fn push(&self, writer: PacketWriteInfo) {
-        let to_write = self.packets.get_local_raw();
-        let to_write = unsafe { &mut *to_write.get() };
-
-        if let Some(last) = to_write.local_to_write.last_mut() {
-            let start_pointer_if_contiguous = unsafe { last.start_ptr.add(last.len as usize) };
-            if start_pointer_if_contiguous == writer.start_ptr {
-                last.len += writer.len;
-                return;
-            }
-        }
-
-        to_write.local_to_write.push(writer);
-    }
-
-    pub fn append_pre_compression_packet<P>(&self, pkt: &P) -> anyhow::Result<()>
-    where
-        P: valence_protocol::Packet + valence_protocol::Encode,
-    {
-        let local = self.packets.get_local_raw();
-        let local = unsafe { &mut *local.get() };
-
-        let buf = &mut *local.buffer;
-
-        let result = append_packet_without_compression(pkt, buf)?;
-
-        trace!("without compression: {result:?}");
-
-        self.push(result);
-
-        Ok(())
-    }
-
     pub fn append<P>(&self, pkt: &P, compose: &Compose) -> anyhow::Result<()>
     where
         P: valence_protocol::Packet + valence_protocol::Encode,
     {
+        // trace!("broadcasting {}", P::NAME);
+        
         let scratch = compose.scratch.get_local();
         let mut scratch = scratch.borrow_mut();
 
@@ -418,11 +389,10 @@ impl Broadcast {
         let local = self.packets.get_local_raw();
         let local = unsafe { &mut *local.get() };
 
-        let buf = &mut *local.buffer;
+        let buf = &mut local.data;
 
-        let result = encoder.append_packet(pkt, buf, &mut *scratch, &mut compressor)?;
+        encoder.append_packet(pkt, buf, &mut *scratch, &mut compressor)?;
 
-        self.push(result);
         Ok(())
     }
 
@@ -430,16 +400,8 @@ impl Broadcast {
         let local = self.packets.get_local_raw();
         let local = unsafe { &mut *local.get() };
 
-        let buf = &mut *local.buffer;
-
-        let start_ptr = buf.append(data);
-
-        let writer = PacketWriteInfo {
-            start_ptr,
-            len: data.len() as u32,
-        };
-
-        self.push(writer);
+        let buf = &mut local.data;
+        buf.extend_from_slice(data);
     }
 }
 

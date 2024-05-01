@@ -34,7 +34,7 @@ pub struct BufferAllocators {
 
 impl BufferAllocators {
     #[must_use]
-    pub fn new(server_def: &mut Servers) -> Self {
+    pub fn new(server_def: &Servers) -> Self {
         let new_span = span!(Level::TRACE, "BAS");
         let _enter = new_span.enter();
 
@@ -73,7 +73,7 @@ impl BufferAllocator {
         #[cfg(debug_assertions)]
         {
             let buffers_left = self.inner.available.lock().len();
-            trace!("buffers left: {buffers_left}");
+            // trace!("buffers left: {buffers_left}");
         }
 
         let index = self
@@ -152,13 +152,13 @@ impl BufferAllocatorInner {
         reason = "todo probs remove somehow but idk how"
     )]
     fn new(server_def: &mut Server) -> Self {
-        trace!("initializing buffer allocator");
+        // trace!("initializing buffer allocator");
         let available: [u16; COUNT] = std::array::from_fn(|i| i as u16);
 
         let buffers = Box::new_zeroed_slice(COUNT);
         let buffers: Box<[UnsafeCell<Ring<BUFFER_SIZE>>]> = unsafe { buffers.assume_init() };
 
-        trace!("got buffers");
+        // trace!("got buffers");
 
         let iovecs = buffers
             .iter()

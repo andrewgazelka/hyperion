@@ -2480,6 +2480,7 @@ dependencies = [
  "itertools 0.12.1",
  "libc",
  "libdeflater",
+ "log",
  "mio",
  "more-asserts",
  "ndarray",

@@ -80,6 +80,7 @@ num-format = "0.4.4"
 arrayvec = "0.7.4"
 arraydeque = "0.5.1"
 thiserror = "1.0.59"
+log = "0.4.21"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 io-uring = { git = "https://github.com/andrewgazelka/io-uring", branch = "feat-more-fixed-derive" }

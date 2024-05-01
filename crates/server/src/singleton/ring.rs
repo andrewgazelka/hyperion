@@ -36,6 +36,23 @@ impl Buf for bytes::BytesMut {
     }
 }
 
+impl Buf for Vec<u8> {
+    type Output = ();
+
+    fn get_contiguous(&mut self, len: usize) -> &mut [u8] {
+        // self.resize(len, 0);
+        // self
+        self.reserve(len);
+        let cap = self.spare_capacity_mut();
+        let cap = unsafe { MaybeUninit::slice_assume_init_mut(cap) };
+        cap
+    }
+
+    fn advance(&mut self, len: usize) -> Self::Output {
+        unsafe { self.set_len(self.len() + len) };
+    }
+}
+
 impl<const N: usize> Ring<N> {
     const fn len_until_end(&self) -> usize {
         N - self.head
@@ -52,7 +69,7 @@ impl<const N: usize> Ring<N> {
     }
 }
 
-impl <const N: usize> Buf for Ring<N> {
+impl<const N: usize> Buf for Ring<N> {
     type Output = PacketWriteInfo;
 
     fn get_contiguous(&mut self, len: usize) -> &mut [u8] {
@@ -88,13 +105,13 @@ impl <const N: usize> Buf for Ring<N> {
     }
 }
 
-impl <const N: usize> Default for Ring<N> {
+impl<const N: usize> Default for Ring<N> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl <const N: usize> Ring<N> {
+impl<const N: usize> Ring<N> {
     pub const fn new() -> Self {
         Self {
             data: [0; N],
@@ -112,7 +129,6 @@ impl <const N: usize> Ring<N> {
 
 #[cfg(test)]
 mod tests {
-    
 
     // #[test]
     // fn test_ring_new() {

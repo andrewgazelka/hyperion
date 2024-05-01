@@ -30,6 +30,14 @@ pub struct PacketWriteInfo {
     pub len: u32,
 }
 
+impl PacketWriteInfo {
+    pub const NULL: Self = Self {
+        start_ptr: std::ptr::null(),
+        len: 0,
+    };
+}
+
+
 unsafe impl Send for PacketWriteInfo {}
 unsafe impl Sync for PacketWriteInfo {}
 

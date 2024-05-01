@@ -172,7 +172,7 @@ pub fn add_player(
             server.fd_ids.insert(new_player);
 
             fd_lookup.insert(fd, new_player);
-            trace!("got a player with fd {:?}", fd);
+            // trace!("got a player with fd {:?}", fd);
         }
     }
 }
@@ -206,7 +206,7 @@ pub fn remove_player(
 
             sender.despawn(id);
 
-            trace!("removed a player with id {id:?}");
+            // trace!("removed a player with id {id:?}");
         }
     }
 }
@@ -269,7 +269,7 @@ pub fn recv_data(
     let event = r.event;
 
     for (fd, data) in event.inner.iter().flatten().copied() {
-        trace!("got data: {data:?}");
+        // trace!("got data: {data:?}");
         let Some(&id) = fd_lookup.get(&fd) else {
             warn!("got data for fd that is not in the fd lookup: {fd:?}");
             return;
