@@ -336,6 +336,7 @@ impl Hyperion {
 
         world.add_handler(system::update_main_hand);
         world.add_handler(system::update_equipment);
+        world.add_handler(system::give_command);
 
         let global = world.spawn();
         world.insert(global, Global::new(shared.clone()));

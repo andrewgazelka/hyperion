@@ -13,6 +13,7 @@ use std::str::FromStr;
 
 use anyhow::ensure;
 use evenio::{entity::EntityId, query::Query};
+use tracing::info;
 use valence_protocol::{
     decode::PacketFrame,
     math::Vec3,
@@ -189,7 +190,6 @@ fn chat_command(
         by: query.id,
         raw: pkt.command.0.to_owned(),
     };
-
     sender.send(event);
 
     Ok(())

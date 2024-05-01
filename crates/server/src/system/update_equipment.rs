@@ -5,7 +5,7 @@ use evenio::{
     event::{Receiver, Sender},
     fetch::Single,
 };
-use tracing::{info, instrument};
+use tracing::instrument;
 use valence_protocol::VarInt;
 
 use crate::{

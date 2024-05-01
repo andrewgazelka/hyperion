@@ -200,11 +200,10 @@ pub fn player_join_world(
         slots: Cow::Borrowed(inv.items.get_items()),
         carried_item: Cow::Borrowed(&ItemStack::EMPTY),
     };
+
     local.append(&pack_inv, &compose).unwrap();
 
-    sender.send(UpdateEquipment {
-        id: query.id,
-    });
+    sender.send(UpdateEquipment { id: query.id });
 
     let actions = PlayerListActions::default()
         .with_add_player(true)
@@ -321,8 +320,6 @@ pub fn player_join_world(
         .unwrap();
 
     broadcast.append(&spawn_player, &compose).unwrap();
-
-    
 
     info!("{} joined the world", query.name);
 }
@@ -481,7 +478,7 @@ fn send_commands(encoder: &mut PacketEncoder) -> anyhow::Result<()> {
     let root = Node {
         data: NodeData::Root,
         executable: false,
-        children: vec![VarInt(1), VarInt(3)],
+        children: vec![VarInt(1), VarInt(3), VarInt(4)],
         redirect_node: None,
     };
 
@@ -517,6 +514,58 @@ fn send_commands(encoder: &mut PacketEncoder) -> anyhow::Result<()> {
         redirect_node: None,
     };
 
+    // id 4 = give item
+    let give = Node {
+        data: NodeData::Literal {
+            name: "give".to_owned(),
+        },
+        executable: true,
+        children: vec![VarInt(5)],
+        redirect_node: None,
+    };
+
+    // id 5 = give {entity}
+    let give_player = Node {
+        data: NodeData::Argument {
+            name: "player".to_owned(),
+            parser: Parser::Entity {
+                single: true,
+                only_players: true,
+            },
+            suggestion: None,
+        },
+        executable: true,
+        children: vec![VarInt(6)],
+        redirect_node: None,
+    };
+
+    // id 6 = give {entity} {item}
+    let give_item = Node {
+        data: NodeData::Argument {
+            name: "item".to_owned(),
+            parser: Parser::ItemStack,
+            suggestion: None,
+        },
+        executable: true,
+        children: vec![VarInt(7)],
+        redirect_node: None,
+    };
+
+    // id 7 = give count
+    let give_count = Node {
+        data: NodeData::Argument {
+            name: "count".to_owned(),
+            parser: Parser::Integer {
+                min: Some(1),
+                max: Some(64),
+            },
+            suggestion: None,
+        },
+        executable: true,
+        children: vec![],
+        redirect_node: None,
+    };
+
     // id 4 = "ka" replace with "killall"
     // let ka = Node {
     //     data: NodeData::Literal {
@@ -528,7 +577,16 @@ fn send_commands(encoder: &mut PacketEncoder) -> anyhow::Result<()> {
     // };
 
     encoder.append_packet(&CommandTreeS2c {
-        commands: vec![root, spawn, spawn_arg, clear],
+        commands: vec![
+            root,
+            spawn,
+            spawn_arg,
+            clear,
+            give,
+            give_player,
+            give_item,
+            give_count,
+        ],
         root_index: VarInt(0),
     })?;
 
