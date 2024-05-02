@@ -5,6 +5,8 @@ use evenio::{
     prelude::With,
     query::Query,
 };
+use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
+use rayon_local::RayonLocal;
 use tracing::instrument;
 
 use crate::{
@@ -28,8 +30,13 @@ pub fn player_detect_mob_hits(
     mut poses_fetcher: Fetcher<PlayerDetectMobHitsQuery>,
     mut s: Sender<event::Shoved>,
 ) {
-    poses_fetcher.iter_mut().for_each(|query| {
+    let sender = RayonLocal::init(Vec::new);
+
+    poses_fetcher.par_iter_mut().for_each(|query| {
         let PlayerDetectMobHitsQuery { id, pose, _player } = query;
+
+        let sender = sender.get_local_raw();
+        let sender = unsafe { &mut *sender.get() };
 
         entity_bounding_boxes
             .query
@@ -39,7 +46,7 @@ pub fn player_detect_mob_hits(
                     return true;
                 }
 
-                s.send(event::Shoved {
+                sender.push(event::Shoved {
                     target: id,
                     from: collision.id,
                     from_location: collision.aabb.mid(),
@@ -48,4 +55,8 @@ pub fn player_detect_mob_hits(
                 true
             });
     });
+
+    for event in sender.into_iter().flatten() {
+        s.send(event);
+    }
 }

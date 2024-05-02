@@ -144,6 +144,7 @@ impl ServerDef for LinuxServer {
 
         let listener = Socket::new(domain, socket2::Type::STREAM, None)?;
         listener.set_nonblocking(true)?;
+        listener.set_reuse_address(true)?;
         // listener.set_send_buffer_size(SEND_BUFFER_SIZE)?;
         listener.bind(&address.into())?;
         listener.listen(LISTEN_BACKLOG)?;
