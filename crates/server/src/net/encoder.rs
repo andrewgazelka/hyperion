@@ -32,12 +32,20 @@ impl Debug for PacketEncoder {
 #[allow(unused, reason = "this is used in linux")]
 #[derive(Debug, Copy, Clone)]
 #[repr(packed)]
-pub struct PacketWriteInfo {
+pub struct DataWriteInfo {
     pub start_ptr: *const u8,
     pub len: u32,
 }
 
-impl PacketWriteInfo {
+unsafe impl Send for DataWriteInfo {}
+unsafe impl Sync for DataWriteInfo {}
+
+impl DataWriteInfo {
+    pub const NULL: Self = Self {
+        start_ptr: std::ptr::null(),
+        len: 0,
+    };
+
     /// # Safety
     /// todo
     #[allow(dead_code, reason = "nice for unit tests")]

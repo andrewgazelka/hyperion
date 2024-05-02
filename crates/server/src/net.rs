@@ -1,21 +1,18 @@
 //! All the networking related code.
 
-use std::{
-    cell::RefCell,
-    collections::VecDeque,
-    hash::Hash,
-    net::ToSocketAddrs,
-    sync::{atomic, atomic::AtomicUsize},
-};
+use std::{cell::RefCell, hash::Hash, net::SocketAddr};
 
-use derive_more::{Deref, DerefMut, From};
+use anyhow::Context;
+use arrayvec::ArrayVec;
+use derive_more::{Deref, DerefMut};
 use evenio::{fetch::Single, handler::HandlerParam, prelude::Component};
 use libc::iovec;
 use libdeflater::CompressionLvl;
-use tracing::{debug, trace};
-use valence_protocol::CompressionThreshold;
+use tracing::{debug, instrument};
 
-use crate::{global::Global, net::encoder::PacketWriteInfo, singleton::ring::Ring};
+use crate::{global::Global, net::encoder::DataWriteInfo};
+
+pub mod buffers;
 
 #[cfg(target_os = "linux")]
 mod linux;
@@ -29,46 +26,49 @@ pub struct Fd(
     #[cfg(not(target_os = "linux"))] usize,
 );
 
+pub const RING_SIZE: usize = MAX_PACKET_SIZE * 2;
+
 #[allow(unused, reason = "these are used on linux")]
-pub enum ServerEvent<'a> {
+pub enum ServerEvent {
     AddPlayer { fd: Fd },
     RemovePlayer { fd: Fd },
-    RecvData { fd: Fd, data: &'a [u8] },
+    RecvData { fd: Fd, data: &'static [u8] },
     SentData { fd: Fd },
 }
 
 pub struct Server {
     #[cfg(target_os = "linux")]
-    server: linux::LinuxServer,
+    pub inner: linux::LinuxServer,
     #[cfg(not(target_os = "linux"))]
-    server: generic::GenericServer,
+    pub inner: generic::GenericServer,
 }
 
 impl ServerDef for Server {
     #[allow(unused, reason = "this has to do with cross-platform code")]
-    fn new(address: impl ToSocketAddrs) -> anyhow::Result<Self>
+    fn new(address: SocketAddr) -> anyhow::Result<Self>
     where
         Self: Sized,
     {
-        #[cfg(target_os = "linux")]
-        {
-            Ok(Self {
-                server: linux::LinuxServer::new(address)?,
-            })
-        }
-        #[cfg(not(target_os = "linux"))]
-        {
-            Ok(Self {
-                server: generic::GenericServer::new(address)?,
-            })
-        }
+        let inner = {
+            #[cfg(target_os = "linux")]
+            {
+                linux::LinuxServer::new(address)?
+            }
+
+            #[cfg(not(target_os = "linux"))]
+            {
+                generic::GenericServer::new(address)?
+            }
+        };
+
+        Ok(Self { inner })
     }
 
     fn drain(&mut self, f: impl FnMut(ServerEvent)) -> std::io::Result<()> {
-        self.server.drain(f)
+        self.inner.drain(f)
     }
 
-    fn allocate_buffers(&mut self, buffers: &[iovec]) {
+    unsafe fn register_buffers(&mut self, buffers: &[iovec]) {
         for (idx, elem) in buffers.iter().enumerate() {
             let ptr = elem.iov_base as *const u8;
             let len = elem.iov_len;
@@ -76,76 +76,48 @@ impl ServerDef for Server {
             debug!("buffer {idx} {ptr:?} of len {len} = {len_readable}");
         }
 
-        self.server.allocate_buffers(buffers);
-    }
-
-    /// Impl with local sends BEFORE broadcasting
-    fn write_all<'a>(
-        &mut self,
-        global: &mut Global,
-        writers: impl Iterator<Item = RefreshItems<'a>>,
-    ) {
-        self.server.write_all(global, writers);
+        self.inner.register_buffers(buffers);
     }
 
     fn submit_events(&mut self) {
-        self.server.submit_events();
+        self.inner.submit_events();
+    }
+
+    fn write(&mut self, item: WriteItem) {
+        self.inner.write(item);
     }
 }
 
+#[derive(Debug, Copy, Clone)]
+pub struct GlobalPacketWriteInfo {
+    pub start_ptr: *const u8,
+    pub len: u32,
+    pub buffer_idx: u16,
+}
+
+unsafe impl Send for GlobalPacketWriteInfo {}
+unsafe impl Sync for GlobalPacketWriteInfo {}
+
 #[allow(unused, reason = "this is used on linux")]
-pub struct RefreshItems<'a> {
-    pub write: &'a mut RayonLocal<VecDeque<PacketWriteInfo>>,
+pub struct WriteItem<'a> {
+    pub info: &'a DataWriteInfo,
+    pub buffer_idx: u16,
     pub fd: Fd,
 }
 
 pub trait ServerDef {
-    fn new(address: impl ToSocketAddrs) -> anyhow::Result<Self>
+    fn new(address: SocketAddr) -> anyhow::Result<Self>
     where
         Self: Sized;
     fn drain(&mut self, f: impl FnMut(ServerEvent)) -> std::io::Result<()>;
 
-    // todo:make unsafe
-    fn allocate_buffers(&mut self, buffers: &[iovec]);
+    /// # Safety
+    /// todo: not completely sure about all the invariants here
+    unsafe fn register_buffers(&mut self, buffers: &[iovec]);
 
-    fn write_all<'a>(
-        &mut self,
-        global: &mut Global,
-        writers: impl Iterator<Item = RefreshItems<'a>>,
-    );
+    fn write(&mut self, item: WriteItem);
 
     fn submit_events(&mut self);
-}
-
-struct NotImplemented;
-
-impl ServerDef for NotImplemented {
-    fn new(_address: impl ToSocketAddrs) -> anyhow::Result<Self>
-    where
-        Self: Sized,
-    {
-        unimplemented!("not implemented; use Linux")
-    }
-
-    fn drain(&mut self, _f: impl FnMut(ServerEvent)) -> std::io::Result<()> {
-        unimplemented!("not implemented; use Linux")
-    }
-
-    fn allocate_buffers(&mut self, _buffers: &[iovec]) {
-        unimplemented!("not implemented; use Linux")
-    }
-
-    fn write_all<'a>(
-        &mut self,
-        _global: &mut Global,
-        _writers: impl Iterator<Item = RefreshItems<'a>>,
-    ) {
-        unimplemented!("not implemented; use Linux")
-    }
-
-    fn submit_events(&mut self) {
-        unimplemented!("not implemented; use Linux")
-    }
 }
 
 /// The Minecraft protocol version this library currently targets.
@@ -167,20 +139,15 @@ pub use decoder::PacketDecoder;
 use rayon_local::RayonLocal;
 
 use crate::{
-    event::Scratches, net::encoder::append_packet_without_compression,
-    singleton::ring::register_rings,
+    event::Scratches,
+    net::{
+        buffers::{BufRef, BufferAllocator},
+        encoder::{append_packet_without_compression, PacketEncoder},
+    },
 };
 
 // 128 MiB * num_cores
 pub const S2C_BUFFER_SIZE: usize = 1024 * 1024 * 128;
-
-#[derive(Debug)]
-pub struct IoBuf {
-    /// The encoding buffer and logic
-    enc: encoder::PacketEncoder,
-    buf: Ring,
-    index: usize,
-}
 
 #[derive(Component, Deref, DerefMut)]
 pub struct Compressors {
@@ -196,123 +163,106 @@ impl Compressors {
     }
 }
 
-#[derive(Component, Debug, Deref, DerefMut)]
-pub struct IoBufs {
-    locals: RayonLocal<RefCell<IoBuf>>,
-}
-
-impl IoBufs {
-    pub fn init(threshold: CompressionThreshold, server_def: &mut impl ServerDef) -> Self {
-        let mut locals = RayonLocal::init_with_index(|i| IoBuf::new(threshold, i));
-
-        let rings = locals.get_all_mut().iter_mut().map(IoBuf::buf_mut);
-        register_rings(server_def, rings);
-
-        let locals = locals.map(RefCell::new);
-
-        Self { locals }
-    }
-}
-
-impl IoBuf {
-    #[must_use]
-    pub fn new(threshold: CompressionThreshold, index: usize) -> Self {
-        Self {
-            enc: encoder::PacketEncoder::new(threshold),
-            buf: Ring::new(S2C_BUFFER_SIZE),
-            index,
-        }
-    }
-
-    #[must_use]
-    pub const fn enc(&self) -> &encoder::PacketEncoder {
-        &self.enc
-    }
-
-    pub fn enc_mut(&mut self) -> &mut encoder::PacketEncoder {
-        &mut self.enc
-    }
-
-    #[must_use]
-    pub const fn index(&self) -> usize {
-        self.index
-    }
-
-    pub fn buf_mut(&mut self) -> &mut Ring {
-        &mut self.buf
-    }
-}
-
 #[derive(HandlerParam, Copy, Clone)]
 pub struct Compose<'a> {
-    pub bufs: Single<'a, &'static IoBufs>,
     pub compressor: Single<'a, &'static Compressors>,
     pub scratch: Single<'a, &'static Scratches>,
+    pub global: Single<'a, &'static Global>,
 }
 
-/// This is useful for the ECS so we can use Single<&mut Broadcast> instead of having to use a marker struct
-#[derive(Component, From, Deref, DerefMut, Default)]
-pub struct Broadcast(Packets);
+impl<'a> Compose<'a> {
+    #[must_use]
+    pub fn encoder(&self) -> PacketEncoder {
+        let threshold = self.global.shared.compression_threshold;
+        PacketEncoder::new(threshold)
+    }
+}
 
 /// Stores indices of packets
-#[derive(Component, Default)]
+#[derive(Component)]
 pub struct Packets {
-    to_write: RayonLocal<VecDeque<PacketWriteInfo>>,
-    number_sending: AtomicUsize,
+    buffer: BufRef,
+    pub local_to_write: ArrayVec<DataWriteInfo, 2>,
+    pub number_sending: u8,
 }
 
 impl Packets {
-    pub fn extend(&mut self, other: &Self) {
-        let this = self.to_write.iter_mut();
-        let other = other.to_write.iter();
-
-        for (this, other) in this.zip(other) {
-            this.extend(other);
-        }
-    }
-
-    pub fn get_write_mut(&mut self) -> &mut RayonLocal<VecDeque<PacketWriteInfo>> {
-        &mut self.to_write
+    #[instrument(skip_all)]
+    pub fn new(allocator: &mut BufferAllocator) -> anyhow::Result<Self> {
+        Ok(Self {
+            buffer: allocator.obtain().context("failed to obtain buffer")?,
+            local_to_write: ArrayVec::new(),
+            number_sending: 0,
+        })
     }
 
     #[must_use]
-    pub fn can_send(&self) -> bool {
-        if self.number_sending.load(atomic::Ordering::Relaxed) != 0 {
-            return false;
-        }
-
-        self.to_write.iter().any(|x| !x.is_empty())
+    pub const fn index(&self) -> u16 {
+        self.buffer.index()
     }
 
-    pub fn set_successfully_sent(&self, d_count: usize) {
-        debug_assert!(
-            self.number_sending.load(atomic::Ordering::Relaxed) > 0,
-            "somehow number sending is 0 even though we just marked a successful send"
-        );
-
-        self.number_sending
-            .fetch_sub(d_count, atomic::Ordering::Relaxed);
+    pub fn elems_mut(&mut self) -> &mut ArrayVec<DataWriteInfo, 2> {
+        &mut self.local_to_write
     }
 
-    pub fn prepare_for_send(&mut self) -> usize {
-        debug_assert!(
-            self.number_sending.load(atomic::Ordering::Relaxed) == 0,
-            "number sending is not 0 even though we are preparing for send"
-        );
-        let count = self.to_write.iter().map(VecDeque::len).sum();
-        self.number_sending = AtomicUsize::new(count);
-        count
+    #[must_use]
+    pub const fn elems(&self) -> &ArrayVec<DataWriteInfo, 2> {
+        &self.local_to_write
     }
 
-    pub fn clear(&mut self) {
-        self.to_write.iter_mut().for_each(VecDeque::clear);
+    pub fn set_successfully_sent(&mut self, d_count: u8) {
+        debug_assert!(self.number_sending >= d_count);
+        self.number_sending -= d_count;
     }
 
-    fn push(&self, writer: PacketWriteInfo, buf: &IoBuf) {
-        let idx = buf.index();
-        let to_write = unsafe { &mut *self.to_write.get_raw(idx).get() };
+    pub fn append<P>(&mut self, pkt: &P, compose: &Compose) -> anyhow::Result<()>
+    where
+        P: valence_protocol::Packet + valence_protocol::Encode,
+    {
+        let scratch = compose.scratch.get_local();
+        let mut scratch = scratch.borrow_mut();
 
-        if let Some(last) = to_write.back_mut() {
+        let compressor = compose.compressor.get_local();
+        let mut compressor = compressor.borrow_mut();
+
+        let enc = compose.encoder();
+
+        let result = enc.append_packet(pkt, &mut *self.buffer, &mut *scratch, &mut compressor)?;
+
+        self.push(result);
+        Ok(())
+    }
+
+    pub fn append_pre_compression_packet<P>(&mut self, pkt: &P) -> anyhow::Result<()>
+    where
+        P: valence_protocol::Packet + valence_protocol::Encode,
+    {
+        // todo: why need DerefMut?
+        let buf = &mut self.buffer;
+        let buf = &mut **buf;
+
+        let result = append_packet_without_compression(pkt, buf)?;
+
+        self.push(result);
+        Ok(())
+    }
+
+    pub fn append_raw(&mut self, data: &[u8]) {
+        let buffer = &mut *self.buffer;
+        let start_ptr = buffer.append(data);
+
+        let writer = DataWriteInfo {
+            start_ptr,
+            len: data.len() as u32,
+        };
+
+        self.push(writer);
+    }
+
+    fn push(&mut self, writer: DataWriteInfo) {
+        let to_write = &mut self.local_to_write;
+
+        if let Some(last) = to_write.last_mut() {
             let start_pointer_if_contiguous = unsafe { last.start_ptr.add(last.len as usize) };
             if start_pointer_if_contiguous == writer.start_ptr {
                 last.len += writer.len;
@@ -320,34 +270,65 @@ impl Packets {
             }
         }
 
-        to_write.push_back(writer);
+        to_write.push(writer);
     }
 
-    pub fn append_pre_compression_packet<P>(&self, pkt: &P, buf: &mut IoBuf) -> anyhow::Result<()>
-    where
-        P: valence_protocol::Packet + valence_protocol::Encode,
-    {
-        let compression = buf.enc.compression_threshold();
-        // none
-        buf.enc.set_compression(CompressionThreshold::DEFAULT);
+    pub fn add_successful_send(&mut self, d_count: usize) {
+        self.number_sending += d_count as u8;
+    }
 
-        let result = append_packet_without_compression(pkt, &mut buf.buf)?;
+    pub fn get_write_mut(&mut self) -> &mut ArrayVec<DataWriteInfo, 2> {
+        &mut self.local_to_write
+    }
 
-        trace!("without compression: {result:?}");
+    #[must_use]
+    pub const fn can_send(&self) -> bool {
+        self.number_sending == 0
+    }
+}
 
-        self.push(result, buf);
+#[derive(Debug, Default)]
+pub struct LocalBroadcast {
+    pub data: Vec<u8>,
+}
 
-        // reset
-        buf.enc.set_compression(compression);
+/// This is useful for the ECS so we can use Single<&mut Broadcast> instead of having to use a marker struct
+#[derive(Component)]
+pub struct Broadcast {
+    pub buffer: BufRef,
+    pub local_to_write: DataWriteInfo,
+    packets: RayonLocal<LocalBroadcast>,
+}
 
-        Ok(())
+impl Broadcast {
+    #[instrument(skip_all, name = "Broadcast::new")]
+    pub fn new(allocator: &mut BufferAllocator) -> anyhow::Result<Self> {
+        let buffer = allocator.obtain().unwrap();
+        // trace!("initializing broadcast buffers");
+        // todo: try_init
+        let packets = RayonLocal::init_with_defaults();
+
+        Ok(Self {
+            packets,
+            buffer,
+            local_to_write: DataWriteInfo::NULL,
+        })
+    }
+
+    pub fn packets_mut(&mut self) -> &mut RayonLocal<LocalBroadcast> {
+        &mut self.packets
+    }
+
+    #[must_use]
+    pub const fn packets(&self) -> &RayonLocal<LocalBroadcast> {
+        &self.packets
     }
 
     pub fn append<P>(&self, pkt: &P, compose: &Compose) -> anyhow::Result<()>
     where
         P: valence_protocol::Packet + valence_protocol::Encode,
     {
-        let buf = compose.bufs.get_local();
+        // trace!("broadcasting {}", P::NAME);
 
         let scratch = compose.scratch.get_local();
         let mut scratch = scratch.borrow_mut();
@@ -355,26 +336,24 @@ impl Packets {
         let compressor = compose.compressor.get_local();
         let mut compressor = compressor.borrow_mut();
 
-        let mut buf = buf.borrow_mut();
-        let buf = &mut *buf;
+        let encoder = compose.encoder();
 
-        let result = buf
-            .enc
-            .append_packet(pkt, &mut buf.buf, &mut *scratch, &mut compressor)?;
+        let local = self.packets.get_local_raw();
+        let local = unsafe { &mut *local.get() };
 
-        self.push(result, buf);
+        let buf = &mut local.data;
+
+        encoder.append_packet(pkt, buf, &mut *scratch, &mut compressor)?;
+
         Ok(())
     }
 
-    pub fn append_raw(&self, data: &[u8], buf: &mut IoBuf) {
-        let start_ptr = buf.buf.append(data);
+    pub fn append_raw(&self, data: &[u8]) {
+        let local = self.packets.get_local_raw();
+        let local = unsafe { &mut *local.get() };
 
-        let writer = PacketWriteInfo {
-            start_ptr,
-            len: data.len() as u32,
-        };
-
-        self.push(writer, buf);
+        let buf = &mut local.data;
+        buf.extend_from_slice(data);
     }
 }
 

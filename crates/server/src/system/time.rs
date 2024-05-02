@@ -8,13 +8,8 @@ use crate::{
 };
 
 #[instrument(skip_all, level = "trace")]
-pub fn update_time(
-    _: Receiver<Gametick>,
-    broadcast: Single<&Broadcast>,
-    mut global: Single<&mut Global>,
-    compose: Compose,
-) {
-    let tick = global.tick;
+pub fn send_time(_: Receiver<Gametick>, broadcast: Single<&Broadcast>, compose: Compose) {
+    let tick = compose.global.tick;
     let time_of_day = tick % 24000;
 
     // Only sync with the client every 5 seconds
@@ -26,7 +21,9 @@ pub fn update_time(
 
         broadcast.append(&pkt, &compose).unwrap();
     }
+}
 
-    // update the tick
+#[instrument(skip_all, level = "trace")]
+pub fn update_time(_: Receiver<Gametick>, mut global: Single<&mut Global>) {
     global.tick += 1;
 }

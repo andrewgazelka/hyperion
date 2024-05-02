@@ -10,6 +10,8 @@
 #![feature(core_io_borrowed_buf)]
 #![feature(maybe_uninit_slice)]
 #![feature(duration_millis_float)]
+#![feature(new_uninit)]
+#![feature(sync_unsafe_cell)]
 #![expect(clippy::type_complexity, reason = "evenio uses a lot of complex types")]
 
 pub use evenio;
@@ -46,7 +48,7 @@ use crate::{
     components::{chunks::Chunks, Vitals},
     event::{BumpScratch, Egress, Gametick, Scratches, Stats},
     global::Global,
-    net::{Broadcast, Compressors, IoBufs, Server, ServerDef, S2C_BUFFER_SIZE},
+    net::{buffers::BufferAllocator, Broadcast, Compressors, Server, ServerDef, S2C_BUFFER_SIZE},
     singleton::{
         fd_lookup::FdLookup, player_aabb_lookup::PlayerBoundingBoxes,
         player_id_lookup::EntityIdLookup, player_uuid_lookup::PlayerUuidLookup,
@@ -234,6 +236,7 @@ impl Hyperion {
     }
 
     /// Initialize the server.
+    #[allow(clippy::too_many_lines, reason = "todo")]
     fn init_with_helper(
         address: impl ToSocketAddrs + Send + Sync + 'static,
         handlers: impl FnOnce(&mut World) + Send + Sync + 'static,
@@ -260,7 +263,6 @@ impl Hyperion {
                 for _ in signals.forever() {
                     warn!("Shutting down...");
                     SHUTDOWN.store(true, std::sync::atomic::Ordering::Relaxed);
-                    // TODO:
                 }
             }
         });
@@ -279,13 +281,20 @@ impl Hyperion {
         let compressor_id = world.spawn();
         world.insert(compressor_id, Compressors::new(shared.compression_level));
 
+        let address = address
+            .to_socket_addrs()?
+            .next()
+            .context("could not get first address")?;
+
         let mut server_def = Server::new(address)?;
 
-        let io_id = world.spawn();
+        let buffers_id = world.spawn();
+        let mut buffers_elem = BufferAllocator::new(&mut server_def);
 
-        let io = IoBufs::init(shared.compression_threshold, &mut server_def);
+        let broadcast = world.spawn();
+        world.insert(broadcast, Broadcast::new(&mut buffers_elem)?);
 
-        world.insert(io_id, io);
+        world.insert(buffers_id, buffers_elem);
 
         world.add_handler(system::ingress::add_player);
         world.add_handler(system::ingress::remove_player);
@@ -303,6 +312,7 @@ impl Hyperion {
         world.add_handler(system::sync_entity_position);
         world.add_handler(system::recalculate_bounding_boxes);
         world.add_handler(system::update_time);
+        world.add_handler(system::send_time);
         world.add_handler(system::update_health);
         world.add_handler(system::sync_players);
         world.add_handler(system::rebuild_player_location);
@@ -356,9 +366,6 @@ impl Hyperion {
         let fd_lookup = world.spawn();
         world.insert(fd_lookup, FdLookup::default());
 
-        let broadcast = world.spawn();
-        world.insert(broadcast, Broadcast::default());
-
         let mut game = Self {
             shared,
             world,
@@ -369,7 +376,6 @@ impl Hyperion {
         };
 
         game.last_ticks.push_back(Instant::now());
-
         Ok(game)
     }
 
@@ -437,7 +443,7 @@ impl Hyperion {
         let bump = RayonLocal::init(bumpalo::Bump::new);
         let mut scratch = bump.map_ref(event::Scratch::from);
 
-        generate_ingress_events(&mut self.world, &mut self.server, &mut scratch);
+        generate_ingress_events(&mut self.world, &mut self.server);
 
         tracing::span!(tracing::Level::TRACE, "gametick").in_scope(|| {
             self.world.send(Gametick {
@@ -448,7 +454,7 @@ impl Hyperion {
 
         let server = &mut self.server;
 
-        tracing::span!(tracing::Level::TRACE, "egress").in_scope(|| {
+        tracing::span!(tracing::Level::TRACE, "egress-event").in_scope(|| {
             self.world.send(Egress { server });
         });
 

@@ -133,6 +133,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "arraydeque"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7d902e3d592a523def97af8f317b08ce16b7ab854c1985a0c671e6f15cebc236"
+
+[[package]]
 name = "arrayvec"
 version = "0.7.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -831,7 +837,7 @@ dependencies = [
 [[package]]
 name = "evenio"
 version = "0.5.0"
-source = "git+https://github.com/rj00a/evenio#c274c045311548cd17e77f16782562ad48ef06dc"
+source = "git+https://github.com/rj00a/evenio#4e22ebb0f7dea01aae1ed629f03ad7fcf587d2cc"
 dependencies = [
  "ahash",
  "bumpalo",
@@ -845,7 +851,7 @@ dependencies = [
 [[package]]
 name = "evenio_macros"
 version = "0.5.0"
-source = "git+https://github.com/rj00a/evenio#c274c045311548cd17e77f16782562ad48ef06dc"
+source = "git+https://github.com/rj00a/evenio#4e22ebb0f7dea01aae1ed629f03ad7fcf587d2cc"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2453,6 +2459,8 @@ name = "server"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "arraydeque",
+ "arrayvec",
  "bumpalo",
  "bvh",
  "bytes",
@@ -2495,6 +2503,7 @@ dependencies = [
  "spin_sleep",
  "tango-bench 0.5.0",
  "tar",
+ "thiserror",
  "tokio",
  "toml",
  "tracing",
