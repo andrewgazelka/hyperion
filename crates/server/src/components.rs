@@ -190,6 +190,12 @@ pub struct LastSentChunk {
 pub const PLAYER_SPAWN_POSITION: Vec3 = Vec3::new(-464.0, -16.0, -60.0);
 
 impl FullEntityPose {
+    // todo: possible have separate field for head yaw
+    #[must_use]
+    pub const fn head_yaw(&self) -> f32 {
+        self.yaw
+    }
+    
     #[must_use]
     pub fn player() -> Self {
         Self {
