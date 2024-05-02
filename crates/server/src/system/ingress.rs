@@ -1,10 +1,13 @@
+use arrayvec::ArrayVec;
+use derive_more::From;
 use evenio::{
-    event::{Despawn, Event, Insert, Receiver, Sender, Spawn},
+    event::{Despawn, Event, EventMut, Insert, Receiver, Sender, Spawn},
     fetch::{Fetcher, Single},
     prelude::{EntityId, ReceiverMut},
     world::World,
 };
 use fxhash::FxHashMap;
+use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
 use rayon_local::RayonLocal;
 use serde_json::json;
 use tracing::{info, instrument, trace, warn};
@@ -26,8 +29,7 @@ mod player_packet_buffer;
 
 use crate::{
     components::{FullEntityPose, ImmuneStatus, KeepAlive, LoginState, Vitals},
-    event::BumpScratch,
-    net::{Fd, IoBuf, IoBufs, Packets, MINECRAFT_VERSION, PROTOCOL_VERSION},
+    net::{buffers::BufferAllocator, Compose, Fd, Packets, MINECRAFT_VERSION, PROTOCOL_VERSION},
     packets::PacketSwitchQuery,
     singleton::player_id_lookup::EntityIdLookup,
     system::ingress::player_packet_buffer::DecodeBuffer,
@@ -36,12 +38,6 @@ use crate::{
 pub type IngressSender<'a> = Sender<
     'a,
     (
-        Spawn,
-        Insert<LoginState>,
-        Insert<DecodeBuffer>,
-        Insert<Fd>,
-        Insert<Packets>,
-        Despawn,
         event::PlayerInit,
         event::KickPlayer,
         event::InitEntity,
@@ -50,7 +46,9 @@ pub type IngressSender<'a> = Sender<
         event::BlockStartBreak,
         event::BlockAbortBreak,
         event::BlockFinishBreak,
-        (event::Command, event::PoseUpdate, UpdateSelectedSlot),
+        event::Command,
+        event::PoseUpdate,
+        UpdateSelectedSlot,
     ),
 >;
 
@@ -66,27 +64,23 @@ pub struct RemovePlayer {
 
 // todo: do we really need three different lifetimes here?
 #[derive(Event)]
-pub struct RecvData<'a, 'b, 'c> {
-    fd: Fd,
-    data: &'c [u8],
-    scratch: &'b mut RayonLocal<BumpScratch<'a>>,
+pub struct RecvDataBulk<'a> {
+    elements: FxHashMap<Fd, ArrayVec<&'a [u8], 16>>,
 }
 
 #[derive(Event)]
 pub struct SentData {
-    decrease_count: FxHashMap<Fd, usize>,
+    decrease_count: FxHashMap<Fd, u8>,
 }
 
 #[instrument(skip_all, level = "trace")]
-pub fn generate_ingress_events(
-    world: &mut World,
-    server: &mut Server,
-    scratch: &mut RayonLocal<BumpScratch>,
-) {
+pub fn generate_ingress_events(world: &mut World, server: &mut Server) {
     let mut decrease_count = FxHashMap::default();
 
-    server
-        .drain(|event| match event {
+    let mut recv_data_elements: FxHashMap<Fd, ArrayVec<&[u8], 16>> = FxHashMap::default();
+
+    for event in server.drain() {
+        match event {
             ServerEvent::AddPlayer { fd } => {
                 world.send(AddPlayer { fd });
             }
@@ -94,7 +88,7 @@ pub fn generate_ingress_events(
                 world.send(RemovePlayer { fd });
             }
             ServerEvent::RecvData { fd, data } => {
-                world.send(RecvData { fd, data, scratch });
+                recv_data_elements.entry(fd).or_default().push(data);
             }
             ServerEvent::SentData { fd } => {
                 decrease_count
@@ -102,10 +96,13 @@ pub fn generate_ingress_events(
                     .and_modify(|x| *x += 1)
                     .or_insert(1);
             }
-        })
-        .unwrap();
+        }
+    }
 
     world.send(SentData { decrease_count });
+    world.send(RecvDataBulk {
+        elements: recv_data_elements,
+    });
 }
 
 // The `Receiver<Tick>` parameter tells our handler to listen for the `Tick` event.
@@ -114,7 +111,14 @@ pub fn generate_ingress_events(
 pub fn add_player(
     r: ReceiverMut<AddPlayer>,
     mut fd_lookup: Single<&mut FdLookup>,
-    mut sender: IngressSender,
+    allocator: Single<&mut BufferAllocator>,
+    mut sender: Sender<(
+        Spawn,
+        Insert<LoginState>,
+        Insert<DecodeBuffer>,
+        Insert<Fd>,
+        Insert<Packets>,
+    )>,
 ) {
     let event = r.event;
 
@@ -122,7 +126,9 @@ pub fn add_player(
     sender.insert(new_player, LoginState::Handshake);
     sender.insert(new_player, DecodeBuffer::default());
 
-    sender.insert(new_player, Packets::default());
+    let allocator = allocator.0;
+
+    sender.insert(new_player, Packets::new(allocator).unwrap());
     let fd = event.fd;
     sender.insert(new_player, fd);
 
@@ -136,7 +142,7 @@ pub fn add_player(
 pub fn remove_player(
     r: ReceiverMut<RemovePlayer>,
     mut fd_lookup: Single<&mut FdLookup>,
-    mut sender: IngressSender,
+    mut sender: Sender<Despawn>,
 ) {
     let event = r.event;
 
@@ -154,7 +160,11 @@ pub fn remove_player(
 // The `Receiver<Tick>` parameter tells our handler to listen for the `Tick` event.
 #[instrument(skip_all, level = "trace")]
 #[allow(clippy::too_many_arguments, reason = "todo")]
-pub fn sent_data(r: Receiver<SentData>, players: Fetcher<&Packets>, fd_lookup: Single<&FdLookup>) {
+pub fn sent_data(
+    r: Receiver<SentData>,
+    mut players: Fetcher<&mut Packets>,
+    fd_lookup: Single<&FdLookup>,
+) {
     let event = r.event;
 
     // todo: par iter
@@ -167,7 +177,7 @@ pub fn sent_data(r: Receiver<SentData>, players: Fetcher<&Packets>, fd_lookup: S
             return;
         };
 
-        let Ok(pkts) = players.get(id) else {
+        let Ok(pkts) = players.get_mut(id) else {
             warn!(
                 "tried to get pkts for id {:?} but it seemed to already be removed",
                 id
@@ -179,12 +189,26 @@ pub fn sent_data(r: Receiver<SentData>, players: Fetcher<&Packets>, fd_lookup: S
     });
 }
 
+#[derive(From)]
+pub enum SendElem {
+    PlayerInit(event::PlayerInit),
+    KickPlayer(event::KickPlayer),
+    InitEntity(event::InitEntity),
+    SwingArm(event::SwingArm),
+    AttackEntity(event::AttackEntity),
+    BlockStartBreak(event::BlockStartBreak),
+    BlockAbortBreak(event::BlockAbortBreak),
+    BlockFinishBreak(event::BlockFinishBreak),
+    Command(event::Command),
+    PoseUpdate(event::PoseUpdate),
+    UpdateSelectedSlot(event::UpdateSelectedSlot),
+}
+
 #[instrument(skip_all, level = "trace")]
 #[allow(clippy::too_many_arguments, reason = "todo")]
 pub fn recv_data(
-    r: ReceiverMut<RecvData>,
-    mut fd_lookup: Single<&mut FdLookup>,
-    mut sender: IngressSender,
+    r: ReceiverMut<RecvDataBulk>,
+    fd_lookup: Single<&mut FdLookup>,
     global: Single<&Global>,
     mut players: Fetcher<(
         &mut LoginState,
@@ -197,87 +221,145 @@ pub fn recv_data(
         Option<&mut ImmuneStatus>,
     )>,
     id_lookup: Single<&EntityIdLookup>,
-    mut io: Single<&mut IoBufs>,
+    mut real_sender: IngressSender,
+    compose: Compose,
 ) {
-    let mut event = r.event;
+    let event = EventMut::take(r.event);
 
-    let fd = event.fd;
-    let data = event.data;
-    // todo: again why do we need &mut * ... also seems to borrow the entire event sadly
-    let scratch = &mut *event.scratch;
+    let send_events = RayonLocal::init(Vec::new);
+    let elements = event.elements;
 
-    trace!("got data: {data:?}");
-    let Some(&id) = fd_lookup.get(&fd) else {
-        warn!("got data for fd that is not in the fd lookup: {fd:?}");
-        return;
-    };
+    players.par_iter_mut().for_each(
+        |(
+            login_state,
+            decoder,
+            packets,
+            fd,
+            mut pose,
+            mut vitals,
+            mut keep_alive,
+            mut immunity,
+        )| {
+            let Some(data) = elements.get(fd) else {
+                return;
+            };
 
-    let (login_state, decoder, packets, _, mut pose, mut vitals, mut keep_alive, mut immunity) =
-        players.get_mut(id).expect("player with fd not found");
-
-    decoder.queue_slice(data);
-
-    let scratch = scratch.one();
-
-    let io = io.one();
-
-    // todo: error  on low compression: "decompressed packet length of 2 is <= the compression threshold of 2"
-    while let Some(frame) = decoder.try_next_packet(scratch).unwrap() {
-        match *login_state {
-            LoginState::Handshake => process_handshake(login_state, &frame).unwrap(),
-            LoginState::Status => {
-                let io = io.get_mut();
-                process_status(login_state, &frame, packets, io).unwrap();
-            }
-            LoginState::Terminate => {
-                // todo: does this properly terminate the connection? I don't think so probably
-                let Some(id) = fd_lookup.remove(&fd) else {
+            for &data in data {
+                trace!("got data: {data:?}");
+                let Some(&id) = fd_lookup.get(fd) else {
+                    warn!("got data for fd that is not in the fd lookup: {fd:?}");
                     return;
                 };
 
-                sender.despawn(id);
-            }
-            LoginState::Login => {
-                let io = io.get_mut();
-                process_login(
-                    id,
-                    login_state,
-                    &frame,
-                    packets,
-                    decoder,
-                    &global,
-                    io,
-                    &mut sender,
-                )
-                .unwrap();
-            }
-            LoginState::TransitioningPlay { .. } | LoginState::Play => {
-                if let LoginState::TransitioningPlay {
-                    packets_to_transition,
-                } = login_state
-                {
-                    if *packets_to_transition == 0 {
-                        *login_state = LoginState::Play;
-                    } else {
-                        *packets_to_transition -= 1;
+                decoder.queue_slice(data);
+
+                let scratch = compose.scratch.get_local();
+                let mut scratch = scratch.borrow_mut();
+                let scratch = &mut *scratch;
+
+                let sender = send_events.get_local_raw();
+                let sender = unsafe { &mut *sender.get() };
+
+                // todo: error  on low compression: "decompressed packet length of 2 is <= the compression threshold of 2"
+                while let Some(frame) = decoder.try_next_packet(scratch).unwrap() {
+                    match *login_state {
+                        LoginState::Handshake => process_handshake(login_state, &frame).unwrap(),
+                        LoginState::Status => {
+                            process_status(login_state, &frame, packets).unwrap();
+                        }
+                        LoginState::Terminate => {
+                            // // todo: does this properly terminate the connection? I don't think so probably
+                            // let Some(id) = fd_lookup.remove(&fd) else {
+                            //     return;
+                            // };
+                            //
+                            // sender.despawn(id);
+                        }
+                        LoginState::Login => {
+                            process_login(
+                                id,
+                                login_state,
+                                &frame,
+                                packets,
+                                decoder,
+                                &global,
+                                sender,
+                            )
+                            .unwrap();
+                        }
+                        LoginState::TransitioningPlay { .. } | LoginState::Play => {
+                            if let LoginState::TransitioningPlay {
+                                packets_to_transition,
+                            } = login_state
+                            {
+                                if *packets_to_transition == 0 {
+                                    *login_state = LoginState::Play;
+                                } else {
+                                    *packets_to_transition -= 1;
+                                }
+                            }
+
+                            if let Some((pose, vitals, keep_alive, immunity)) = itertools::izip!(
+                                pose.as_mut(),
+                                vitals.as_mut(),
+                                keep_alive.as_mut(),
+                                immunity.as_mut()
+                            )
+                            .next()
+                            {
+                                let mut query = PacketSwitchQuery {
+                                    id,
+                                    pose,
+                                    vitals,
+                                    keep_alive,
+                                    immunity,
+                                };
+
+                                crate::packets::switch(
+                                    frame, &global, sender, &id_lookup, &mut query,
+                                )
+                                .unwrap();
+                            }
+                        }
                     }
                 }
-
-                if let Some((pose, vitals, keep_alive, immunity)) =
-                    itertools::izip!(&mut pose, &mut vitals, &mut keep_alive, &mut immunity).next()
-                {
-                    let mut query = PacketSwitchQuery {
-                        id,
-                        pose,
-                        vitals,
-                        keep_alive,
-                        immunity,
-                    };
-
-                    crate::packets::switch(frame, &global, &mut sender, &id_lookup, &mut query)
-                        .unwrap();
-                }
             }
+        },
+    );
+
+    for elem in send_events.into_iter().flatten() {
+        match elem {
+            SendElem::PlayerInit(event) => {
+                real_sender.send(event);
+            }
+            SendElem::KickPlayer(event) => {
+                real_sender.send(event);
+            }
+            SendElem::InitEntity(event) => {
+                real_sender.send(event);
+            }
+            SendElem::SwingArm(event) => {
+                real_sender.send(event);
+            }
+            SendElem::AttackEntity(event) => {
+                real_sender.send(event);
+            }
+            SendElem::BlockStartBreak(event) => {
+                real_sender.send(event);
+            }
+            SendElem::BlockAbortBreak(event) => {
+                real_sender.send(event);
+            }
+            SendElem::BlockFinishBreak(event) => {
+                real_sender.send(event);
+            }
+            SendElem::Command(event) => {
+                real_sender.send(event);
+            }
+            SendElem::PoseUpdate(event) => {
+                real_sender.send(event);
+            }
+            SendElem::UpdateSelectedSlot(event) => real_sender.send(event),
         }
     }
 
@@ -310,11 +392,10 @@ fn process_login(
     id: EntityId,
     login_state: &mut LoginState,
     packet: &PacketFrame,
-    packets: &Packets,
+    packets: &mut Packets,
     decoder: &mut DecodeBuffer,
     global: &Global,
-    io: &mut IoBuf,
-    sender: &mut IngressSender,
+    sender: &mut Vec<SendElem>,
 ) -> anyhow::Result<()> {
     debug_assert!(*login_state == LoginState::Login);
 
@@ -328,17 +409,20 @@ fn process_login(
         threshold: VarInt(global.shared.compression_threshold.0),
     };
 
-    packets.append_pre_compression_packet(&pkt, io)?;
+    packets.append_pre_compression_packet(&pkt)?;
 
     decoder.set_compression(global.shared.compression_threshold);
 
     let username = Box::from(username);
 
-    sender.send(event::PlayerInit {
-        target: id,
-        username,
-        pose: FullEntityPose::player(),
-    });
+    sender.push(
+        event::PlayerInit {
+            target: id,
+            username,
+            pose: FullEntityPose::player(),
+        }
+        .into(),
+    );
 
     // todo: impl rest
     *login_state = LoginState::TransitioningPlay {
@@ -351,8 +435,7 @@ fn process_login(
 fn process_status(
     login_state: &mut LoginState,
     packet: &PacketFrame,
-    packets: &Packets,
-    io: &mut IoBuf,
+    packets: &mut Packets,
 ) -> anyhow::Result<()> {
     debug_assert!(*login_state == LoginState::Status);
 
@@ -381,15 +464,7 @@ fn process_status(
 
             info!("sent query response: {query_request:?}");
             //
-            packets.append_pre_compression_packet(&send, io)?;
-
-            // send pong
-            // we send this right away so our ping looks better
-            // let send = packets::status::QueryPongS2c { payload: 123 };
-            // packets.append_pre_compression_packet(&send, io, scratch)?;
-
-            // short circuit
-            // *login_state = LoginState::Terminate;
+            packets.append_pre_compression_packet(&send)?;
         }
 
         packets::status::QueryPingC2s::ID => {
@@ -399,7 +474,7 @@ fn process_status(
 
             let send = packets::status::QueryPongS2c { payload };
 
-            packets.append_pre_compression_packet(&send, io)?;
+            packets.append_pre_compression_packet(&send)?;
 
             info!("sent query pong: {query_ping:?}");
             *login_state = LoginState::Terminate;

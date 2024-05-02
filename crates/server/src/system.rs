@@ -31,9 +31,9 @@ mod stats_message;
 mod sync_entity_position;
 mod sync_players;
 mod teleport;
+mod time;
 mod update_equipment;
 mod update_health;
-mod update_time;
 mod voice_chat;
 
 pub use block_update::block_update;
@@ -65,6 +65,6 @@ pub use stats_message::stats_message;
 pub use sync_entity_position::sync_entity_position;
 pub use sync_players::sync_players;
 pub use teleport::teleport;
+pub use time::{send_time, update_time};
 pub use update_equipment::{update_equipment, update_main_hand};
 pub use update_health::update_health;
-pub use update_time::update_time;

@@ -18,11 +18,12 @@ use server::{
     util::player_skin::PlayerSkin,
     valence_server::{entity::EntityKind, Text},
 };
-use tracing::warn;
+use tracing::{instrument, warn};
 
 use crate::components::Team;
 
 // makes it easier to test with the same account
+#[instrument(skip_all)]
 pub fn scramble_player_name(mut r: ReceiverMut<event::PlayerInit, ()>) {
     // 10 alphanumeric name using fastrand
 
@@ -44,6 +45,7 @@ pub fn scramble_player_name(mut r: ReceiverMut<event::PlayerInit, ()>) {
     r.event.username = name.into_boxed_str();
 }
 
+#[instrument(skip_all)]
 pub fn assign_team_on_join(
     r: ReceiverMut<event::PlayerInit, EntityId>,
     mut s: Sender<Insert<Team>>,
@@ -51,6 +53,7 @@ pub fn assign_team_on_join(
     s.insert(r.event.target, Team::Human);
 }
 
+#[instrument(skip_all)]
 pub fn respawn_on_death(
     r: Receiver<event::Death, (EntityId, &mut Team, &mut Vitals)>,
     mut s: Sender<(event::DisguisePlayer, event::Teleport)>,
@@ -72,6 +75,7 @@ pub fn respawn_on_death(
     *vitals = Vitals::ALIVE;
 }
 
+#[instrument(skip_all)]
 pub fn zombie_command(
     r: ReceiverMut<event::Command, (EntityId, &mut Team)>,
     mut s: Sender<(
@@ -111,6 +115,7 @@ pub fn zombie_command(
     });
 }
 
+#[instrument(skip_all)]
 pub fn bump_into_player(r: ReceiverMut<Shoved, &Team>, fetcher: Fetcher<&Team>) {
     let event = r.event;
     let Ok(&origin_team) = fetcher.get(event.from) else {
@@ -129,6 +134,7 @@ pub fn bump_into_player(r: ReceiverMut<Shoved, &Team>, fetcher: Fetcher<&Team>) 
     EventMut::take(event);
 }
 
+#[instrument(skip_all)]
 pub fn disable_attack_team(
     event: ReceiverMut<event::AttackEntity, &Team>,
     fetcher: Fetcher<&Team>,

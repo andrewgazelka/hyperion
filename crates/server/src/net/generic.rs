@@ -1,9 +1,10 @@
+#![allow(unused, reason = "todo: will be re-added soon-tm")]
 // You can run this example from the root of the mio repo:
 // cargo run --example tcp_server --features="os-poll net"
 use std::{
     hash::BuildHasherDefault,
     io::{self, Read, Write},
-    net::ToSocketAddrs,
+    net::{SocketAddr, ToSocketAddrs},
     time::Duration,
 };
 
@@ -18,10 +19,7 @@ use mio::{
 use rayon_local::RayonLocal;
 use tracing::{info, warn};
 
-use crate::{
-    global::Global,
-    net::{encoder::PacketWriteInfo, Fd, RefreshItems, ServerDef, ServerEvent, MAX_PACKET_SIZE},
-};
+use crate::net::{encoder::DataWriteInfo, Fd, ServerDef, ServerEvent, WriteItem, MAX_PACKET_SIZE};
 
 // Setup some tokens to allow us to identify which event is for which socket.
 const SERVER: Token = Token(0);
@@ -29,7 +27,7 @@ const SERVER: Token = Token(0);
 const EVENT_CAPACITY: usize = 128;
 
 struct ConnectionInfo {
-    pub to_write: RayonLocal<Vec<PacketWriteInfo>>,
+    pub to_write: RayonLocal<Vec<DataWriteInfo>>,
     pub connection: TcpStream,
     pub data_to_write: Vec<u8>,
 }
@@ -56,7 +54,7 @@ impl Ids {
 }
 
 impl ServerDef for GenericServer {
-    fn new(address: impl ToSocketAddrs) -> anyhow::Result<Self>
+    fn new(address: SocketAddr) -> anyhow::Result<Self>
     where
         Self: Sized,
     {
@@ -91,121 +89,107 @@ impl ServerDef for GenericServer {
         })
     }
 
-    fn drain(&mut self, mut f: impl FnMut(ServerEvent)) -> io::Result<()> {
-        // todo: this is a bit of a hack, is there a better number? probs dont want people sending more than this
-        let mut received_data = Vec::with_capacity(MAX_PACKET_SIZE * 2);
-
-        // process the current tick
-        if let Err(err) = self
-            .poll
-            .poll(&mut self.events, Some(Duration::from_millis(10)))
-        {
-            if interrupted(&err) {
-                return Ok(());
-            }
-            return Err(err);
-        }
-
-        for event in &self.events {
-            match event.token() {
-                SERVER => loop {
-                    // Received an event for the TCP server socket, which
-                    // indicates we can accept an connection.
-                    let (mut connection, _) = match self.server.accept() {
-                        Ok((connection, address)) => (connection, address),
-                        Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
-                            // If we get a `WouldBlock` error we know our
-                            // listener has no more incoming connections queued,
-                            // so we can return to polling and wait for some
-                            // more.
-                            break;
-                        }
-                        Err(e) => {
-                            // If it was any other kind of error, something went
-                            // wrong and we terminate with an error.
-                            return Err(e);
-                        }
-                    };
-
-                    let token = self.ids.generate_unique_token();
-                    self.poll.registry().register(
-                        &mut connection,
-                        token,
-                        Interest::READABLE.add(Interest::WRITABLE),
-                    )?;
-
-                    self.connections.insert(token.0, ConnectionInfo {
-                        to_write: RayonLocal::default(),
-                        connection,
-                        data_to_write: vec![],
-                    });
-
-                    f(ServerEvent::AddPlayer { fd: Fd(token.0) });
-                },
-                token => {
-                    // Maybe received an event for a TCP connection.
-                    let done = if let Some(connection) = self.connections.get_mut(&token.0) {
-                        received_data.clear();
-                        handle_connection_event(
-                            self.poll.registry(),
-                            connection,
-                            event,
-                            &mut received_data,
-                            token,
-                            &mut f,
-                        )?
-                    } else {
-                        // Sporadic events happen, we can safely ignore them.
-                        false
-                    };
-                    if done {
-                        if let Some(mut connection) = self.connections.remove(&token.0) {
-                            self.poll
-                                .registry()
-                                .deregister(&mut connection.connection)?;
-                        }
-                        f(ServerEvent::RemovePlayer { fd: Fd(token.0) });
-                    }
-                }
-            }
-        }
-
-        Ok(())
+    fn drain(&mut self) -> impl Iterator<Item = ServerEvent> {
+        // // todo: this is a bit of a hack, is there a better number? probs dont want people sending more than this
+        // let mut received_data = Vec::with_capacity(MAX_PACKET_SIZE * 2);
+        //
+        // // process the current tick
+        // if let Err(err) = self
+        //     .poll
+        //     .poll(&mut self.events, Some(Duration::from_millis(10)))
+        // {
+        //     if interrupted(&err) {
+        //         return Ok(());
+        //     }
+        //     return Err(err);
+        // }
+        //
+        // for event in &self.events {
+        //     match event.token() {
+        //         SERVER => loop {
+        //             // Received an event for the TCP server socket, which
+        //             // indicates we can accept an connection.
+        //             let (mut connection, _) = match self.server.accept() {
+        //                 Ok((connection, address)) => (connection, address),
+        //                 Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
+        //                     // If we get a `WouldBlock` error we know our
+        //                     // listener has no more incoming connections queued,
+        //                     // so we can return to polling and wait for some
+        //                     // more.
+        //                     break;
+        //                 }
+        //                 Err(e) => {
+        //                     // If it was any other kind of error, something went
+        //                     // wrong and we terminate with an error.
+        //                     return Err(e);
+        //                 }
+        //             };
+        //
+        //             let token = self.ids.generate_unique_token();
+        //             self.poll.registry().register(
+        //                 &mut connection,
+        //                 token,
+        //                 Interest::READABLE.add(Interest::WRITABLE),
+        //             )?;
+        //
+        //             self.connections.insert(token.0, ConnectionInfo {
+        //                 to_write: RayonLocal::default(),
+        //                 connection,
+        //                 data_to_write: vec![],
+        //             });
+        //
+        //             f(ServerEvent::AddPlayer { fd: Fd(token.0) });
+        //         },
+        //         token => {
+        //             // Maybe received an event for a TCP connection.
+        //             let done = if let Some(connection) = self.connections.get_mut(&token.0) {
+        //                 received_data.clear();
+        //                 handle_connection_event(
+        //                     self.poll.registry(),
+        //                     connection,
+        //                     event,
+        //                     &mut received_data,
+        //                     token,
+        //                     &mut f,
+        //                 )?
+        //             } else {
+        //                 // Sporadic events happen, we can safely ignore them.
+        //                 false
+        //             };
+        //             if done {
+        //                 if let Some(mut connection) = self.connections.remove(&token.0) {
+        //                     self.poll
+        //                         .registry()
+        //                         .deregister(&mut connection.connection)?;
+        //                 }
+        //                 f(ServerEvent::RemovePlayer { fd: Fd(token.0) });
+        //             }
+        //         }
+        //     }
+        // }
+        //
+        // Ok(())
+        todo!();
+        std::iter::empty()
     }
 
     // todo: make unsafe
-    fn allocate_buffers(&mut self, buffers: &[iovec]) {
+    unsafe fn register_buffers(&mut self, buffers: &[iovec]) {
         if !self.write_iovecs.is_empty() {
             warn!("iovecs are not empty");
         }
         self.write_iovecs = buffers.to_vec();
     }
 
-    fn write_all<'a>(
-        &mut self,
-        _global: &mut Global,
-        writers: impl Iterator<Item = RefreshItems<'a>>,
-    ) {
-        for writer in writers {
-            let RefreshItems { write, fd } = writer;
+    fn write(&mut self, _write: WriteItem) {
+        // let WriteItem { write, fd } = write;
+        //
+        // let Some(to_write) = self.connections.get_mut(&fd.0) else {
+        //     warn!("no connection for fd {fd:?}");
+        //     return;
+        // };
 
-            let Some(to_write) = self.connections.get_mut(&fd.0) else {
-                warn!("no connection for fd {fd:?}");
-                continue;
-            };
-
-            for (idx, write) in write.iter_mut().enumerate() {
-                let (a, b) = write.as_slices();
-
-                let to_write = &mut to_write.to_write[idx];
-                to_write.reserve(a.len() + b.len());
-
-                to_write.extend_from_slice(a);
-                to_write.extend_from_slice(b);
-
-                write.clear();
-            }
-        }
+        todo!()
     }
 
     fn submit_events(&mut self) {
@@ -334,4 +318,8 @@ fn would_block(err: &io::Error) -> bool {
 
 fn interrupted(err: &io::Error) -> bool {
     err.kind() == io::ErrorKind::Interrupted
+}
+
+unsafe fn make_static<T>(t: &[T]) -> &'static [T] {
+    core::mem::transmute(t)
 }

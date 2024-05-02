@@ -13,7 +13,7 @@ use valence_protocol::{packets::play, ChunkPos, Encode, FixedArray};
 use valence_registry::{BiomeRegistry, RegistryIdx};
 use valence_server::layer::chunk::{bit_width, BiomeContainer, BlockStateContainer, UnloadedChunk};
 
-use crate::{bits::BitStorage, blocks::AnvilFolder, chunk::heightmap, net, net::Compose};
+use crate::{bits::BitStorage, blocks::AnvilFolder, chunk::heightmap, net::Compose};
 
 #[derive(Debug)]
 pub struct LoadedChunk {
@@ -81,16 +81,12 @@ impl Chunks {
             return Ok(None);
         };
 
-        let bufs = compose.bufs.get_local();
-        let mut bufs = bufs.borrow_mut();
-        let enc = bufs.enc_mut();
-
         let bytes = self.bytes.get_local_raw();
         let bytes = unsafe { &mut *bytes.get() };
 
         let chunk = chunk.chunk;
 
-        let bytes_in_packet = encode_chunk_packet(&chunk, pos, bytes, compose, enc)?;
+        let bytes_in_packet = encode_chunk_packet(&chunk, pos, bytes, compose)?;
 
         let Some(bytes_in_packet) = bytes_in_packet else {
             return Ok(None);
@@ -117,8 +113,9 @@ fn encode_chunk_packet(
     location: ChunkPos,
     buf: &mut BytesMut,
     compose: &Compose,
-    encoder: &net::encoder::PacketEncoder,
 ) -> anyhow::Result<Option<BytesMut>> {
+    let encoder = compose.encoder();
+
     let section_count = 384 / 16_usize;
     let dimension_height = 384;
 

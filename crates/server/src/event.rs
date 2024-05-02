@@ -230,7 +230,6 @@ pub struct UpdateEquipment {
     pub id: EntityId,
 }
 
-
 #[derive(Event)]
 pub struct BlockStartBreak {
     #[event(target)]

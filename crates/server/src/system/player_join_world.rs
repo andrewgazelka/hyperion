@@ -177,9 +177,7 @@ pub fn player_join_world(
 
     let local = query.packets;
     {
-        let mut buf = compose.bufs.get_local().borrow_mut();
-        let buf = &mut *buf;
-        local.append_raw(cached_data, buf);
+        local.append_raw(cached_data);
     }
 
     trace!("appending cached data");
@@ -324,7 +322,7 @@ pub fn player_join_world(
     info!("{} joined the world", query.name);
 }
 
-pub fn send_keep_alive(packets: &Packets, compose: &Compose) -> anyhow::Result<()> {
+pub fn send_keep_alive(packets: &mut Packets, compose: &Compose) -> anyhow::Result<()> {
     let pkt = play::KeepAliveS2c {
         // The ID can be set to zero because it doesn't matter
         id: 0,
@@ -447,9 +445,9 @@ pub fn send_game_join_packet(encoder: &mut PacketEncoder) -> anyhow::Result<()> 
         is_hardcore: false,
         dimension_names: Cow::Owned(dimension_names),
         registry_codec: Cow::Borrowed(&registry_codec),
-        max_players: config::CONFIG.max_players.into(),
-        view_distance: config::CONFIG.view_distance.into(), // max view distance
-        simulation_distance: config::CONFIG.simulation_distance.into(),
+        max_players: CONFIG.max_players.into(),
+        view_distance: CONFIG.view_distance.into(), // max view distance
+        simulation_distance: CONFIG.simulation_distance.into(),
         reduced_debug_info: false,
         enable_respawn_screen: false,
         dimension_name: dimension_name.into(),
@@ -661,7 +659,7 @@ fn inner(encoder: &mut PacketEncoder, chunks: &Chunks, compose: &Compose) -> any
         },
     })?;
 
-    if let Some(diameter) = config::CONFIG.border_diameter {
+    if let Some(diameter) = CONFIG.border_diameter {
         debug!("Setting world border to diameter {}", diameter);
 
         encoder.append_packet(&play::WorldBorderInitializeS2c {

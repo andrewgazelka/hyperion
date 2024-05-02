@@ -30,7 +30,7 @@ fn offline_uuid(username: &str) -> anyhow::Result<uuid::Uuid> {
 
 #[instrument(skip_all, level = "trace")]
 pub fn init_player(
-    r: ReceiverMut<PlayerInit, &Packets>,
+    r: ReceiverMut<PlayerInit, &mut Packets>,
     compose: Compose,
     mut s: Sender<(
         Insert<FullEntityPose>,

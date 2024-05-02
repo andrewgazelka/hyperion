@@ -20,7 +20,7 @@ use crate::{
 
 #[derive(Query)]
 pub(crate) struct SetPlayerSkinQuery<'a> {
-    packets: &'a Packets,
+    packets: &'a mut Packets,
     uuid: &'a Uuid,
     username: &'a InGameName,
 }

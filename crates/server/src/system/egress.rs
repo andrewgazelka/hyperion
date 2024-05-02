@@ -2,68 +2,91 @@ use evenio::{
     event::ReceiverMut,
     fetch::{Fetcher, Single},
 };
-use tracing::instrument;
+use tracing::{instrument, log::warn};
 
 use crate::{
     components::LoginState,
     event::Egress,
-    global::Global,
-    net::{Broadcast, Fd, Packets, RefreshItems, ServerDef},
+    net::{encoder::DataWriteInfo, Broadcast, Fd, Packets, ServerDef, WriteItem},
 };
 
 #[instrument(skip_all, level = "trace")]
 pub fn egress(
     r: ReceiverMut<Egress>,
     mut players: Fetcher<(&mut Packets, &Fd, &LoginState)>,
-    mut broadcast: Single<&mut Broadcast>,
-    mut global: Single<&mut Global>,
+    broadcast: Single<&mut Broadcast>,
 ) {
-    // todo: idk how inefficient this is
-    tracing::span!(tracing::Level::TRACE, "extend-from-broadcast").in_scope(|| {
-        for (pkts, _, login_state) in &mut players {
-            if *login_state == LoginState::Play {
-                let broadcast = &mut ***broadcast;
-                pkts.extend(broadcast);
-            }
+    let broadcast = broadcast.0;
+
+    let combined = tracing::span!(tracing::Level::TRACE, "broadcast-combine").in_scope(|| {
+        let total_len: usize = broadcast.packets().iter().map(|x| x.data.len()).sum();
+
+        let mut combined = Vec::with_capacity(total_len);
+
+        for data in broadcast.packets_mut().iter_mut().map(|x| x.data.as_mut()) {
+            combined.append(data);
         }
+
+        combined
     });
 
-    let mut total_items = 0;
+    let broadcast_len = combined.len() as u32;
 
-    let local_items =
-        tracing::span!(tracing::Level::TRACE, "generate-refresh-items").in_scope(|| {
-            players
-                .iter_mut()
-                .filter(|(pkts, ..)| pkts.can_send())
-                .map(|(pkts, fd, _)| {
-                    total_items += pkts.prepare_for_send(); // todo: should we not do this in a map for clarity?
-                    RefreshItems {
-                        write: pkts.get_write_mut(),
-                        fd: *fd,
-                    }
-                })
-        });
+    let ptr = broadcast.buffer.append(combined.as_slice());
+    broadcast.local_to_write = DataWriteInfo {
+        start_ptr: ptr,
+        len: broadcast_len,
+    };
+
+    let broadcast_index = broadcast.buffer.index();
 
     let mut event = r.event;
     let server = &mut *event.server;
 
-    server.write_all(&mut global, local_items);
+    tracing::span!(tracing::Level::TRACE, "send",).in_scope(|| {
+        for (pkts, fd, login) in &mut players {
+            if !pkts.can_send() {
+                continue;
+            }
 
-    let player_count = players.iter_mut().len();
-    let per_player = total_items as f64 / player_count as f64;
+            let index = pkts.index();
 
-    tracing::span!(
-        tracing::Level::TRACE,
-        "submit-events",
-        total_items,
-        per_player
-    )
-    .in_scope(|| {
-        server.submit_events();
+            for elem in &pkts.local_to_write {
+                if elem.len == 0 {
+                    continue;
+                }
+
+                let write_item = WriteItem {
+                    info: elem,
+                    buffer_idx: index,
+                    fd: *fd,
+                };
+
+                pkts.number_sending += 1;
+
+                server.inner.write(write_item);
+            }
+
+            pkts.elems_mut().clear();
+
+            // no broadcasting if we are not in play state
+            if *login != LoginState::Play {
+                continue;
+            }
+
+            // todo: append broadcast even if cannot send and have packet prios and stuff
+            if broadcast_len != 0 {
+                pkts.number_sending += 1;
+                server.inner.write(WriteItem {
+                    info: &broadcast.local_to_write,
+                    buffer_idx: broadcast_index,
+                    fd: *fd,
+                });
+            }
+        }
     });
 
-    // now clear
-    tracing::span!(tracing::Level::TRACE, "clear-broadcast").in_scope(|| {
-        broadcast.clear();
+    tracing::span!(tracing::Level::TRACE, "submit-events",).in_scope(|| {
+        server.submit_events();
     });
 }
