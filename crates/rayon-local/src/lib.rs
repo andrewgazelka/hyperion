@@ -68,6 +68,19 @@ impl<'a, S> IntoIterator for &'a RayonLocal<S> {
     }
 }
 
+impl<S> IntoIterator for RayonLocal<S> {
+    type Item = S;
+
+    type IntoIter = impl Iterator<Item = S>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.thread_locals
+            .into_vec()
+            .into_iter()
+            .map(UnsafeCell::into_inner)
+    }
+}
+
 impl<'a, S> IntoIterator for &'a mut RayonLocal<S> {
     type Item = &'a mut S;
 

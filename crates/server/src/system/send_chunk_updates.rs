@@ -1,5 +1,4 @@
 use evenio::prelude::*;
-use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
 use tracing::{instrument, trace};
 use valence_protocol::{packets::play, ChunkPos};
 
@@ -13,14 +12,15 @@ use crate::{
 #[instrument(skip_all, level = "trace")]
 pub fn send_chunk_updates(
     _: Receiver<Gametick>,
-    mut fetcher: Fetcher<(&mut LastSentChunk, &mut FullEntityPose, &Packets)>,
+    mut fetcher: Fetcher<(&mut LastSentChunk, &mut FullEntityPose, &mut Packets)>,
     chunks: Single<&Chunks>,
     compose: Compose,
 ) {
     let radius = CONFIG.view_distance;
-    // chunk updates yay
+
     fetcher
-        .par_iter_mut()
+        // todo: par itermut
+        .iter_mut()
         .for_each(|(last_sent, pose, packets)| {
             let last_sent_chunk = last_sent.chunk;
 
@@ -59,9 +59,7 @@ pub fn send_chunk_updates(
                     return;
                 };
 
-                let mut io_buf = compose.bufs.get_local().borrow_mut();
-                let io_buf = &mut *io_buf;
-                packets.append_raw(&raw, io_buf);
+                packets.append_raw(&raw);
 
                 trace!("appended chunk {chunk:?}");
             });

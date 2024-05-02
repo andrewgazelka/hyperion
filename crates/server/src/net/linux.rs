@@ -18,11 +18,8 @@ use libc::iovec;
 use socket2::Socket;
 use tracing::{error, info, instrument, trace, warn};
 
-use super::RefreshItems;
-use crate::{
-    global::Global,
-    net::{encoder::PacketWriteInfo, Fd, ServerDef, ServerEvent},
-};
+use super::WriteItem;
+use crate::net::{Fd, ServerDef, ServerEvent};
 
 const COMPLETION_QUEUE_SIZE: u32 = 32768;
 const SUBMISSION_QUEUE_SIZE: u32 = 32768;
@@ -136,7 +133,7 @@ pub struct LinuxServer {
 }
 
 impl ServerDef for LinuxServer {
-    fn new(address: impl ToSocketAddrs) -> anyhow::Result<Self> {
+    fn new(address: SocketAddr) -> anyhow::Result<Self> {
         let Some(address) = address.to_socket_addrs()?.next() else {
             anyhow::bail!("no addresses specified")
         };
@@ -351,33 +348,24 @@ impl ServerDef for LinuxServer {
         Ok(())
     }
 
-    #[instrument(skip_all, level = "trace", name = "iou-allocate-buffers")]
-    fn allocate_buffers(&mut self, buffers: &[iovec]) {
-        info!("allocating buffers");
+    #[instrument(skip_all, level = "trace", name = "iou-register-buffers")]
+    unsafe fn register_buffers(&mut self, buffers: &[iovec]) {
+        info!("registering buffers");
         unsafe { self.register_buffers(buffers) };
-        info!("finished allocating buffers");
+        info!("finished registering buffers");
     }
 
     /// Impl with local sends BEFORE broadcasting
-    #[instrument(skip_all, level = "trace", name = "iou-write-all")]
-    fn write_all<'a>(
-        &mut self,
-        _global: &mut Global,
-        writers: impl Iterator<Item = RefreshItems<'a>>,
-    ) {
-        writers.for_each(|item| {
-            let RefreshItems { write, fd } = item;
+    // #[instrument(skip_all, level = "trace")]
+    fn write(&mut self, item: WriteItem) {
+        let WriteItem {
+            info,
+            buffer_idx,
+            fd,
+        } = item;
 
-            let fd = fd.0;
-
-            for (idx, buf) in write.iter_mut().enumerate() {
-                for elem in buf.iter() {
-                    let PacketWriteInfo { start_ptr, len } = *elem;
-                    self.write_raw(fd, start_ptr, len, idx as u16);
-                }
-                buf.clear();
-            }
-        });
+        let fd = fd.0;
+        self.write_raw(fd, info.start_ptr, info.len, buffer_idx);
     }
 
     #[instrument(skip_all, level = "trace", name = "iou-submit-events")]
@@ -466,7 +454,6 @@ impl LinuxServer {
         }
     }
 
-    #[expect(dead_code, reason = "this is not used")]
     pub fn cancel(&mut self, cancel_builder: io_uring::types::CancelBuilder) {
         self.uring
             .submitter()
@@ -483,7 +470,6 @@ impl LinuxServer {
 
     /// All requests in the submission queue must be finished or cancelled, or else this function
     /// will hang indefinetely.
-    #[expect(dead_code, reason = "this is not used")]
     pub fn unregister_buffers(&mut self) {
         self.uring.submitter().unregister_buffers().unwrap();
     }

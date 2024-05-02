@@ -32,7 +32,7 @@ use crate::{
     event::{AttackEntity, AttackType, Pose, SwingArm},
     global::Global,
     singleton::player_id_lookup::EntityIdLookup,
-    system::ingress::IngressSender,
+    system::ingress::SendElem,
 };
 
 pub mod vanilla;
@@ -170,7 +170,7 @@ fn chat_command(
     mut data: &[u8],
     query: &PacketSwitchQuery,
     // query: PacketSwitchQuery,
-    sender: &mut IngressSender,
+    sender: &mut Vec<SendElem>,
 ) -> anyhow::Result<()> {
     const BASE_RADIUS: f32 = 4.0;
     let pkt = play::CommandExecutionC2s::decode(&mut data)?;
@@ -180,7 +180,7 @@ fn chat_command(
         raw: pkt.command.0.to_owned(),
     };
 
-    sender.send(event);
+    sender.push(event.into());
 
     Ok(())
 }
@@ -188,7 +188,7 @@ fn chat_command(
 fn hand_swing(
     mut data: &[u8],
     query: &PacketSwitchQuery,
-    sender: &mut IngressSender,
+    sender: &mut Vec<SendElem>,
 ) -> anyhow::Result<()> {
     let packet = play::HandSwingC2s::decode(&mut data)?;
 
@@ -199,7 +199,7 @@ fn hand_swing(
         hand: packet,
     };
 
-    sender.send(event);
+    sender.push(event.into());
 
     Ok(())
 }
@@ -209,7 +209,7 @@ fn player_interact_entity(
     query: &PacketSwitchQuery,
     id_lookup: &EntityIdLookup,
     from_pos: Vec3,
-    sender: &mut IngressSender,
+    sender: &mut Vec<SendElem>,
 ) -> anyhow::Result<()> {
     let packet = play::PlayerInteractEntityC2s::decode(&mut data)?;
 
@@ -221,13 +221,16 @@ fn player_interact_entity(
     let target = packet.entity_id.0;
 
     if let Some(&target) = id_lookup.get(&target) {
-        sender.send(AttackEntity {
-            target,
-            from_pos,
-            from: query.id,
-            damage: 10.0,
-            source: AttackType::Melee,
-        });
+        sender.push(
+            AttackEntity {
+                target,
+                from_pos,
+                from: query.id,
+                damage: 10.0,
+                source: AttackType::Melee,
+            }
+            .into(),
+        );
     }
 
     Ok(())
@@ -242,11 +245,7 @@ pub struct PacketSwitchQuery<'a> {
 }
 
 /// i.e., doors, etc
-fn player_interact_block(
-    mut data: &[u8],
-    id_lookup: &EntityIdLookup,
-    sender: &mut IngressSender,
-) -> anyhow::Result<()> {
+fn player_interact_block(mut data: &[u8]) -> anyhow::Result<()> {
     let packet = play::PlayerInteractBlockC2s::decode(&mut data)?;
 
     // todo!()
@@ -255,7 +254,7 @@ fn player_interact_block(
 
 fn player_action(
     mut data: &[u8],
-    sender: &mut IngressSender,
+    sender: &mut Vec<SendElem>,
     query: &PacketSwitchQuery,
 ) -> anyhow::Result<()> {
     let packet = play::PlayerActionC2s::decode(&mut data)?;
@@ -266,25 +265,34 @@ fn player_action(
 
     match packet.action {
         PlayerAction::StartDestroyBlock => {
-            sender.send(event::BlockStartBreak {
-                by: id,
-                position,
-                sequence,
-            });
+            sender.push(
+                event::BlockStartBreak {
+                    by: id,
+                    position,
+                    sequence,
+                }
+                .into(),
+            );
         }
         PlayerAction::AbortDestroyBlock => {
-            sender.send(event::BlockAbortBreak {
-                by: id,
-                position,
-                sequence,
-            });
+            sender.push(
+                event::BlockAbortBreak {
+                    by: id,
+                    position,
+                    sequence,
+                }
+                .into(),
+            );
         }
         PlayerAction::StopDestroyBlock => {
-            sender.send(event::BlockFinishBreak {
-                by: id,
-                position,
-                sequence,
-            });
+            sender.push(
+                event::BlockFinishBreak {
+                    by: id,
+                    position,
+                    sequence,
+                }
+                .into(),
+            );
         }
         _ => {}
     }
@@ -295,7 +303,7 @@ fn player_action(
 // for sneaking
 fn client_command(
     mut data: &[u8],
-    sender: &mut IngressSender,
+    sender: &mut Vec<SendElem>,
     query: &PacketSwitchQuery,
 ) -> anyhow::Result<()> {
     let packet = play::ClientCommandC2s::decode(&mut data)?;
@@ -304,16 +312,22 @@ fn client_command(
 
     match packet.action {
         ClientCommand::StartSneaking => {
-            sender.send(event::PoseUpdate {
-                target: id,
-                state: Pose::Sneaking,
-            });
+            sender.push(
+                event::PoseUpdate {
+                    target: id,
+                    state: Pose::Sneaking,
+                }
+                .into(),
+            );
         }
         ClientCommand::StopSneaking => {
-            sender.send(event::PoseUpdate {
-                target: id,
-                state: Pose::Standing,
-            });
+            sender.push(
+                event::PoseUpdate {
+                    target: id,
+                    state: Pose::Standing,
+                }
+                .into(),
+            );
         }
         _ => {}
     }
@@ -324,7 +338,7 @@ fn client_command(
 pub fn switch(
     raw: PacketFrame,
     global: &Global,
-    sender: &mut IngressSender,
+    sender: &mut Vec<SendElem>,
     id_lookup: &EntityIdLookup,
     query: &mut PacketSwitchQuery,
 ) -> anyhow::Result<()> {
@@ -335,7 +349,7 @@ pub fn switch(
     match packet_id {
         play::HandSwingC2s::ID => hand_swing(data, query, sender)?,
         play::TeleportConfirmC2s::ID => confirm_teleport(data),
-        play::PlayerInteractBlockC2s::ID => player_interact_block(data, id_lookup, sender)?,
+        play::PlayerInteractBlockC2s::ID => player_interact_block(data)?,
         play::ClientCommandC2s::ID => client_command(data, sender, query)?,
         // play::ClientSettingsC2s::ID => client_settings(data, player)?,
         // play::CustomPayloadC2s::ID => custom_payload(data),
