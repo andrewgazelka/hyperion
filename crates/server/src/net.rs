@@ -29,10 +29,10 @@ pub struct Fd(
 pub const RING_SIZE: usize = MAX_PACKET_SIZE * 2;
 
 #[allow(unused, reason = "these are used on linux")]
-pub enum ServerEvent {
+pub enum ServerEvent<'a> {
     AddPlayer { fd: Fd },
     RemovePlayer { fd: Fd },
-    RecvData { fd: Fd, data: &'static [u8] },
+    RecvData { fd: Fd, data: &'a [u8] },
     SentData { fd: Fd },
 }
 
@@ -64,8 +64,8 @@ impl ServerDef for Server {
         Ok(Self { inner })
     }
 
-    fn drain(&mut self, f: impl FnMut(ServerEvent)) -> std::io::Result<()> {
-        self.inner.drain(f)
+    fn drain(&mut self) -> impl Iterator<Item = ServerEvent> {
+        self.inner.drain()
     }
 
     unsafe fn register_buffers(&mut self, buffers: &[iovec]) {
@@ -109,7 +109,7 @@ pub trait ServerDef {
     fn new(address: SocketAddr) -> anyhow::Result<Self>
     where
         Self: Sized;
-    fn drain(&mut self, f: impl FnMut(ServerEvent)) -> std::io::Result<()>;
+    fn drain(&mut self) -> impl Iterator<Item = ServerEvent>;
 
     /// # Safety
     /// todo: not completely sure about all the invariants here

@@ -1,3 +1,4 @@
+#![allow(unused, reason = "todo: will be re-added soon-tm")]
 // You can run this example from the root of the mio repo:
 // cargo run --example tcp_server --features="os-poll net"
 use std::{
@@ -88,86 +89,88 @@ impl ServerDef for GenericServer {
         })
     }
 
-    fn drain(&mut self, mut f: impl FnMut(ServerEvent)) -> io::Result<()> {
-        // todo: this is a bit of a hack, is there a better number? probs dont want people sending more than this
-        let mut received_data = Vec::with_capacity(MAX_PACKET_SIZE * 2);
-
-        // process the current tick
-        if let Err(err) = self
-            .poll
-            .poll(&mut self.events, Some(Duration::from_millis(10)))
-        {
-            if interrupted(&err) {
-                return Ok(());
-            }
-            return Err(err);
-        }
-
-        for event in &self.events {
-            match event.token() {
-                SERVER => loop {
-                    // Received an event for the TCP server socket, which
-                    // indicates we can accept an connection.
-                    let (mut connection, _) = match self.server.accept() {
-                        Ok((connection, address)) => (connection, address),
-                        Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
-                            // If we get a `WouldBlock` error we know our
-                            // listener has no more incoming connections queued,
-                            // so we can return to polling and wait for some
-                            // more.
-                            break;
-                        }
-                        Err(e) => {
-                            // If it was any other kind of error, something went
-                            // wrong and we terminate with an error.
-                            return Err(e);
-                        }
-                    };
-
-                    let token = self.ids.generate_unique_token();
-                    self.poll.registry().register(
-                        &mut connection,
-                        token,
-                        Interest::READABLE.add(Interest::WRITABLE),
-                    )?;
-
-                    self.connections.insert(token.0, ConnectionInfo {
-                        to_write: RayonLocal::default(),
-                        connection,
-                        data_to_write: vec![],
-                    });
-
-                    f(ServerEvent::AddPlayer { fd: Fd(token.0) });
-                },
-                token => {
-                    // Maybe received an event for a TCP connection.
-                    let done = if let Some(connection) = self.connections.get_mut(&token.0) {
-                        received_data.clear();
-                        handle_connection_event(
-                            self.poll.registry(),
-                            connection,
-                            event,
-                            &mut received_data,
-                            token,
-                            &mut f,
-                        )?
-                    } else {
-                        // Sporadic events happen, we can safely ignore them.
-                        false
-                    };
-                    if done {
-                        if let Some(mut connection) = self.connections.remove(&token.0) {
-                            self.poll
-                                .registry()
-                                .deregister(&mut connection.connection)?;
-                        }
-                        f(ServerEvent::RemovePlayer { fd: Fd(token.0) });
-                    }
-                }
-            }
-        }
-
-        Ok(())
+    fn drain(&mut self) -> impl Iterator<Item = ServerEvent> {
+        // // todo: this is a bit of a hack, is there a better number? probs dont want people sending more than this
+        // let mut received_data = Vec::with_capacity(MAX_PACKET_SIZE * 2);
+        //
+        // // process the current tick
+        // if let Err(err) = self
+        //     .poll
+        //     .poll(&mut self.events, Some(Duration::from_millis(10)))
+        // {
+        //     if interrupted(&err) {
+        //         return Ok(());
+        //     }
+        //     return Err(err);
+        // }
+        //
+        // for event in &self.events {
+        //     match event.token() {
+        //         SERVER => loop {
+        //             // Received an event for the TCP server socket, which
+        //             // indicates we can accept an connection.
+        //             let (mut connection, _) = match self.server.accept() {
+        //                 Ok((connection, address)) => (connection, address),
+        //                 Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
+        //                     // If we get a `WouldBlock` error we know our
+        //                     // listener has no more incoming connections queued,
+        //                     // so we can return to polling and wait for some
+        //                     // more.
+        //                     break;
+        //                 }
+        //                 Err(e) => {
+        //                     // If it was any other kind of error, something went
+        //                     // wrong and we terminate with an error.
+        //                     return Err(e);
+        //                 }
+        //             };
+        //
+        //             let token = self.ids.generate_unique_token();
+        //             self.poll.registry().register(
+        //                 &mut connection,
+        //                 token,
+        //                 Interest::READABLE.add(Interest::WRITABLE),
+        //             )?;
+        //
+        //             self.connections.insert(token.0, ConnectionInfo {
+        //                 to_write: RayonLocal::default(),
+        //                 connection,
+        //                 data_to_write: vec![],
+        //             });
+        //
+        //             f(ServerEvent::AddPlayer { fd: Fd(token.0) });
+        //         },
+        //         token => {
+        //             // Maybe received an event for a TCP connection.
+        //             let done = if let Some(connection) = self.connections.get_mut(&token.0) {
+        //                 received_data.clear();
+        //                 handle_connection_event(
+        //                     self.poll.registry(),
+        //                     connection,
+        //                     event,
+        //                     &mut received_data,
+        //                     token,
+        //                     &mut f,
+        //                 )?
+        //             } else {
+        //                 // Sporadic events happen, we can safely ignore them.
+        //                 false
+        //             };
+        //             if done {
+        //                 if let Some(mut connection) = self.connections.remove(&token.0) {
+        //                     self.poll
+        //                         .registry()
+        //                         .deregister(&mut connection.connection)?;
+        //                 }
+        //                 f(ServerEvent::RemovePlayer { fd: Fd(token.0) });
+        //             }
+        //         }
+        //     }
+        // }
+        //
+        // Ok(())
+        todo!();
+        std::iter::empty()
     }
 
     // todo: make unsafe
@@ -295,7 +298,6 @@ fn handle_connection_event(
 
         if bytes_read != 0 {
             let received_data = &received_data[..bytes_read];
-            let received_data = unsafe { make_static(received_data) };
             f(ServerEvent::RecvData {
                 fd: Fd(token.0),
                 data: received_data,
