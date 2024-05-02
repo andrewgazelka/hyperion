@@ -272,7 +272,7 @@ impl Hyperion {
         let shared = Arc::new(global::Shared {
             player_count: AtomicU32::new(0),
             compression_threshold: CompressionThreshold(256),
-            compression_level: CompressionLvl::new(12)
+            compression_level: CompressionLvl::new(6)
                 .map_err(|_| anyhow::anyhow!("failed to create compression level"))?,
         });
 

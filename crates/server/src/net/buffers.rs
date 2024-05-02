@@ -18,7 +18,7 @@ use crate::{
 
 const COUNT: usize = 1024;
 
-const BUFFER_SIZE: usize = MAX_PACKET_SIZE * 2;
+const BUFFER_SIZE: usize = MAX_PACKET_SIZE * 4;
 
 #[derive(Component)]
 pub struct BufferAllocator {
