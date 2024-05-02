@@ -34,7 +34,7 @@ pub fn spawn_entity_packet(
         position: pose.position.as_dvec3(),
         pitch: ByteAngle::from_degrees(pose.pitch),
         yaw: ByteAngle::from_degrees(pose.yaw),
-        head_yaw: ByteAngle(0),
+        head_yaw: ByteAngle::from_degrees(pose.head_yaw()),
         data: VarInt::default(),
         velocity: Velocity([0; 3]),
     }
