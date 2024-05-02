@@ -232,7 +232,10 @@ impl<'a> Iterator for LinuxServerIterator<'a> {
                             // TODO: Check that write wasn't truncated
                             trace!("successful write response");
 
-                            return Some(ServerEvent::SentData { fd: Fd(fd) });
+                            return Some(ServerEvent::SentData {
+                                fd: Fd(fd),
+                                bytes_sent: result as u32,
+                            });
                         }
                     }
                 }

@@ -1,6 +1,12 @@
 //! All the networking related code.
 
-use std::{cell::RefCell, collections::VecDeque, hash::Hash, net::ToSocketAddrs, net::SocketAddr, sync::Mutex};
+use std::{
+    cell::RefCell,
+    collections::VecDeque,
+    hash::Hash,
+    net::{SocketAddr, ToSocketAddrs},
+    sync::Mutex,
+};
 
 use anyhow::Context;
 use arrayvec::ArrayVec;
@@ -89,14 +95,14 @@ impl ServerDef for Server {
 }
 
 #[derive(Debug, Copy, Clone)]
-pub struct GlobalPacketWriteInfo {
+pub struct GlobalDataWriteInfo {
     pub start_ptr: *const u8,
     pub len: u32,
     pub buffer_idx: u16,
 }
 
-unsafe impl Send for GlobalPacketWriteInfo {}
-unsafe impl Sync for GlobalPacketWriteInfo {}
+unsafe impl Send for GlobalDataWriteInfo {}
+unsafe impl Sync for GlobalDataWriteInfo {}
 
 #[allow(unused, reason = "this is used on linux")]
 pub struct WriteItem<'a> {
@@ -182,7 +188,7 @@ impl<'a> Compose<'a> {
 #[derive(Component)]
 pub struct Packets {
     to_write: Mutex<Vec<u8>>,
-    currently_sending: bool
+    currently_sending: bool,
 }
 
 impl Packets {
@@ -227,7 +233,7 @@ impl Packets {
         f(to_write);
     }
 
-    fn push(&self, writer: PacketWriteInfo) {
+    fn push(&self, writer: DataWriteInfo) {
         let to_write = self.to_write.get_mut().unwrap();
 
         // TODO: This is unsound because this function doesn't have safety contract
@@ -235,12 +241,52 @@ impl Packets {
         to_write.extend_from_slice(data);
     }
 
-    pub fn add_successful_send(&mut self, d_count: usize) {
-        self.number_sending += d_count as u8;
-    }
-
     pub fn get_write_mut(&mut self) -> &mut ArrayVec<DataWriteInfo, 2> {
         &mut self.local_to_write
+    }
+
+    pub fn append<P>(&mut self, pkt: &P, compose: &Compose) -> anyhow::Result<()>
+    where
+        P: valence_protocol::Packet + valence_protocol::Encode,
+    {
+        let scratch = compose.scratch.get_local();
+        let mut scratch = scratch.borrow_mut();
+
+        let compressor = compose.compressor.get_local();
+        let mut compressor = compressor.borrow_mut();
+
+        let enc = compose.encoder();
+
+        let result = enc.append_packet(pkt, &mut *self.buffer, &mut *scratch, &mut compressor)?;
+
+        self.push(result);
+        Ok(())
+    }
+
+    pub fn append_pre_compression_packet<P>(&mut self, pkt: &P) -> anyhow::Result<()>
+    where
+        P: valence_protocol::Packet + valence_protocol::Encode,
+    {
+        // todo: why need DerefMut?
+        let buf = &mut self.buffer;
+        let buf = &mut **buf;
+
+        let result = append_packet_without_compression(pkt, buf)?;
+
+        self.push(result);
+        Ok(())
+    }
+
+    pub fn append_raw(&mut self, data: &[u8]) {
+        let buffer = &mut *self.buffer;
+        let start_ptr = buffer.append(data);
+
+        let writer = DataWriteInfo {
+            start_ptr,
+            len: data.len() as u32,
+        };
+
+        self.push(writer);
     }
 
     #[must_use]
@@ -286,6 +332,14 @@ impl Broadcast {
         &self.packets
     }
 
+    fn push(&self, writer: DataWriteInfo) {
+        let to_write = self.to_write.get_mut().unwrap();
+
+        // TODO: This is unsound because this function doesn't have safety contract
+        let data = unsafe { std::slice::from_raw_parts(writer.start_ptr, writer.len as usize) };
+        to_write.extend_from_slice(data);
+    }
+
     pub fn append<P>(&self, pkt: &P, compose: &Compose) -> anyhow::Result<()>
     where
         P: valence_protocol::Packet + valence_protocol::Encode,
@@ -305,7 +359,7 @@ impl Broadcast {
 
         let buf = &mut local.data;
 
-        encoder.append_packet(pkt, buf, &mut *scratch, &mut compressor)?;
+        let result = encoder.append_packet(pkt, buf, &mut *scratch, &mut compressor)?;
 
         self.push(result);
         Ok(())
@@ -315,8 +369,8 @@ impl Broadcast {
         let local = self.packets.get_local_raw();
         let local = unsafe { &mut *local.get() };
 
-        let writer = PacketWriteInfo {
-            start_ptr,
+        let writer = DataWriteInfo {
+            start_ptr: data.as_ptr(),
             len: data.len() as u32,
         };
 

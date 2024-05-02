@@ -61,10 +61,10 @@ pub struct RemovePlayer {
     fd: Fd,
 }
 
-// todo: do we really need three different lifetimes here?
 #[derive(Event)]
-pub struct RecvDataBulk<'a> {
-    elements: FxHashMap<Fd, ArrayVec<&'a [u8], 16>>,
+pub struct RecvData<'a> {
+    fd: Fd,
+    data: &'a [u8],
 }
 
 #[derive(Event)]
@@ -75,10 +75,6 @@ pub struct SentData {
 
 #[instrument(skip_all, level = "trace")]
 pub fn generate_ingress_events(world: &mut World, server: &mut Server) {
-    let mut decrease_count = FxHashMap::default();
-
-    let mut recv_data_elements: FxHashMap<Fd, ArrayVec<&[u8], 16>> = FxHashMap::default();
-
     for event in server.drain() {
         match event {
             ServerEvent::AddPlayer { fd } => {
@@ -88,18 +84,13 @@ pub fn generate_ingress_events(world: &mut World, server: &mut Server) {
                 world.send(RemovePlayer { fd });
             }
             ServerEvent::RecvData { fd, data } => {
-                recv_data_elements.entry(fd).or_default().push(data);
+                world.send(RecvData { fd, data });
             }
             ServerEvent::SentData { fd, bytes_sent } => {
                 world.send(SentData { fd, bytes_sent });
             }
         }
     }
-
-    world.send(SentData { decrease_count });
-    world.send(RecvDataBulk {
-        elements: recv_data_elements,
-    });
 }
 
 // The `Receiver<Tick>` parameter tells our handler to listen for the `Tick` event.
@@ -203,7 +194,7 @@ pub enum SendElem {
 #[instrument(skip_all, level = "trace")]
 #[allow(clippy::too_many_arguments, reason = "todo")]
 pub fn recv_data(
-    r: ReceiverMut<RecvDataBulk>,
+    r: ReceiverMut<RecvData>,
     fd_lookup: Single<&mut FdLookup>,
     global: Single<&Global>,
     mut players: Fetcher<(
@@ -221,107 +212,84 @@ pub fn recv_data(
     compose: Compose,
 ) {
     let event = EventMut::take(r.event);
-
     let send_events = RayonLocal::init(Vec::new);
-    let elements = event.elements;
+    let fd = event.fd;
 
-    players.par_iter_mut().for_each(
-        |(
-            login_state,
-            decoder,
-            packets,
-            fd,
-            mut pose,
-            mut vitals,
-            mut keep_alive,
-            mut immunity,
-        )| {
-            let Some(data) = elements.get(fd) else {
-                return;
-            };
+    let Some(&id) = fd_lookup.get(fd) else {
+        warn!("got data for fd that is not in the fd lookup: {fd:?}");
+        return;
+    };
 
-            for &data in data {
-                trace!("got data: {data:?}");
-                let Some(&id) = fd_lookup.get(fd) else {
-                    warn!("got data for fd that is not in the fd lookup: {fd:?}");
-                    return;
-                };
+    let Ok(login_state, decoder, packets, fd, mut pose, mut vitals, mut keep_alive, mut immunity) =
+        players.get_mut(id)
+    else {
+        warn!(
+            "tried to get pkts for id {:?} but it seemed to already be removed",
+            id
+        );
+        return;
+    };
 
-                decoder.queue_slice(data);
+    decoder.queue_slice(event.data);
 
-                let scratch = compose.scratch.get_local();
-                let mut scratch = scratch.borrow_mut();
-                let scratch = &mut *scratch;
+    let scratch = compose.scratch.get_local();
+    let mut scratch = scratch.borrow_mut();
+    let scratch = &mut *scratch;
 
-                let sender = send_events.get_local_raw();
-                let sender = unsafe { &mut *sender.get() };
+    let sender = send_events.get_local_raw();
+    let sender = unsafe { &mut *sender.get() };
 
-                // todo: error  on low compression: "decompressed packet length of 2 is <= the compression threshold of 2"
-                while let Some(frame) = decoder.try_next_packet(scratch).unwrap() {
-                    match *login_state {
-                        LoginState::Handshake => process_handshake(login_state, &frame).unwrap(),
-                        LoginState::Status => {
-                            process_status(login_state, &frame, packets).unwrap();
-                        }
-                        LoginState::Terminate => {
-                            // // todo: does this properly terminate the connection? I don't think so probably
-                            // let Some(id) = fd_lookup.remove(&fd) else {
-                            //     return;
-                            // };
-                            //
-                            // sender.despawn(id);
-                        }
-                        LoginState::Login => {
-                            process_login(
-                                id,
-                                login_state,
-                                &frame,
-                                packets,
-                                decoder,
-                                &global,
-                                sender,
-                            )
-                            .unwrap();
-                        }
-                        LoginState::TransitioningPlay { .. } | LoginState::Play => {
-                            if let LoginState::TransitioningPlay {
-                                packets_to_transition,
-                            } = login_state
-                            {
-                                if *packets_to_transition == 0 {
-                                    *login_state = LoginState::Play;
-                                } else {
-                                    *packets_to_transition -= 1;
-                                }
-                            }
-
-                            if let Some((pose, vitals, keep_alive, immunity)) = itertools::izip!(
-                                pose.as_mut(),
-                                vitals.as_mut(),
-                                keep_alive.as_mut(),
-                                immunity.as_mut()
-                            )
-                            .next()
-                            {
-                                let mut query = PacketSwitchQuery {
-                                    id,
-                                    pose,
-                                    vitals,
-                                    keep_alive,
-                                    immunity,
-                                };
-
-                                crate::packets::switch(
-                                    frame, &global, sender, &id_lookup, &mut query,
-                                )
-                                .unwrap();
-                            }
-                        }
+    // todo: error  on low compression: "decompressed packet length of 2 is <= the compression threshold of 2"
+    while let Some(frame) = decoder.try_next_packet(scratch).unwrap() {
+        match *login_state {
+            LoginState::Handshake => process_handshake(login_state, &frame).unwrap(),
+            LoginState::Status => {
+                process_status(login_state, &frame, packets).unwrap();
+            }
+            LoginState::Terminate => {
+                // // todo: does this properly terminate the connection? I don't think so probably
+                // let Some(id) = fd_lookup.remove(&fd) else {
+                //     return;
+                // };
+                //
+                // sender.despawn(id);
+            }
+            LoginState::Login => {
+                process_login(id, login_state, &frame, packets, decoder, &global, sender).unwrap();
+            }
+            LoginState::TransitioningPlay { .. } | LoginState::Play => {
+                if let LoginState::TransitioningPlay {
+                    packets_to_transition,
+                } = login_state
+                {
+                    if *packets_to_transition == 0 {
+                        *login_state = LoginState::Play;
+                    } else {
+                        *packets_to_transition -= 1;
                     }
                 }
+
+                if let Some((pose, vitals, keep_alive, immunity)) = itertools::izip!(
+                    pose.as_mut(),
+                    vitals.as_mut(),
+                    keep_alive.as_mut(),
+                    immunity.as_mut()
+                )
+                .next()
+                {
+                    let mut query = PacketSwitchQuery {
+                        id,
+                        pose,
+                        vitals,
+                        keep_alive,
+                        immunity,
+                    };
+
+                    crate::packets::switch(frame, &global, sender, &id_lookup, &mut query).unwrap();
+                }
             }
-        },
-    );
+        }
+    }
 
     for elem in send_events.into_iter().flatten() {
         match elem {

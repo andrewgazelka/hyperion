@@ -6,7 +6,6 @@ use tracing::{instrument, log::warn};
 
 use crate::{
     components::LoginState,
-    net::IoBufs,
     event::Egress,
     net::{encoder::DataWriteInfo, Broadcast, Fd, Packets, ServerDef, WriteItem},
 };
