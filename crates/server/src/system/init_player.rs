@@ -13,7 +13,7 @@ use crate::{
     },
     event::{PlayerInit, PlayerJoinWorld},
     net::{Compose, Packets},
-    system::sync_entity_position::PositionSyncMetadata,
+    system::{chunks::ChunkChanges, sync_entity_position::PositionSyncMetadata},
     tracker::Prev,
 };
 
@@ -44,6 +44,7 @@ pub fn init_player(
         Insert<LastSentChunk>,
         Insert<AiTargetable>,
         Insert<InGameName>,
+        Insert<ChunkChanges>,
         PlayerJoinWorld,
     )>,
 ) {
@@ -82,11 +83,11 @@ pub fn init_player(
     s.insert(entity, Prev::from(Vitals::ALIVE));
     s.insert(entity, Vitals::ALIVE);
 
-    let pose = FullEntityPose::player();
-    let chunk = pose.chunk_pos();
-
     s.insert(entity, FullEntityPose::player());
-    s.insert(entity, LastSentChunk { chunk });
+    s.insert(entity, ChunkChanges::default());
+
+    // so we always send updates
+    s.insert(entity, LastSentChunk::NULL);
 
     s.insert(entity, EntityReaction::default());
 
