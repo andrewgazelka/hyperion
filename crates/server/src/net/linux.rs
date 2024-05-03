@@ -234,7 +234,7 @@ impl ServerDef for LinuxServer {
                 0 => {
                     if event.flags() & IORING_CQE_F_MORE == 0 {
                         warn!("multishot accept rerequested");
-                        LinuxServer::request_accept(&mut submission);
+                        Self::request_accept(&mut submission);
                     }
 
                     if result < 0 {
@@ -244,7 +244,7 @@ impl ServerDef for LinuxServer {
 
                     #[expect(clippy::cast_sign_loss, reason = "we are checking if < 0")]
                     let fd = Fixed(result as u32);
-                    LinuxServer::request_recv(&mut submission, fd);
+                    Self::request_recv(&mut submission, fd);
                     f(ServerEvent::AddPlayer { fd: Fd(fd) });
                 }
                 1 => {
@@ -295,7 +295,7 @@ impl ServerDef for LinuxServer {
                         );
 
                         f(ServerEvent::RemovePlayer { fd: Fd(fd) });
-                        LinuxServer::close(&mut submission, fd);
+                        Self::close(&mut submission, fd);
                     } else {
                         // The player is not getting disconnected, but there still may be errors
 
@@ -303,7 +303,7 @@ impl ServerDef for LinuxServer {
                             // No more completion events will occur from this multishot recv. This
                             // will need to request another multishot recv.
                             warn!("socket recv rerequested");
-                            LinuxServer::request_recv(&mut submission, fd);
+                            Self::request_recv(&mut submission, fd);
                         }
 
                         if result > 0 {
