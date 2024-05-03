@@ -525,17 +525,15 @@ where
             return;
         }
 
-        let mut iter = Self {
-            // node_stack,
+        let iter = Self {
             target,
             bvh,
-            // elements: vec![],
         };
 
         iter.process(root, process);
     }
 
-    pub fn process(&mut self, on: &BvhNode, process: &mut impl FnMut(&T) -> bool) {
+    pub fn process(&self, on: &BvhNode, process: &mut impl FnMut(&T) -> bool) {
         let mut stack: ArrayVec<&BvhNode, 64> = ArrayVec::new();
         stack.push(on);
 
