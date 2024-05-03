@@ -18,7 +18,7 @@ use mio::{
     Events, Interest, Poll, Registry, Token,
 };
 use rayon_local::RayonLocal;
-use tracing::{info, warn};
+use tracing::{info, instrument, warn};
 
 use crate::{
     net::{encoder::DataWriteInfo, Fd, ServerDef, ServerEvent, WriteItem, MAX_PACKET_SIZE},
@@ -96,6 +96,7 @@ impl ServerDef for GenericServer {
         })
     }
 
+    #[instrument(skip_all, level = "trace")]
     fn drain<'a>(&'a mut self, mut f: impl FnMut(ServerEvent<'a>)) -> std::io::Result<()> {
         // // todo: this is a bit of a hack, is there a better number? probs dont want people sending more than this
         let mut received_data = BytesMut::with_capacity(MAX_PACKET_SIZE * 2);
@@ -103,7 +104,7 @@ impl ServerDef for GenericServer {
         // process the current tick
         if let Err(err) = self
             .poll
-            .poll(&mut self.events, Some(Duration::from_millis(10)))
+            .poll(&mut self.events, Some(Duration::from_nanos(10)))
         {
             if interrupted(&err) {
                 return Ok(());

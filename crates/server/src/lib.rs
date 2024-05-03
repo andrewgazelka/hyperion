@@ -46,7 +46,10 @@ use valence_protocol::CompressionThreshold;
 pub use valence_server;
 
 use crate::{
-    components::{chunks::Chunks, Vitals},
+    components::{
+        chunks::{Chunks, Tasks},
+        Vitals,
+    },
     event::{BumpScratch, Egress, Gametick, Scratches, Stats},
     global::Global,
     net::{buffers::BufferAllocator, Broadcast, Compressors, Server, ServerDef, S2C_BUFFER_SIZE},
@@ -71,6 +74,11 @@ mod bits;
 mod tracker;
 
 mod config;
+
+#[must_use]
+pub fn default<T: Default>() -> T {
+    T::default()
+}
 
 #[derive(From, Debug)]
 pub enum CowBytes<'a> {
@@ -317,7 +325,9 @@ impl Hyperion {
         world.add_handler(system::ingress::recv_data);
         world.add_handler(system::ingress::sent_data);
 
-        world.add_handler(system::send_chunk_updates);
+        world.add_handler(system::chunks::generate_changes);
+        world.add_handler(system::chunks::send_updates);
+
         world.add_handler(system::init_player);
         world.add_handler(system::despawn_player);
         world.add_handler(system::player_join_world);
@@ -373,6 +383,9 @@ impl Hyperion {
             generate_biome_registry().context("failed to generate biome registry")?;
         world.insert(chunks, Chunks::new(&biome_registry)?);
 
+        let tasks = world.spawn();
+        world.insert(tasks, Tasks::default());
+
         let player_id_lookup = world.spawn();
         world.insert(player_id_lookup, EntityIdLookup::default());
 
@@ -396,7 +409,8 @@ impl Hyperion {
     }
 
     /// The duration to wait between ticks.
-    fn wait_duration(&self) -> Option<Duration> {
+    #[instrument(skip_all, level = "trace")]
+    fn calculate_wait_duration(&self) -> Option<Duration> {
         let &first_tick = self.last_ticks.front()?;
 
         let count = self.last_ticks.len();
@@ -481,7 +495,7 @@ impl Hyperion {
         )]
         let ms = now.elapsed().as_nanos() as f64 / 1_000_000.0;
         self.update_tick_stats(ms, scratch.one());
-        self.wait_duration()
+        self.calculate_wait_duration()
     }
 
     #[instrument(skip_all, level = "trace")]

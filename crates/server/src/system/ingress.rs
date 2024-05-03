@@ -10,7 +10,7 @@ use fxhash::FxHashMap;
 use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
 use rayon_local::RayonLocal;
 use serde_json::json;
-use tracing::{info, instrument, trace, warn};
+use tracing::{info, instrument, span, trace, warn, Level};
 use valence_protocol::{
     decode::PacketFrame,
     packets,
@@ -99,9 +99,14 @@ pub fn generate_ingress_events(world: &mut World, server: &mut Server) {
         })
         .unwrap();
 
-    world.send(SentData { decrease_count });
-    world.send(RecvDataBulk {
-        elements: recv_data_elements,
+    span!(Level::TRACE, "sent-data").in_scope(|| {
+        world.send(SentData { decrease_count });
+    });
+
+    span!(Level::TRACE, "recv-data").in_scope(|| {
+        world.send(RecvDataBulk {
+            elements: recv_data_elements,
+        });
     });
 }
 
