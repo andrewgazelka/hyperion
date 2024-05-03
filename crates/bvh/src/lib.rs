@@ -525,10 +525,7 @@ where
             return;
         }
 
-        let iter = Self {
-            target,
-            bvh,
-        };
+        let iter = Self { target, bvh };
 
         iter.process(root, process);
     }
