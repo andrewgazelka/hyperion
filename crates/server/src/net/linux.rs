@@ -478,7 +478,7 @@ impl LinuxServer {
         }
     }
 
-    pub fn cancel(&mut self, cancel_builder: io_uring::types::CancelBuilder) {
+    pub fn cancel(&self, cancel_builder: io_uring::types::CancelBuilder) {
         self.uring
             .submitter()
             .register_sync_cancel(None, cancel_builder)
@@ -494,7 +494,7 @@ impl LinuxServer {
 
     /// All requests in the submission queue must be finished or cancelled, or else this function
     /// will hang indefinetely.
-    pub fn unregister_buffers(&mut self) {
+    pub fn unregister_buffers(&self) {
         self.uring.submitter().unregister_buffers().unwrap();
     }
 }
