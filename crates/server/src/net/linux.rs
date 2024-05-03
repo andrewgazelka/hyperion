@@ -12,15 +12,17 @@ use std::{
 
 pub use io_uring::types::Fixed;
 use io_uring::{
-    cqueue::buffer_select, squeue, squeue::SubmissionQueue, types::BufRingEntry, CompletionQueue,
-    IoUring,
+    cqueue::buffer_select, squeue, squeue::SubmissionQueue, types::BufRingEntry, IoUring,
 };
 use libc::iovec;
 use socket2::Socket;
 use tracing::{error, info, instrument, trace, warn};
 
-use super::WriteItem;
-use crate::net::{Fd, ServerDef, ServerEvent};
+use super::{Consumer, WriteItem};
+use crate::{
+    net::{Fd, ServerDef, ServerEvent},
+    CowBytes,
+};
 
 const COMPLETION_QUEUE_SIZE: u32 = 32768;
 const SUBMISSION_QUEUE_SIZE: u32 = 32768;
@@ -133,19 +135,22 @@ pub struct LinuxServer {
     phantom: PhantomData<*const ()>,
 }
 
-struct LinuxServerIterator<'a> {
-    submission: SubmissionQueue<'a>,
-    completion: CompletionQueue<'a>,
-    pending_writes: &'a mut usize,
-    c2s_buffer: &'a mut Vec<[u8; C2S_RING_BUFFER_LEN]>,
-    c2s_buffer_entries: &'a mut PageAlignedMemory<BufRingEntry>,
-    c2s_local_tail: &'a mut u16,
+struct LinuxServerConsumer<'a> {
+    parent: &'a mut LinuxServer,
 }
 
-impl<'a> LinuxServerIterator<'a> {
+impl<'a> LinuxServerConsumer<'a> {
     fn new(parent: &'a mut LinuxServer) -> Self {
-        let (_submitter, submission, mut completion) = parent.uring.split();
+        Self { parent }
+    }
+}
 
+impl<'a> Consumer for LinuxServerConsumer<'a> {
+    type Item = ServerEvent<'a>;
+
+    #[allow(clippy::cognitive_complexity, reason = "todo")]
+    fn consume_all(&mut self, mut f: impl FnMut(Self::Item)) -> std::io::Result<()> {
+        let (_submitter, mut submission, mut completion) = self.parent.uring.split();
         completion.sync();
         if completion.overflow() > 0 {
             error!(
@@ -154,43 +159,13 @@ impl<'a> LinuxServerIterator<'a> {
             );
         }
 
-        Self {
-            submission,
-            completion,
-            pending_writes: &mut parent.pending_writes,
-            c2s_buffer: &mut parent.c2s_buffer,
-            c2s_buffer_entries: &mut parent.c2s_buffer_entries,
-            c2s_local_tail: &mut parent.c2s_local_tail,
-        }
-    }
-}
-
-impl<'a> Drop for LinuxServerIterator<'a> {
-    fn drop(&mut self) {
-        // SAFETY: This is the first entry of the buffer ring
-        let tail_addr = unsafe { BufRingEntry::tail(self.c2s_buffer_entries.data) };
-        // Casting it into an atomic is needed since the kernel is also reading the tail
-        let tail_addr: *const AtomicU16 = tail_addr.cast();
-        // SAFETY: tail_addr is valid
-        unsafe {
-            (*tail_addr).store(*self.c2s_local_tail, Ordering::Relaxed);
-        }
-    }
-}
-
-impl<'a> Iterator for LinuxServerIterator<'a> {
-    type Item = ServerEvent<'a>;
-
-    #[allow(clippy::cognitive_complexity, reason = "todo")]
-    fn next(&mut self) -> Option<Self::Item> {
-        loop {
-            let event = self.completion.next()?;
+        for event in completion {
             let result = event.result();
             match event.user_data() {
                 0 => {
                     if event.flags() & IORING_CQE_F_MORE == 0 {
                         warn!("multishot accept rerequested");
-                        LinuxServer::request_accept(&mut self.submission);
+                        LinuxServer::request_accept(&mut submission);
                     }
 
                     if result < 0 {
@@ -200,8 +175,8 @@ impl<'a> Iterator for LinuxServerIterator<'a> {
 
                     #[expect(clippy::cast_sign_loss, reason = "we are checking if < 0")]
                     let fd = Fixed(result as u32);
-                    LinuxServer::request_recv(&mut self.submission, fd);
-                    return Some(ServerEvent::AddPlayer { fd: Fd(fd) });
+                    LinuxServer::request_recv(&mut submission, fd);
+                    f(ServerEvent::AddPlayer { fd: Fd(fd) });
                 }
                 1 => {
                     if result < 0 {
@@ -211,7 +186,7 @@ impl<'a> Iterator for LinuxServerIterator<'a> {
                 write if write & SEND_MARKER != 0 => {
                     let fd = Fixed((write & !SEND_MARKER) as u32);
 
-                    *self.pending_writes -= 1;
+                    self.parent.pending_writes -= 1;
 
                     match result.cmp(&0) {
                         cmp::Ordering::Less => {
@@ -233,7 +208,7 @@ impl<'a> Iterator for LinuxServerIterator<'a> {
                             // TODO: Check that write wasn't truncated
                             trace!("successful write response");
 
-                            return Some(ServerEvent::SentData { fd: Fd(fd) });
+                            f(ServerEvent::SentData { fd: Fd(fd) });
                         }
                     }
                 }
@@ -250,43 +225,45 @@ impl<'a> Iterator for LinuxServerIterator<'a> {
                              check is needed to avoid removing the same player multiple times"
                         );
 
-                        LinuxServer::close(&mut self.submission, fd);
-                        return Some(ServerEvent::RemovePlayer { fd: Fd(fd) });
-                    }
-                    // The player is not getting disconnected, but there still may be errors
-
-                    if !more {
-                        // No more completion events will occur from this multishot recv. This
-                        // will need to request another multishot recv.
-                        warn!("socket recv rerequested");
-                        LinuxServer::request_recv(&mut self.submission, fd);
-                    }
-
-                    if result > 0 {
-                        #[expect(clippy::cast_sign_loss, reason = "we are checking if < 0")]
-                        let bytes_received = result as usize;
-                        let buffer_id =
-                            buffer_select(event.flags()).expect("there should be a buffer");
-                        assert!((buffer_id as usize) < C2S_RING_BUFFER_COUNT);
-                        // SAFETY: as_mut_ptr doesn't take a reference to the slice in c2s_buffer.
-                        // buffer_id is in bounds of c2s_buffer, so all the
-                        // safety requirements for add is met.
-                        let buffer_ptr =
-                            unsafe { self.c2s_buffer.as_mut_ptr().add(buffer_id as usize) };
-                        // SAFETY: buffer_id is in bounds, so buffer_ptr is valid
-                        let buffer = unsafe { &(*buffer_ptr)[..bytes_received] };
-                        *self.c2s_local_tail = self.c2s_local_tail.wrapping_add(1);
-                        return Some(ServerEvent::RecvData {
-                            fd: Fd(fd),
-                            data: buffer,
-                        });
-                    } else if result == -libc::ENOBUFS {
-                        warn!(
-                            "ran out of c2s buffers which will negatively impact performance; \
-                             consider increasing C2S_RING_BUFFER_COUNT"
-                        );
+                        f(ServerEvent::RemovePlayer { fd: Fd(fd) });
+                        LinuxServer::close(&mut submission, fd);
                     } else {
-                        error!("unhandled recv error: {result}");
+                        // The player is not getting disconnected, but there still may be errors
+
+                        if !more {
+                            // No more completion events will occur from this multishot recv. This
+                            // will need to request another multishot recv.
+                            warn!("socket recv rerequested");
+                            LinuxServer::request_recv(&mut submission, fd);
+                        }
+
+                        if result > 0 {
+                            #[expect(clippy::cast_sign_loss, reason = "we are checking if < 0")]
+                            let bytes_received = result as usize;
+                            let buffer_id =
+                                buffer_select(event.flags()).expect("there should be a buffer");
+                            assert!((buffer_id as usize) < C2S_RING_BUFFER_COUNT);
+                            // SAFETY: as_mut_ptr doesn't take a reference to the slice in c2s_buffer.
+                            // buffer_id is in bounds of c2s_buffer, so all the
+                            // safety requirements for add is met.
+                            let buffer_ptr = unsafe {
+                                self.parent.c2s_buffer.as_mut_ptr().add(buffer_id as usize)
+                            };
+                            // SAFETY: buffer_id is in bounds, so buffer_ptr is valid
+                            let buffer = unsafe { &(*buffer_ptr)[..bytes_received] };
+                            self.parent.c2s_local_tail = self.parent.c2s_local_tail.wrapping_add(1);
+                            f(ServerEvent::RecvData {
+                                fd: Fd(fd),
+                                data: CowBytes::Borrowed(buffer),
+                            });
+                        } else if result == -libc::ENOBUFS {
+                            warn!(
+                                "ran out of c2s buffers which will negatively impact performance; \
+                                 consider increasing C2S_RING_BUFFER_COUNT"
+                            );
+                        } else {
+                            error!("unhandled recv error: {result}");
+                        }
                     }
                 }
                 _ => {
@@ -294,6 +271,17 @@ impl<'a> Iterator for LinuxServerIterator<'a> {
                 }
             }
         }
+
+        // SAFETY: This is the first entry of the buffer ring
+        let tail_addr = unsafe { BufRingEntry::tail(self.parent.c2s_buffer_entries.data) };
+        // Casting it into an atomic is needed since the kernel is also reading the tail
+        let tail_addr: *const AtomicU16 = tail_addr.cast();
+        // SAFETY: tail_addr is valid
+        unsafe {
+            (*tail_addr).store(self.parent.c2s_local_tail, Ordering::Relaxed);
+        }
+
+        Ok(())
     }
 }
 
@@ -380,8 +368,8 @@ impl ServerDef for LinuxServer {
 
     /// `f` should never panic
     #[instrument(skip_all, level = "trace", name = "iou-drain-events")]
-    fn drain(&mut self) -> impl Iterator<Item = ServerEvent> {
-        LinuxServerIterator::new(self)
+    fn drain(&mut self) -> impl Consumer<Item = ServerEvent> {
+        LinuxServerConsumer::new(self)
     }
 
     #[instrument(skip_all, level = "trace", name = "iou-register-buffers")]
