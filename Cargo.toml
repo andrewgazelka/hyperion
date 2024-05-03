@@ -10,6 +10,7 @@ members = [
     "crates/rayon-local",
     "crates/server",
     "events/infection",
+    "examples",
 ]
 #opt-level = 1
 
