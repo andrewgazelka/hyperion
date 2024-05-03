@@ -195,7 +195,7 @@ impl FullEntityPose {
     pub const fn head_yaw(&self) -> f32 {
         self.yaw
     }
-    
+
     #[must_use]
     pub fn player() -> Self {
         Self {
