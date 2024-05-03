@@ -21,7 +21,6 @@ use valence_protocol::{
 use crate::{
     event,
     global::Global,
-    net,
     net::{Server, ServerDef, ServerEvent},
     singleton::fd_lookup::FdLookup,
     CowBytes,
@@ -76,15 +75,12 @@ pub struct SentData {
 
 #[instrument(skip_all, level = "trace")]
 pub fn generate_ingress_events(world: &mut World, server: &mut Server) {
-    use net::Consumer;
     let mut decrease_count = FxHashMap::default();
 
     let mut recv_data_elements: FxHashMap<Fd, ArrayVec<CowBytes, 16>> = FxHashMap::default();
 
-    let mut drainer = server.drain();
-
-    drainer
-        .consume_all(|event| match event {
+    server
+        .drain(|event| match event {
             ServerEvent::AddPlayer { fd } => {
                 world.send(AddPlayer { fd });
             }
