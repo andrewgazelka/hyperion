@@ -10,7 +10,7 @@ use libc::iovec;
 use libdeflater::CompressionLvl;
 use tracing::{debug, instrument};
 
-use crate::{global::Global, net::encoder::DataWriteInfo};
+use crate::{global::Global, net::encoder::DataWriteInfo, CowBytes};
 
 pub mod buffers;
 
@@ -32,7 +32,7 @@ pub const RING_SIZE: usize = MAX_PACKET_SIZE * 2;
 pub enum ServerEvent<'a> {
     AddPlayer { fd: Fd },
     RemovePlayer { fd: Fd },
-    RecvData { fd: Fd, data: &'a [u8] },
+    RecvData { fd: Fd, data: CowBytes<'a> },
     SentData { fd: Fd },
 }
 
@@ -64,7 +64,7 @@ impl ServerDef for Server {
         Ok(Self { inner })
     }
 
-    fn drain(&mut self) -> impl Iterator<Item = ServerEvent> {
+    fn drain(&mut self) -> impl Consumer<Item = ServerEvent> {
         self.inner.drain()
     }
 
@@ -105,11 +105,16 @@ pub struct WriteItem<'a> {
     pub fd: Fd,
 }
 
+pub trait Consumer {
+    type Item;
+    fn consume_all(&mut self, f: impl FnMut(Self::Item)) -> std::io::Result<()>;
+}
+
 pub trait ServerDef {
     fn new(address: SocketAddr) -> anyhow::Result<Self>
     where
         Self: Sized;
-    fn drain(&mut self) -> impl Iterator<Item = ServerEvent>;
+    fn drain(&mut self) -> impl Consumer<Item = ServerEvent>;
 
     /// # Safety
     /// todo: not completely sure about all the invariants here

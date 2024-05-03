@@ -30,6 +30,7 @@ use std::{
 };
 
 use anyhow::Context;
+use derive_more::From;
 use evenio::prelude::*;
 use humansize::{SizeFormatter, BINARY};
 use libc::{getrlimit, setrlimit, RLIMIT_NOFILE};
@@ -70,6 +71,21 @@ mod bits;
 mod tracker;
 
 mod config;
+
+#[derive(From, Debug)]
+pub enum CowBytes<'a> {
+    Owned(bytes::Bytes),
+    Borrowed(&'a [u8]),
+}
+
+impl<'a> AsRef<[u8]> for CowBytes<'a> {
+    fn as_ref(&self) -> &[u8] {
+        match self {
+            CowBytes::Owned(bytes) => bytes.as_ref(),
+            CowBytes::Borrowed(bytes) => bytes,
+        }
+    }
+}
 
 /// History size for sliding average.
 const MSPT_HISTORY_SIZE: usize = 100;

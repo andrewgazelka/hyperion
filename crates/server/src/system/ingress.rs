@@ -21,8 +21,10 @@ use valence_protocol::{
 use crate::{
     event,
     global::Global,
+    net,
     net::{Server, ServerDef, ServerEvent},
     singleton::fd_lookup::FdLookup,
+    CowBytes,
 };
 
 mod player_packet_buffer;
@@ -64,7 +66,7 @@ pub struct RemovePlayer {
 // todo: do we really need three different lifetimes here?
 #[derive(Event)]
 pub struct RecvDataBulk<'a> {
-    elements: FxHashMap<Fd, ArrayVec<&'a [u8], 16>>,
+    elements: FxHashMap<Fd, ArrayVec<CowBytes<'a>, 16>>,
 }
 
 #[derive(Event)]
@@ -74,12 +76,15 @@ pub struct SentData {
 
 #[instrument(skip_all, level = "trace")]
 pub fn generate_ingress_events(world: &mut World, server: &mut Server) {
+    use net::Consumer;
     let mut decrease_count = FxHashMap::default();
 
-    let mut recv_data_elements: FxHashMap<Fd, ArrayVec<&[u8], 16>> = FxHashMap::default();
+    let mut recv_data_elements: FxHashMap<Fd, ArrayVec<CowBytes, 16>> = FxHashMap::default();
 
-    for event in server.drain() {
-        match event {
+    let mut drainer = server.drain();
+
+    drainer
+        .consume_all(|event| match event {
             ServerEvent::AddPlayer { fd } => {
                 world.send(AddPlayer { fd });
             }
@@ -95,8 +100,8 @@ pub fn generate_ingress_events(world: &mut World, server: &mut Server) {
                     .and_modify(|x| *x += 1)
                     .or_insert(1);
             }
-        }
-    }
+        })
+        .unwrap();
 
     world.send(SentData { decrease_count });
     world.send(RecvDataBulk {
@@ -242,14 +247,14 @@ pub fn recv_data(
                 return;
             };
 
-            for &data in data {
+            for data in data {
                 trace!("got data: {data:?}");
                 let Some(&id) = fd_lookup.get(fd) else {
                     warn!("got data for fd that is not in the fd lookup: {fd:?}");
                     return;
                 };
 
-                decoder.queue_slice(data);
+                decoder.queue_slice(data.as_ref());
 
                 let scratch = compose.scratch.get_local();
                 let mut scratch = scratch.borrow_mut();
