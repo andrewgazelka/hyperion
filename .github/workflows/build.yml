@@ -51,7 +51,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - uses: dtolnay/rust-toolchain@master
+      - uses: dtolnay/rust-toolchain@nightly
         with:
           components: rustfmt
 
@@ -69,7 +69,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - uses: dtolnay/rust-toolchain@master
+      - uses: dtolnay/rust-toolchain@nightly
 
       - uses: Swatinem/rust-cache@v2
         with:
@@ -88,7 +88,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup Rust toolchain
-        uses: dtolnay/rust-toolchain@master
+        uses: dtolnay/rust-toolchain@nightly
         with:
           components: clippy
 
@@ -106,7 +106,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup Rust toolchain and cache
-        uses: dtolnay/rust-toolchain@master
+        uses: dtolnay/rust-toolchain@nightly
         with:
           components: clippy
 
