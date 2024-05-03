@@ -587,15 +587,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "06ea2b9bc92be3c2baa9334a323ebca2d6f074ff852cd1d7b11064035cd3868f"
 
 [[package]]
-name = "cpp_demangle"
-version = "0.4.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7e8227005286ec39567949b33df9896bcadfa6051bccca2488129f108ca23119"
-dependencies = [
- "cfg-if",
-]
-
-[[package]]
 name = "cpufeatures"
 version = "0.2.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -697,15 +688,6 @@ checksum = "1bfb12502f3fc46cca1bb51ac28df9d618d813cdc3d2f25b9fe775a34af26bb3"
 dependencies = [
  "generic-array",
  "typenum",
-]
-
-[[package]]
-name = "debugid"
-version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bef552e6f588e446098f6ba40d89ac146c8c7b64aade83c051ee00bb5d2bc18d"
-dependencies = [
- "uuid",
 ]
 
 [[package]]
@@ -898,18 +880,6 @@ dependencies = [
  "libc",
  "redox_syscall 0.4.1",
  "windows-sys 0.52.0",
-]
-
-[[package]]
-name = "findshlibs"
-version = "0.10.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "40b9e59cd0f7e0806cca4be089683ecb6434e602038df21fe6bf6711b2f07f64"
-dependencies = [
- "cc",
- "lazy_static",
- "libc",
- "winapi",
 ]
 
 [[package]]
@@ -1366,24 +1336,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "inferno"
-version = "0.11.19"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "321f0f839cd44a4686e9504b0a62b4d69a50b62072144c71c68f5873c167b8d9"
-dependencies = [
- "ahash",
- "indexmap",
- "is-terminal",
- "itoa",
- "log",
- "num-format",
- "once_cell",
- "quick-xml",
- "rgb",
- "str_stack",
-]
-
-[[package]]
 name = "instant"
 version = "0.1.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1612,15 +1564,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6c8640c5d730cb13ebd907d8d04b52f55ac9a2eec55b440c8892f40d56c76c1d"
 
 [[package]]
-name = "memmap2"
-version = "0.9.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fe751422e4a8caa417e13c3ea66452215d7d63e19e604f4980461212f3ae1322"
-dependencies = [
- "libc",
-]
-
-[[package]]
 name = "mime"
 version = "0.3.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1683,17 +1626,6 @@ dependencies = [
  "num-integer",
  "num-traits",
  "rawpointer",
-]
-
-[[package]]
-name = "nix"
-version = "0.26.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "598beaf3cc6fdd9a5dfb1630c2800c7acd31df7aaf0f565796fba2b53ca1af1b"
-dependencies = [
- "bitflags 1.3.2",
- "cfg-if",
- "libc",
 ]
 
 [[package]]
@@ -1996,27 +1928,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "pprof"
-version = "0.13.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ef5c97c51bd34c7e742402e216abdeb44d415fbe6ae41d56b114723e953711cb"
-dependencies = [
- "backtrace",
- "cfg-if",
- "findshlibs",
- "inferno",
- "libc",
- "log",
- "nix",
- "once_cell",
- "parking_lot",
- "smallvec",
- "symbolic-demangle",
- "tempfile",
- "thiserror",
-]
-
-[[package]]
 name = "ppv-lite86"
 version = "0.2.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2029,15 +1940,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3d1597b0c024618f09a9c3b8655b7e430397a36d23fdafec26d6965e9eec3eba"
 dependencies = [
  "unicode-ident",
-]
-
-[[package]]
-name = "quick-xml"
-version = "0.26.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7f50b1c63b38611e7d4d7f68b82d3ad0cc71a2ad2e7f61fc10f1328d917c93cd"
-dependencies = [
- "memchr",
 ]
 
 [[package]]
@@ -2253,15 +2155,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rgb"
-version = "0.8.37"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "05aaa8004b64fd573fc9d002f4e632d51ad4f026c2b5ba95fcb6c2f32c2c47d8"
-dependencies = [
- "bytemuck",
-]
-
-[[package]]
 name = "rustc-demangle"
 version = "0.1.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2464,7 +2357,6 @@ dependencies = [
  "bumpalo",
  "bvh",
  "bytes",
- "clap",
  "crossbeam-queue",
  "derive_more 0.99.17",
  "dirs-next",
@@ -2487,7 +2379,6 @@ dependencies = [
  "num-format",
  "once_cell",
  "parking_lot",
- "pprof",
  "rand",
  "rand_distr",
  "rayon",
@@ -2507,9 +2398,6 @@ dependencies = [
  "tokio",
  "toml",
  "tracing",
- "tracing-flame",
- "tracing-subscriber",
- "tracing-tracy",
  "uuid",
  "valence_anvil",
  "valence_generated",
@@ -2609,18 +2497,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "stable_deref_trait"
-version = "1.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a8f112729512f8e442d81f95a8a7ddf2b7c6b8a1a6f509a95864142b30cab2d3"
-
-[[package]]
-name = "str_stack"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9091b6114800a5f2141aee1d1b9d6ca3592ac062dc5decb3764ec5895a47b4eb"
-
-[[package]]
 name = "strsim"
 version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2634,29 +2510,6 @@ checksum = "d6398cde53adc3c4557306a96ce67b302968513830a77a95b2b17305d9719a89"
 dependencies = [
  "is-terminal",
  "is_ci",
-]
-
-[[package]]
-name = "symbolic-common"
-version = "12.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1cccfffbc6bb3bb2d3a26cd2077f4d055f6808d266f9d4d158797a4c60510dfe"
-dependencies = [
- "debugid",
- "memmap2",
- "stable_deref_trait",
- "uuid",
-]
-
-[[package]]
-name = "symbolic-demangle"
-version = "12.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "76a99812da4020a67e76c4eb41f08c87364c14170495ff780f30dd519c221a68"
-dependencies = [
- "cpp_demangle",
- "rustc-demangle",
- "symbolic-common",
 ]
 
 [[package]]
@@ -3001,17 +2854,6 @@ checksum = "c06d3da6113f116aaee68e4d601191614c9053067f9ab7f6edbcb161237daa54"
 dependencies = [
  "once_cell",
  "valuable",
-]
-
-[[package]]
-name = "tracing-flame"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0bae117ee14789185e129aaee5d93750abe67fdc5a9a62650452bfe4e122a3a9"
-dependencies = [
- "lazy_static",
- "tracing",
- "tracing-subscriber",
 ]
 
 [[package]]

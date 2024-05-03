@@ -10,7 +10,7 @@ use libc::iovec;
 use libdeflater::CompressionLvl;
 use tracing::{debug, instrument};
 
-use crate::{global::Global, net::encoder::DataWriteInfo};
+use crate::{global::Global, net::encoder::DataWriteInfo, CowBytes};
 
 pub mod buffers;
 
@@ -32,7 +32,7 @@ pub const RING_SIZE: usize = MAX_PACKET_SIZE * 2;
 pub enum ServerEvent<'a> {
     AddPlayer { fd: Fd },
     RemovePlayer { fd: Fd },
-    RecvData { fd: Fd, data: &'a [u8] },
+    RecvData { fd: Fd, data: CowBytes<'a> },
     SentData { fd: Fd },
 }
 
@@ -64,8 +64,8 @@ impl ServerDef for Server {
         Ok(Self { inner })
     }
 
-    fn drain(&mut self) -> impl Iterator<Item = ServerEvent> {
-        self.inner.drain()
+    fn drain<'a>(&'a mut self, f: impl FnMut(ServerEvent<'a>)) -> std::io::Result<()> {
+        self.inner.drain(f)
     }
 
     unsafe fn register_buffers(&mut self, buffers: &[iovec]) {
@@ -109,7 +109,7 @@ pub trait ServerDef {
     fn new(address: SocketAddr) -> anyhow::Result<Self>
     where
         Self: Sized;
-    fn drain(&mut self) -> impl Iterator<Item = ServerEvent>;
+    fn drain<'a>(&'a mut self, f: impl FnMut(ServerEvent<'a>)) -> std::io::Result<()>;
 
     /// # Safety
     /// todo: not completely sure about all the invariants here
