@@ -5,10 +5,6 @@ publish = false
 edition = "2021"
 
 [dependencies]
-anyhow = "1.0.82"
-evenio.workspace = true
-fastrand = "2.0.2"
-serde_json = "1.0.116"
 server.workspace = true
 tracing = "0.1.40"
 tracing-subscriber = { version = "0.3.18", features = ["chrono", "env-filter"] }
