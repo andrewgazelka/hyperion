@@ -216,13 +216,11 @@ pub struct Shoved {
 
 /// An event when server stats are updated.
 #[derive(Event)]
-pub struct Stats<'a, 'b> {
+pub struct Stats {
     /// The number of milliseconds per tick in the last second.
     pub ms_per_tick_mean_1s: f64,
     /// The number of milliseconds per tick in the last 5 seconds.
     pub ms_per_tick_mean_5s: f64,
-
-    pub scratch: &'b mut BumpScratch<'a>,
 }
 
 // todo: naming? this seems bad
@@ -332,10 +330,7 @@ pub struct Scratches {
 
 // todo: why need two life times?
 #[derive(Event)]
-pub struct Gametick<'a, 'b> {
-    pub bump: &'a RayonLocal<Bump>,
-    pub scratch: &'b mut RayonLocal<BumpScratch<'a>>,
-}
+pub struct Gametick;
 
 /// An event that is sent when it is time to send packets to clients.
 #[derive(Event)]

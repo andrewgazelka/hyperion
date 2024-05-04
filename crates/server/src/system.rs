@@ -4,6 +4,7 @@
 
 mod block_update;
 mod chat_message;
+pub mod chunks;
 mod despawn_player;
 mod disguise_player;
 mod egress;
@@ -24,7 +25,6 @@ mod player_kick;
 mod pose_update;
 mod rebuild_player_location;
 mod recalculate_bounding_boxes;
-mod send_chunk_updates;
 mod set_player_skin;
 mod shoved_reaction;
 mod stats_message;
@@ -58,7 +58,6 @@ pub use player_kick::player_kick;
 pub use pose_update::pose_update;
 pub use rebuild_player_location::rebuild_player_location;
 pub use recalculate_bounding_boxes::recalculate_bounding_boxes;
-pub use send_chunk_updates::send_chunk_updates;
 pub use set_player_skin::set_player_skin;
 pub use shoved_reaction::shoved_reaction;
 pub use stats_message::stats_message;
