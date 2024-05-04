@@ -8,7 +8,7 @@ use evenio::component::Component;
 use fxhash::FxBuildHasher;
 use itertools::Itertools;
 use libdeflater::{CompressionLvl, Compressor};
-use tokio::runtime::Runtime;
+use tokio::{runtime::Runtime, task::JoinHandle};
 use tracing::instrument;
 use valence_anvil::parsing::parse_chunk;
 use valence_generated::block::BlockState;
@@ -107,15 +107,36 @@ thread_local! {
   static STATE: RefCell<TasksState> = RefCell::new(TasksState::default());
 }
 
+pub enum ChunkData {
+    Cached(Bytes),
+    Task(JoinHandle<()>),
+}
+
 impl Chunks {
+    /// todo: doesn't work in loading state
+    #[allow(clippy::missing_panics_doc, reason = "todo use unwrap unchecked")]
+    pub fn get_and_wait(&self, position: ChunkPos, tasks: &Tasks) -> anyhow::Result<Option<Bytes>> {
+        let result = match self.get_cached_or_load(position, tasks)? {
+            None => None,
+            Some(ChunkData::Cached(data)) => Some(data),
+            Some(ChunkData::Task(handle)) => {
+                tasks.block_on(handle)?;
+                let res = self.inner.cache.get(&position).unwrap().raw.clone();
+                Some(res)
+            }
+        };
+
+        Ok(result)
+    }
+
     #[instrument(skip_all, level = "trace")]
     pub fn get_cached_or_load(
         &self,
         position: ChunkPos,
         tasks: &Tasks,
-    ) -> anyhow::Result<Option<Bytes>> {
+    ) -> anyhow::Result<Option<ChunkData>> {
         if let Some(result) = self.inner.cache.get(&position) {
-            return Ok(Some(result.raw.clone()));
+            return Ok(Some(ChunkData::Cached(result.raw.clone())));
         }
 
         if !self.inner.loading.insert(position) {
@@ -124,7 +145,7 @@ impl Chunks {
 
         let inner = self.inner.clone();
 
-        tasks.spawn(async move {
+        let handle = tasks.spawn(async move {
             let mut decompress_buf = vec![0; 1024 * 1024];
 
             // https://rust-lang.github.io/rust-clippy/master/index.html#/large_futures
@@ -167,7 +188,7 @@ impl Chunks {
             });
         });
 
-        Ok(None)
+        Ok(Some(ChunkData::Task(handle)))
     }
 }
 

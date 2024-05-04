@@ -8,7 +8,7 @@ use valence_protocol::{packets::play, ChunkPos};
 
 use crate::{
     components::{
-        chunks::{Chunks, Tasks},
+        chunks::{ChunkData, Chunks, Tasks},
         FullEntityPose, LastSentChunk,
     },
     config::CONFIG,
@@ -85,11 +85,11 @@ pub fn send_updates(
 
         for &elem in &chunk_changes.changes {
             match chunks.get_cached_or_load(elem, &tasks) {
-                Ok(Some(chunk)) => {
+                Ok(Some(ChunkData::Cached(chunk))) => {
                     packets.append_raw(&chunk);
                     continue;
                 }
-                Ok(None) => {
+                Ok(Some(ChunkData::Task(..)) | None) => {
                     left_over.push(elem);
                     continue;
                 }
