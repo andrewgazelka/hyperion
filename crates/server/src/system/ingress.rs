@@ -208,7 +208,7 @@ pub enum SendElem {
     Command(event::Command),
     PoseUpdate(event::PoseUpdate),
     UpdateSelectedSlot(event::UpdateSelectedSlot),
-    
+    ClickEvent(event::ClickEvent),
 }
 
 #[instrument(skip_all, level = "trace")]
@@ -367,6 +367,7 @@ pub fn recv_data(
                 real_sender.send(event);
             }
             SendElem::UpdateSelectedSlot(event) => real_sender.send(event),
+            SendElem::ClickEvent(event) => real_sender.send(event),
         }
     }
 

@@ -354,8 +354,7 @@ pub fn switch(
     query: &mut PacketSwitchQuery,
 ) -> anyhow::Result<()> {
     let packet_id = raw.id;
-    let data = raw.body;
-    let data = &*data;
+    let data = raw.body.as_ref();
 
     match packet_id {
         play::HandSwingC2s::ID => hand_swing(data, query, sender)?,
@@ -404,39 +403,97 @@ fn inventory_action(
         carried_item,
     } = packet;
 
+    info!("slot changes: {:?}", slot_changes);
+
     // todo support other windows like chests, etc
     if window_id != 0 {
         return Ok(());
-    }
-    return Ok(());
+    };
 
-    match mode {
+    let x = match mode {
         ClickMode::Click => {
-            let event = event::ClickEvent {
-                id: todo!(),
-                click_type: todo!(),
-                slot: todo!(),
-            };
+            match button {
+                0 => event::ClickType::LeftClick { slot: slot_idx },
+                1 => event::ClickType::RightClick { slot: slot_idx },
+                _ => {
+                    // Button no supported for click
+                    // todo error
+                    return Ok(());
+                }
+            }
         }
         ClickMode::ShiftClick => {
-            // todo
+            // Shift right click is identical behavior to shift left click
+            match button {
+                0 => event::ClickType::ShiftLeftClick { slot: slot_idx },
+                1 => event::ClickType::ShiftRightClick { slot: slot_idx },
+                _ => {
+                    // Button no supported for shift click
+                    // todo error
+                    return Ok(());
+                }
+            }
         }
         ClickMode::Hotbar => {
-            // todo
+            match button {
+                // calculate real index
+                0..=8 => event::ClickType::HotbarKeyPress {
+                    button: button + 36,
+                    slot: slot_idx,
+                },
+                40 => event::ClickType::OffHandSwap { slot: slot_idx },
+                _ => {
+                    // Button no supported for hotbar
+                    // todo error
+                    return Ok(());
+                }
+            }
         }
-        ClickMode::CreativeMiddleClick => {
-            // todo
-        }
+        ClickMode::CreativeMiddleClick => event::ClickType::CreativeMiddleClick { slot: slot_idx },
         ClickMode::DropKey => {
-            // todo
+            match button {
+                0 => event::ClickType::QDrop { slot: slot_idx },
+                1 => event::ClickType::QControlDrop { slot: slot_idx },
+                _ => {
+                    // Button no supported for drop
+                    // todo error
+                    return Ok(());
+                }
+            }
         }
         ClickMode::Drag => {
-            // todo
+            match button {
+                0 => event::ClickType::StartLeftMouseDrag,
+                4 => event::ClickType::StartRightMouseDrag,
+                8 => event::ClickType::StartMiddleMouseDrag,
+                1 => event::ClickType::AddSlotLeftDrag { slot: slot_idx },
+                5 => event::ClickType::AddSlotRightDrag { slot: slot_idx },
+                9 => event::ClickType::AddSlotMiddleDrag { slot: slot_idx },
+                2 => event::ClickType::EndLeftMouseDrag,
+                6 => event::ClickType::EndRightMouseDrag,
+                10 => event::ClickType::EndMiddleMouseDrag,
+                _ => {
+                    // Button no supported for drag
+                    // todo error
+                    return Ok(());
+                }
+            }
         }
         ClickMode::DoubleClick => {
             // todo
+            return Ok(());
         }
-    }
+    };
 
-    Ok(())
+    let id = query.id;
+
+    let event = event::ClickEvent {
+        by: id,
+        click_type: x,
+        carried_item,
+    };
+
+    sender.push(event.into());
+
+    return Ok(());
 }

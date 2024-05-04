@@ -1,4 +1,4 @@
-use std::{alloc::Allocator, cell::RefCell, fmt::Debug};
+use std::{alloc::Allocator, borrow::Cow, cell::RefCell, fmt::Debug};
 
 use bumpalo::Bump;
 use derive_more::{Deref, DerefMut};
@@ -6,8 +6,8 @@ use evenio::{component::Component, entity::EntityId, event::Event};
 use glam::Vec3;
 use rayon_local::RayonLocal;
 use valence_generated::block::BlockState;
-use valence_protocol::{BlockPos, Hand};
-use valence_server::entity::EntityKind;
+use valence_protocol::{packets::play::click_slot_c2s::SlotChange, BlockPos, Hand};
+use valence_server::{entity::EntityKind, ItemStack};
 use valence_text::Text;
 
 use crate::{
@@ -16,54 +16,92 @@ use crate::{
     util::player_skin::PlayerSkin,
 };
 
-#[derive(Event)]
+#[derive(Event, Debug)]
+/// An event that is sent when a player clicks in the inventory.
 pub struct ClickEvent {
     #[event(target)]
-    pub id: EntityId,
+    pub by: EntityId,
     pub click_type: ClickType,
-    // None = -999 bzw. outside of inventory
-    pub slot: Option<i16>,
+    pub carried_item: ItemStack,
 }
 
+/// The type of click that the player performed.
+#[derive(Clone, Debug)]
 pub enum ClickType {
-    Left,
-    Right,
-}
-
-#[derive(Event)]
-pub struct ShiftClickEvent {
-    #[event(target)]
-    pub id: EntityId,
-}
-
-#[derive(Event)]
-pub struct HotbarEvent {
-    #[event(target)]
-    pub id: EntityId,
-}
-
-#[derive(Event)]
-pub struct CreativeMiddleClickEvent {
-    #[event(target)]
-    pub id: EntityId,
-}
-
-#[derive(Event)]
-pub struct DropKeyEvent {
-    #[event(target)]
-    pub id: EntityId,
-}
-
-#[derive(Event)]
-pub struct DragEvent {
-    #[event(target)]
-    pub id: EntityId,
-}
-
-#[derive(Event)]
-pub struct DoubleClickEvent {
-    #[event(target)]
-    pub id: EntityId,
+    LeftClick {
+        slot: i16,
+        // todo: left click only can result in 1 slot change right?
+        slot_change: SlotChange,
+    },
+    RightClick {
+        slot: i16,
+        // todo: left click only can result in 1 slot change right?
+        slot_change: SlotChange,
+    },
+    LeftClickOutsideOfWindow,
+    RightClickOutsideOfWindow,
+    ShiftLeftClick {
+        slot: i16,
+        // todo: should be 2 slot changes right?
+        slot_changes: [SlotChange; 2],
+    },
+    ShiftRightClick {
+        slot: i16,
+        // todo: should be 2 slot changes right?
+        slot_changes: [SlotChange; 2],
+    },
+    HotbarKeyPress {
+        button: i8,
+        slot: i16,
+        // todo: should be 2 slot changes right?
+        slot_changes: [SlotChange; 2],
+    },
+    OffHandSwap {
+        slot: i16,
+        // todo: should be 2 slot changes right?
+        slot_changes: [SlotChange; 2],
+    },
+    // todo: support for creative mode
+    CreativeMiddleClick {
+        slot: i16,
+    },
+    QDrop {
+        slot: i16,
+        // todo: left click only can result in 1 slot change right?
+        slot_change: SlotChange,
+    },
+    QControlDrop {
+        slot: i16,
+        // todo: left click only can result in 1 slot change right?
+        slot_change: SlotChange,
+    },
+    StartLeftMouseDrag,
+    StartRightMouseDrag,
+    StartMiddleMouseDrag,
+    AddSlotLeftDrag {
+        slot: i16,
+    },
+    AddSlotRightDrag {
+        slot: i16,
+    },
+    AddSlotMiddleDrag {
+        slot: i16,
+    },
+    EndLeftMouseDrag {
+        slot_changes: Vec<SlotChange>,
+    },
+    EndRightMouseDrag {
+        slot_changes: Vec<SlotChange>,
+    },
+    EndMiddleMouseDrag,
+    DoubleClick {
+        slot: i16,
+        slot_changes: Vec<SlotChange>,
+    },
+    DoubleClickReverseOrder {
+        slot: i16,
+        slot_changes: Vec<SlotChange>,
+    },
 }
 
 #[derive(Event)]
