@@ -63,8 +63,9 @@ num-format = "0.4.4"
 thiserror = "1.0.59"
 arraydeque = "0.5.1"
 arrayvec = "0.7.4"
-switchyard = "0.3.0"
 dashmap = "5.5.3"
+bitfield-struct = "0.6.1"
+bitvec = "1.0.1"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 io-uring = { git = "https://github.com/andrewgazelka/io-uring", branch = "feat-more-fixed-derive" }

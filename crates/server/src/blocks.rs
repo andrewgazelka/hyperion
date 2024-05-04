@@ -4,19 +4,12 @@ use anyhow::Context;
 use flate2::bufread::GzDecoder;
 use tar::Archive;
 use tracing::info;
-use valence_anvil::parsing::DimensionFolder;
-use valence_registry::BiomeRegistry;
-
-#[derive(Debug)]
-pub struct AnvilFolder {
-    pub dim: DimensionFolder,
-}
 
 #[allow(
     clippy::cognitive_complexity,
     reason = "todo break up into smaller functions"
 )]
-fn get_nyc_save() -> anyhow::Result<PathBuf> {
+pub fn get_nyc_save() -> anyhow::Result<PathBuf> {
     // $HOME/.hyperion
     let home_dir = dirs_next::home_dir().context("could not find home directory")?;
 
@@ -56,15 +49,4 @@ fn get_nyc_save() -> anyhow::Result<PathBuf> {
     }
 
     Ok(new_york_dir)
-}
-
-impl AnvilFolder {
-    pub fn new(biomes: &BiomeRegistry) -> anyhow::Result<Self> {
-        // let latest_save = get_latest_save()?;
-        let world = get_nyc_save()?;
-        info!("loading world from {world:?}");
-        let dim = DimensionFolder::new(world, biomes);
-
-        Ok(Self { dim })
-    }
 }
