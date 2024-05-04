@@ -203,6 +203,7 @@ pub enum SendElem {
     Command(event::Command),
     PoseUpdate(event::PoseUpdate),
     UpdateSelectedSlot(event::UpdateSelectedSlot),
+    
 }
 
 #[instrument(skip_all, level = "trace")]

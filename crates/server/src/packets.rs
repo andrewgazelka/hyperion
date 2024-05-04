@@ -17,12 +17,9 @@ use tracing::info;
 use valence_protocol::{
     decode::PacketFrame,
     math::Vec3,
-    packets::{
-        play,
-        play::{
-            client_command_c2s::ClientCommand, player_action_c2s::PlayerAction,
-            player_interact_entity_c2s::EntityInteraction,
-        },
+    packets::play::{
+        self, click_slot_c2s::ClickMode, client_command_c2s::ClientCommand,
+        player_action_c2s::PlayerAction, player_interact_entity_c2s::EntityInteraction,
     },
     Decode, Packet,
 };
@@ -379,8 +376,65 @@ pub fn switch(
         }
         // play::KeepAliveC2s::ID => keep_alive(query.keep_alive)?,
         play::CommandExecutionC2s::ID => chat_command(data, query, sender)?,
+        play::ClickSlotC2s::ID => inventory_action(data, sender, query)?,
         _ => {
             // info!("unknown packet id: 0x{:02X}", packet_id)
+        }
+    }
+
+    Ok(())
+}
+
+// for inventory events
+fn inventory_action(
+    mut data: &[u8],
+    sender: &mut Vec<SendElem>,
+    query: &PacketSwitchQuery,
+) -> anyhow::Result<()> {
+    let packet = play::ClickSlotC2s::decode(&mut data)?;
+
+    let play::ClickSlotC2s {
+        window_id,
+        // todo what is that for? something important?
+        state_id,
+        slot_idx,
+        button,
+        mode,
+        slot_changes,
+        carried_item,
+    } = packet;
+
+    // todo support other windows like chests, etc
+    if window_id != 0 {
+        return Ok(());
+    }
+    return Ok(());
+
+    match mode {
+        ClickMode::Click => {
+            let event = event::ClickEvent {
+                id: todo!(),
+                click_type: todo!(),
+                slot: todo!(),
+            };
+        }
+        ClickMode::ShiftClick => {
+            // todo
+        }
+        ClickMode::Hotbar => {
+            // todo
+        }
+        ClickMode::CreativeMiddleClick => {
+            // todo
+        }
+        ClickMode::DropKey => {
+            // todo
+        }
+        ClickMode::Drag => {
+            // todo
+        }
+        ClickMode::DoubleClick => {
+            // todo
         }
     }
 

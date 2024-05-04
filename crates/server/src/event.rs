@@ -16,6 +16,71 @@ use crate::{
     util::player_skin::PlayerSkin,
 };
 
+#[derive(Event)]
+pub struct ClickEvent {
+    #[event(target)]
+    pub id: EntityId,
+    pub click_type: ClickType,
+    // None = -999 bzw. outside of inventory
+    pub slot: Option<i16>,
+}
+
+pub enum ClickType {
+    Left,
+    Right,
+}
+
+#[derive(Event)]
+pub struct ShiftClickEvent {
+    #[event(target)]
+    pub id: EntityId,
+}
+
+#[derive(Event)]
+pub struct HotbarEvent {
+    #[event(target)]
+    pub id: EntityId,
+}
+
+#[derive(Event)]
+pub struct CreativeMiddleClickEvent {
+    #[event(target)]
+    pub id: EntityId,
+}
+
+#[derive(Event)]
+pub struct DropKeyEvent {
+    #[event(target)]
+    pub id: EntityId,
+}
+
+#[derive(Event)]
+pub struct DragEvent {
+    #[event(target)]
+    pub id: EntityId,
+}
+
+#[derive(Event)]
+pub struct DoubleClickEvent {
+    #[event(target)]
+    pub id: EntityId,
+}
+
+#[derive(Event)]
+/// An event that is sent when a player is changes his main hand
+pub struct UpdateSelectedSlot {
+    #[event(target)]
+    pub id: EntityId,
+    pub slot: usize,
+}
+
+/// This event is sent when the payer equipment gets sent to the client.
+#[derive(Event)]
+pub struct UpdateEquipment {
+    #[event(target)]
+    pub id: EntityId,
+}
+
 /// Initialize a Minecraft entity (like a zombie) with a given pose.
 #[derive(Event)]
 pub struct InitEntity {
@@ -213,21 +278,6 @@ impl<A: Allocator> From<A> for Scratch<A> {
             inner: Vec::with_capacity_in(MAX_PACKET_SIZE, allocator),
         }
     }
-}
-
-#[derive(Event)]
-/// An event that is sent when a player is changes his main hand
-pub struct UpdateSelectedSlot {
-    #[event(target)]
-    pub id: EntityId,
-    pub slot: usize,
-}
-
-/// This event is sent when the payer equipment gets sent to the client.
-#[derive(Event)]
-pub struct UpdateEquipment {
-    #[event(target)]
-    pub id: EntityId,
 }
 
 #[derive(Event)]
