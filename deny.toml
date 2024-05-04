@@ -88,11 +88,13 @@ ignore = [
 # List of explicitly allowed licenses
 # See https://spdx.org/licenses/ for list of possible licenses
 # [possible values: any SPDX 3.11 short identifier (+ optional exception)].
+# todo: is MPL ok?
 allow = [
     "MIT",
     "Apache-2.0",
     "Unicode-DFS-2016",
-    "BSD-3-Clause"
+    "BSD-3-Clause",
+    "Zlib",
     #"Apache-2.0 WITH LLVM-exception",
 ]
 # The confidence threshold for detecting a license from license text.
@@ -106,6 +108,8 @@ exceptions = [
     # Each entry is the crate and version constraint, and its specific allow
     # list
     #{ allow = ["Zlib"], crate = "adler32" },
+    # TODO: this is an OR clause I am confused I think we are taking the MPL verion
+    { allow = ["MPL-2.0", "LGPL-3.0"], crate = "priority-queue" },
 ]
 
 # Some crates don't have (easily) machine readable licensing information,
@@ -221,6 +225,10 @@ skip = [
     "bitflags",
 #    "glam",
     "toml_edit",
+    "parking_lot_core",
+    "parking_lot",
+    "indexmap",
+    "hashbrown",
     "winnow",
     "windows-core",
     "derive_more",

@@ -187,6 +187,14 @@ pub struct LastSentChunk {
     pub chunk: ChunkPos,
 }
 
+const SANE_MAX_RADIUS: i32 = 128;
+
+impl LastSentChunk {
+    pub const NULL: Self = Self {
+        chunk: ChunkPos::new(i32::MAX - SANE_MAX_RADIUS, i32::MAX - SANE_MAX_RADIUS),
+    };
+}
+
 pub const PLAYER_SPAWN_POSITION: Vec3 = Vec3::new(-464.0, -16.0, -60.0);
 
 impl FullEntityPose {

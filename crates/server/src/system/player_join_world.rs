@@ -2,7 +2,6 @@ use std::{borrow::Cow, collections::BTreeSet};
 
 use anyhow::{bail, Context};
 use evenio::prelude::*;
-use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use serde::Deserialize;
 use tracing::{debug, info, instrument, trace, warn};
 use valence_nbt::{value::ValueRef, Value};
@@ -21,7 +20,7 @@ use valence_protocol::{
         },
     },
     text::IntoText,
-    ByteAngle, ChunkPos, GameMode, Ident, ItemKind, ItemStack, PacketEncoder, VarInt,
+    ByteAngle, GameMode, Ident, ItemKind, ItemStack, PacketEncoder, VarInt,
 };
 use valence_registry::{
     biome::{Biome, BiomeEffects},
@@ -29,9 +28,7 @@ use valence_registry::{
 };
 
 use crate::{
-    components::{
-        chunks::Chunks, Display, FullEntityPose, InGameName, Player, Uuid, PLAYER_SPAWN_POSITION,
-    },
+    components::{Display, FullEntityPose, InGameName, Player, Uuid, PLAYER_SPAWN_POSITION},
     config::CONFIG,
     event::PlayerJoinWorld,
     global::Global,
@@ -78,7 +75,6 @@ pub fn player_join_world(
     mut uuid_lookup: Single<&mut PlayerUuidLookup>,
     mut id_lookup: Single<&mut EntityIdLookup>,
     broadcast: Single<&Broadcast>,
-    chunks: Single<&Chunks>,
     compose: Compose,
 ) {
     static CACHED_DATA: once_cell::sync::OnceCell<bytes::Bytes> = once_cell::sync::OnceCell::new();
@@ -90,7 +86,7 @@ pub fn player_join_world(
         encoder.set_compression(compression_level);
 
         info!("caching world data for new players");
-        inner(&mut encoder, &chunks, &compose).unwrap();
+        inner(&mut encoder).unwrap();
 
         let bytes = encoder.take();
         bytes.freeze()
@@ -548,7 +544,7 @@ fn send_sync_tags(encoder: &mut PacketEncoder) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn inner(encoder: &mut PacketEncoder, chunks: &Chunks, compose: &Compose) -> anyhow::Result<()> {
+fn inner(encoder: &mut PacketEncoder) -> anyhow::Result<()> {
     send_game_join_packet(encoder)?;
     send_sync_tags(encoder)?;
 
@@ -560,28 +556,28 @@ fn inner(encoder: &mut PacketEncoder, chunks: &Chunks, compose: &Compose) -> any
         chunk_z: center_chunk.z.into(),
     })?;
 
-    let radius = CONFIG.view_distance;
+    // let radius = 2;
 
     // todo: right number?
-    let number_chunks = (radius * 2 + 1) * (radius * 2 + 1);
-    let bytes_to_append = crossbeam_queue::ArrayQueue::new(usize::try_from(number_chunks).unwrap());
-
-    (0..number_chunks).into_par_iter().for_each(|i| {
-        let x = i % (radius * 2 + 1);
-        let z = i / (radius * 2 + 1);
-
-        let x = center_chunk.x + x - radius;
-        let z = center_chunk.z + z - radius;
-
-        let chunk = ChunkPos::new(x, z);
-        if let Ok(Some(chunk)) = chunks.get(chunk, compose) {
-            bytes_to_append.push(chunk).unwrap();
-        }
-    });
-
-    for elem in bytes_to_append {
-        encoder.append_bytes(&elem);
-    }
+    // let number_chunks = (radius * 2 + 1) * (radius * 2 + 1);
+    // let bytes_to_append = crossbeam_queue::ArrayQueue::new(usize::try_from(number_chunks).unwrap());
+    //
+    // (0..number_chunks).into_par_iter().for_each(|i| {
+    //     let x = i % (radius * 2 + 1);
+    //     let z = i / (radius * 2 + 1);
+    //
+    //     let x = center_chunk.x + x - radius;
+    //     let z = center_chunk.z + z - radius;
+    //
+    //     let chunk = ChunkPos::new(x, z);
+    //     if let Ok(Some(chunk)) = chunks.get(chunk, compose) {
+    //         bytes_to_append.push(chunk).unwrap();
+    //     }
+    // });
+    //
+    // for elem in bytes_to_append {
+    //     encoder.append_bytes(&elem);
+    // }
 
     send_commands(encoder)?;
 
