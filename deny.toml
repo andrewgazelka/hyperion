@@ -109,7 +109,6 @@ exceptions = [
     # list
     #{ allow = ["Zlib"], crate = "adler32" },
     # TODO: this is an OR clause I am confused I think we are taking the MPL verion
-    { allow = ["MPL-2.0", "LGPL-3.0"], crate = "priority-queue" },
 ]
 
 # Some crates don't have (easily) machine readable licensing information,
@@ -233,6 +232,7 @@ skip = [
     "windows-core",
     "derive_more",
     "redox_syscall",
+    "bitfield-struct",
     #{ crate = "ansi_term@0.11.0", reason = "you can specify a reason why it can't be updated/removed" },
 ]
 # Similarly to `skip` allows you to skip certain crates during duplicate

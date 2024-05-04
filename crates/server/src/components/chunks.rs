@@ -1,4 +1,4 @@
-use std::{borrow::Cow, cell::RefCell, io::Write, sync::Arc};
+use std::{borrow::Cow, cell::RefCell, collections::BTreeMap, io::Write, sync::Arc};
 
 use anyhow::Context;
 use bytes::{Bytes, BytesMut};
@@ -8,18 +8,21 @@ use evenio::component::Component;
 use fxhash::FxBuildHasher;
 use itertools::Itertools;
 use libdeflater::{CompressionLvl, Compressor};
-use switchyard::{threads::thread_info, Switchyard};
+use tokio::runtime::Runtime;
 use tracing::instrument;
+use valence_anvil::parsing::parse_chunk;
 use valence_generated::block::BlockState;
 use valence_nbt::{compound, List};
-use valence_protocol::{packets::play, ChunkPos, CompressionThreshold, Encode, FixedArray};
-use valence_registry::{BiomeRegistry, RegistryIdx};
+use valence_protocol::{packets::play, ChunkPos, CompressionThreshold, Encode, FixedArray, Ident};
+use valence_registry::{biome::BiomeId, BiomeRegistry, RegistryIdx};
 use valence_server::layer::chunk::{bit_width, BiomeContainer, BlockStateContainer, UnloadedChunk};
 
 use crate::{
-    bits::BitStorage, blocks::AnvilFolder, chunk::heightmap, default, event::Scratch,
-    net::encoder::PacketEncoder,
+    bits::BitStorage, chunk::heightmap, components::chunks::loader::Regions, default,
+    event::Scratch, net::encoder::PacketEncoder,
 };
+mod loader;
+mod region;
 
 pub struct TasksState {
     bytes: BytesMut,
@@ -37,25 +40,24 @@ impl Default for TasksState {
     }
 }
 
-#[derive(Deref, DerefMut, Component)]
+#[derive(Component, Deref, DerefMut)]
 pub struct Tasks {
-    switchyard: Switchyard<RefCell<TasksState>>,
+    runtime: Runtime,
 }
 
 impl Default for Tasks {
     fn default() -> Self {
-        let allocations = switchyard::threads::one_to_one(thread_info(), Some("switchyard"));
+        let runtime = tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .unwrap();
 
-        let switchyard =
-            Switchyard::new(allocations, || RefCell::new(TasksState::default())).unwrap();
-
-        Self { switchyard }
+        Self { runtime }
     }
 }
 
 #[derive(Debug)]
 pub struct LoadedChunk {
-    // inner: UnloadedChunk,
     pub raw: Bytes,
 }
 
@@ -77,18 +79,32 @@ pub struct ChunksInner {
     // todo: impl more efficient (probably lru) cache
     cache: DashMap<ChunkPos, LoadedChunk, FxBuildHasher>,
     loading: DashSet<ChunkPos, FxBuildHasher>,
-    loader: parking_lot::Mutex<AnvilFolder>,
+    regions: Regions,
+    biome_to_id: BTreeMap<Ident<String>, BiomeId>,
 }
 
+impl ChunksInner {}
+
 impl ChunksInner {
-    pub fn new(registry: &BiomeRegistry) -> anyhow::Result<Self> {
-        let loader = AnvilFolder::new(registry).context("failed to get anvil data")?;
+    pub fn new(biomes: &BiomeRegistry) -> anyhow::Result<Self> {
+        let regions = Regions::new().context("failed to get anvil data")?;
+
+        let biome_to_id = biomes
+            .iter()
+            .map(|(id, name, _)| (name.to_string_ident(), id))
+            .collect();
+
         Ok(Self {
             cache: default(),
             loading: default(),
-            loader: loader.into(),
+            regions,
+            biome_to_id,
         })
     }
+}
+
+thread_local! {
+  static STATE: RefCell<TasksState> = RefCell::new(TasksState::default());
 }
 
 impl Chunks {
@@ -108,32 +124,47 @@ impl Chunks {
 
         let inner = self.inner.clone();
 
-        tasks.spawn_local(1, move |state| async move {
-            let chunk = {
-                let mut loader = inner.loader.lock();
-                loader.dim.get_chunk(position)
+        tasks.spawn(async move {
+            let mut decompress_buf = vec![0; 1024 * 1024];
+
+            // https://rust-lang.github.io/rust-clippy/master/index.html#/large_futures
+            let region = inner
+                .regions
+                .get_region_from_chunk(position.x, position.z)
+                .await;
+
+            let raw_chunk = {
+                let mut region_access = region.lock().await;
+
+                region_access
+                    .get_chunk(
+                        position.x,
+                        position.z,
+                        &mut decompress_buf,
+                        inner.regions.root(),
+                    )
+                    .await
+                    .unwrap()
+                    .unwrap()
             };
 
-            let Ok(chunk) = chunk else {
+            let Ok(chunk) = parse_chunk(raw_chunk.data, &inner.biome_to_id) else {
                 return;
             };
 
-            let Some(chunk) = chunk else {
-                return;
-            };
+            STATE.with_borrow_mut(|state| {
+                let Ok(Some(bytes)) = encode_chunk_packet(&chunk, position, state) else {
+                    return;
+                };
 
-            let mut state = state.borrow_mut();
-            let Ok(Some(bytes)) = encode_chunk_packet(&chunk.chunk, position, &mut state) else {
-                return;
-            };
+                inner.cache.insert(position, LoadedChunk {
+                    raw: bytes.freeze(),
+                });
 
-            inner.cache.insert(position, LoadedChunk {
-                raw: bytes.freeze(),
+                let present = inner.loading.remove(&position);
+
+                debug_assert!(present.is_some());
             });
-
-            let present = inner.loading.remove(&position);
-
-            debug_assert!(present.is_some());
         });
 
         Ok(None)
