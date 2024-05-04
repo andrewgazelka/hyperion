@@ -28,11 +28,9 @@ Hyperion requires Linux 6.0 or above and io_uring support.
 ```bash
 git clone https://github.com/andrewgazelka/hyperion
 cd hyperion
-cargo run --release --bin server
+cargo run --release --example basic
 ```
-When joining the Server loads the last played singleplayer map.  
-**At the moment, the player spawns at -656.0, 18.0, -1695.0, so make sure the chunks are loaded.**
-
+When joining the Server downloads a map and loads it.  
 
 # FAQ
 
