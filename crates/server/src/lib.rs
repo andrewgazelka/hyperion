@@ -37,7 +37,6 @@ use libc::{getrlimit, setrlimit, RLIMIT_NOFILE};
 use libdeflater::CompressionLvl;
 use ndarray::s;
 use num_format::Locale;
-use rayon_local::RayonLocal;
 use signal_hook::iterator::Signals;
 use singleton::bounding_box;
 use spin::Lazy;
@@ -50,7 +49,7 @@ use crate::{
         chunks::{Chunks, Tasks},
         Vitals,
     },
-    event::{BumpScratch, Egress, Gametick, Scratches, Stats},
+    event::{Egress, Gametick, Scratches, Stats},
     global::Global,
     net::{buffers::BufferAllocator, Broadcast, Compressors, Server, ServerDef, S2C_BUFFER_SIZE},
     singleton::{
@@ -470,16 +469,10 @@ impl Hyperion {
 
         self.last_ticks.push_back(now);
 
-        let bump = RayonLocal::init(bumpalo::Bump::new);
-        let mut scratch = bump.map_ref(event::Scratch::from);
-
         generate_ingress_events(&mut self.world, &mut self.server);
 
         tracing::span!(tracing::Level::TRACE, "gametick").in_scope(|| {
-            self.world.send(Gametick {
-                bump: &bump,
-                scratch: &mut scratch, // todo: any problem with ref vs val
-            });
+            self.world.send(Gametick);
         });
 
         let server = &mut self.server;
@@ -494,12 +487,12 @@ impl Hyperion {
                       (~52 days)"
         )]
         let ms = now.elapsed().as_nanos() as f64 / 1_000_000.0;
-        self.update_tick_stats(ms, scratch.one());
+        self.update_tick_stats(ms);
         self.calculate_wait_duration()
     }
 
     #[instrument(skip_all, level = "trace")]
-    fn update_tick_stats(&mut self, ms: f64, scratch: &mut BumpScratch) {
+    fn update_tick_stats(&mut self, ms: f64) {
         self.last_ms_per_tick.push_back(ms);
 
         if self.last_ms_per_tick.len() > MSPT_HISTORY_SIZE {
@@ -515,7 +508,6 @@ impl Hyperion {
             self.world.send(Stats {
                 ms_per_tick_mean_1s: mean_1_second,
                 ms_per_tick_mean_5s: mean_5_seconds,
-                scratch,
             });
 
             self.last_ms_per_tick.pop_front();
