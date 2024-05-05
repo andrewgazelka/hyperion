@@ -16,6 +16,8 @@ tracing = "0.1.40"
 tracing-subscriber = { version = "0.3.18", features = ["chrono", "env-filter"] }
 clap = { version = "4.5.4", features = ["derive"] }
 tracing-tracy = "0.11.0"
+bvh = { git = "https://github.com/andrewgazelka/bvh-data" }
+glam = { workspace = true, features = ["core-simd", "fast-math"] }
 
 [dev-dependencies]
 tokio = { version = "1.37.0", features = ["full"] }

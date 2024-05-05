@@ -1,9 +1,19 @@
+use evenio::entity::EntityId;
 use server::evenio::component::Component;
 
-#[derive(Component, PartialOrd, PartialEq, Debug, Eq, Ord, Hash, Copy, Clone)]
+#[derive(Component, Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Team {
     Human,
     Zombie,
 }
 
-const _: () = assert!(std::mem::size_of::<Team>() == 1);
+#[derive(Component, Default)]
+pub struct HumanLocations {
+    pub bvh: bvh::Bvh<EntityId>,
+}
+
+#[derive(Component)]
+pub struct Human;
+
+#[derive(Component)]
+pub struct Zombie;

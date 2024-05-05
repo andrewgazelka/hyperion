@@ -3,24 +3,30 @@
     reason = "this is used in the event loop"
 )]
 
+use bvh::{Data, Point};
 use evenio::{
-    event::{EventMut, Insert},
-    fetch::Fetcher,
+    event::{EventMut, Insert, Remove},
+    fetch::{Fetcher, Single},
+    query::{Query, With},
 };
+use glam::I16Vec2;
 use server::{
-    components::{Vitals, PLAYER_SPAWN_POSITION},
+    components::{ChunkLocation, FullEntityPose, Vitals, PLAYER_SPAWN_POSITION},
     evenio::{
         entity::EntityId,
         event::{Receiver, ReceiverMut, Sender},
     },
     event,
-    event::Shoved,
+    event::{Gametick, Shoved},
     util::player_skin::PlayerSkin,
-    valence_server::{entity::EntityKind, protocol::status_effects::StatusEffect, Text},
+    valence_server::{entity::EntityKind, protocol::status_effects::StatusEffect, BlockPos, Text},
 };
 use tracing::{instrument, warn};
 
-use crate::components::Team;
+use crate::{
+    components::{Human, HumanLocations, Team, Zombie},
+    ToZombie,
+};
 
 // makes it easier to test with the same account
 #[instrument(skip_all)]
@@ -45,20 +51,96 @@ pub fn scramble_player_name(mut r: ReceiverMut<event::PlayerInit, ()>) {
     r.event.username = name.into_boxed_str();
 }
 
-#[instrument(skip_all)]
-pub fn assign_team_on_join(
-    r: ReceiverMut<event::PlayerInit, EntityId>,
-    mut s: Sender<Insert<Team>>,
+#[derive(Query)]
+pub struct BvhHuman<'a> {
+    id: EntityId,
+    location: &'a ChunkLocation,
+    _human: With<&'static Human>,
+}
+
+impl<'a> Point for BvhHuman<'a> {
+    fn point(&self) -> I16Vec2 {
+        self.location.0
+    }
+}
+
+impl<'a> Data for BvhHuman<'a> {
+    type Unit = EntityId;
+
+    fn data(&self) -> &[EntityId] {
+        core::slice::from_ref(&self.id)
+    }
+}
+
+pub fn calculate_chunk_level_bvh(
+    _: Receiver<Gametick>,
+    humans: Fetcher<BvhHuman>,
+    mut human_locations: Single<&mut HumanLocations>,
 ) {
-    s.insert(r.event.target, Team::Human);
+    let humans: Vec<_> = humans.iter().collect();
+
+    let len = humans.len();
+    human_locations.bvh = bvh::Bvh::build(humans, len);
+}
+
+pub fn point_close_player(
+    _: Receiver<Gametick>,
+    human_locations: Single<&HumanLocations>,
+    zombies: Fetcher<(&ChunkLocation, EntityId, With<&Zombie>)>,
+    poses: Fetcher<&FullEntityPose>,
+    mut s: Sender<event::Compass>,
+) {
+    for (location, id, _) in zombies {
+        let Some(ids) = human_locations.bvh.get_closest_slice(location.0) else {
+            continue;
+        };
+
+        if ids.is_empty() {
+            continue;
+        }
+
+        let random = fastrand::usize(..ids.len());
+        let point_to_id = ids[random];
+
+        let Ok(point_to_pose) = poses.get(point_to_id) else {
+            continue;
+        };
+
+        let point_to = BlockPos::from(point_to_pose.position.as_dvec3());
+
+        s.send(event::Compass {
+            target: id,
+            point_to,
+        });
+    }
 }
 
 #[instrument(skip_all)]
-pub fn respawn_on_death(
-    r: Receiver<event::Death, (EntityId, &mut Team, &mut Vitals)>,
-    mut s: Sender<(event::DisguisePlayer, event::Teleport)>,
+pub fn assign_team_on_join(
+    r: ReceiverMut<event::PlayerInit, EntityId>,
+    mut s: Sender<(Insert<Team>, Insert<Human>)>,
 ) {
-    let (target, team, vitals) = r.query;
+    let target = r.event.target;
+    s.insert(target, Team::Human);
+    s.insert(target, Human);
+}
+
+#[allow(clippy::type_complexity, reason = "required")]
+pub fn to_zombie(
+    r: ReceiverMut<ToZombie, (&mut Team, &mut Vitals)>,
+    mut s: Sender<(
+        Insert<Team>,
+        Insert<Zombie>,
+        Remove<Human>,
+        event::DisguisePlayer,
+        event::Teleport,
+        event::SetPlayerSkin,
+        event::DisplayPotionEffect,
+        event::SpeedEffect,
+    )>,
+) {
+    let (team, vitals) = r.query;
+    let target = r.event.target;
 
     *team = Team::Zombie;
 
@@ -67,47 +149,22 @@ pub fn respawn_on_death(
         mob: EntityKind::ZOMBIE,
     });
 
-    // teleport
-    let position = PLAYER_SPAWN_POSITION;
-    s.send(event::Teleport { target, position });
     *vitals = Vitals::ALIVE;
-}
-
-#[instrument(skip_all)]
-pub fn zombie_command(
-    r: ReceiverMut<event::Command, (EntityId, &mut Team)>,
-    mut s: Sender<(
-        event::DisguisePlayer,
-        event::ChatMessage,
-        event::SetPlayerSkin,
-        event::DisplayPotionEffect,
-        event::SpeedEffect,
-    )>,
-) {
-    // todo: permissions
-    let raw = &r.event.raw;
-
-    // todo: how to do commands in non O(n) time?
-    if raw != "zombie" {
-        return;
-    }
-
-    let (target, team) = r.query;
-
-    *team = Team::Zombie;
-
-    s.send(event::ChatMessage {
-        target,
-        message: Text::text("Turning into zombie"),
-    });
 
     let zombie_skin = include_bytes!("zombie_skin.json");
     let zombie_skin: PlayerSkin = serde_json::from_slice(zombie_skin).unwrap();
+
+    s.insert(target, Zombie);
+    s.remove::<Human>(target);
 
     s.send(event::SetPlayerSkin {
         target,
         skin: zombie_skin,
     });
+
+    // teleport
+    let position = PLAYER_SPAWN_POSITION;
+    s.send(event::Teleport { target, position });
 
     s.send(event::DisguisePlayer {
         target,
@@ -128,22 +185,36 @@ pub fn zombie_command(
     s.send(event::SpeedEffect::new(target, 0));
 }
 
-// fn to_zombie(target: EntityId, s: &mut Sender<(event::DisguisePlayer, event::PotionEffect)>) {
-//     s.send(event::DisguisePlayer {
-//         target,
-//         mob: EntityKind::ZOMBIE,
-//     });
-//
-//     s.send(event::PotionEffect {
-//         target,
-//         effect: StatusEffect::Speed,
-//         amplifier: 2,
-//         duration: 99999,
-//         ambient: false,
-//         show_particles: false,
-//         show_icon: false,
-//     });
-// }
+#[instrument(skip_all)]
+pub fn respawn_on_death(r: Receiver<event::Death, EntityId>, mut s: Sender<ToZombie>) {
+    let target = r.event.target;
+    s.send(ToZombie { target });
+}
+
+#[instrument(skip_all)]
+pub fn zombie_command(
+    r: ReceiverMut<event::Command, (EntityId, &mut Team)>,
+    mut s: Sender<(event::ChatMessage, ToZombie)>,
+) {
+    // todo: permissions
+    let raw = &r.event.raw;
+
+    // todo: how to do commands in non O(n) time?
+    if raw != "zombie" {
+        return;
+    }
+
+    let (target, team) = r.query;
+
+    *team = Team::Zombie;
+
+    s.send(event::ChatMessage {
+        target,
+        message: Text::text("Turning into zombie"),
+    });
+
+    s.send(ToZombie { target });
+}
 
 #[instrument(skip_all)]
 pub fn bump_into_player(r: ReceiverMut<Shoved, &Team>, fetcher: Fetcher<&Team>) {

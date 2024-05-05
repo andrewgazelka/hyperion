@@ -10,7 +10,7 @@ fn main() {
     divan::main();
 }
 
-use bvh::{create_random_elements_1, random_aabb, Bvh, Heuristic, TrivialHeuristic};
+use bvh_region::{create_random_elements_1, random_aabb, Bvh, Heuristic, TrivialHeuristic};
 
 const ENTITY_COUNTS: &[usize] = &[100, 1_000, 10_000];
 

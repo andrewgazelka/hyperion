@@ -8,8 +8,8 @@ use valence_protocol::{packets::login, Bounded};
 
 use crate::{
     components::{
-        AiTargetable, EntityReaction, FullEntityPose, ImmuneStatus, InGameName, KeepAlive,
-        LastSentChunk, Player, Uuid, Vitals,
+        AiTargetable, ChunkLocation, EntityReaction, FullEntityPose, ImmuneStatus, InGameName,
+        KeepAlive, Player, Uuid, Vitals,
     },
     event::{PlayerInit, PlayerJoinWorld},
     net::{Compose, Packets},
@@ -41,7 +41,7 @@ pub fn init_player(
         Insert<Vitals>,
         Insert<Prev<Vitals>>,
         Insert<KeepAlive>,
-        Insert<LastSentChunk>,
+        Insert<ChunkLocation>,
         Insert<AiTargetable>,
         Insert<InGameName>,
         Insert<ChunkChanges>,
@@ -87,7 +87,7 @@ pub fn init_player(
     s.insert(entity, ChunkChanges::default());
 
     // so we always send updates
-    s.insert(entity, LastSentChunk::NULL);
+    s.insert(entity, ChunkLocation::NULL);
 
     s.insert(entity, EntityReaction::default());
 

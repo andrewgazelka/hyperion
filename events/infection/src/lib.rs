@@ -3,10 +3,19 @@
 
 use std::net::ToSocketAddrs;
 
+use evenio::{entity::EntityId, event::Event};
 use server::{valence_server::protocol::anyhow, Hyperion};
+
+use crate::components::HumanLocations;
 
 mod components;
 mod system;
+
+#[derive(Event)]
+struct ToZombie {
+    #[event(target)]
+    target: EntityId,
+}
 
 pub fn init_game(address: impl ToSocketAddrs + Send + Sync + 'static) -> anyhow::Result<()> {
     let mut game = Hyperion::init_with(address, |world| {
@@ -24,6 +33,14 @@ pub fn init_game(address: impl ToSocketAddrs + Send + Sync + 'static) -> anyhow:
 
         // commands
         world.add_handler(system::zombie_command);
+
+        world.add_handler(system::calculate_chunk_level_bvh);
+        world.add_handler(system::point_close_player);
+
+        world.add_handler(system::to_zombie);
+
+        let locations = world.spawn();
+        world.insert(locations, HumanLocations::default());
     })?;
 
     game.game_loop();
