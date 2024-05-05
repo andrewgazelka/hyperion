@@ -26,8 +26,7 @@ pub fn spawn_entity_packet(
     pose: &FullEntityPose,
 ) -> valence_protocol::packets::play::EntitySpawnS2c {
     info!("spawning entity");
-    
-    
+
     #[expect(clippy::cast_possible_wrap, reason = "wrapping is ok in this case")]
     let entity_id = VarInt(id.index().0 as i32);
 
