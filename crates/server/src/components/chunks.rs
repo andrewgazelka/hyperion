@@ -10,7 +10,7 @@ use glam::I16Vec2;
 use itertools::Itertools;
 use libdeflater::{CompressionLvl, Compressor};
 use tokio::{runtime::Runtime, task::JoinHandle};
-use tracing::instrument;
+use tracing::{error, instrument};
 use valence_anvil::parsing::parse_chunk;
 use valence_generated::block::BlockState;
 use valence_nbt::{compound, List};
@@ -171,11 +171,23 @@ impl Chunks {
             };
 
             let Ok(chunk) = parse_chunk(raw_chunk.data, &inner.biome_to_id) else {
+                error!("failed to parse chunk {position:?}");
+                inner
+                    .cache
+                    .insert(position, LoadedChunk { raw: Bytes::new() });
+
+                inner.loading.remove(&position);
+
                 return;
             };
 
             STATE.with_borrow_mut(|state| {
                 let Ok(Some(bytes)) = encode_chunk_packet(&chunk, position, state) else {
+                    inner
+                        .cache
+                        .insert(position, LoadedChunk { raw: Bytes::new() });
+
+                    inner.loading.remove(&position);
                     return;
                 };
 
