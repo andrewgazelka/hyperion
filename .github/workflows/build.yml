@@ -55,9 +55,6 @@ jobs:
         with:
           components: rustfmt
 
-      - uses: Swatinem/rust-cache@v2
-        with:
-          cache-on-failure: true
       - name: Run rustfmt
         run: |
           cargo fmt --all -- --check
