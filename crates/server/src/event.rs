@@ -5,7 +5,7 @@ use derive_more::{Deref, DerefMut};
 use evenio::{component::Component, entity::EntityId, event::Event};
 use glam::Vec3;
 use rayon_local::RayonLocal;
-use valence_generated::block::BlockState;
+use valence_generated::{block::BlockState, status_effects::StatusEffect};
 use valence_protocol::{packets::play::click_slot_c2s::SlotChange, BlockPos, Hand};
 use valence_server::{entity::EntityKind, ItemStack};
 use valence_text::Text;
@@ -364,6 +364,42 @@ pub struct DisguisePlayer {
 #[derive(Component, Deref, DerefMut, Default)]
 pub struct Scratches {
     inner: RayonLocal<RefCell<Scratch>>,
+}
+
+/// This often only displays the effect. For instance, for speed it does not give the actual speed effect.
+#[derive(Event, Copy, Clone)]
+pub struct DisplayPotionEffect {
+    #[event(target)]
+    pub target: EntityId,
+    pub effect: StatusEffect,
+    pub amplifier: u8,
+    pub duration: i32,
+
+    // todo: make this a bitfield
+    ///  whether or not this is an effect provided by a beacon and therefore should be less intrusive on the screen.
+    /// Optional, and defaults to false.
+    pub ambient: bool,
+    pub show_particles: bool,
+    pub show_icon: bool,
+}
+
+#[derive(Event, Copy, Clone)]
+pub struct SpeedEffect {
+    #[event(target)]
+    target: EntityId,
+    level: u8,
+}
+
+impl SpeedEffect {
+    #[must_use]
+    pub const fn new(target: EntityId, level: u8) -> Self {
+        Self { target, level }
+    }
+
+    #[must_use]
+    pub const fn level(&self) -> u8 {
+        self.level
+    }
 }
 
 // todo: why need two life times?

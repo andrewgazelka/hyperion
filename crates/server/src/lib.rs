@@ -1,6 +1,5 @@
 //! Hyperion
 
-#![feature(split_at_checked)]
 #![feature(type_alias_impl_trait)]
 #![feature(lint_reasons)]
 #![feature(io_error_more)]
@@ -358,6 +357,9 @@ impl Hyperion {
         world.add_handler(system::teleport);
         world.add_handler(system::shoved_reaction);
         world.add_handler(system::pose_update);
+
+        world.add_handler(system::effect::display);
+        world.add_handler(system::effect::speed);
 
         world.add_handler(system::pkt_hand_swing);
 

@@ -2,6 +2,7 @@ use std::{borrow::Cow, collections::BTreeSet};
 
 use anyhow::{bail, Context};
 use evenio::prelude::*;
+use glam::IVec3;
 use serde::Deserialize;
 use tracing::{debug, info, instrument, trace, warn};
 use valence_nbt::{value::ValueRef, Value};
@@ -19,7 +20,7 @@ use valence_protocol::{
         },
     },
     text::IntoText,
-    ByteAngle, GameMode, Ident, ItemKind, ItemStack, PacketEncoder, VarInt,
+    ByteAngle, ChunkPos, GameMode, Ident, ItemKind, ItemStack, PacketEncoder, VarInt,
 };
 use valence_registry::{
     biome::{Biome, BiomeEffects},
@@ -28,9 +29,9 @@ use valence_registry::{
 
 use crate::{
     components::{
-        chunks::Chunks, Display, FullEntityPose, InGameName, Player, Uuid, PLAYER_SPAWN_POSITION,
+        chunks::{Chunks, Tasks}, Display, FullEntityPose, InGameName, Player, Uuid, PLAYER_SPAWN_POSITION,
     },
-    config::{self, CONFIG},
+    config::CONFIG,
     event::{PlayerJoinWorld, UpdateEquipment},
     global::Global,
     inventory::PlayerInventory,
@@ -128,6 +129,8 @@ pub fn player_join_world(
     mut uuid_lookup: Single<&mut PlayerUuidLookup>,
     mut id_lookup: Single<&mut EntityIdLookup>,
     broadcast: Single<&Broadcast>,
+    chunks: Single<&Chunks>,
+    tasks: Single<&Tasks>,
     compose: Compose,
     mut sender: Sender<UpdateEquipment>,
 ) {
@@ -140,7 +143,7 @@ pub fn player_join_world(
         encoder.set_compression(compression_level);
 
         info!("caching world data for new players");
-        inner(&mut encoder).unwrap();
+        inner(&mut encoder, &chunks, &tasks).unwrap();
 
         let bytes = encoder.take();
         bytes.freeze()
@@ -601,11 +604,11 @@ fn send_sync_tags(encoder: &mut PacketEncoder) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn inner(encoder: &mut PacketEncoder) -> anyhow::Result<()> {
+fn inner(encoder: &mut PacketEncoder, chunks: &Chunks, tasks: &Tasks) -> anyhow::Result<()> {
     send_game_join_packet(encoder)?;
     send_sync_tags(encoder)?;
 
-    let center_chunk = PLAYER_SPAWN_POSITION.as_ivec3() / 16;
+    let center_chunk: IVec3 = PLAYER_SPAWN_POSITION.as_ivec3() >> 4;
 
     // TODO: Do we need to send this else where?
     encoder.append_packet(&play::ChunkRenderDistanceCenterS2c {
@@ -613,11 +616,16 @@ fn inner(encoder: &mut PacketEncoder) -> anyhow::Result<()> {
         chunk_z: center_chunk.z.into(),
     })?;
 
+    let center_chunk = ChunkPos::new(center_chunk.x, center_chunk.z);
+
+    // so they do not fall
+    let chunk = chunks.get_and_wait(center_chunk, tasks).unwrap().unwrap();
+    encoder.append_bytes(&chunk);
+
     // let radius = 2;
 
     // todo: right number?
     // let number_chunks = (radius * 2 + 1) * (radius * 2 + 1);
-    // let bytes_to_append = crossbeam_queue::ArrayQueue::new(usize::try_from(number_chunks).unwrap());
     //
     // (0..number_chunks).into_par_iter().for_each(|i| {
     //     let x = i % (radius * 2 + 1);
