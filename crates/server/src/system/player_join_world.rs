@@ -2,7 +2,7 @@ use std::{borrow::Cow, collections::BTreeSet};
 
 use anyhow::{bail, Context};
 use evenio::prelude::*;
-use glam::IVec3;
+use glam::{I16Vec2, IVec3};
 use serde::Deserialize;
 use tracing::{debug, info, instrument, trace, warn};
 use valence_nbt::{value::ValueRef, Value};
@@ -21,7 +21,7 @@ use valence_protocol::{
         },
     },
     text::IntoText,
-    ByteAngle, ChunkPos, GameMode, Ident, ItemKind, ItemStack, PacketEncoder, VarInt,
+    ByteAngle, GameMode, Ident, ItemKind, ItemStack, PacketEncoder, VarInt,
 };
 use valence_registry::{
     biome::{Biome, BiomeEffects},
@@ -109,7 +109,7 @@ pub fn player_join_world(
     let leggings = ItemStack::new(ItemKind::NetheriteLeggings, 1, None);
     let chestplate = ItemStack::new(ItemKind::NetheriteChestplate, 1, None);
     let helmet = ItemStack::new(ItemKind::NetheriteHelmet, 1, None);
-    let sword = ItemStack::new(ItemKind::NetheriteSword, 1, None);
+    let compass = ItemStack::new(ItemKind::Compass, 1, None);
 
     // 0: Mainhand
     // 2: Boots
@@ -118,7 +118,7 @@ pub fn player_join_world(
     // 5: Helmet
     let mainhand = EquipmentEntry {
         slot: 0,
-        item: sword,
+        item: compass,
     };
     let boots = EquipmentEntry {
         slot: 2,
@@ -562,7 +562,7 @@ fn inner(encoder: &mut PacketEncoder, chunks: &Chunks, tasks: &Tasks) -> anyhow:
         chunk_z: center_chunk.z.into(),
     })?;
 
-    let center_chunk = ChunkPos::new(center_chunk.x, center_chunk.z);
+    let center_chunk = I16Vec2::new(center_chunk.x as i16, center_chunk.z as i16);
 
     // so they do not fall
     let chunk = chunks.get_and_wait(center_chunk, tasks).unwrap().unwrap();

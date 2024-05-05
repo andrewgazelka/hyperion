@@ -1,4 +1,4 @@
-use bvh::TrivialHeuristic;
+use bvh_region::TrivialHeuristic;
 use evenio::{
     entity::EntityId,
     event::Receiver,
@@ -42,7 +42,7 @@ pub fn recalculate_bounding_boxes(
             .collect()
     });
 
-    let bvh = bvh::Bvh::build::<TrivialHeuristic>(stored);
+    let bvh = bvh_region::Bvh::build::<TrivialHeuristic>(stored);
 
     entity_bounding_boxes.query = bvh;
 }

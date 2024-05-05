@@ -1,4 +1,4 @@
-use bvh::{Bvh, TrivialHeuristic};
+use bvh_region::TrivialHeuristic;
 use evenio::{
     entity::EntityId,
     event::Receiver,
@@ -34,7 +34,7 @@ pub fn rebuild_player_location(
         })
         .collect();
 
-    let bvh = Bvh::build::<TrivialHeuristic>(elements);
+    let bvh = bvh_region::Bvh::build::<TrivialHeuristic>(elements);
 
     lookup.query = bvh;
 }

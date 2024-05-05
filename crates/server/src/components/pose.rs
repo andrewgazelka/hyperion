@@ -1,4 +1,4 @@
-use bvh::aabb::Aabb;
+use bvh_region::aabb::Aabb;
 
 use crate::components::{EntityReaction, FullEntityPose};
 

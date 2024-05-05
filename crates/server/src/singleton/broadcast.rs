@@ -20,20 +20,12 @@ pub enum PacketNecessity {
         /// The location to prioritize the packet at. If this is an entity movement packet, this is the location of the entity.
         /// This will mean
         /// that the packet is more likely to be sent to players near to this location if their bandwidth is limited.
-        #[expect(
-            dead_code,
-            reason = "this is not used, but we plan to use it in the future"
-        )]
         prioritize_location: Vec2,
     },
 }
 
 /// Metadata for determining how to send a packet.
 #[derive(Copy, Clone)]
-#[expect(
-    dead_code,
-    reason = "this is not used, but we plan to use it in the future"
-)]
 pub struct PacketMetadata {
     /// Determines whether the packet is required or optional.
     pub necessity: PacketNecessity,
@@ -47,10 +39,6 @@ pub struct PacketMetadata {
 
 impl PacketMetadata {
     /// The server can drop the packet (with no prioritization of location).
-    #[expect(
-        dead_code,
-        reason = "this is not used, but we plan to use it in the future"
-    )]
     pub const DROPPABLE: Self = Self {
         necessity: PacketNecessity::Droppable {
             prioritize_location: Vec2::new(0.0, 0.0),
@@ -58,10 +46,6 @@ impl PacketMetadata {
         exclude_player: None,
     };
     /// The packet is required.
-    #[expect(
-        dead_code,
-        reason = "this is not used, but we plan to use it in the future"
-    )]
     pub const REQUIRED: Self = Self {
         necessity: PacketNecessity::Required,
         exclude_player: None,

@@ -110,6 +110,7 @@ impl<const N: usize> Default for Ring<N> {
 }
 
 impl<const N: usize> Ring<N> {
+    #[must_use]
     pub const fn new() -> Self {
         Self {
             data: [0; N],

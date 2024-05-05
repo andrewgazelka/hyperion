@@ -1,10 +1,9 @@
 use std::time::Instant;
 
-use bvh::aabb::Aabb;
+use bvh_region::aabb::Aabb;
 use derive_more::{Deref, Display, From};
 use evenio::component::Component;
-use glam::Vec3;
-use valence_protocol::ChunkPos;
+use glam::{I16Vec2, Vec3};
 use valence_server::entity::EntityKind;
 
 use crate::{
@@ -183,16 +182,15 @@ pub struct FullEntityPose {
 }
 
 #[derive(Component, Debug, Copy, Clone)]
-pub struct LastSentChunk {
-    pub chunk: ChunkPos,
-}
+pub struct ChunkLocation(pub I16Vec2);
 
-const SANE_MAX_RADIUS: i32 = 128;
+const SANE_MAX_RADIUS: i16 = 128;
 
-impl LastSentChunk {
-    pub const NULL: Self = Self {
-        chunk: ChunkPos::new(i32::MAX - SANE_MAX_RADIUS, i32::MAX - SANE_MAX_RADIUS),
-    };
+impl ChunkLocation {
+    pub const NULL: Self = Self(I16Vec2::new(
+        i16::MAX - SANE_MAX_RADIUS,
+        i16::MAX - SANE_MAX_RADIUS,
+    ));
 }
 
 pub const PLAYER_SPAWN_POSITION: Vec3 = Vec3::new(-464.0, -16.0, -60.0);
@@ -215,11 +213,11 @@ impl FullEntityPose {
     }
 
     #[must_use]
-    pub fn chunk_pos(&self) -> ChunkPos {
+    pub fn chunk_pos(&self) -> I16Vec2 {
         let position = self.position.as_ivec3();
         let x = position.x >> 4;
         let z = position.z >> 4;
-        ChunkPos::new(x, z)
+        I16Vec2::new(x as i16, z as i16)
     }
 }
 
