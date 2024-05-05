@@ -16,7 +16,7 @@ use server::{
     event,
     event::Shoved,
     util::player_skin::PlayerSkin,
-    valence_server::{entity::EntityKind, Text},
+    valence_server::{entity::EntityKind, protocol::status_effects::StatusEffect, Text},
 };
 use tracing::{instrument, warn};
 
@@ -58,8 +58,6 @@ pub fn respawn_on_death(
     r: Receiver<event::Death, (EntityId, &mut Team, &mut Vitals)>,
     mut s: Sender<(event::DisguisePlayer, event::Teleport)>,
 ) {
-    // if they die they become zombies
-
     let (target, team, vitals) = r.query;
 
     *team = Team::Zombie;
@@ -82,6 +80,8 @@ pub fn zombie_command(
         event::DisguisePlayer,
         event::ChatMessage,
         event::SetPlayerSkin,
+        event::DisplayPotionEffect,
+        event::SpeedEffect,
     )>,
 ) {
     // todo: permissions
@@ -113,7 +113,37 @@ pub fn zombie_command(
         target,
         mob: EntityKind::ZOMBIE,
     });
+
+    s.send(event::DisplayPotionEffect {
+        target,
+        effect: StatusEffect::Speed,
+        amplifier: 0, // speed 3
+        duration: 99999,
+        ambient: false,
+        show_particles: true,
+        show_icon: true,
+    });
+
+    // speed 2
+    s.send(event::SpeedEffect::new(target, 0));
 }
+
+// fn to_zombie(target: EntityId, s: &mut Sender<(event::DisguisePlayer, event::PotionEffect)>) {
+//     s.send(event::DisguisePlayer {
+//         target,
+//         mob: EntityKind::ZOMBIE,
+//     });
+//
+//     s.send(event::PotionEffect {
+//         target,
+//         effect: StatusEffect::Speed,
+//         amplifier: 2,
+//         duration: 99999,
+//         ambient: false,
+//         show_particles: false,
+//         show_icon: false,
+//     });
+// }
 
 #[instrument(skip_all)]
 pub fn bump_into_player(r: ReceiverMut<Shoved, &Team>, fetcher: Fetcher<&Team>) {
