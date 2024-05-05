@@ -49,8 +49,6 @@ impl<'a, S> DerefMut for RayonRef<'a, S> {
 #[derive(Debug)]
 pub struct RayonLocal<S> {
     thread_locals: Box<[UnsafeCell<S>]>,
-    #[cfg(debug)]
-    main_thread_id: ThreadId,
 }
 
 #[must_use]
@@ -205,11 +203,7 @@ impl<S: Default> RayonLocal<S> {
             .map(|_| UnsafeCell::new(S::default()))
             .collect();
 
-        Self {
-            thread_locals,
-            #[cfg(debug)]
-            main_thread_id: std::thread::current().id(),
-        }
+        Self { thread_locals }
     }
 }
 
@@ -277,16 +271,7 @@ impl<S> RayonLocal<S> {
     pub fn idx(&self) -> usize {
         // this is so the main thread will still have a place to put data
         // todo: priority—this is currently unsafe in the situation where there is another thread beyond the main thread
-        let index = rayon::current_thread_index().unwrap_or(self.thread_locals.len() - 1);
-
-        #[cfg(debug)]
-        if index == self.thread_locals.len() - 1 {
-            if self.main_thread_id != std::thread::current().id() {
-                panic!("main thread id is not the same as the current thread id");
-            }
-        }
-
-        index
+        rayon::current_thread_index().unwrap_or(self.thread_locals.len() - 1)
     }
 
     /// Get the local value for the current thread.
