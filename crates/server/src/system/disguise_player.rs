@@ -2,14 +2,14 @@ use std::borrow::Cow;
 
 use evenio::{
     entity::EntityId,
-    event::{EventMut, ReceiverMut},
+    event::{EventMut, Insert, ReceiverMut, Sender},
     fetch::Fetcher,
     query::Query,
 };
 use valence_protocol::packets::play;
 
 use crate::{
-    components::{FullEntityPose, Uuid},
+    components::{Display, FullEntityPose, Uuid},
     event,
     net::{Compose, Packets},
     system::init_entity::spawn_entity_packet,
@@ -30,6 +30,7 @@ pub fn disguise_player(
     r: ReceiverMut<event::DisguisePlayer, DisguisePlayerQuery>,
     all_packets: Fetcher<(&mut Packets, EntityId)>,
     compose: Compose,
+    mut sender: Sender<Insert<Display>>,
 ) {
     let event = EventMut::take(r.event);
     let query = r.query;
@@ -53,4 +54,6 @@ pub fn disguise_player(
 
         packets.append(&pkt, &compose).unwrap();
     }
+
+    sender.insert(query.id, Display(event.mob));
 }

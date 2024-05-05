@@ -15,7 +15,7 @@ pub mod chunks;
 pub mod pose;
 pub mod vitals;
 
-#[derive(Component, Deref, From, Display)]
+#[derive(Component, Deref, From, Display, Debug)]
 pub struct InGameName(Box<str>);
 
 #[derive(Component, Default)]

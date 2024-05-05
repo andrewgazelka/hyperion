@@ -4,7 +4,7 @@ use evenio::{
     prelude::Single,
 };
 use rand_distr::{Distribution, LogNormal};
-use tracing::instrument;
+use tracing::{info, instrument};
 use valence_protocol::{ByteAngle, VarInt, Velocity};
 use valence_server::entity::EntityKind;
 
@@ -18,12 +18,15 @@ use crate::{
     system::sync_entity_position::PositionSyncMetadata,
 };
 
+#[tracing::instrument]
 pub fn spawn_entity_packet(
     id: EntityId,
     kind: EntityKind,
     uuid: Uuid,
     pose: &FullEntityPose,
 ) -> valence_protocol::packets::play::EntitySpawnS2c {
+    info!("spawning entity");
+
     #[expect(clippy::cast_possible_wrap, reason = "wrapping is ok in this case")]
     let entity_id = VarInt(id.index().0 as i32);
 

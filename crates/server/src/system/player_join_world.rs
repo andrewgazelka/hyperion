@@ -59,13 +59,13 @@ pub(crate) struct PlayerJoinWorldQuery<'a> {
     _player: With<&'static Player>,
 }
 
-#[derive(Query)]
+#[derive(Query, Debug)]
 pub(crate) struct PlayerQuery<'a> {
     id: EntityId,
     uuid: &'a Uuid,
     pose: &'a FullEntityPose,
-    name: &'a InGameName,
     _player: With<&'static Player>,
+    _no_display: Not<&'static Display>,
 }
 
 // todo: clean up player_join_world; the file is super super super long and hard to understand
@@ -75,7 +75,8 @@ pub fn player_join_world(
     r: Receiver<PlayerJoinWorld, PlayerJoinWorldQuery>,
     entities: Fetcher<EntityQuery>,
     global: Single<&Global>,
-    players: Fetcher<PlayerQuery>,
+    player_spawns: Fetcher<PlayerQuery>,
+    player_list: Fetcher<(&InGameName, &Uuid)>,
     mut uuid_lookup: Single<&mut PlayerUuidLookup>,
     mut id_lookup: Single<&mut EntityIdLookup>,
     broadcast: Single<&Broadcast>,
@@ -189,29 +190,29 @@ pub fn player_join_world(
     broadcast.append(&info, &compose).unwrap();
 
     for entity in entities {
-        // todo: handle player?
+        info!("spawning entity");
         let pkt = spawn_entity_packet(entity.id, entity.skin.0, *entity.uuid, entity.pose);
         local.append(&pkt, &compose).unwrap();
     }
 
     // todo: cache
-    let entries = players
+    let entries = player_list
         .iter()
-        .map(|query| play::player_list_s2c::PlayerListEntry {
-            player_uuid: query.uuid.0,
-            username: query.name,
+        .map(|(name, uuid)| play::player_list_s2c::PlayerListEntry {
+            player_uuid: uuid.0,
+            username: name,
             properties: Cow::Borrowed(&[]),
             chat_data: None,
             listed: true,
             ping: 20,
             game_mode: GameMode::Adventure,
-            display_name: Some(query.name.to_string().into_cow_text()),
+            display_name: Some(name.to_string().into_cow_text()),
         })
         .collect::<Vec<_>>();
 
-    let player_names: Vec<_> = players
+    let player_names: Vec<_> = player_list
         .iter()
-        .map(|query| &***query.name) // todo: lol
+        .map(|(name, _)| &***name) // todo: lol
         .collect();
 
     local
@@ -264,7 +265,7 @@ pub fn player_join_world(
         .unwrap();
 
     // todo: cache
-    for current_query in &players {
+    for current_query in &player_spawns {
         let id = current_query.id;
         let pose = current_query.pose;
         let uuid = current_query.uuid;
