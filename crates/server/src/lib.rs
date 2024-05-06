@@ -18,7 +18,7 @@ pub use uuid;
 
 mod blocks;
 mod chunk;
-mod singleton;
+pub mod singleton;
 pub mod util;
 
 use std::{
@@ -350,6 +350,7 @@ impl Hyperion {
         world.add_handler(system::pkt_attack_player);
         world.add_handler(system::pkt_attack_entity);
         world.add_handler(system::set_player_skin);
+        world.add_handler(system::compass);
 
         world.add_handler(system::block_update);
         world.add_handler(system::chat_message);

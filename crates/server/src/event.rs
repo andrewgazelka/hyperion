@@ -418,3 +418,10 @@ pub struct SetPlayerSkin {
     pub target: EntityId,
     pub skin: PlayerSkin,
 }
+
+#[derive(Event)]
+pub struct Compass {
+    #[event(target)]
+    pub target: EntityId,
+    pub point_to: BlockPos,
+}

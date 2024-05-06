@@ -2,7 +2,7 @@ use std::{borrow::Cow, collections::BTreeSet};
 
 use anyhow::{bail, Context};
 use evenio::prelude::*;
-use glam::IVec3;
+use glam::{I16Vec2, IVec3};
 use serde::Deserialize;
 use tracing::{debug, info, instrument, trace, warn};
 use valence_nbt::{value::ValueRef, Value};
@@ -20,7 +20,7 @@ use valence_protocol::{
         },
     },
     text::IntoText,
-    ByteAngle, ChunkPos, GameMode, Ident, ItemKind, ItemStack, PacketEncoder, VarInt,
+    ByteAngle, GameMode, Ident, ItemKind, ItemStack, PacketEncoder, VarInt,
 };
 use valence_registry::{
     biome::{Biome, BiomeEffects},
@@ -29,7 +29,8 @@ use valence_registry::{
 
 use crate::{
     components::{
-        chunks::{Chunks, Tasks}, Display, FullEntityPose, InGameName, Player, Uuid, PLAYER_SPAWN_POSITION,
+        chunks::{Chunks, Tasks},
+        Display, FullEntityPose, InGameName, Player, Uuid, PLAYER_SPAWN_POSITION,
     },
     config::CONFIG,
     event::{PlayerJoinWorld, UpdateEquipment},
@@ -59,13 +60,13 @@ pub(crate) struct PlayerJoinWorldQuery<'a> {
     _player: With<&'static Player>,
 }
 
-#[derive(Query)]
+#[derive(Query, Debug)]
 pub(crate) struct PlayerJoinWorldQueryReduced<'a> {
     packets: &'a mut Packets,
     _player: With<&'static Player>,
 }
 
-#[derive(Query)]
+#[derive(Query, Debug)]
 pub(crate) struct PlayerQuery<'a> {
     uuid: &'a Uuid,
     name: &'a InGameName,
@@ -80,6 +81,7 @@ pub(crate) struct PlayerInventoryQuery<'a> {
     pose: &'a FullEntityPose,
     inventory: &'a PlayerInventory,
     _player: With<&'static Player>,
+    _no_display: Not<&'static Display>,
 }
 
 // This needs to be a separate system
@@ -125,7 +127,8 @@ pub fn player_join_world(
     r: Receiver<PlayerJoinWorld, PlayerJoinWorldQuery>,
     entities: Fetcher<EntityQuery>,
     global: Single<&Global>,
-    players: Fetcher<PlayerQuery>,
+    player_spawns: Fetcher<PlayerQuery>,
+    player_list: Fetcher<(&InGameName, &Uuid)>,
     mut uuid_lookup: Single<&mut PlayerUuidLookup>,
     mut id_lookup: Single<&mut EntityIdLookup>,
     broadcast: Single<&Broadcast>,
@@ -187,6 +190,7 @@ pub fn player_join_world(
 
     // give players the items
     inv.set_first_available(ItemStack::new(ItemKind::NetheriteSword, 1, None));
+    inv.set_first_available(ItemStack::new(ItemKind::Compass, 1, None));
     inv.set_first_available(ItemStack::new(ItemKind::Book, 15, None));
     inv.set_boots(ItemStack::new(ItemKind::NetheriteBoots, 1, None));
     inv.set_leggings(ItemStack::new(ItemKind::NetheriteLeggings, 1, None));
@@ -217,29 +221,29 @@ pub fn player_join_world(
     broadcast.append(&info, &compose).unwrap();
 
     for entity in entities {
-        // todo: handle player?
+        info!("spawning entity");
         let pkt = spawn_entity_packet(entity.id, entity.skin.0, *entity.uuid, entity.pose);
         local.append(&pkt, &compose).unwrap();
     }
 
     // todo: cache
-    let entries = players
+    let entries = player_list
         .iter()
-        .map(|query| play::player_list_s2c::PlayerListEntry {
-            player_uuid: query.uuid.0,
-            username: query.name,
+        .map(|(name, uuid)| play::player_list_s2c::PlayerListEntry {
+            player_uuid: uuid.0,
+            username: name,
             properties: Cow::Borrowed(&[]),
             chat_data: None,
             listed: true,
             ping: 20,
             game_mode: GameMode::Adventure,
-            display_name: Some(query.name.to_string().into_cow_text()),
+            display_name: Some(name.to_string().into_cow_text()),
         })
         .collect::<Vec<_>>();
 
-    let player_names: Vec<_> = players
+    let player_names: Vec<_> = player_list
         .iter()
-        .map(|query| &***query.name) // todo: lol
+        .map(|(name, _)| &***name) // todo: lol
         .collect();
 
     local
@@ -616,7 +620,7 @@ fn inner(encoder: &mut PacketEncoder, chunks: &Chunks, tasks: &Tasks) -> anyhow:
         chunk_z: center_chunk.z.into(),
     })?;
 
-    let center_chunk = ChunkPos::new(center_chunk.x, center_chunk.z);
+    let center_chunk = I16Vec2::new(center_chunk.x as i16, center_chunk.z as i16);
 
     // so they do not fall
     let chunk = chunks.get_and_wait(center_chunk, tasks).unwrap().unwrap();

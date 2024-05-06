@@ -1,6 +1,6 @@
 //! Defines a singleton that is used to query given bounding boxes.
-//! This uses a [`bvh::Bvh`] to accelerate collision detection and querying.
-use bvh::{aabb::Aabb, HasAabb};
+//! This uses a [`bvh_region::Bvh`] to accelerate collision detection and querying.
+use bvh_region::{aabb::Aabb, HasAabb};
 use evenio::{component::Component, entity::EntityId};
 
 /// An [`Aabb`] that is tied to an [`EntityId`].
@@ -22,7 +22,7 @@ impl HasAabb for Stored {
 #[derive(Component, Default)]
 pub struct EntityBoundingBoxes {
     /// The bounding boxes of all entities as stored in a BVH.
-    pub query: bvh::Bvh<Stored>,
+    pub query: bvh_region::Bvh<Stored>,
 }
 
 impl EntityBoundingBoxes {

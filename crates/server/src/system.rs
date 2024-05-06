@@ -5,6 +5,7 @@
 mod block_update;
 mod chat_message;
 pub mod chunks;
+mod compass;
 mod despawn_player;
 mod disguise_player;
 pub mod effect;
@@ -40,6 +41,7 @@ mod voice_chat;
 
 pub use block_update::block_update;
 pub use chat_message::chat_message;
+pub use compass::compass;
 pub use despawn_player::despawn_player;
 pub use disguise_player::disguise_player;
 pub use egress::egress;

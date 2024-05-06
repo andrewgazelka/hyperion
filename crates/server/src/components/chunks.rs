@@ -6,10 +6,11 @@ use dashmap::{DashMap, DashSet};
 use derive_more::{Deref, DerefMut};
 use evenio::component::Component;
 use fxhash::FxBuildHasher;
+use glam::I16Vec2;
 use itertools::Itertools;
 use libdeflater::{CompressionLvl, Compressor};
 use tokio::{runtime::Runtime, task::JoinHandle};
-use tracing::instrument;
+use tracing::{error, instrument};
 use valence_anvil::parsing::parse_chunk;
 use valence_generated::block::BlockState;
 use valence_nbt::{compound, List};
@@ -77,8 +78,8 @@ impl Chunks {
 
 pub struct ChunksInner {
     // todo: impl more efficient (probably lru) cache
-    cache: DashMap<ChunkPos, LoadedChunk, FxBuildHasher>,
-    loading: DashSet<ChunkPos, FxBuildHasher>,
+    cache: DashMap<I16Vec2, LoadedChunk, FxBuildHasher>,
+    loading: DashSet<I16Vec2, FxBuildHasher>,
     regions: Regions,
     biome_to_id: BTreeMap<Ident<String>, BiomeId>,
 }
@@ -115,7 +116,7 @@ pub enum ChunkData {
 impl Chunks {
     /// todo: doesn't work in loading state
     #[allow(clippy::missing_panics_doc, reason = "todo use unwrap unchecked")]
-    pub fn get_and_wait(&self, position: ChunkPos, tasks: &Tasks) -> anyhow::Result<Option<Bytes>> {
+    pub fn get_and_wait(&self, position: I16Vec2, tasks: &Tasks) -> anyhow::Result<Option<Bytes>> {
         let result = match self.get_cached_or_load(position, tasks)? {
             None => None,
             Some(ChunkData::Cached(data)) => Some(data),
@@ -132,7 +133,7 @@ impl Chunks {
     #[instrument(skip_all, level = "trace")]
     pub fn get_cached_or_load(
         &self,
-        position: ChunkPos,
+        position: I16Vec2,
         tasks: &Tasks,
     ) -> anyhow::Result<Option<ChunkData>> {
         if let Some(result) = self.inner.cache.get(&position) {
@@ -151,7 +152,7 @@ impl Chunks {
             // https://rust-lang.github.io/rust-clippy/master/index.html#/large_futures
             let region = inner
                 .regions
-                .get_region_from_chunk(position.x, position.z)
+                .get_region_from_chunk(i32::from(position.x), i32::from(position.y))
                 .await;
 
             let raw_chunk = {
@@ -159,8 +160,8 @@ impl Chunks {
 
                 region_access
                     .get_chunk(
-                        position.x,
-                        position.z,
+                        i32::from(position.x),
+                        i32::from(position.y),
                         &mut decompress_buf,
                         inner.regions.root(),
                     )
@@ -170,11 +171,23 @@ impl Chunks {
             };
 
             let Ok(chunk) = parse_chunk(raw_chunk.data, &inner.biome_to_id) else {
+                error!("failed to parse chunk {position:?}");
+                inner
+                    .cache
+                    .insert(position, LoadedChunk { raw: Bytes::new() });
+
+                inner.loading.remove(&position);
+
                 return;
             };
 
             STATE.with_borrow_mut(|state| {
                 let Ok(Some(bytes)) = encode_chunk_packet(&chunk, position, state) else {
+                    inner
+                        .cache
+                        .insert(position, LoadedChunk { raw: Bytes::new() });
+
+                    inner.loading.remove(&position);
                     return;
                 };
 
@@ -195,7 +208,7 @@ impl Chunks {
 #[instrument(skip_all, level = "trace", fields(location = ?location))]
 fn encode_chunk_packet(
     chunk: &UnloadedChunk,
-    location: ChunkPos,
+    location: I16Vec2,
     state: &mut TasksState,
 ) -> anyhow::Result<Option<BytesMut>> {
     let encoder = PacketEncoder::new(CompressionThreshold::from(6));
@@ -228,7 +241,7 @@ fn encode_chunk_packet(
     }
 
     let pkt = play::ChunkDataS2c {
-        pos: location,
+        pos: ChunkPos::new(i32::from(location.x), i32::from(location.y)),
         heightmaps: Cow::Owned(compound! {
             "MOTION_BLOCKING" => List::Long(map),
         }),

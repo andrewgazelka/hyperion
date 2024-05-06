@@ -409,7 +409,7 @@ fn inventory_action(
     if window_id != 0 {
         return Ok(());
     };
-
+    return Ok(());/*
     let x = match mode {
         ClickMode::Click => {
             match button {
@@ -495,5 +495,5 @@ fn inventory_action(
 
     sender.push(event.into());
 
-    return Ok(());
+    return Ok(());*/
 }

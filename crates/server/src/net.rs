@@ -179,7 +179,7 @@ impl<'a> Compose<'a> {
 }
 
 /// Stores indices of packets
-#[derive(Component)]
+#[derive(Component, Debug)]
 pub struct Packets {
     buffer: BufRef,
     pub local_to_write: ArrayVec<DataWriteInfo, 2>,

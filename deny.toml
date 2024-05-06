@@ -262,6 +262,7 @@ allow-git = [
     "https://github.com/rj00a/evenio",
     "https://github.com/andrewgazelka/io-uring",
     "https://github.com/andrewgazelka/valence",
+    "https://github.com/andrewgazelka/bvh-data",
 #    "https://github.com/andrewgazelka/rust-mc-bot"
 ]
 
