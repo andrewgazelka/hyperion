@@ -9,17 +9,20 @@
 
 //! <https://wiki.vg/index.php?title=Protocol&oldid=18375>
 
-use std::str::FromStr;
+use std::{borrow::Cow, str::FromStr};
 
 use anyhow::ensure;
 use evenio::{entity::EntityId, query::Query};
-use tracing::info;
+use tracing::{info, warn};
 use valence_protocol::{
     decode::PacketFrame,
     math::Vec3,
     packets::play::{
-        self, click_slot_c2s::ClickMode, client_command_c2s::ClientCommand,
-        player_action_c2s::PlayerAction, player_interact_entity_c2s::EntityInteraction,
+        self,
+        click_slot_c2s::{ClickMode, SlotChange},
+        client_command_c2s::ClientCommand,
+        player_action_c2s::PlayerAction,
+        player_interact_entity_c2s::EntityInteraction,
     },
     Decode, Packet,
 };
@@ -407,56 +410,126 @@ fn inventory_action(
 
     // todo support other windows like chests, etc
     if window_id != 0 {
+        warn!("unsupported window id from client: {}", window_id);
         return Ok(());
     };
-    return Ok(());/*
+
     let x = match mode {
-        ClickMode::Click => {
+        ClickMode::Click if slot_changes.len() == 1 => {
+            let change = slot_changes.iter().next();
+
+            let change = match change {
+                Some(change) => change.clone(),
+                None => {
+                    // todo error
+                    warn!("unexpected empty slot change");
+                    return Ok(());
+                }
+            };
+
             match button {
-                0 => event::ClickType::LeftClick { slot: slot_idx },
-                1 => event::ClickType::RightClick { slot: slot_idx },
+                0 => event::ClickType::LeftClick {
+                    slot: slot_idx,
+                    slot_change: change,
+                },
+                1 => event::ClickType::RightClick {
+                    slot: slot_idx,
+                    slot_change: change,
+                },
                 _ => {
                     // Button no supported for click
                     // todo error
+                    warn!("unexpected button for click: {}", button);
                     return Ok(());
                 }
             }
         }
-        ClickMode::ShiftClick => {
+        ClickMode::ShiftClick if slot_changes.len() == 2 => {
+            let change = slot_changes.iter().cloned().array_chunks().next();
+
+            let change = match change {
+                Some(change) => change,
+                None => {
+                    // todo error
+                    warn!("unexpected empty slot change");
+                    return Ok(());
+                }
+            };
             // Shift right click is identical behavior to shift left click
             match button {
-                0 => event::ClickType::ShiftLeftClick { slot: slot_idx },
-                1 => event::ClickType::ShiftRightClick { slot: slot_idx },
+                0 => event::ClickType::ShiftLeftClick {
+                    slot: slot_idx,
+                    slot_changes: change,
+                },
+                1 => event::ClickType::ShiftRightClick {
+                    slot: slot_idx,
+                    slot_changes: change,
+                },
                 _ => {
                     // Button no supported for shift click
                     // todo error
+                    warn!("unexpected button for shift click: {}", button);
                     return Ok(());
                 }
             }
         }
-        ClickMode::Hotbar => {
+        ClickMode::Hotbar if slot_changes.len() == 2 => {
+            let change = slot_changes.iter().cloned().array_chunks().next();
+
+            let change = match change {
+                Some(change) => change,
+                None => {
+                    // todo error
+                    warn!("unexpected empty slot change");
+                    return Ok(());
+                }
+            };
+
             match button {
                 // calculate real index
                 0..=8 => event::ClickType::HotbarKeyPress {
                     button: button + 36,
                     slot: slot_idx,
+                    slot_changes: change,
                 },
-                40 => event::ClickType::OffHandSwap { slot: slot_idx },
+                40 => event::ClickType::OffHandSwap {
+                    slot: slot_idx,
+                    slot_changes: change,
+                },
                 _ => {
                     // Button no supported for hotbar
                     // todo error
+                    warn!("unexpected button for hotbar: {}", button);
                     return Ok(());
                 }
             }
         }
         ClickMode::CreativeMiddleClick => event::ClickType::CreativeMiddleClick { slot: slot_idx },
-        ClickMode::DropKey => {
+        ClickMode::DropKey if slot_changes.len() == 1 => {
+            let change = slot_changes.iter().next();
+
+            let change = match change {
+                Some(change) => change.clone(),
+                None => {
+                    // todo error
+                    warn!("unexpected empty slot change");
+                    return Ok(());
+                }
+            };
+
             match button {
-                0 => event::ClickType::QDrop { slot: slot_idx },
-                1 => event::ClickType::QControlDrop { slot: slot_idx },
+                0 => event::ClickType::QDrop {
+                    slot: slot_idx,
+                    slot_change: change,
+                },
+                1 => event::ClickType::QControlDrop {
+                    slot: slot_idx,
+                    slot_change: change,
+                },
                 _ => {
                     // Button no supported for drop
                     // todo error
+                    warn!("unexpected button for drop: {}", button);
                     return Ok(());
                 }
             }
@@ -469,18 +542,42 @@ fn inventory_action(
                 1 => event::ClickType::AddSlotLeftDrag { slot: slot_idx },
                 5 => event::ClickType::AddSlotRightDrag { slot: slot_idx },
                 9 => event::ClickType::AddSlotMiddleDrag { slot: slot_idx },
-                2 => event::ClickType::EndLeftMouseDrag,
-                6 => event::ClickType::EndRightMouseDrag,
+                2 => event::ClickType::EndLeftMouseDrag {
+                    slot_changes: slot_changes.iter().cloned().collect(),
+                },
+                6 => event::ClickType::EndRightMouseDrag {
+                    slot_changes: slot_changes.iter().cloned().collect(),
+                },
                 10 => event::ClickType::EndMiddleMouseDrag,
                 _ => {
                     // Button no supported for drag
                     // todo error
+                    warn!("unexpected button for drag: {}", button);
                     return Ok(());
                 }
             }
         }
         ClickMode::DoubleClick => {
-            // todo
+            match button {
+                0 => event::ClickType::DoubleClick {
+                    slot: slot_idx,
+                    slot_changes: slot_changes.iter().cloned().collect(),
+                },
+                1 => event::ClickType::DoubleClickReverseOrder {
+                    slot: slot_idx,
+                    slot_changes: slot_changes.iter().cloned().collect(),
+                },
+                _ => {
+                    // Button no supported for double click
+                    // todo error
+                    warn!("unexpected button for double click: {}", button);
+                    return Ok(());
+                }
+            }
+        }
+        _ => {
+            // todo error
+            warn!("unexpected click mode or slot change: {:?}", mode);
             return Ok(());
         }
     };
@@ -495,5 +592,5 @@ fn inventory_action(
 
     sender.push(event.into());
 
-    return Ok(());*/
+    return Ok(());
 }

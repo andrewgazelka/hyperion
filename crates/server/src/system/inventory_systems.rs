@@ -6,16 +6,29 @@ use evenio::{
     fetch::Fetcher,
     query::{Query, With},
 };
-use tracing::{instrument, warn};
+use tracing::{error, instrument, warn};
 use valence_protocol::{packets::play, VarInt};
 use valence_server::{ItemKind, ItemStack};
 
 use crate::{
     components::{InGameName, Player},
-    event::Command,
+    event::{ClickEvent, Command},
     inventory::PlayerInventory,
     net::{Compose, Packets},
 };
+
+#[instrument(skip_all, level = "trace")]
+pub fn get_inventory_actions(r: Receiver<ClickEvent, EntityId>) {
+    let click_event = r.event;
+
+    let ClickEvent {
+        by,
+        click_type,
+        carried_item,
+    } = click_event;
+
+    error!("click_event: {:?}", click_event);
+}
 
 #[derive(Query)]
 pub struct InventoryQuery<'a> {

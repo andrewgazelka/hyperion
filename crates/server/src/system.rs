@@ -51,7 +51,7 @@ pub use generate_egress_packets::generate_egress_packets;
 pub use ingress::generate_ingress_events;
 pub use init_entity::init_entity;
 pub use init_player::init_player;
-pub use inventory_systems::give_command;
+pub use inventory_systems::{get_inventory_actions, give_command};
 pub use keep_alive::keep_alive;
 pub use kill_all::kill_all;
 pub use pkt_attack::{check_immunity, pkt_attack_entity, pkt_attack_player};

@@ -50,6 +50,7 @@ pub type IngressSender<'a> = Sender<
         event::Command,
         event::PoseUpdate,
         UpdateSelectedSlot,
+        event::ClickEvent,
     ),
 >;
 

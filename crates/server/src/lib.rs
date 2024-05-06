@@ -11,6 +11,7 @@
 #![feature(duration_millis_float)]
 #![feature(new_uninit)]
 #![feature(sync_unsafe_cell)]
+#![feature(iter_array_chunks)]
 #![expect(clippy::type_complexity, reason = "evenio uses a lot of complex types")]
 
 pub use evenio;
@@ -372,6 +373,7 @@ impl Hyperion {
         world.add_handler(system::stats_message);
         world.add_handler(system::kill_all);
 
+        world.add_handler(system::get_inventory_actions);
         world.add_handler(system::update_main_hand);
         world.add_handler(system::update_equipment);
         world.add_handler(system::give_command);
