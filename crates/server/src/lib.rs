@@ -50,7 +50,7 @@ use crate::{
     },
     event::{Egress, Gametick, Scratches, Stats},
     global::Global,
-    net::{buffers::BufferAllocator, Broadcast, Compressors, Server, ServerDef, S2C_BUFFER_SIZE},
+    net::{registered_buffer::RegisteredBuffer, Broadcast, Compressors, Server, ServerDef, S2C_BUFFER_SIZE},
     singleton::{
         fd_lookup::FdLookup, player_aabb_lookup::PlayerBoundingBoxes,
         player_id_lookup::EntityIdLookup, player_uuid_lookup::PlayerUuidLookup,
@@ -310,13 +310,11 @@ impl Hyperion {
 
         let mut server_def = Server::new(address)?;
 
-        let buffers_id = world.spawn();
-        let mut buffers_elem = BufferAllocator::new(&mut server_def);
+        let registered_buffer = world.spawn();
+        world.insert(buffers_id, BufferAllocator::new(&mut server_def));
 
         let broadcast = world.spawn();
         world.insert(broadcast, Broadcast::new(&mut buffers_elem)?);
-
-        world.insert(buffers_id, buffers_elem);
 
         world.add_handler(system::ingress::add_player);
         world.add_handler(system::ingress::remove_player);

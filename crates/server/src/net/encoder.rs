@@ -8,7 +8,7 @@ use anyhow::ensure;
 use tracing::trace;
 use valence_protocol::{CompressionThreshold, Encode, Packet, VarInt};
 
-use crate::{event::ScratchBuffer, net::MAX_PACKET_SIZE, singleton::ring::Buf};
+use crate::{event::ScratchBuffer, net::MAX_PACKET_SIZE};
 
 mod util;
 
@@ -55,17 +55,17 @@ impl DataWriteInfo {
     }
 }
 
-pub fn append_packet_without_compression<P, B: Buf>(
+/// Returns the number of bytes written to `buf`
+pub fn append_packet_without_compression<P>(
     pkt: &P,
-    buf: &mut B,
-) -> anyhow::Result<B::Output>
+    buf: &mut [u8]
+) -> anyhow::Result<usize>
 where
     P: valence_protocol::Packet + Encode,
 {
     let data_write_start = VarInt::MAX_SIZE as u64;
-    let slice = buf.get_contiguous(MAX_PACKET_SIZE);
 
-    let mut cursor = Cursor::new(slice);
+    let mut cursor = Cursor::new(buf);
     cursor.set_position(data_write_start);
 
     pkt.encode_with_id(&mut cursor)?;
@@ -90,14 +90,9 @@ where
     let mut cursor = Cursor::new(inner);
     VarInt(data_len as i32).encode(&mut cursor)?;
 
-    let slice = cursor.into_inner();
-    let entire_slice = &slice[..packet_len_size + data_len];
+    trace!("without compression: {packet_len} bytes");
 
-    let len = entire_slice.len();
-
-    trace!("without compression: {len} bytes");
-
-    Ok(buf.advance(len))
+    Ok(packet_len)
 }
 
 impl PacketEncoder {
@@ -111,13 +106,14 @@ impl PacketEncoder {
         self.threshold
     }
 
+    /// Returns the number of bytes written to `buf`
     pub fn append_packet_with_compression<P, B: Buf>(
         &self,
         pkt: &P,
-        buf: &mut B,
+        buf: &mut [u8],
         scratch: &mut impl ScratchBuffer,
         compressor: &mut libdeflater::Compressor,
-    ) -> anyhow::Result<B::Output>
+    ) -> anyhow::Result<usize>
     where
         P: valence_protocol::Packet + Encode,
     {
@@ -125,9 +121,8 @@ impl PacketEncoder {
 
         // + 1 because data len would be 0 if not compressed
         let data_write_start = (VarInt::MAX_SIZE + DATA_LEN_0_SIZE) as u64;
-        let slice = buf.get_contiguous(MAX_PACKET_SIZE);
 
-        let mut cursor = Cursor::new(&mut slice[..]);
+        let mut cursor = Cursor::new(buf);
         cursor.set_position(data_write_start);
 
         pkt.encode_with_id(&mut cursor)?;
@@ -144,7 +139,7 @@ impl PacketEncoder {
             debug_assert!(scratch.is_empty());
 
             let data_slice =
-                &mut slice[data_write_start as usize..end_data_position_exclusive as usize];
+                &mut buf[data_write_start as usize..end_data_position_exclusive as usize];
 
             {
                 // todo: I think this kinda safe maybe??? ... lol. well I know at least scratch is always large enough
@@ -165,7 +160,7 @@ impl PacketEncoder {
             let packet_len = data_len.written_size() + scratch.len();
             let packet_len = VarInt(packet_len as u32 as i32);
 
-            let mut write = Cursor::new(&mut slice[..]);
+            let mut write = Cursor::new(buf);
             packet_len.encode(&mut write)?;
             data_len.encode(&mut write)?;
             write.write_all(scratch)?;
@@ -178,13 +173,13 @@ impl PacketEncoder {
         let data_len_0 = VarInt(0);
         let packet_len = VarInt(DATA_LEN_0_SIZE as i32 + data_len as u32 as i32); // packet_len.written_size();
 
-        let mut cursor = Cursor::new(&mut slice[..]);
+        let mut cursor = Cursor::new(buf);
         packet_len.encode(&mut cursor)?;
         data_len_0.encode(&mut cursor)?;
 
         let pos = cursor.position();
 
-        slice.copy_within(
+        buf.copy_within(
             data_write_start as usize..end_data_position_exclusive as usize,
             pos as usize,
         );
@@ -200,7 +195,7 @@ impl PacketEncoder {
         buf: &mut B,
         scratch: &mut impl ScratchBuffer,
         compressor: &mut libdeflater::Compressor,
-    ) -> anyhow::Result<B::Output>
+    ) -> anyhow::Result<usize>
     where
         P: Packet + Encode,
     {

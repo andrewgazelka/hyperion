@@ -7,30 +7,30 @@ use tracing::{instrument, log::warn};
 use crate::{
     components::LoginState,
     event::Egress,
-    net::{encoder::DataWriteInfo, Broadcast, Fd, Packets, ServerDef, WriteItem},
+    net::{encoder::DataWriteInfo, Broadcast, Fd, ServerDef, WriteItem},
 };
 
 #[instrument(skip_all, level = "trace")]
 pub fn egress(
     r: ReceiverMut<Egress>,
-    mut players: Fetcher<(&mut Packets, &Fd, &LoginState)>,
+    mut players: Fetcher<(&Fd, &LoginState)>,
     broadcast: Single<&mut Broadcast>,
 ) {
     let broadcast = broadcast.0;
 
-    let combined = tracing::span!(tracing::Level::TRACE, "broadcast-combine").in_scope(|| {
-        let total_len: usize = broadcast.packets().iter().map(|x| x.data.len()).sum();
+//    let combined = tracing::span!(tracing::Level::TRACE, "broadcast-combine").in_scope(|| {
+//        let total_len: usize = broadcast.packets().iter().map(|x| x.data.len()).sum();
+//
+//        let mut combined = Vec::with_capacity(total_len);
+//
+//        for data in broadcast.packets_mut().iter_mut().map(|x| x.data.as_mut()) {
+//            combined.append(data);
+//        }
+//
+//        combined
+//    });
 
-        let mut combined = Vec::with_capacity(total_len);
-
-        for data in broadcast.packets_mut().iter_mut().map(|x| x.data.as_mut()) {
-            combined.append(data);
-        }
-
-        combined
-    });
-
-    let broadcast_len = combined.len() as u32;
+    // let broadcast_len = combined.len() as u32;
 
     let ptr = broadcast.buffer.append(combined.as_slice());
     broadcast.local_to_write = DataWriteInfo {

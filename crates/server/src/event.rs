@@ -307,6 +307,7 @@ pub struct Gametick;
 #[derive(Event)]
 pub struct Egress<'a> {
     pub server: &'a mut Server,
+    pub buffer: &'a mut [u8]
 }
 
 #[derive(Event)]

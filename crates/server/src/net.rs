@@ -12,7 +12,7 @@ use tracing::{debug, instrument};
 
 use crate::{global::Global, net::encoder::DataWriteInfo, CowBytes};
 
-pub mod buffers;
+pub mod registered_buffer;
 
 #[cfg(target_os = "linux")]
 mod linux;
@@ -112,7 +112,7 @@ pub trait ServerDef {
     fn drain<'a>(&'a mut self, f: impl FnMut(ServerEvent<'a>)) -> std::io::Result<()>;
 
     /// # Safety
-    /// todo: not completely sure about all the invariants here
+    /// The data poitned to by each `iovec` must remain valid until the server is dropped.
     unsafe fn register_buffers(&mut self, buffers: &[iovec]);
 
     fn write(&mut self, item: WriteItem);
@@ -141,7 +141,6 @@ use rayon_local::RayonLocal;
 use crate::{
     event::Scratches,
     net::{
-        buffers::{BufRef, BufferAllocator},
         encoder::{append_packet_without_compression, PacketEncoder},
     },
 };
@@ -178,115 +177,6 @@ impl<'a> Compose<'a> {
     }
 }
 
-/// Stores indices of packets
-#[derive(Component)]
-pub struct Packets {
-    buffer: BufRef,
-    pub local_to_write: ArrayVec<DataWriteInfo, 2>,
-    pub number_sending: u8,
-}
-
-impl Packets {
-    #[instrument(skip_all)]
-    pub fn new(allocator: &mut BufferAllocator) -> anyhow::Result<Self> {
-        Ok(Self {
-            buffer: allocator.obtain().context("failed to obtain buffer")?,
-            local_to_write: ArrayVec::new(),
-            number_sending: 0,
-        })
-    }
-
-    #[must_use]
-    pub const fn index(&self) -> u16 {
-        self.buffer.index()
-    }
-
-    pub fn elems_mut(&mut self) -> &mut ArrayVec<DataWriteInfo, 2> {
-        &mut self.local_to_write
-    }
-
-    #[must_use]
-    pub const fn elems(&self) -> &ArrayVec<DataWriteInfo, 2> {
-        &self.local_to_write
-    }
-
-    pub fn set_successfully_sent(&mut self, d_count: u8) {
-        debug_assert!(self.number_sending >= d_count);
-        self.number_sending -= d_count;
-    }
-
-    pub fn append<P>(&mut self, pkt: &P, compose: &Compose) -> anyhow::Result<()>
-    where
-        P: valence_protocol::Packet + valence_protocol::Encode,
-    {
-        let scratch = compose.scratch.get_local();
-        let mut scratch = scratch.borrow_mut();
-
-        let compressor = compose.compressor.get_local();
-        let mut compressor = compressor.borrow_mut();
-
-        let enc = compose.encoder();
-
-        let result = enc.append_packet(pkt, &mut *self.buffer, &mut *scratch, &mut compressor)?;
-
-        self.push(result);
-        Ok(())
-    }
-
-    pub fn append_pre_compression_packet<P>(&mut self, pkt: &P) -> anyhow::Result<()>
-    where
-        P: valence_protocol::Packet + valence_protocol::Encode,
-    {
-        // todo: why need DerefMut?
-        let buf = &mut self.buffer;
-        let buf = &mut **buf;
-
-        let result = append_packet_without_compression(pkt, buf)?;
-
-        self.push(result);
-        Ok(())
-    }
-
-    pub fn append_raw(&mut self, data: &[u8]) {
-        let buffer = &mut *self.buffer;
-        let start_ptr = buffer.append(data);
-
-        let writer = DataWriteInfo {
-            start_ptr,
-            len: data.len() as u32,
-        };
-
-        self.push(writer);
-    }
-
-    fn push(&mut self, writer: DataWriteInfo) {
-        let to_write = &mut self.local_to_write;
-
-        if let Some(last) = to_write.last_mut() {
-            let start_pointer_if_contiguous = unsafe { last.start_ptr.add(last.len as usize) };
-            if start_pointer_if_contiguous == writer.start_ptr {
-                last.len += writer.len;
-                return;
-            }
-        }
-
-        to_write.push(writer);
-    }
-
-    pub fn add_successful_send(&mut self, d_count: usize) {
-        self.number_sending += d_count as u8;
-    }
-
-    pub fn get_write_mut(&mut self) -> &mut ArrayVec<DataWriteInfo, 2> {
-        &mut self.local_to_write
-    }
-
-    #[must_use]
-    pub const fn can_send(&self) -> bool {
-        self.number_sending == 0
-    }
-}
-
 #[derive(Debug, Default)]
 pub struct LocalBroadcast {
     pub data: Vec<u8>,
@@ -295,23 +185,14 @@ pub struct LocalBroadcast {
 /// This is useful for the ECS so we can use Single<&mut Broadcast> instead of having to use a marker struct
 #[derive(Component)]
 pub struct Broadcast {
-    pub buffer: BufRef,
-    pub local_to_write: DataWriteInfo,
     packets: RayonLocal<LocalBroadcast>,
 }
 
 impl Broadcast {
     #[instrument(skip_all, name = "Broadcast::new")]
-    pub fn new(allocator: &mut BufferAllocator) -> anyhow::Result<Self> {
-        let buffer = allocator.obtain().unwrap();
-        // trace!("initializing broadcast buffers");
-        // todo: try_init
-        let packets = RayonLocal::init_with_defaults();
-
+    pub fn new() -> anyhow::Result<Self> {
         Ok(Self {
-            packets,
-            buffer,
-            local_to_write: DataWriteInfo::NULL,
+            packets: RayonLocal::init_with_defaults()
         })
     }
 

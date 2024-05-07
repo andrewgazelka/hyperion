@@ -30,7 +30,7 @@ mod player_packet_buffer;
 
 use crate::{
     components::{FullEntityPose, ImmuneStatus, KeepAlive, LoginState, Vitals},
-    net::{buffers::BufferAllocator, Compose, Fd, Packets, MINECRAFT_VERSION, PROTOCOL_VERSION},
+    net::{Compose, Fd, MINECRAFT_VERSION, PROTOCOL_VERSION},
     packets::PacketSwitchQuery,
     singleton::player_id_lookup::EntityIdLookup,
     system::ingress::player_packet_buffer::DecodeBuffer,
@@ -68,11 +68,6 @@ pub struct RecvDataBulk<'a> {
     elements: FxHashMap<Fd, ArrayVec<CowBytes<'a>, 16>>,
 }
 
-#[derive(Event)]
-pub struct SentData {
-    decrease_count: FxHashMap<Fd, u8>,
-}
-
 #[instrument(skip_all, level = "trace")]
 pub fn generate_ingress_events(world: &mut World, server: &mut Server) {
     let mut decrease_count = FxHashMap::default();
@@ -91,10 +86,7 @@ pub fn generate_ingress_events(world: &mut World, server: &mut Server) {
                 recv_data_elements.entry(fd).or_default().push(data);
             }
             ServerEvent::SentData { fd } => {
-                decrease_count
-                    .entry(fd)
-                    .and_modify(|x| *x += 1)
-                    .or_insert(1);
+                // TODO: check for truncated writes
             }
         })
         .unwrap();
@@ -116,13 +108,11 @@ pub fn generate_ingress_events(world: &mut World, server: &mut Server) {
 pub fn add_player(
     r: ReceiverMut<AddPlayer>,
     mut fd_lookup: Single<&mut FdLookup>,
-    allocator: Single<&mut BufferAllocator>,
     mut sender: Sender<(
         Spawn,
         Insert<LoginState>,
         Insert<DecodeBuffer>,
         Insert<Fd>,
-        Insert<Packets>,
     )>,
 ) {
     let event = r.event;
@@ -131,9 +121,6 @@ pub fn add_player(
     sender.insert(new_player, LoginState::Handshake);
     sender.insert(new_player, DecodeBuffer::default());
 
-    let allocator = allocator.0;
-
-    sender.insert(new_player, Packets::new(allocator).unwrap());
     let fd = event.fd;
     sender.insert(new_player, fd);
 
@@ -162,38 +149,6 @@ pub fn remove_player(
     trace!("removed a player with fd {:?}", fd);
 }
 
-// The `Receiver<Tick>` parameter tells our handler to listen for the `Tick` event.
-#[instrument(skip_all, level = "trace")]
-#[allow(clippy::too_many_arguments, reason = "todo")]
-pub fn sent_data(
-    r: Receiver<SentData>,
-    mut players: Fetcher<&mut Packets>,
-    fd_lookup: Single<&FdLookup>,
-) {
-    let event = r.event;
-
-    // todo: par iter
-    event.decrease_count.iter().for_each(|(fd, count)| {
-        let Some(&id) = fd_lookup.get(fd) else {
-            warn!(
-                "tried to get id for fd {:?} but it seemed to already be removed",
-                fd
-            );
-            return;
-        };
-
-        let Ok(pkts) = players.get_mut(id) else {
-            warn!(
-                "tried to get pkts for id {:?} but it seemed to already be removed",
-                id
-            );
-            return;
-        };
-
-        pkts.set_successfully_sent(*count);
-    });
-}
-
 #[derive(From)]
 pub enum SendElem {
     PlayerInit(event::PlayerInit),
@@ -217,7 +172,6 @@ pub fn recv_data(
     mut players: Fetcher<(
         &mut LoginState,
         &mut DecodeBuffer,
-        &mut Packets,
         &Fd,
         Option<&mut FullEntityPose>,
         Option<&mut Vitals>,
@@ -237,7 +191,6 @@ pub fn recv_data(
         |(
             login_state,
             decoder,
-            packets,
             fd,
             mut pose,
             mut vitals,

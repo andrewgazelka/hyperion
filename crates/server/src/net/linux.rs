@@ -471,10 +471,4 @@ impl LinuxServer {
     pub unsafe fn register_buffers(&mut self, buffers: &[iovec]) {
         self.uring.submitter().register_buffers(buffers).unwrap();
     }
-
-    /// All requests in the submission queue must be finished or cancelled, or else this function
-    /// will hang indefinetely.
-    pub fn unregister_buffers(&self) {
-        self.uring.submitter().unregister_buffers().unwrap();
-    }
 }
