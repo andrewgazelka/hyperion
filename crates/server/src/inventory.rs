@@ -1,13 +1,15 @@
-use std::{mem, ops::RangeInclusive};
+use std::{borrow::BorrowMut, mem, ops::RangeInclusive};
 
 use evenio::component::Component;
 use itertools::Either;
-use valence_protocol::packets::play::entity_equipment_update_s2c::EquipmentEntry;
+use valence_protocol::packets::play::{
+    click_slot_c2s::SlotChange, entity_equipment_update_s2c::EquipmentEntry,
+};
 use valence_server::ItemStack;
 
 #[derive(Debug)]
 pub struct Inventory<const T: usize> {
-    slots: [ItemStack; T],
+    pub slots: [ItemStack; T],
 }
 
 impl<const T: usize> Inventory<T> {
@@ -16,11 +18,6 @@ impl<const T: usize> Inventory<T> {
         Self {
             slots: [ItemStack::EMPTY; T],
         }
-    }
-
-    /// Get the item stack at the given index.
-    pub fn get(&self, index: usize) -> Option<&ItemStack> {
-        self.slots.get(index)
     }
 
     /// Set the item stack at the given index.
@@ -69,6 +66,10 @@ pub struct PlayerInventory {
     pub items: Inventory<46>,
     /// main hand index
     main_hand: usize,
+    /// carried item
+    ///
+    /// This item will be none when player closes inventory
+    carried_item: ItemStack,
 }
 
 impl PlayerInventory {
@@ -77,7 +78,46 @@ impl PlayerInventory {
         Self {
             items: Inventory::new(),
             main_hand: 36,
+            carried_item: ItemStack::EMPTY,
         }
+    }
+
+    /// Swap the carried item with the item at the given index.
+    /// If the item in the slot is the same as the carried item, the items will stack. the rest is left in the carried item
+    /// It also checks if the change is within the changes the client sent
+    /// This is called when left clicking a slot
+    pub fn swap_or_stack_carried_item(
+        &mut self,
+        index: usize,
+        clients_carried_item: ItemStack,
+        clients_item_change: SlotChange,
+    ) -> Result<(), ()> {
+        let item = match self.items.slots.get_mut(index) {
+            Some(item) => item,
+            None => return Err(()),
+        };
+
+        mem::swap(item, &mut self.carried_item);
+
+        Ok(())
+    }
+
+    /// stack the carried item with the item at the given index.
+
+    /// Swap the carried item with the item at the given index.
+    pub fn swap_carried_item(&mut self, index: usize) -> Result<(), ()> {
+        let item = match self.items.slots.get_mut(index) {
+            Some(item) => item,
+            None => return Err(()),
+        };
+
+        mem::swap(item, &mut self.carried_item);
+        Ok(())
+    }
+
+    /// Get the Carried Item
+    pub fn get_carried_item(&self) -> &ItemStack {
+        &self.carried_item
     }
 
     /// Set item at first available spot
@@ -105,12 +145,12 @@ impl PlayerInventory {
 
     /// get item in the offhand
     pub fn get_offhand(&self) -> Option<&ItemStack> {
-        self.items.get(45)
+        self.items.slots.get(45)
     }
 
     /// get item in the main hand
     pub fn get_main_hand(&self) -> Option<&ItemStack> {
-        self.items.get(self.main_hand)
+        self.items.slots.get(self.main_hand)
     }
 
     /// set main hand index to
@@ -131,7 +171,7 @@ impl PlayerInventory {
 
     /// get helmet slot 5
     pub fn get_helmet(&self) -> Option<&ItemStack> {
-        self.items.get(5)
+        self.items.slots.get(5)
     }
 
     /// set chestplate slot 6
@@ -142,7 +182,7 @@ impl PlayerInventory {
 
     /// get chestplate slot 6
     pub fn get_chestplate(&self) -> Option<&ItemStack> {
-        self.items.get(6)
+        self.items.slots.get(6)
     }
 
     /// set leggings slot 7
@@ -153,7 +193,7 @@ impl PlayerInventory {
 
     /// get leggings slot 7
     pub fn get_leggings(&self) -> Option<&ItemStack> {
-        self.items.get(7)
+        self.items.slots.get(7)
     }
 
     /// set boots slot 8
@@ -164,7 +204,7 @@ impl PlayerInventory {
 
     /// get boots slot 8
     pub fn get_boots(&self) -> Option<&ItemStack> {
-        self.items.get(8)
+        self.items.slots.get(8)
     }
 
     /// get Entity Equipment
