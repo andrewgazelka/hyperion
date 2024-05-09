@@ -22,6 +22,8 @@ pub struct ClickEvent {
     #[event(target)]
     pub by: EntityId,
     pub click_type: ClickType,
+    // maybe use smallvec to reduce heap allocations
+    pub slot_changes: Vec<SlotChange>,
     pub carried_item: ItemStack,
 }
 
@@ -31,35 +33,35 @@ pub enum ClickType {
     LeftClick {
         slot: i16,
         // todo: left click only can result in 1 slot change right?
-        slot_change: SlotChange,
+        //     slot_change: SlotChange,
     },
     RightClick {
         slot: i16,
         // todo: left click only can result in 1 slot change right?
-        slot_change: SlotChange,
+        //   slot_change: SlotChange,
     },
     LeftClickOutsideOfWindow,
     RightClickOutsideOfWindow,
     ShiftLeftClick {
         slot: i16,
         // todo: should be 2 slot changes right?
-        slot_changes: [SlotChange; 2],
+        // slot_changes: [SlotChange; 2],
     },
     ShiftRightClick {
         slot: i16,
         // todo: should be 2 slot changes right?
-        slot_changes: [SlotChange; 2],
+        // slot_changes: [SlotChange; 2],
     },
     HotbarKeyPress {
         button: i8,
         slot: i16,
         // todo: should be 2 slot changes right?
-        slot_changes: [SlotChange; 2],
+        //       slot_changes: [SlotChange; 2],
     },
     OffHandSwap {
         slot: i16,
         // todo: should be 2 slot changes right?
-        slot_changes: [SlotChange; 2],
+        //    slot_changes: [SlotChange; 2],
     },
     // todo: support for creative mode
     CreativeMiddleClick {
@@ -68,12 +70,12 @@ pub enum ClickType {
     QDrop {
         slot: i16,
         // todo: left click only can result in 1 slot change right?
-        slot_change: SlotChange,
+        //  slot_change: SlotChange,
     },
     QControlDrop {
         slot: i16,
         // todo: left click only can result in 1 slot change right?
-        slot_change: SlotChange,
+        //    slot_change: SlotChange,
     },
     StartLeftMouseDrag,
     StartRightMouseDrag,
@@ -88,19 +90,19 @@ pub enum ClickType {
         slot: i16,
     },
     EndLeftMouseDrag {
-        slot_changes: Vec<SlotChange>,
+        //   slot_changes: Vec<SlotChange>,
     },
     EndRightMouseDrag {
-        slot_changes: Vec<SlotChange>,
+        //     slot_changes: Vec<SlotChange>,
     },
     EndMiddleMouseDrag,
     DoubleClick {
         slot: i16,
-        slot_changes: Vec<SlotChange>,
+        //        slot_changes: Vec<SlotChange>,
     },
     DoubleClickReverseOrder {
         slot: i16,
-        slot_changes: Vec<SlotChange>,
+        //   slot_changes: Vec<SlotChange>,
     },
 }
 

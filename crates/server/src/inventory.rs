@@ -1,11 +1,13 @@
 use std::{borrow::BorrowMut, mem, ops::RangeInclusive};
 
 use evenio::component::Component;
-use itertools::Either;
+use itertools::{Either, Itertools};
+use thiserror::Error;
+use tracing::warn;
 use valence_protocol::packets::play::{
     click_slot_c2s::SlotChange, entity_equipment_update_s2c::EquipmentEntry,
 };
-use valence_server::ItemStack;
+use valence_server::{ItemKind, ItemStack};
 
 #[derive(Debug)]
 pub struct Inventory<const T: usize> {
@@ -72,6 +74,26 @@ pub struct PlayerInventory {
     carried_item: ItemStack,
 }
 
+#[derive(Debug, Error)]
+pub enum SlotChangeError {
+    #[error("More items than expected")]
+    MoreItems,
+    #[error("To much items in stack")]
+    ToMuchInStack,
+    #[error("Change index not found")]
+    SlotNotFound,
+    #[error("Less items than expected")]
+    LessItems,
+    #[error("Armor slot can only contain armor")]
+    NoArmor,
+}
+
+/// Struct represents the result of [`append_slot_change`]
+pub struct AppendSlotChange {
+    /// flag if the equipment should be updated
+    pub update_equipment: bool,
+}
+
 impl PlayerInventory {
     /// Constructs a new player inventory.
     pub fn new() -> Self {
@@ -82,37 +104,113 @@ impl PlayerInventory {
         }
     }
 
-    /// Swap the carried item with the item at the given index.
-    /// If the item in the slot is the same as the carried item, the items will stack. the rest is left in the carried item
-    /// It also checks if the change is within the changes the client sent
-    /// This is called when left clicking a slot
-    pub fn swap_or_stack_carried_item(
+    /// Append the client proposed slot change to the inventory
+    /// It checks, that the player does not invent not existing items by summing up all slots before and after the change
+    pub fn append_slot_change(
         &mut self,
-        index: usize,
-        clients_carried_item: ItemStack,
-        clients_item_change: SlotChange,
-    ) -> Result<(), ()> {
-        let item = match self.items.slots.get_mut(index) {
-            Some(item) => item,
-            None => return Err(()),
+        slot_change: &Vec<SlotChange>,
+        client_proposed_cursor: &ItemStack,
+        allow_less: bool,
+    ) -> Result<AppendSlotChange, SlotChangeError> {
+        // construct result struct
+        let mut result = AppendSlotChange {
+            update_equipment: false,
         };
 
-        mem::swap(item, &mut self.carried_item);
+        // Bitmap of the affected slots
+        let mut slots: u128 = 0;
+        // set the bitmap for changed slots
+        for change in slot_change {
+            if change.idx > 45 {
+                warn!("Slot not found {:?}", change.idx);
+                return Err(SlotChangeError::SlotNotFound);
+            }
+            slots = slots | (1 << change.idx);
 
-        Ok(())
-    }
+            // check if the stack is not to big
+            if change.stack.count < 0 || change.stack.count > change.stack.item.max_stack() {
+                warn!("To much items in stack {:?}", change.stack);
+                // no negative items
+                return Err(SlotChangeError::ToMuchInStack);
+            }
 
-    /// stack the carried item with the item at the given index.
+            // check if armor slot
+            let armor_slot_ok = match change.idx {
+                5 => Self::is_helmet(&change.stack),
+                6 => Self::is_chestplate(&change.stack),
+                7 => Self::is_leggings(&change.stack),
+                8 => Self::is_boots(&change.stack),
+                _ => true,
+            };
+            if !armor_slot_ok {
+                warn!("Armor slot can only contain armor {:?}", change.stack);
+                return Err(SlotChangeError::NoArmor);
+            }
 
-    /// Swap the carried item with the item at the given index.
-    pub fn swap_carried_item(&mut self, index: usize) -> Result<(), ()> {
-        let item = match self.items.slots.get_mut(index) {
-            Some(item) => item,
-            None => return Err(()),
-        };
+            // check if the visible items are updated
+            if matches!(change.idx, 5..=8 | 45) || change.idx as usize == self.main_hand {
+                result.update_equipment = true;
+            }
+        }
 
-        mem::swap(item, &mut self.carried_item);
-        Ok(())
+        // sum up all items of a kind
+        // slot_change.iter().map(|change| &change.stack.item)
+        let count_per_item_kind = slot_change
+            .iter()
+            // ignore air
+            .filter(|change| change.stack.item != ItemKind::Air)
+            .map(|change| (change.stack.item, change.stack.count as isize))
+            .into_grouping_map()
+            .sum();
+
+        for (item, count) in count_per_item_kind {
+            // sum up all items of a kind
+            let mut current_count = self
+                .items
+                .slots
+                .iter()
+                .enumerate()
+                .filter(|(idx, stack)| stack.item == item && slots & (1 << idx) > 0)
+                .map(|(_, stack)| stack.count as isize)
+                .sum::<isize>();
+            let mut proposed_count = count;
+
+            // check cursor slots
+            if self.carried_item.item == item {
+                warn!("Carried {:?}", self.carried_item);
+                current_count += self.carried_item.count as isize;
+            }
+            if client_proposed_cursor.item == item {
+                warn!("Proposed {:?}", client_proposed_cursor);
+                proposed_count += client_proposed_cursor.count as isize;
+            }
+
+            // check if the player does not invent items
+            if proposed_count > current_count {
+                warn!(
+                    "More items than expected {:?} p:{proposed_count} c:{current_count}",
+                    item
+                );
+                return Err(SlotChangeError::MoreItems);
+            }
+            // check if the player does not destroy items
+            if !allow_less && proposed_count < current_count && !allow_less {
+                warn!(
+                    "Less items than expected {:?}p:{proposed_count} c:{current_count}",
+                    item
+                );
+                return Err(SlotChangeError::MoreItems);
+            }
+        }
+
+        // all checks passed
+        // apply changes
+        for change in slot_change {
+            self.items.set(change.idx as usize, change.stack.clone());
+            self.carried_item = client_proposed_cursor.clone();
+        }
+
+        Ok(result)
     }
 
     /// Get the Carried Item
@@ -235,5 +333,105 @@ impl PlayerInventory {
         };
 
         [mainhand, offhand, boots, leggings, chestplate, helmet]
+    }
+
+    /// check if the item is a helmet
+    pub fn is_helmet(check_item: &ItemStack) -> bool {
+        matches!(
+            check_item.item,
+            ItemKind::LeatherHelmet
+                | ItemKind::ChainmailHelmet
+                | ItemKind::IronHelmet
+                | ItemKind::GoldenHelmet
+                | ItemKind::DiamondHelmet
+                | ItemKind::NetheriteHelmet
+                | ItemKind::TurtleHelmet
+                | ItemKind::Air
+        ) || (check_item.item.eq(&ItemKind::Pumpkin) && check_item.count == 1)
+    }
+
+    /// check if the item is a chestplate
+    pub fn is_chestplate(check_item: &ItemStack) -> bool {
+        matches!(
+            check_item.item,
+            ItemKind::LeatherChestplate
+                | ItemKind::ChainmailChestplate
+                | ItemKind::IronChestplate
+                | ItemKind::GoldenChestplate
+                | ItemKind::DiamondChestplate
+                | ItemKind::NetheriteChestplate
+                | ItemKind::Elytra
+                | ItemKind::Air
+        )
+    }
+
+    /// check if the item is a leggings
+    pub fn is_leggings(check_item: &ItemStack) -> bool {
+        matches!(
+            check_item.item,
+            ItemKind::LeatherLeggings
+                | ItemKind::ChainmailLeggings
+                | ItemKind::IronLeggings
+                | ItemKind::GoldenLeggings
+                | ItemKind::DiamondLeggings
+                | ItemKind::NetheriteLeggings
+                | ItemKind::Air
+        )
+    }
+
+    /// check if the item is a boots
+    pub fn is_boots(check_item: &ItemStack) -> bool {
+        matches!(
+            check_item.item,
+            ItemKind::LeatherBoots
+                | ItemKind::ChainmailBoots
+                | ItemKind::IronBoots
+                | ItemKind::GoldenBoots
+                | ItemKind::DiamondBoots
+                | ItemKind::NetheriteBoots
+                | ItemKind::Air
+        )
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_inventory() {
+        let mut inventory = Inventory::<46>::new();
+        let item = ItemStack::new(ItemKind::AcaciaBoat, 1, None);
+        inventory.set(0, item.clone());
+        assert_eq!(inventory.slots[0], item);
+    }
+
+    // test append_slot_change
+    #[test]
+    fn test_append_slot_change() {
+        let mut inventory = PlayerInventory::new();
+        let item = ItemStack::new(ItemKind::AcaciaBoat, 1, None);
+        let slot_change = vec![SlotChange {
+            idx: 0,
+            stack: item.clone(),
+        }];
+        inventory
+            .append_slot_change(&slot_change, &ItemStack::EMPTY, false)
+            .unwrap();
+        assert_eq!(inventory.items.slots[0], item);
+    }
+
+    // append_slot_change with more items
+    #[test]
+    fn test_append_slot_change_more_items() {}
+
+    // prepare basic inventory for tests
+    fn prepare_inventory() -> PlayerInventory {
+        let mut inventory = PlayerInventory::new();
+        inventory
+            .items
+            .set(36, ItemStack::new(ItemKind::AcaciaBoat, 1, None));
+
+        inventory
     }
 }

@@ -430,11 +430,11 @@ fn inventory_action(
             match button {
                 0 => event::ClickType::LeftClick {
                     slot: slot_idx,
-                    slot_change: change,
+                    //    slot_change: change,
                 },
                 1 => event::ClickType::RightClick {
                     slot: slot_idx,
-                    slot_change: change,
+                    //      slot_change: change,
                 },
                 _ => {
                     // Button no supported for click
@@ -445,25 +445,25 @@ fn inventory_action(
             }
         }
         ClickMode::ShiftClick if slot_changes.len() == 2 => {
-            let change = slot_changes.iter().cloned().array_chunks().next();
+            // let change = slot_changes.iter().cloned().array_chunks().next();
 
-            let change = match change {
-                Some(change) => change,
-                None => {
-                    // todo error
-                    warn!("unexpected empty slot change");
-                    return Ok(());
-                }
-            };
+            // let change = match change {
+            //     Some(change) => change,
+            //     None => {
+            //         // todo error
+            //         warn!("unexpected empty slot change");
+            //         return Ok(());
+            //     }
+            //};
             // Shift right click is identical behavior to shift left click
             match button {
                 0 => event::ClickType::ShiftLeftClick {
                     slot: slot_idx,
-                    slot_changes: change,
+                    //            slot_changes: change,
                 },
                 1 => event::ClickType::ShiftRightClick {
                     slot: slot_idx,
-                    slot_changes: change,
+                    //            slot_changes: change,
                 },
                 _ => {
                     // Button no supported for shift click
@@ -474,27 +474,27 @@ fn inventory_action(
             }
         }
         ClickMode::Hotbar if slot_changes.len() == 2 => {
-            let change = slot_changes.iter().cloned().array_chunks().next();
+            // let change = slot_changes.iter().cloned().array_chunks().next();
 
-            let change = match change {
-                Some(change) => change,
-                None => {
-                    // todo error
-                    warn!("unexpected empty slot change");
-                    return Ok(());
-                }
-            };
+            // let change = match change {
+            //     Some(change) => change,
+            //     None => {
+            //         // todo error
+            //         warn!("unexpected empty slot change");
+            //         return Ok(());
+            //     }
+            // };
 
             match button {
                 // calculate real index
                 0..=8 => event::ClickType::HotbarKeyPress {
                     button: button + 36,
                     slot: slot_idx,
-                    slot_changes: change,
+                    //    slot_changes: change,
                 },
                 40 => event::ClickType::OffHandSwap {
                     slot: slot_idx,
-                    slot_changes: change,
+                    //          slot_changes: change,
                 },
                 _ => {
                     // Button no supported for hotbar
@@ -506,25 +506,25 @@ fn inventory_action(
         }
         ClickMode::CreativeMiddleClick => event::ClickType::CreativeMiddleClick { slot: slot_idx },
         ClickMode::DropKey if slot_changes.len() == 1 => {
-            let change = slot_changes.iter().next();
+            // let change = slot_changes.iter().next();
 
-            let change = match change {
-                Some(change) => change.clone(),
-                None => {
-                    // todo error
-                    warn!("unexpected empty slot change");
-                    return Ok(());
-                }
-            };
+            // let change = match change {
+            //     Some(change) => change.clone(),
+            //     None => {
+            //         // todo error
+            //         warn!("unexpected empty slot change");
+            //         return Ok(());
+            //     }
+            // };
 
             match button {
                 0 => event::ClickType::QDrop {
                     slot: slot_idx,
-                    slot_change: change,
+                    //          slot_change: change,
                 },
                 1 => event::ClickType::QControlDrop {
                     slot: slot_idx,
-                    slot_change: change,
+                    //        slot_change: change,
                 },
                 _ => {
                     // Button no supported for drop
@@ -543,10 +543,10 @@ fn inventory_action(
                 5 => event::ClickType::AddSlotRightDrag { slot: slot_idx },
                 9 => event::ClickType::AddSlotMiddleDrag { slot: slot_idx },
                 2 => event::ClickType::EndLeftMouseDrag {
-                    slot_changes: slot_changes.iter().cloned().collect(),
+                    //slot_changes: slot_changes.iter().cloned().collect(),
                 },
                 6 => event::ClickType::EndRightMouseDrag {
-                    slot_changes: slot_changes.iter().cloned().collect(),
+                    //slot_changes: slot_changes.iter().cloned().collect(),
                 },
                 10 => event::ClickType::EndMiddleMouseDrag,
                 _ => {
@@ -561,11 +561,11 @@ fn inventory_action(
             match button {
                 0 => event::ClickType::DoubleClick {
                     slot: slot_idx,
-                    slot_changes: slot_changes.iter().cloned().collect(),
+                    //    slot_changes: slot_changes.iter().cloned().collect(),
                 },
                 1 => event::ClickType::DoubleClickReverseOrder {
                     slot: slot_idx,
-                    slot_changes: slot_changes.iter().cloned().collect(),
+                    //    slot_changes: slot_changes.iter().cloned().collect(),
                 },
                 _ => {
                     // Button no supported for double click
@@ -588,6 +588,7 @@ fn inventory_action(
         by: id,
         click_type: x,
         carried_item,
+        slot_changes: slot_changes.iter().cloned().collect(),
     };
 
     sender.push(event.into());

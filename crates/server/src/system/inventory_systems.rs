@@ -2,31 +2,38 @@ use std::borrow::{Borrow, Cow};
 
 use evenio::{
     entity::EntityId,
-    event::Receiver,
+    event::{Receiver, Sender},
     fetch::Fetcher,
     query::{Query, With},
 };
 use tracing::{instrument, warn};
-use valence_protocol::{packets::play::{self, click_slot_c2s::SlotChange}, VarInt};
+use valence_protocol::{
+    packets::play::{self, click_slot_c2s::SlotChange},
+    VarInt,
+};
 use valence_server::{ItemKind, ItemStack};
 
 use crate::{
     components::{InGameName, Player},
-    event::{ClickEvent, ClickType, Command},
+    event::{ClickEvent, ClickType, Command, UpdateEquipment},
     inventory::PlayerInventory,
     net::{Compose, Packets},
 };
 
 #[derive(Query)]
 pub struct InventoryActionQuery<'a> {
-    id: EntityId,
+    _id: EntityId,
     inventory: &'a mut PlayerInventory,
     packet: &'a mut Packets,
     _player: With<&'static Player>,
 }
 
 #[instrument(skip_all, level = "trace")]
-pub fn get_inventory_actions(r: Receiver<ClickEvent, InventoryActionQuery>, compose: Compose) {
+pub fn get_inventory_actions(
+    r: Receiver<ClickEvent, InventoryActionQuery>,
+    compose: Compose,
+    mut sender: Sender<UpdateEquipment>,
+) {
     let click_event = r.event;
 
     let query = r.query;
@@ -35,14 +42,17 @@ pub fn get_inventory_actions(r: Receiver<ClickEvent, InventoryActionQuery>, comp
         by,
         click_type,
         carried_item,
+        slot_changes,
     } = click_event;
 
-   /* match click_type {
-        ClickType::LeftClick { slot, slot_change } => query.inventory.swap_carried_item(),
-        // todo: implement other click types
-        _ => ()
-    }*/
-
+    match query
+        .inventory
+        .append_slot_change(slot_changes, carried_item, false)
+    {
+        Ok(restult) if restult.update_equipment => sender.send(UpdateEquipment { id: *by }),
+        // error must not be handled, the server resets the inventory
+        _ => (),
+    }
     send_inventory_update(query.inventory, query.packet, &compose)
 }
 
