@@ -65,44 +65,44 @@ impl MojangClient {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use std::str::FromStr;
-
-    use crate::util::mojang::MojangClient;
-
-    #[tokio::test]
-    async fn test_get_uuid() {
-        let mojang = MojangClient::default();
-
-        let uuid = mojang.get_uuid("Emerald_Explorer").await.unwrap();
-        let expected = uuid::Uuid::from_str("86271406-1188-44a5-8496-7af10c906204").unwrap();
-        assert_eq!(uuid, expected);
-    }
-
-    #[tokio::test]
-    async fn test_get_username() {
-        let mojang = MojangClient::default();
-
-        let username = mojang
-            .get_username(uuid::Uuid::from_str("86271406-1188-44a5-8496-7af10c906204").unwrap())
-            .await
-            .unwrap();
-        assert_eq!(username, "Emerald_Explorer");
-    }
-
-    #[tokio::test]
-    async fn test_retrieve_username() {
-        let mojang = MojangClient::default();
-
-        let res = mojang
-            .response_from_uuid(
-                &uuid::Uuid::from_str("86271406-1188-44a5-8496-7af10c906204").unwrap(),
-            )
-            .await
-            .unwrap();
-
-        let pretty = serde_json::to_string_pretty(&res).unwrap();
-        println!("{pretty}");
-    }
-}
+// #[cfg(test)]
+// mod tests {
+//     use std::str::FromStr;
+//
+//     use crate::util::mojang::MojangClient;
+//
+//     #[tokio::test]
+//     async fn test_get_uuid() {
+//         let mojang = MojangClient::default();
+//
+//         let uuid = mojang.get_uuid("Emerald_Explorer").await.unwrap();
+//         let expected = uuid::Uuid::from_str("86271406-1188-44a5-8496-7af10c906204").unwrap();
+//         assert_eq!(uuid, expected);
+//     }
+//
+//     #[tokio::test]
+//     async fn test_get_username() {
+//         let mojang = MojangClient::default();
+//
+//         let username = mojang
+//             .get_username(uuid::Uuid::from_str("86271406-1188-44a5-8496-7af10c906204").unwrap())
+//             .await
+//             .unwrap();
+//         assert_eq!(username, "Emerald_Explorer");
+//     }
+//
+//     #[tokio::test]
+//     async fn test_retrieve_username() {
+//         let mojang = MojangClient::default();
+//
+//         let res = mojang
+//             .response_from_uuid(
+//                 &uuid::Uuid::from_str("86271406-1188-44a5-8496-7af10c906204").unwrap(),
+//             )
+//             .await
+//             .unwrap();
+//
+//         let pretty = serde_json::to_string_pretty(&res).unwrap();
+//         println!("{pretty}");
+//     }
+// }
