@@ -350,7 +350,7 @@ fn client_command(
 }
 
 pub fn switch(
-    raw: PacketFrame,
+    raw: &PacketFrame,
     global: &Global,
     sender: &mut Vec<SendElem>,
     id_lookup: &EntityIdLookup,
@@ -418,13 +418,12 @@ fn inventory_action(
         ClickMode::Click if slot_changes.len() == 1 => {
             let change = slot_changes.iter().next();
 
-            let change = match change {
-                Some(change) => change.clone(),
-                None => {
-                    // todo error
-                    warn!("unexpected empty slot change");
-                    return Ok(());
-                }
+            let change = if let Some(change) = change {
+                change.clone()
+            } else {
+                // todo error
+                warn!("unexpected empty slot change");
+                return Ok(());
             };
 
             match button {
@@ -593,5 +592,5 @@ fn inventory_action(
 
     sender.push(event.into());
 
-    return Ok(());
+    Ok(())
 }

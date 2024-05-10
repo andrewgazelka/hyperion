@@ -324,7 +324,7 @@ pub fn recv_data(
                                 };
 
                                 crate::packets::switch(
-                                    frame, &global, sender, &id_lookup, &mut query,
+                                    &frame, &global, sender, &id_lookup, &mut query,
                                 )
                                 .unwrap();
                             }

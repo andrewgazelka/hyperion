@@ -1,4 +1,4 @@
-use std::{borrow::BorrowMut, mem, ops::RangeInclusive};
+use std::{mem, ops::RangeInclusive};
 
 use evenio::component::Component;
 use itertools::{Either, Itertools};
@@ -16,7 +16,7 @@ pub struct Inventory<const T: usize> {
 
 impl<const T: usize> Inventory<T> {
     /// Constructs a new inventory with the given size.
-    fn new() -> Self {
+    const fn new() -> Self {
         Self {
             slots: [ItemStack::EMPTY; T],
         }
@@ -50,13 +50,13 @@ impl<const T: usize> Inventory<T> {
 
     /// remove item at index
     pub fn remove(&mut self, index: usize) -> ItemStack {
-        let item = mem::replace(&mut self.slots[index], ItemStack::EMPTY);
-        item
+        mem::replace(&mut self.slots[index], ItemStack::EMPTY)
     }
 
     /// Get all items in the inventory
     /// to send to client
-    pub fn get_items(&self) -> &[ItemStack; T] {
+    #[must_use]
+    pub const fn get_items(&self) -> &[ItemStack; T] {
         &self.slots
     }
 }
@@ -94,9 +94,16 @@ pub struct AppendSlotChange {
     pub update_equipment: bool,
 }
 
+impl Default for PlayerInventory {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PlayerInventory {
     /// Constructs a new player inventory.
-    pub fn new() -> Self {
+    #[must_use]
+    pub const fn new() -> Self {
         Self {
             items: Inventory::new(),
             main_hand: 36,
@@ -125,7 +132,7 @@ impl PlayerInventory {
                 warn!("Slot not found {:?}", change.idx);
                 return Err(SlotChangeError::SlotNotFound);
             }
-            slots = slots | (1 << change.idx);
+            slots |= 1 << change.idx;
 
             // check if the stack is not to big
             if change.stack.count < 0 || change.stack.count > change.stack.item.max_stack() {
@@ -194,7 +201,7 @@ impl PlayerInventory {
                 return Err(SlotChangeError::MoreItems);
             }
             // check if the player does not destroy items
-            if !allow_less && proposed_count < current_count && !allow_less {
+            if !allow_less && proposed_count < current_count {
                 warn!(
                     "Less items than expected {:?}p:{proposed_count} c:{current_count}",
                     item
@@ -214,7 +221,8 @@ impl PlayerInventory {
     }
 
     /// Get the Carried Item
-    pub fn get_carried_item(&self) -> &ItemStack {
+    #[must_use]
+    pub const fn get_carried_item(&self) -> &ItemStack {
         &self.carried_item
     }
 
@@ -222,13 +230,13 @@ impl PlayerInventory {
     pub fn set_first_available(&mut self, item: ItemStack) -> Either<(), ItemStack> {
         // try hotbar
         let item = match self.items.set_first_available(36..=44, item) {
-            Either::Left(_) => return Either::Left(()),
+            Either::Left(()) => return Either::Left(()),
             Either::Right(item) => item,
         };
 
         // try inventory
         let item = match self.items.set_first_available(9..=35, item) {
-            Either::Left(_) => return Either::Left(()),
+            Either::Left(()) => return Either::Left(()),
             Either::Right(item) => item,
         };
 
@@ -242,18 +250,20 @@ impl PlayerInventory {
     }
 
     /// get item in the offhand
+    #[must_use]
     pub fn get_offhand(&self) -> Option<&ItemStack> {
         self.items.slots.get(45)
     }
 
     /// get item in the main hand
+    #[must_use]
     pub fn get_main_hand(&self) -> Option<&ItemStack> {
         self.items.slots.get(self.main_hand)
     }
 
     /// set main hand index to
     pub fn set_main_hand(&mut self, index: usize) -> Result<(), ()> {
-        if index < 36 || index > 44 {
+        if !(36..=44).contains(&index) {
             // main hand can only be in the hotbar
             return Err(());
         }
@@ -268,6 +278,7 @@ impl PlayerInventory {
     }
 
     /// get helmet slot 5
+    #[must_use]
     pub fn get_helmet(&self) -> Option<&ItemStack> {
         self.items.slots.get(5)
     }
@@ -279,6 +290,7 @@ impl PlayerInventory {
     }
 
     /// get chestplate slot 6
+    #[must_use]
     pub fn get_chestplate(&self) -> Option<&ItemStack> {
         self.items.slots.get(6)
     }
@@ -290,6 +302,7 @@ impl PlayerInventory {
     }
 
     /// get leggings slot 7
+    #[must_use]
     pub fn get_leggings(&self) -> Option<&ItemStack> {
         self.items.slots.get(7)
     }
@@ -301,11 +314,13 @@ impl PlayerInventory {
     }
 
     /// get boots slot 8
+    #[must_use]
     pub fn get_boots(&self) -> Option<&ItemStack> {
         self.items.slots.get(8)
     }
 
     /// get Entity Equipment
+    #[must_use]
     pub fn get_entity_equipment(&self) -> [EquipmentEntry; 6] {
         let mainhand = EquipmentEntry {
             slot: 0,
@@ -336,6 +351,7 @@ impl PlayerInventory {
     }
 
     /// check if the item is a helmet
+    #[must_use]
     pub fn is_helmet(check_item: &ItemStack) -> bool {
         matches!(
             check_item.item,
@@ -351,7 +367,8 @@ impl PlayerInventory {
     }
 
     /// check if the item is a chestplate
-    pub fn is_chestplate(check_item: &ItemStack) -> bool {
+    #[must_use]
+    pub const fn is_chestplate(check_item: &ItemStack) -> bool {
         matches!(
             check_item.item,
             ItemKind::LeatherChestplate
@@ -366,7 +383,8 @@ impl PlayerInventory {
     }
 
     /// check if the item is a leggings
-    pub fn is_leggings(check_item: &ItemStack) -> bool {
+    #[must_use]
+    pub const fn is_leggings(check_item: &ItemStack) -> bool {
         matches!(
             check_item.item,
             ItemKind::LeatherLeggings
@@ -380,7 +398,8 @@ impl PlayerInventory {
     }
 
     /// check if the item is a boots
-    pub fn is_boots(check_item: &ItemStack) -> bool {
+    #[must_use]
+    pub const fn is_boots(check_item: &ItemStack) -> bool {
         matches!(
             check_item.item,
             ItemKind::LeatherBoots

@@ -8,14 +8,14 @@ use evenio::{
 };
 use tracing::{instrument, warn};
 use valence_protocol::{
-    packets::play::{self, click_slot_c2s::SlotChange},
+    packets::play::{self},
     VarInt,
 };
 use valence_server::{ItemKind, ItemStack};
 
 use crate::{
     components::{InGameName, Player},
-    event::{ClickEvent, ClickType, Command, UpdateEquipment},
+    event::{ClickEvent, Command, UpdateEquipment},
     inventory::PlayerInventory,
     net::{Compose, Packets},
 };
@@ -40,9 +40,9 @@ pub fn get_inventory_actions(
 
     let ClickEvent {
         by,
-        click_type,
         carried_item,
         slot_changes,
+        click_type: _,
     } = click_event;
 
     match query
@@ -53,7 +53,7 @@ pub fn get_inventory_actions(
         // error must not be handled, the server resets the inventory
         _ => (),
     }
-    send_inventory_update(query.inventory, query.packet, &compose)
+    send_inventory_update(query.inventory, query.packet, &compose);
 }
 
 /// Sends an inventory update to the player.
@@ -62,10 +62,10 @@ fn send_inventory_update(inventory: &PlayerInventory, packet: &mut Packets, comp
         window_id: 0,
         state_id: VarInt(0),
         slots: Cow::Borrowed(inventory.items.get_items()),
-        carried_item: Cow::Borrowed(&inventory.get_carried_item()),
+        carried_item: Cow::Borrowed(inventory.get_carried_item()),
     };
 
-    packet.append(&pack_inv, &compose).unwrap();
+    packet.append(&pack_inv, compose).unwrap();
 }
 
 #[derive(Query)]
@@ -107,16 +107,13 @@ pub fn give_command(
             return;
         }
 
-        let (packet, inventory) = if let Some(x) = fetcher
-            .iter_mut()
-            .filter(|q| q.name.as_ref().eq(player))
-            .next()
-        {
-            (x.packet, x.inventory)
-        } else {
-            warn!("give_command: player not found");
-            return;
-        };
+        let (packet, inventory) =
+            if let Some(x) = fetcher.iter_mut().find(|q| q.name.as_ref() == player) {
+                (x.packet, x.inventory)
+            } else {
+                warn!("give_command: player not found");
+                return;
+            };
 
         let item = ItemStack::new(
             ItemKind::from_str(item).unwrap_or(ItemKind::AcaciaBoat),
@@ -126,7 +123,7 @@ pub fn give_command(
 
         inventory.set_first_available(item);
 
-        send_inventory_update(inventory, packet, &compose)
+        send_inventory_update(inventory, packet, &compose);
 
         //  let (entity_id, inventory, packet) = r.query;
     } else {

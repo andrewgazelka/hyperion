@@ -93,7 +93,7 @@ pub fn send_player_info(
 ) {
     let local = r.query.packets;
     // todo: cache
-    for current_query in &players {
+    for current_query in players {
         let id = current_query.id;
         let pose = current_query.pose;
         let uuid = current_query.uuid;
@@ -127,7 +127,6 @@ pub fn player_join_world(
     r: Receiver<PlayerJoinWorld, PlayerJoinWorldQuery>,
     entities: Fetcher<EntityQuery>,
     global: Single<&Global>,
-    player_spawns: Fetcher<PlayerQuery>,
     player_list: Fetcher<(&InGameName, &Uuid)>,
     mut uuid_lookup: Single<&mut PlayerUuidLookup>,
     mut id_lookup: Single<&mut EntityIdLookup>,

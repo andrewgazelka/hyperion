@@ -1,4 +1,4 @@
-use std::{alloc::Allocator, borrow::Cow, cell::RefCell, fmt::Debug};
+use std::{alloc::Allocator, cell::RefCell, fmt::Debug};
 
 use bumpalo::Bump;
 use derive_more::{Deref, DerefMut};
