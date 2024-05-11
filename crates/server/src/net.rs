@@ -190,10 +190,10 @@ pub struct Broadcast {
 
 impl Broadcast {
     #[instrument(skip_all, name = "Broadcast::new")]
-    pub fn new() -> anyhow::Result<Self> {
-        Ok(Self {
+    pub fn new() -> Self {
+        Self {
             packets: RayonLocal::init_with_defaults()
-        })
+        }
     }
 
     pub fn packets_mut(&mut self) -> &mut RayonLocal<LocalBroadcast> {

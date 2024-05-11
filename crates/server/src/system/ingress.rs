@@ -70,7 +70,7 @@ pub struct RecvDataBulk<'a> {
 
 #[instrument(skip_all, level = "trace")]
 pub fn generate_ingress_events(world: &mut World, server: &mut Server) {
-    let mut decrease_count = FxHashMap::default();
+    // `let mut decrease_count = FxHashMap::default();
 
     let mut recv_data_elements: FxHashMap<Fd, ArrayVec<CowBytes, 16>> = FxHashMap::default();
 
@@ -92,7 +92,7 @@ pub fn generate_ingress_events(world: &mut World, server: &mut Server) {
         .unwrap();
 
     span!(Level::TRACE, "sent-data").in_scope(|| {
-        world.send(SentData { decrease_count });
+        // world.send(SentData { decrease_count });
     });
 
     span!(Level::TRACE, "recv-data").in_scope(|| {
@@ -222,7 +222,7 @@ pub fn recv_data(
                     match *login_state {
                         LoginState::Handshake => process_handshake(login_state, &frame).unwrap(),
                         LoginState::Status => {
-                            process_status(login_state, &frame, packets).unwrap();
+                            process_status(login_state, &frame).unwrap();
                         }
                         LoginState::Terminate => {
                             // // todo: does this properly terminate the connection? I don't think so probably
@@ -237,7 +237,6 @@ pub fn recv_data(
                                 id,
                                 login_state,
                                 &frame,
-                                packets,
                                 decoder,
                                 &global,
                                 sender,
@@ -348,7 +347,6 @@ fn process_login(
     id: EntityId,
     login_state: &mut LoginState,
     packet: &PacketFrame,
-    packets: &mut Packets,
     decoder: &mut DecodeBuffer,
     global: &Global,
     sender: &mut Vec<SendElem>,
@@ -365,7 +363,7 @@ fn process_login(
         threshold: VarInt(global.shared.compression_threshold.0),
     };
 
-    packets.append_pre_compression_packet(&pkt)?;
+    //packets.append_pre_compression_packet(&pkt)?;
 
     decoder.set_compression(global.shared.compression_threshold);
 
@@ -391,7 +389,6 @@ fn process_login(
 fn process_status(
     login_state: &mut LoginState,
     packet: &PacketFrame,
-    packets: &mut Packets,
 ) -> anyhow::Result<()> {
     debug_assert!(*login_state == LoginState::Status);
 
@@ -420,7 +417,7 @@ fn process_status(
 
             info!("sent query response: {query_request:?}");
             //
-            packets.append_pre_compression_packet(&send)?;
+            // packets.append_pre_compression_packet(&send)?;
         }
 
         packets::status::QueryPingC2s::ID => {
@@ -430,7 +427,7 @@ fn process_status(
 
             let send = packets::status::QueryPongS2c { payload };
 
-            packets.append_pre_compression_packet(&send)?;
+            // packets.append_pre_compression_packet(&send)?;
 
             info!("sent query pong: {query_ping:?}");
             *login_state = LoginState::Terminate;

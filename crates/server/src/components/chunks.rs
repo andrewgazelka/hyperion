@@ -262,7 +262,8 @@ fn encode_chunk_packet(
 
     let result = encoder.append_packet(&pkt, buf, scratch, compressor)?;
 
-    Ok(Some(result))
+    // Ok(Some(result))
+    todo!()
 }
 
 fn write_block_states(states: &BlockStateContainer, writer: &mut impl Write) -> anyhow::Result<()> {

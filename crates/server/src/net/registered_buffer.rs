@@ -24,13 +24,16 @@ pub struct RegisteredBuffer {
 }
 
 impl RegisteredBuffer {
-    fn new(server: &mut Server) {
-        let buffer = vec![0u8; BUFFER_SIZE].into_boxed_slice();
+    /// # Safety
+    /// The returned `RegisteredBuffers` must not be dropped before `Server` is dropped.
+    pub unsafe fn new(server: &mut Server) -> Self {
+        let mut buffer = vec![0u8; BUFFER_SIZE].into_boxed_slice();
+        // SAFETY: Ensured by caller
         unsafe {
-            server.register_buffers(iovec {
+            server.register_buffers(&[iovec {
                 iov_base: buffer.as_mut_ptr().cast(),
                 iov_len: buffer.len()
-            });
+            }]);
         }
         Self {
             inner: buffer

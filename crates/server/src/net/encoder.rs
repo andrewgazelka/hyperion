@@ -107,7 +107,7 @@ impl PacketEncoder {
     }
 
     /// Returns the number of bytes written to `buf`
-    pub fn append_packet_with_compression<P, B: Buf>(
+    pub fn append_packet_with_compression<P>(
         &self,
         pkt: &P,
         buf: &mut [u8],
@@ -122,7 +122,7 @@ impl PacketEncoder {
         // + 1 because data len would be 0 if not compressed
         let data_write_start = (VarInt::MAX_SIZE + DATA_LEN_0_SIZE) as u64;
 
-        let mut cursor = Cursor::new(buf);
+        let mut cursor = Cursor::new(&mut buf[..]);
         cursor.set_position(data_write_start);
 
         pkt.encode_with_id(&mut cursor)?;
@@ -167,13 +167,13 @@ impl PacketEncoder {
 
             let len = write.position();
 
-            return Ok(buf.advance(len as usize));
+            return Ok(len as usize);
         }
 
         let data_len_0 = VarInt(0);
         let packet_len = VarInt(DATA_LEN_0_SIZE as i32 + data_len as u32 as i32); // packet_len.written_size();
 
-        let mut cursor = Cursor::new(buf);
+        let mut cursor = Cursor::new(&mut buf[..]);
         packet_len.encode(&mut cursor)?;
         data_len_0.encode(&mut cursor)?;
 
@@ -186,13 +186,13 @@ impl PacketEncoder {
 
         let len = pos as u32 + (end_data_position_exclusive - data_write_start) as u32;
 
-        Ok(buf.advance(len as usize))
+        Ok(len as usize)
     }
 
-    pub fn append_packet<P, B: Buf>(
+    pub fn append_packet<P>(
         &self,
         pkt: &P,
-        buf: &mut B,
+        buf: &mut [u8],
         scratch: &mut impl ScratchBuffer,
         compressor: &mut libdeflater::Compressor,
     ) -> anyhow::Result<usize>

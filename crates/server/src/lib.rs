@@ -55,7 +55,8 @@ use crate::{
         fd_lookup::FdLookup, player_aabb_lookup::PlayerBoundingBoxes,
         player_id_lookup::EntityIdLookup, player_uuid_lookup::PlayerUuidLookup,
     },
-    system::{generate_biome_registry, generate_ingress_events},
+    // system::{generate_biome_registry, generate_ingress_events},
+    system::generate_ingress_events,
 };
 
 pub mod components;
@@ -196,6 +197,7 @@ fn set_memlock_limit(limit: u64) -> anyhow::Result<()> {
 
 /// The central [`Hyperion`] struct which owns and manages the entire server.
 pub struct Hyperion {
+    server: Server,
     /// The shared state between the ECS framework and the I/O thread.
     shared: Arc<global::Shared>,
     /// The manager of the ECS framework.
@@ -206,8 +208,6 @@ pub struct Hyperion {
     last_ms_per_tick: VecDeque<f64>,
     /// The tick of the game. This is incremented every 50 ms.
     tick_on: u64,
-
-    server: Server,
 }
 
 impl Hyperion {
@@ -310,24 +310,21 @@ impl Hyperion {
 
         let mut server_def = Server::new(address)?;
 
-        let registered_buffer = world.spawn();
-        world.insert(buffers_id, BufferAllocator::new(&mut server_def));
-
         let broadcast = world.spawn();
-        world.insert(broadcast, Broadcast::new(&mut buffers_elem)?);
+        world.insert(broadcast, Broadcast::new());
 
         world.add_handler(system::ingress::add_player);
         world.add_handler(system::ingress::remove_player);
         world.add_handler(system::ingress::recv_data);
-        world.add_handler(system::ingress::sent_data);
+        // world.add_handler(system::ingress::sent_data);
 
-        world.add_handler(system::chunks::generate_changes);
-        world.add_handler(system::chunks::send_updates);
+        // world.add_handler(system::chunks::generate_changes);
+        // world.add_handler(system::chunks::send_updates);
 
-        world.add_handler(system::init_player);
+        // world.add_handler(system::init_player);
         world.add_handler(system::despawn_player);
-        world.add_handler(system::player_join_world);
-        world.add_handler(system::player_kick);
+        // world.add_handler(system::player_join_world);
+        // world.add_handler(system::player_kick);
         world.add_handler(system::init_entity);
         world.add_handler(system::entity_move_logic);
         world.add_handler(system::entity_detect_collisions);
@@ -336,35 +333,35 @@ impl Hyperion {
         world.add_handler(system::update_time);
         world.add_handler(system::send_time);
         world.add_handler(system::update_health);
-        world.add_handler(system::sync_players);
+        // world.add_handler(system::sync_players);
         world.add_handler(system::rebuild_player_location);
-        world.add_handler(system::player_detect_mob_hits);
+        // world.add_handler(system::player_detect_mob_hits);
 
-        world.add_handler(system::check_immunity);
-        world.add_handler(system::pkt_attack_player);
-        world.add_handler(system::pkt_attack_entity);
-        world.add_handler(system::set_player_skin);
-        world.add_handler(system::compass);
+        // world.add_handler(system::check_immunity);
+        // world.add_handler(system::pkt_attack_player);
+        // world.add_handler(system::pkt_attack_entity);
+        // world.add_handler(system::set_player_skin);
+        // world.add_handler(system::compass);
 
         world.add_handler(system::block_update);
         world.add_handler(system::chat_message);
         world.add_handler(system::disguise_player);
-        world.add_handler(system::teleport);
+        // world.add_handler(system::teleport);
         world.add_handler(system::shoved_reaction);
-        world.add_handler(system::pose_update);
+        // world.add_handler(system::pose_update);
 
         world.add_handler(system::effect::display);
-        world.add_handler(system::effect::speed);
+        // world.add_handler(system::effect::speed);
 
-        world.add_handler(system::pkt_hand_swing);
+        // world.add_handler(system::pkt_hand_swing);
 
         world.add_handler(system::generate_egress_packets);
 
         world.add_handler(system::egress);
 
-        world.add_handler(system::keep_alive);
+        // world.add_handler(system::keep_alive);
         world.add_handler(system::stats_message);
-        world.add_handler(system::kill_all);
+        // world.add_handler(system::kill_all);
 
         let global = world.spawn();
         world.insert(global, Global::new(shared.clone()));
@@ -379,9 +376,9 @@ impl Hyperion {
         world.insert(uuid_lookup, PlayerUuidLookup::default());
 
         let chunks = world.spawn();
-        let biome_registry =
-            generate_biome_registry().context("failed to generate biome registry")?;
-        world.insert(chunks, Chunks::new(&biome_registry)?);
+//        let biome_registry =
+//            generate_biome_registry().context("failed to generate biome registry")?;
+//        world.insert(chunks, Chunks::new(&biome_registry)?);
 
         let tasks = world.spawn();
         world.insert(tasks, Tasks::default());
@@ -395,13 +392,17 @@ impl Hyperion {
         let fd_lookup = world.spawn();
         world.insert(fd_lookup, FdLookup::default());
 
+        let registered_buffer = world.spawn();
+        // SAFETY: The server is dropped before the world, including this registered buffer, when dropping the Hyperion struct.
+        world.insert(registered_buffer, unsafe { RegisteredBuffer::new(&mut server_def) });
+
         let mut game = Self {
+            server: server_def,
             shared,
             world,
             last_ticks: VecDeque::default(),
             last_ms_per_tick: VecDeque::default(),
             tick_on: 0,
-            server: server_def,
         };
 
         game.last_ticks.push_back(Instant::now());
@@ -479,7 +480,7 @@ impl Hyperion {
         let server = &mut self.server;
 
         tracing::span!(tracing::Level::TRACE, "egress-event").in_scope(|| {
-            self.world.send(Egress { server });
+            // self.world.send(Egress { server });
         });
 
         #[expect(
