@@ -1,5 +1,6 @@
 use std::{mem, ops::RangeInclusive};
 
+use anyhow::ensure;
 use evenio::component::Component;
 use itertools::{Either, Itertools};
 use thiserror::Error;
@@ -88,7 +89,7 @@ pub enum SlotChangeError {
     NoArmor,
 }
 
-/// Struct represents the result of [`append_slot_change`]
+/// Struct represents the result of [`PlayerInventory::append_slot_changes`]
 pub struct AppendSlotChange {
     /// flag if the equipment should be updated
     pub update_equipment: bool,
@@ -113,9 +114,9 @@ impl PlayerInventory {
 
     /// Append the client proposed slot change to the inventory
     /// It checks, that the player does not invent not existing items by summing up all slots before and after the change
-    pub fn append_slot_change(
+    pub fn append_slot_changes(
         &mut self,
-        slot_change: &Vec<SlotChange>,
+        slot_change: &[SlotChange],
         client_proposed_cursor: &ItemStack,
         allow_less: bool,
     ) -> Result<AppendSlotChange, SlotChangeError> {
@@ -136,7 +137,7 @@ impl PlayerInventory {
 
             // check if the stack is not to big
             if change.stack.count < 0 || change.stack.count > change.stack.item.max_stack() {
-                warn!("To much items in stack {:?}", change.stack);
+                warn!("To many items in stack {:?}", change.stack);
                 // no negative items
                 return Err(SlotChangeError::ToMuchInStack);
             }
@@ -155,7 +156,9 @@ impl PlayerInventory {
             }
 
             // check if the visible items are updated
-            if matches!(change.idx, 5..=8 | 45) || change.idx as usize == self.main_hand {
+            if matches!(change.idx, 5..=8 | 45)
+                || usize::try_from(change.idx).unwrap() == self.main_hand
+            {
                 result.update_equipment = true;
             }
         }
@@ -213,7 +216,8 @@ impl PlayerInventory {
         // all checks passed
         // apply changes
         for change in slot_change {
-            self.items.set(change.idx as usize, change.stack.clone());
+            self.items
+                .set(usize::try_from(change.idx).unwrap(), change.stack.clone());
             self.carried_item = client_proposed_cursor.clone();
         }
 
@@ -262,11 +266,11 @@ impl PlayerInventory {
     }
 
     /// set main hand index to
-    pub fn set_main_hand(&mut self, index: usize) -> Result<(), ()> {
-        if !(36..=44).contains(&index) {
-            // main hand can only be in the hotbar
-            return Err(());
-        }
+    pub fn set_main_hand(&mut self, index: usize) -> anyhow::Result<()> {
+        ensure!(
+            (36..=44).contains(&index),
+            "main hand can only be in the hotbar"
+        );
         self.main_hand = index;
         Ok(())
     }
@@ -435,22 +439,12 @@ mod test {
             stack: item.clone(),
         }];
         inventory
-            .append_slot_change(&slot_change, &ItemStack::EMPTY, false)
+            .append_slot_changes(&slot_change, &ItemStack::EMPTY, false)
             .unwrap();
         assert_eq!(inventory.items.slots[0], item);
     }
 
     // append_slot_change with more items
     #[test]
-    fn test_append_slot_change_more_items() {}
-
-    // prepare basic inventory for tests
-    fn prepare_inventory() -> PlayerInventory {
-        let mut inventory = PlayerInventory::new();
-        inventory
-            .items
-            .set(36, ItemStack::new(ItemKind::AcaciaBoat, 1, None));
-
-        inventory
-    }
+    const fn test_append_slot_change_more_items() {}
 }

@@ -66,14 +66,6 @@ pub(crate) struct PlayerJoinWorldQueryReduced<'a> {
     _player: With<&'static Player>,
 }
 
-#[derive(Query, Debug)]
-pub(crate) struct PlayerQuery<'a> {
-    uuid: &'a Uuid,
-    name: &'a InGameName,
-    //  inventory: &'a PlayerInventory,
-    _player: With<&'static Player>,
-}
-
 #[derive(Query)]
 pub(crate) struct PlayerInventoryQuery<'a> {
     id: EntityId,

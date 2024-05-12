@@ -444,16 +444,6 @@ fn inventory_action(
             }
         }
         ClickMode::ShiftClick if slot_changes.len() == 2 => {
-            // let change = slot_changes.iter().cloned().array_chunks().next();
-
-            // let change = match change {
-            //     Some(change) => change,
-            //     None => {
-            //         // todo error
-            //         warn!("unexpected empty slot change");
-            //         return Ok(());
-            //     }
-            //};
             // Shift right click is identical behavior to shift left click
             match button {
                 0 => event::ClickType::ShiftLeftClick {
@@ -473,17 +463,6 @@ fn inventory_action(
             }
         }
         ClickMode::Hotbar if slot_changes.len() == 2 => {
-            // let change = slot_changes.iter().cloned().array_chunks().next();
-
-            // let change = match change {
-            //     Some(change) => change,
-            //     None => {
-            //         // todo error
-            //         warn!("unexpected empty slot change");
-            //         return Ok(());
-            //     }
-            // };
-
             match button {
                 // calculate real index
                 0..=8 => event::ClickType::HotbarKeyPress {
@@ -505,17 +484,6 @@ fn inventory_action(
         }
         ClickMode::CreativeMiddleClick => event::ClickType::CreativeMiddleClick { slot: slot_idx },
         ClickMode::DropKey if slot_changes.len() == 1 => {
-            // let change = slot_changes.iter().next();
-
-            // let change = match change {
-            //     Some(change) => change.clone(),
-            //     None => {
-            //         // todo error
-            //         warn!("unexpected empty slot change");
-            //         return Ok(());
-            //     }
-            // };
-
             match button {
                 0 => event::ClickType::QDrop {
                     slot: slot_idx,

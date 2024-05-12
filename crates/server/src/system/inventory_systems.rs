@@ -47,7 +47,7 @@ pub fn get_inventory_actions(
 
     match query
         .inventory
-        .append_slot_change(slot_changes, carried_item, false)
+        .append_slot_changes(slot_changes, carried_item, false)
     {
         Ok(restult) if restult.update_equipment => sender.send(UpdateEquipment { id: *by }),
         // error must not be handled, the server resets the inventory
