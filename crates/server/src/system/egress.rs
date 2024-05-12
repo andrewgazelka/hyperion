@@ -3,18 +3,22 @@ use evenio::{
     fetch::{Fetcher, Single},
 };
 use tracing::{instrument, log::warn};
+use valence_protocol::packets;
 
 use crate::{
-    components::LoginState,
+    components::{LoginState, LoginStatePendingC2s, LoginStatePendingS2c},
     event::Egress,
-    net::{encoder::DataWriteInfo, Broadcast, Fd, ServerDef, WriteItem},
+    net::{registered_buffer::RegisteredBuffer, encoder::{DataWriteInfo, append_packet_without_compression}, Broadcast, Fd, ServerDef, WriteItem, MINECRAFT_VERSION, PROTOCOL_VERSION},
 };
+
+mod status;
 
 #[instrument(skip_all, level = "trace")]
 pub fn egress(
     r: ReceiverMut<Egress>,
-    mut players: Fetcher<(&Fd, &LoginState)>,
+    mut players: Fetcher<(&Fd, &mut LoginState)>,
     broadcast: Single<&mut Broadcast>,
+    mut registered_buffer: Single<&mut RegisteredBuffer>,
 ) {
     let broadcast = broadcast.0;
 
@@ -40,41 +44,44 @@ pub fn egress(
 //
 //    let broadcast_index = broadcast.buffer.index();
 //
-//    let mut event = r.event;
-//    let server = &mut *event.server;
-//
-//    tracing::span!(tracing::Level::TRACE, "send",).in_scope(|| {
-//        for (pkts, fd, login) in &mut players {
-//            if !pkts.can_send() {
-//                continue;
-//            }
-//
-//            let index = pkts.index();
-//
-//            for elem in &pkts.local_to_write {
-//                if elem.len == 0 {
-//                    continue;
-//                }
-//
-//                let write_item = WriteItem {
-//                    info: elem,
-//                    buffer_idx: index,
-//                    fd: *fd,
-//                };
-//
-//                pkts.number_sending += 1;
-//
-//                server.inner.write(write_item);
-//            }
-//
-//            pkts.elems_mut().clear();
-//
-//            // no broadcasting if we are not in play state
+    let mut event = r.event;
+    let server = &mut *event.server;
+    let registered_buffer: &mut [u8] = &mut registered_buffer.0;
+
+    let mut buffer_offset = 0;
+    tracing::span!(tracing::Level::TRACE, "send",).in_scope(|| {
+        for (fd, login) in &mut players {
+            tracing::info!("egress: login state: {login:?}");
+            let buffer_start = buffer_offset;
+
+            for generator in [status::generate_status_packets] {
+                let bytes_written = generator(&mut registered_buffer[buffer_offset..], login).unwrap();
+                buffer_offset += bytes_written;
+            }
+
+            let len = buffer_offset - buffer_start;
+            if len > 0 {
+                server.inner.write(WriteItem {
+                    info: &DataWriteInfo {
+                        // TODO: Check if this breaks any aliasing rules with having a &mut [u8] from
+                        // RegisteredBuffer and the kernel reading *const u8 in here
+                        // SAFETY: buffer_start should be in bounds of registered_buffer and therefore
+                        // not cause overflow
+                        start_ptr: unsafe { registered_buffer.as_ptr().add(buffer_start) },
+                        len: len as u32,
+                    },
+                    // It's assumed that RegisteredBuffer is the only buffer registered in this server
+                    buffer_idx: 0,
+                    fd: *fd,
+                });
+            }
+
+            // no broadcasting if we are not in play state
 //            if *login != LoginState::Play {
 //                continue;
 //            }
-//
-//            // todo: append broadcast even if cannot send and have packet prios and stuff
+
+            // todo: append broadcast even if cannot send and have packet prios and stuff
 //            if broadcast_len != 0 {
 //                pkts.number_sending += 1;
 //                server.inner.write(WriteItem {
@@ -83,10 +90,10 @@ pub fn egress(
 //                    fd: *fd,
 //                });
 //            }
-//        }
-//    });
-//
-//    tracing::span!(tracing::Level::TRACE, "submit-events",).in_scope(|| {
-//        server.submit_events();
-//    });
+        }
+    });
+
+    tracing::span!(tracing::Level::TRACE, "submit-events",).in_scope(|| {
+        server.submit_events();
+    });
 }

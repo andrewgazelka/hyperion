@@ -31,18 +31,30 @@ pub struct KeepAlive {
 #[derive(Component, Debug)]
 pub struct Player;
 
-#[derive(Component, Debug, Eq, PartialEq)]
-#[repr(u8)]
-pub enum LoginState {
+/// Any state in here means that the server is waiting for the client to send a packet.
+#[derive(Debug, Eq, PartialEq)]
+pub enum LoginStatePendingC2s {
     Handshake,
-    Status,
-    Login,
-    TransitioningPlay {
-        // todo: remove this is a hack
-        packets_to_transition: usize,
-    },
+    StatusRequest,
+    StatusPing
+}
+
+/// Any state in here means that the server needs to send a packet to the client and that the
+/// server has
+/// not sent that packet yet.
+#[derive(Debug, Eq, PartialEq)]
+pub enum LoginStatePendingS2c {
+    StatusResponse,
+    StatusPong {
+        payload: u64
+    }
+}
+
+#[derive(Component, Debug, Eq, PartialEq)]
+pub enum LoginState {
+    PendingC2s(LoginStatePendingC2s),
+    PendingS2c(LoginStatePendingS2c),
     Play,
-    Terminate,
 }
 
 #[derive(Copy, Clone, PartialEq, Debug, Component)]

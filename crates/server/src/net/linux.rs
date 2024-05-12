@@ -232,6 +232,7 @@ impl ServerDef for LinuxServer {
             let result = event.result();
             match event.user_data() {
                 0 => {
+                    info!("accepted fd");
                     if event.flags() & IORING_CQE_F_MORE == 0 {
                         warn!("multishot accept rerequested");
                         Self::request_accept(&mut submission);
@@ -254,6 +255,7 @@ impl ServerDef for LinuxServer {
                 }
                 write if write & SEND_MARKER != 0 => {
                     let fd = Fixed((write & !SEND_MARKER) as u32);
+                    info!("wrote data to fd {fd:?}");
 
                     self.pending_writes -= 1;
 
@@ -283,6 +285,7 @@ impl ServerDef for LinuxServer {
                 }
                 read if read & RECV_MARKER != 0 => {
                     let fd = Fixed((read & !RECV_MARKER) as u32);
+                    info!("received data from fd {fd:?}");
                     let more = event.flags() & IORING_CQE_F_MORE != 0;
 
                     if result == -libc::ECONNRESET || result == -libc::ETIMEDOUT || result == 0 {

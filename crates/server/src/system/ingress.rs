@@ -29,7 +29,7 @@ use crate::{
 mod player_packet_buffer;
 
 use crate::{
-    components::{FullEntityPose, ImmuneStatus, KeepAlive, LoginState, Vitals},
+    components::{FullEntityPose, ImmuneStatus, KeepAlive, LoginState, LoginStatePendingC2s, LoginStatePendingS2c, Vitals},
     net::{Compose, Fd, MINECRAFT_VERSION, PROTOCOL_VERSION},
     packets::PacketSwitchQuery,
     singleton::player_id_lookup::EntityIdLookup,
@@ -118,7 +118,7 @@ pub fn add_player(
     let event = r.event;
 
     let new_player = sender.spawn();
-    sender.insert(new_player, LoginState::Handshake);
+    sender.insert(new_player, LoginState::PendingC2s(LoginStatePendingC2s::Handshake));
     sender.insert(new_player, DecodeBuffer::default());
 
     let fd = event.fd;
@@ -219,42 +219,26 @@ pub fn recv_data(
 
                 // todo: error  on low compression: "decompressed packet length of 2 is <= the compression threshold of 2"
                 while let Some(frame) = decoder.try_next_packet(scratch).unwrap() {
-                    match *login_state {
-                        LoginState::Handshake => process_handshake(login_state, &frame).unwrap(),
-                        LoginState::Status => {
-                            process_status(login_state, &frame).unwrap();
-                        }
-                        LoginState::Terminate => {
-                            // // todo: does this properly terminate the connection? I don't think so probably
-                            // let Some(id) = fd_lookup.remove(&fd) else {
-                            //     return;
-                            // };
-                            //
-                            // sender.despawn(id);
-                        }
-                        LoginState::Login => {
-                            process_login(
-                                id,
-                                login_state,
-                                &frame,
-                                decoder,
-                                &global,
-                                sender,
-                            )
-                            .unwrap();
-                        }
-                        LoginState::TransitioningPlay { .. } | LoginState::Play => {
-                            if let LoginState::TransitioningPlay {
-                                packets_to_transition,
-                            } = login_state
-                            {
-                                if *packets_to_transition == 0 {
-                                    *login_state = LoginState::Play;
-                                } else {
-                                    *packets_to_transition -= 1;
-                                }
-                            }
-
+                    tracing::info!("ingress: login state: {login_state:?}");
+                    match login_state {
+                        LoginState::PendingC2s(state) => match state {
+                            LoginStatePendingC2s::Handshake => process_handshake(login_state, &frame).unwrap(),
+                            LoginStatePendingC2s::StatusRequest => process_status_request(login_state, &frame).unwrap(),
+                            LoginStatePendingC2s::StatusPing => process_status_ping(login_state, &frame).unwrap(),
+                        },
+                        LoginState::PendingS2c(_) => {},
+//                        LoginState::Login => {
+//                            process_login(
+//                                id,
+//                                login_state,
+//                                &frame,
+//                                decoder,
+//                                &global,
+//                                sender,
+//                            )
+//                            .unwrap();
+//                        }
+                        LoginState::Play => {
                             if let Some((pose, vitals, keep_alive, immunity)) = itertools::izip!(
                                 pose.as_mut(),
                                 vitals.as_mut(),
@@ -278,6 +262,7 @@ pub fn recv_data(
                             }
                         }
                     }
+                    tracing::info!("ingress: new login state: {login_state:?}");
                 }
             }
         },
@@ -322,7 +307,7 @@ pub fn recv_data(
 }
 
 fn process_handshake(login_state: &mut LoginState, packet: &PacketFrame) -> anyhow::Result<()> {
-    debug_assert!(*login_state == LoginState::Handshake);
+    debug_assert!(*login_state == LoginState::PendingC2s(LoginStatePendingC2s::Handshake));
 
     let handshake: packets::handshaking::HandshakeC2s = packet.decode()?;
 
@@ -332,111 +317,86 @@ fn process_handshake(login_state: &mut LoginState, packet: &PacketFrame) -> anyh
 
     match handshake.next_state {
         HandshakeNextState::Status => {
-            *login_state = LoginState::Status;
+            *login_state = LoginState::PendingC2s(LoginStatePendingC2s::StatusRequest);
         }
         HandshakeNextState::Login => {
-            *login_state = LoginState::Login;
+            // TODO:
+            // *login_state = LoginState::Login;
         }
     }
 
     Ok(())
 }
 
-#[allow(clippy::too_many_arguments, reason = "todo del")]
-fn process_login(
-    id: EntityId,
+//#[allow(clippy::too_many_arguments, reason = "todo del")]
+//fn process_login(
+//    id: EntityId,
+//    login_state: &mut LoginState,
+//    packet: &PacketFrame,
+//    decoder: &mut DecodeBuffer,
+//    global: &Global,
+//    sender: &mut Vec<SendElem>,
+//) -> anyhow::Result<()> {
+//    debug_assert!(*login_state == LoginState::Login);
+//
+//    let login::LoginHelloC2s { username, .. } = packet.decode()?;
+//
+//    trace!("received LoginHello for {username}");
+//
+//    let username = username.0;
+//
+//    let pkt = LoginCompressionS2c {
+//        threshold: VarInt(global.shared.compression_threshold.0),
+//    };
+//
+//    //packets.append_pre_compression_packet(&pkt)?;
+//
+//    decoder.set_compression(global.shared.compression_threshold);
+//
+//    let username = Box::from(username);
+//
+//    sender.push(
+//        event::PlayerInit {
+//            target: id,
+//            username,
+//            pose: FullEntityPose::player(),
+//        }
+//        .into(),
+//    );
+//
+//    // todo: impl rest
+//    *login_state = LoginState::TransitioningPlay {
+//        packets_to_transition: 5,
+//    };
+//
+//    Ok(())
+//}
+
+fn process_status_request(
     login_state: &mut LoginState,
     packet: &PacketFrame,
-    decoder: &mut DecodeBuffer,
-    global: &Global,
-    sender: &mut Vec<SendElem>,
 ) -> anyhow::Result<()> {
-    debug_assert!(*login_state == LoginState::Login);
+    debug_assert!(*login_state == LoginState::PendingC2s(LoginStatePendingC2s::StatusRequest));
 
-    let login::LoginHelloC2s { username, .. } = packet.decode()?;
+    if packet.id != packets::status::QueryRequestC2s::ID {
+        anyhow::bail!("unexpected c2s packet; expected status request");
+    }
 
-    trace!("received LoginHello for {username}");
-
-    let username = username.0;
-
-    let pkt = LoginCompressionS2c {
-        threshold: VarInt(global.shared.compression_threshold.0),
-    };
-
-    //packets.append_pre_compression_packet(&pkt)?;
-
-    decoder.set_compression(global.shared.compression_threshold);
-
-    let username = Box::from(username);
-
-    sender.push(
-        event::PlayerInit {
-            target: id,
-            username,
-            pose: FullEntityPose::player(),
-        }
-        .into(),
-    );
-
-    // todo: impl rest
-    *login_state = LoginState::TransitioningPlay {
-        packets_to_transition: 5,
-    };
+    *login_state = LoginState::PendingS2c(LoginStatePendingS2c::StatusResponse);
 
     Ok(())
 }
 
-fn process_status(
+fn process_status_ping(
     login_state: &mut LoginState,
     packet: &PacketFrame,
 ) -> anyhow::Result<()> {
-    debug_assert!(*login_state == LoginState::Status);
+    debug_assert!(*login_state == LoginState::PendingC2s(LoginStatePendingC2s::StatusPing));
 
-    #[allow(clippy::single_match, reason = "todo del")]
-    match packet.id {
-        packets::status::QueryRequestC2s::ID => {
-            let query_request: packets::status::QueryRequestC2s = packet.decode()?;
+    let query_ping: packets::status::QueryPingC2s = packet.decode()?;
+    let payload = query_ping.payload;
 
-            // https://wiki.vg/Server_List_Ping#Response
-            let json = json!({
-                "version": {
-                    "name": MINECRAFT_VERSION,
-                    "protocol": PROTOCOL_VERSION,
-                },
-                "players": {
-                    "online": 1,
-                    "max": 32,
-                    "sample": [],
-                },
-                "description": "something"
-            });
-
-            let json = serde_json::to_string_pretty(&json)?;
-
-            let send = packets::status::QueryResponseS2c { json: &json };
-
-            info!("sent query response: {query_request:?}");
-            //
-            // packets.append_pre_compression_packet(&send)?;
-        }
-
-        packets::status::QueryPingC2s::ID => {
-            let query_ping: packets::status::QueryPingC2s = packet.decode()?;
-
-            let payload = query_ping.payload;
-
-            let send = packets::status::QueryPongS2c { payload };
-
-            // packets.append_pre_compression_packet(&send)?;
-
-            info!("sent query pong: {query_ping:?}");
-            *login_state = LoginState::Terminate;
-        }
-
-        _ => panic!("unexpected packet id: {}", packet.id),
-    }
-
-    // todo: check version is correct
+    *login_state = LoginState::PendingS2c(LoginStatePendingS2c::StatusPong { payload });
 
     Ok(())
 }

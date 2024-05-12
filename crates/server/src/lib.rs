@@ -344,13 +344,13 @@ impl Hyperion {
         // world.add_handler(system::compass);
 
         world.add_handler(system::block_update);
-        world.add_handler(system::chat_message);
+        // world.add_handler(system::chat_message);
         world.add_handler(system::disguise_player);
         // world.add_handler(system::teleport);
         world.add_handler(system::shoved_reaction);
         // world.add_handler(system::pose_update);
 
-        world.add_handler(system::effect::display);
+        // world.add_handler(system::effect::display);
         // world.add_handler(system::effect::speed);
 
         // world.add_handler(system::pkt_hand_swing);
@@ -480,7 +480,7 @@ impl Hyperion {
         let server = &mut self.server;
 
         tracing::span!(tracing::Level::TRACE, "egress-event").in_scope(|| {
-            // self.world.send(Egress { server });
+            self.world.send(Egress { server });
         });
 
         #[expect(

@@ -19,7 +19,7 @@ pub fn send_time(_: Receiver<Gametick>, broadcast: Single<&Broadcast>, compose: 
             time_of_day,
         };
 
-        broadcast.append(&pkt, &compose).unwrap();
+        // broadcast.append(&pkt, &compose).unwrap();
     }
 }
 

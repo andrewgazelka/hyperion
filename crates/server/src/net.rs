@@ -211,30 +211,30 @@ impl Broadcast {
     {
         // trace!("broadcasting {}", P::NAME);
 
-        let scratch = compose.scratch.get_local();
-        let mut scratch = scratch.borrow_mut();
-
-        let compressor = compose.compressor.get_local();
-        let mut compressor = compressor.borrow_mut();
-
-        let encoder = compose.encoder();
-
-        let local = self.packets.get_local_raw();
-        let local = unsafe { &mut *local.get() };
-
-        let buf = &mut local.data;
-
-        encoder.append_packet(pkt, buf, &mut *scratch, &mut compressor)?;
-
+//        let scratch = compose.scratch.get_local();
+//        let mut scratch = scratch.borrow_mut();
+//
+//        let compressor = compose.compressor.get_local();
+//        let mut compressor = compressor.borrow_mut();
+//
+//        let encoder = compose.encoder();
+//
+//        let local = self.packets.get_local_raw();
+//        let local = unsafe { &mut *local.get() };
+//
+//        let buf = &mut local.data;
+//
+//        encoder.append_packet(pkt, buf, &mut *scratch, &mut compressor)?;
+//
         Ok(())
     }
 
     pub fn append_raw(&self, data: &[u8]) {
-        let local = self.packets.get_local_raw();
-        let local = unsafe { &mut *local.get() };
-
-        let buf = &mut local.data;
-        buf.extend_from_slice(data);
+//        let local = self.packets.get_local_raw();
+//        let local = unsafe { &mut *local.get() };
+//
+//        let buf = &mut local.data;
+//        buf.extend_from_slice(data);
     }
 }
 
