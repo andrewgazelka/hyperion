@@ -25,7 +25,7 @@ pub fn stats_message(
 
     let title = format!("{ms_per_tick:05.2} ms/tick");
     let title = title.into_cow_text();
-    let health = (ms_per_tick / 20.0).min(1.0) as f32;
+    let health = (ms_per_tick / 50.0).min(1.0) as f32;
 
     let color = if health > 0.5 {
         BossBarColor::Red
@@ -40,16 +40,10 @@ pub fn stats_message(
             title,
             health,
             color,
-            division: BossBarDivision::TwentyNotches,
+            division: BossBarDivision::NoDivision,
             flags: BossBarFlags::default(),
         },
     };
-
-    // // header footer
-    // let pkt = valence_protocol::packets::play::PlayerListHeaderS2c {
-    //     header: mspt,
-    //     footer: player_count,
-    // };
 
     broadcast.append(&pkt, &compose).unwrap();
 
