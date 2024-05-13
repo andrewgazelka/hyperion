@@ -160,10 +160,7 @@ pub struct Shoved {
 /// An event when server stats are updated.
 #[derive(Event)]
 pub struct Stats {
-    /// The number of milliseconds per tick in the last second.
-    pub ms_per_tick_mean_1s: f64,
-    /// The number of milliseconds per tick in the last 5 seconds.
-    pub ms_per_tick_mean_5s: f64,
+    pub ms_per_tick: f64,
 }
 
 // todo: naming? this seems bad
