@@ -159,7 +159,6 @@ pub struct Shoved {
 #[derive(Event, Debug)]
 pub struct BulkShoved(pub RayonLocal<Vec<Shoved>>);
 
-
 /// An event when server stats are updated.
 #[derive(Event)]
 pub struct Stats {
