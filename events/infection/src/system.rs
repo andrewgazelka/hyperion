@@ -90,6 +90,7 @@ pub fn calculate_chunk_level_bvh(
     human_locations.bvh = bvh::Bvh::build(humans, len);
 }
 
+#[instrument(skip_all, level = "trace")]
 pub fn point_close_player(
     _: Receiver<Gametick>,
     human_locations: Single<&HumanLocations>,

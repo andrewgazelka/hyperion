@@ -21,6 +21,7 @@ use crate::{
     },
     CowBytes,
 };
+use crate::event::Scratch;
 
 pub mod buffers;
 
@@ -128,6 +129,14 @@ impl<'a> Compose<'a> {
     pub fn encoder(&self) -> PacketEncoder {
         let threshold = self.global.shared.compression_threshold;
         PacketEncoder::new(threshold)
+    }
+    
+    pub fn scratch(&self) -> &RefCell<Scratch> {
+        self.scratch.get_local()
+    }
+    
+    pub fn compressor(&self) -> &RefCell<libdeflater::Compressor> {
+        self.compressor.get_local()
     }
 }
 
