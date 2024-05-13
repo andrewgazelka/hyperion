@@ -1,4 +1,4 @@
-use std::{alloc::Allocator, cell::RefCell, fmt::Debug};
+use std::{alloc::Allocator, borrow::Cow, cell::RefCell, fmt::Debug};
 
 use bumpalo::Bump;
 use derive_more::{Deref, DerefMut};
@@ -6,7 +6,9 @@ use evenio::{component::Component, entity::EntityId, event::Event};
 use glam::Vec3;
 use rayon_local::RayonLocal;
 use valence_generated::{block::BlockState, status_effects::StatusEffect};
-use valence_protocol::{BlockPos, Hand};
+use valence_protocol::{
+    packets::play::entity_equipment_update_s2c::EquipmentEntry, BlockPos, Hand,
+};
 use valence_server::entity::EntityKind;
 use valence_text::Text;
 
@@ -45,6 +47,12 @@ pub struct PlayerInit {
 #[derive(Event)]
 pub struct PlayerJoinWorld {
     /// The [`EntityId`] of the player.
+    #[event(target)]
+    pub target: EntityId,
+}
+
+#[derive(Event)]
+pub struct PostPlayerJoinWorld {
     #[event(target)]
     pub target: EntityId,
 }
@@ -317,8 +325,22 @@ pub struct SetPlayerSkin {
 }
 
 #[derive(Event)]
-pub struct Compass {
+pub struct PointCompass {
     #[event(target)]
     pub target: EntityId,
     pub point_to: BlockPos,
+}
+
+#[derive(Event)]
+pub struct SetEquipment<'a> {
+    #[event(target)]
+    pub target: EntityId,
+    pub equipment: Cow<'a, [EquipmentEntry]>,
+}
+
+impl<'a> SetEquipment<'a> {
+    pub fn new(target: EntityId, equipment: impl Into<Cow<'a, [EquipmentEntry]>>) -> Self {
+        let equipment = equipment.into();
+        Self { target, equipment }
+    }
 }

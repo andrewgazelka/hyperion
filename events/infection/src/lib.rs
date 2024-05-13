@@ -23,6 +23,8 @@ pub fn init_game(address: impl ToSocketAddrs + Send + Sync + 'static) -> anyhow:
         world.add_handler(system::scramble_player_name);
         world.add_handler(system::assign_team_on_join);
 
+        world.add_handler(system::give_armor_on_join);
+
         world.add_handler(system::disable_attack_team);
 
         // world.add_handler(system::deny_block_break);

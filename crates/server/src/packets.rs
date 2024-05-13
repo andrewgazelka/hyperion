@@ -1,18 +1,6 @@
-#![expect(
-    unused,
-    reason = "there are still many changes that need to be made to this file"
-)]
-#![allow(
-    clippy::missing_docs_in_private_items,
-    reason = "most of this is self-explanatory"
-)]
-
 //! <https://wiki.vg/index.php?title=Protocol&oldid=18375>
 
-use std::str::FromStr;
-
-use anyhow::ensure;
-use evenio::{entity::EntityId, query::Query};
+use evenio::entity::EntityId;
 use valence_protocol::{
     decode::PacketFrame,
     math::Vec3,
@@ -27,10 +15,9 @@ use valence_protocol::{
 };
 
 use crate::{
-    components::{FullEntityPose, ImmuneStatus, KeepAlive, Vitals},
+    components::FullEntityPose,
     event,
     event::{AttackEntity, AttackType, Pose, SwingArm},
-    global::Global,
     singleton::player_id_lookup::EntityIdLookup,
     system::ingress::SendElem,
 };
@@ -39,10 +26,6 @@ pub mod vanilla;
 pub mod voicechat;
 
 const fn confirm_teleport(_pkt: &[u8]) {
-    // ignore
-}
-
-const fn custom_payload(_data: &[u8]) {
     // ignore
 }
 
@@ -93,12 +76,6 @@ fn look_and_on_ground(
     Ok(())
 }
 
-const fn player_command(data: &[u8]) {
-    // let pkt = play::ClientCommandC2s::decode(&mut data)?;
-
-    // debug!("player command packet: {:?}", pkt);
-}
-
 fn position_and_on_ground(
     mut data: &[u8],
     full_entity_pose: &mut FullEntityPose,
@@ -115,64 +92,12 @@ fn position_and_on_ground(
     Ok(())
 }
 
-fn update_player_abilities(mut data: &[u8]) -> anyhow::Result<()> {
-    let pkt = play::UpdatePlayerAbilitiesC2s::decode(&mut data)?;
-
-    // debug!("update player abilities packet: {:?}", pkt);
-
-    Ok(())
-}
-
-fn update_selected_slot(mut data: &[u8]) -> anyhow::Result<()> {
-    let pkt = play::UpdateSelectedSlotC2s::decode(&mut data)?;
-
-    // debug!("update selected slot packet: {:?}", pkt);
-
-    Ok(())
-}
-
-fn keep_alive(player: &mut KeepAlive) -> anyhow::Result<()> {
-    ensure!(!player.unresponded, "keep alive sent unexpectedly");
-    player.unresponded = false;
-    // player.ping = player.last_keep_alive_sent.elapsed();
-    Ok(())
-}
-
-#[derive(Debug, Copy, Clone)]
-enum HybridPos {
-    Absolute(f32),
-    Relative(f32),
-}
-
-// impl parse
-
-impl FromStr for HybridPos {
-    type Err = anyhow::Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if let Some((l, r)) = s.split_once('~') {
-            ensure!(l.is_empty(), "expected ~ to be at the start of the string");
-
-            if r.is_empty() {
-                return Ok(Self::Relative(0.0));
-            }
-
-            let num = r.parse()?;
-            return Ok(Self::Relative(num));
-        }
-
-        let num = s.parse()?;
-        Ok(Self::Absolute(num))
-    }
-}
-
 fn chat_command(
     mut data: &[u8],
     query: &PacketSwitchQuery,
     // query: PacketSwitchQuery,
     sender: &mut Vec<SendElem>,
 ) -> anyhow::Result<()> {
-    const BASE_RADIUS: f32 = 4.0;
     let pkt = play::CommandExecutionC2s::decode(&mut data)?;
 
     let event = event::Command {
@@ -239,17 +164,6 @@ fn player_interact_entity(
 pub struct PacketSwitchQuery<'a> {
     pub id: EntityId,
     pub pose: &'a mut FullEntityPose,
-    pub vitals: &'a mut Vitals,
-    pub keep_alive: &'a mut KeepAlive,
-    pub immunity: &'a mut ImmuneStatus,
-}
-
-/// i.e., doors, etc
-fn player_interact_block(mut data: &[u8]) -> anyhow::Result<()> {
-    let packet = play::PlayerInteractBlockC2s::decode(&mut data)?;
-
-    // todo!()
-    Ok(())
 }
 
 fn player_action(
@@ -337,7 +251,6 @@ fn client_command(
 
 pub fn switch(
     raw: PacketFrame,
-    global: &Global,
     sender: &mut Vec<SendElem>,
     id_lookup: &EntityIdLookup,
     query: &mut PacketSwitchQuery,
@@ -349,7 +262,7 @@ pub fn switch(
     match packet_id {
         play::HandSwingC2s::ID => hand_swing(data, query, sender)?,
         play::TeleportConfirmC2s::ID => confirm_teleport(data),
-        play::PlayerInteractBlockC2s::ID => player_interact_block(data)?,
+        // play::PlayerInteractBlockC2s::ID => player_interact_block(data)?,
         play::ClientCommandC2s::ID => client_command(data, sender, query)?,
         // play::ClientSettingsC2s::ID => client_settings(data, player)?,
         // play::CustomPayloadC2s::ID => custom_payload(data),

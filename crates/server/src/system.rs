@@ -12,6 +12,7 @@ pub mod effect;
 mod egress;
 mod entity_detect_collisions;
 mod entity_move_logic;
+pub mod equipment;
 mod generate_egress_packets;
 pub mod ingress;
 mod init_entity;

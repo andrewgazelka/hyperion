@@ -30,6 +30,7 @@ impl<'a> Msg for SecretVoiceChatS2c<'a> {
     const KEY: Ident<&'static str> = Ident::new_unchecked("voicechat:secret");
 }
 
+#[expect(dead_code, reason = "this will be removed soon")]
 #[derive(Copy, Clone, Debug)]
 #[repr(u8)]
 pub enum Codec {
