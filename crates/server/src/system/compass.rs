@@ -8,7 +8,7 @@ use crate::{
 };
 
 #[instrument(skip_all, level = "trace")]
-pub fn compass(r: Receiver<event::Compass, &mut Packets>, compose: Compose) {
+pub fn compass(r: Receiver<event::PointCompass, &mut Packets>, compose: Compose) {
     let event = r.event;
 
     let packets = r.query;

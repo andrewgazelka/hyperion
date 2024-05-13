@@ -1,4 +1,3 @@
-#![allow(unused, reason = "todo: will be re-added soon-tm")]
 // You can run this example from the root of the mio repo:
 // cargo run --example tcp_server --features="os-poll net"
 use std::{
@@ -17,7 +16,6 @@ use mio::{
     net::{TcpListener, TcpStream},
     Events, Interest, Poll, Registry, Token,
 };
-use rayon_local::RayonLocal;
 use tracing::{info, instrument, warn};
 
 use crate::{
@@ -56,11 +54,6 @@ impl Ids {
     }
 }
 
-struct GenericServerConsumer<'a> {
-    server: &'a mut GenericServer,
-    bytes: BytesMut,
-}
-
 impl ServerDef for GenericServer {
     fn new(address: SocketAddr) -> anyhow::Result<Self>
     where
@@ -97,7 +90,7 @@ impl ServerDef for GenericServer {
     }
 
     #[instrument(skip_all, level = "trace")]
-    fn drain<'a>(&'a mut self, mut f: impl FnMut(ServerEvent<'a>)) -> std::io::Result<()> {
+    fn drain<'a>(&'a mut self, mut f: impl FnMut(ServerEvent<'a>)) -> io::Result<()> {
         // // todo: this is a bit of a hack, is there a better number? probs dont want people sending more than this
         let mut received_data = BytesMut::with_capacity(MAX_PACKET_SIZE * 2);
 
@@ -116,7 +109,7 @@ impl ServerDef for GenericServer {
             match event.token() {
                 SERVER => loop {
                     // Received an event for the TCP server socket, which
-                    // indicates we can accept an connection.
+                    // indicates we can accept a connection.
                     let (mut connection, _) = match self.server.accept() {
                         Ok((connection, address)) => (connection, address),
                         Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
@@ -179,7 +172,7 @@ impl ServerDef for GenericServer {
     }
 
     // todo: make unsafe
-    unsafe fn register_buffers(&mut self, buffers: &[iovec]) {
+    unsafe fn register_buffers(&mut self, _buffers: &[iovec]) {
         // nop
     }
 
@@ -319,8 +312,4 @@ fn would_block(err: &io::Error) -> bool {
 
 fn interrupted(err: &io::Error) -> bool {
     err.kind() == io::ErrorKind::Interrupted
-}
-
-unsafe fn make_static<T>(t: &[T]) -> &'static [T] {
-    core::mem::transmute(t)
 }

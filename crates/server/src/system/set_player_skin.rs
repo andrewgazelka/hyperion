@@ -5,15 +5,11 @@ use evenio::{
     query::Query,
 };
 use tracing::instrument;
-use valence_generated::item::ItemKind;
 use valence_protocol::{
     game_mode::OptGameMode,
     ident,
-    packets::{
-        play,
-        play::{entity_equipment_update_s2c::EquipmentEntry, player_list_s2c::PlayerListEntry},
-    },
-    GameMode, ItemStack, VarInt,
+    packets::{play, play::player_list_s2c::PlayerListEntry},
+    GameMode, VarInt,
 };
 
 use crate::{
@@ -106,23 +102,4 @@ pub fn set_player_skin(r: ReceiverMut<SetPlayerSkin, SetPlayerSkinQuery>, compos
 
     // send_all_chunks(packets, &compose).unwrap();
     packets.append(&respawn, &compose).unwrap();
-
-    // set slots
-    let compass = ItemStack::new(ItemKind::Compass, 1, None);
-
-    let mainhand = EquipmentEntry {
-        slot: 0,
-        item: compass,
-    };
-    let equipment = vec![mainhand];
-
-    packets
-        .append(
-            &crate::packets::vanilla::EntityEquipmentUpdateS2c {
-                entity_id: VarInt(0),
-                equipment: Cow::Borrowed(&equipment),
-            },
-            &compose,
-        )
-        .unwrap();
 }

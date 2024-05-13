@@ -13,7 +13,6 @@ use valence_protocol::{
     packets::{
         play,
         play::{
-            entity_equipment_update_s2c::EquipmentEntry,
             player_list_s2c::PlayerListActions,
             player_position_look_s2c::PlayerPositionLookFlags,
             team_s2c::{CollisionRule, Mode, NameTagVisibility, TeamColor, TeamFlags},
@@ -21,7 +20,7 @@ use valence_protocol::{
         },
     },
     text::IntoText,
-    ByteAngle, GameMode, Ident, ItemKind, ItemStack, PacketEncoder, VarInt,
+    ByteAngle, GameMode, Ident, PacketEncoder, VarInt,
 };
 use valence_registry::{
     biome::{Biome, BiomeEffects},
@@ -34,6 +33,7 @@ use crate::{
         Display, FullEntityPose, InGameName, Player, Uuid, PLAYER_SPAWN_POSITION,
     },
     config::CONFIG,
+    event,
     event::PlayerJoinWorld,
     global::Global,
     net::{Broadcast, Compose, Packets},
@@ -83,6 +83,7 @@ pub fn player_join_world(
     chunks: Single<&Chunks>,
     tasks: Single<&Tasks>,
     compose: Compose,
+    mut sender: Sender<event::PostPlayerJoinWorld>,
 ) {
     static CACHED_DATA: once_cell::sync::OnceCell<bytes::Bytes> = once_cell::sync::OnceCell::new();
 
@@ -103,42 +104,10 @@ pub fn player_join_world(
 
     let query = r.query;
 
+    let got_id = query.id;
+
     uuid_lookup.insert(query.uuid.0, query.id);
     id_lookup.insert(query.id.index().0 as i32, query.id);
-
-    let boots = ItemStack::new(ItemKind::NetheriteBoots, 1, None);
-    let leggings = ItemStack::new(ItemKind::NetheriteLeggings, 1, None);
-    let chestplate = ItemStack::new(ItemKind::NetheriteChestplate, 1, None);
-    let helmet = ItemStack::new(ItemKind::NetheriteHelmet, 1, None);
-    let compass = ItemStack::new(ItemKind::Compass, 1, None);
-
-    // 0: Mainhand
-    // 2: Boots
-    // 3: Leggings
-    // 4: Chestplate
-    // 5: Helmet
-    let mainhand = EquipmentEntry {
-        slot: 0,
-        item: compass,
-    };
-    let boots = EquipmentEntry {
-        slot: 2,
-        item: boots,
-    };
-    let leggings = EquipmentEntry {
-        slot: 3,
-        item: leggings,
-    };
-    let chestplate = EquipmentEntry {
-        slot: 4,
-        item: chestplate,
-    };
-    let helmet = EquipmentEntry {
-        slot: 5,
-        item: helmet,
-    };
-
-    let equipment = vec![mainhand, boots, leggings, chestplate, helmet];
 
     let entries = &[play::player_list_s2c::PlayerListEntry {
         player_uuid: query.uuid.0,
@@ -166,16 +135,6 @@ pub fn player_join_world(
     }
 
     trace!("appending cached data");
-
-    local
-        .append(
-            &crate::packets::vanilla::EntityEquipmentUpdateS2c {
-                entity_id: VarInt(0),
-                equipment: Cow::Borrowed(&equipment),
-            },
-            &compose,
-        )
-        .unwrap();
 
     let actions = PlayerListActions::default()
         .with_add_player(true)
@@ -281,12 +240,6 @@ pub fn player_join_world(
         };
 
         local.append(&pkt, &compose).unwrap();
-
-        let pkt = crate::packets::vanilla::EntityEquipmentUpdateS2c {
-            entity_id,
-            equipment: Cow::Borrowed(&equipment),
-        };
-        local.append(&pkt, &compose).unwrap();
     }
 
     global
@@ -318,17 +271,9 @@ pub fn player_join_world(
 
     broadcast.append(&spawn_player, &compose).unwrap();
 
-    broadcast
-        .append(
-            &crate::packets::vanilla::EntityEquipmentUpdateS2c {
-                entity_id: current_entity_id,
-                equipment: Cow::Borrowed(&equipment),
-            },
-            &compose,
-        )
-        .unwrap();
-
     info!("{} joined the world", query.name);
+
+    sender.send(event::PostPlayerJoinWorld { target: got_id });
 }
 
 pub fn send_keep_alive(packets: &mut Packets, compose: &Compose) -> anyhow::Result<()> {

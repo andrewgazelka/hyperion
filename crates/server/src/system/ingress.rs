@@ -29,7 +29,7 @@ use crate::{
 mod player_packet_buffer;
 
 use crate::{
-    components::{FullEntityPose, ImmuneStatus, KeepAlive, LoginState, Vitals},
+    components::{FullEntityPose, LoginState},
     net::{buffers::BufferAllocator, Compose, Fd, Packets, MINECRAFT_VERSION, PROTOCOL_VERSION},
     packets::PacketSwitchQuery,
     singleton::player_id_lookup::EntityIdLookup,
@@ -220,9 +220,6 @@ pub fn recv_data(
         &mut Packets,
         &Fd,
         Option<&mut FullEntityPose>,
-        Option<&mut Vitals>,
-        Option<&mut KeepAlive>,
-        Option<&mut ImmuneStatus>,
     )>,
     id_lookup: Single<&EntityIdLookup>,
     mut real_sender: IngressSender,
@@ -233,17 +230,9 @@ pub fn recv_data(
     let send_events = RayonLocal::init(Vec::new);
     let elements = event.elements;
 
-    players.par_iter_mut().for_each(
-        |(
-            login_state,
-            decoder,
-            packets,
-            fd,
-            mut pose,
-            mut vitals,
-            mut keep_alive,
-            mut immunity,
-        )| {
+    players
+        .par_iter_mut()
+        .for_each(|(login_state, decoder, packets, fd, mut pose)| {
             let Some(data) = elements.get(fd) else {
                 return;
             };
@@ -303,33 +292,17 @@ pub fn recv_data(
                                 }
                             }
 
-                            if let Some((pose, vitals, keep_alive, immunity)) = itertools::izip!(
-                                pose.as_mut(),
-                                vitals.as_mut(),
-                                keep_alive.as_mut(),
-                                immunity.as_mut()
-                            )
-                            .next()
-                            {
-                                let mut query = PacketSwitchQuery {
-                                    id,
-                                    pose,
-                                    vitals,
-                                    keep_alive,
-                                    immunity,
-                                };
+                            if let Some(pose) = pose.as_mut() {
+                                let mut query = PacketSwitchQuery { id, pose };
 
-                                crate::packets::switch(
-                                    frame, &global, sender, &id_lookup, &mut query,
-                                )
-                                .unwrap();
+                                crate::packets::switch(frame, sender, &id_lookup, &mut query)
+                                    .unwrap();
                             }
                         }
                     }
                 }
             }
-        },
-    );
+        });
 
     for elem in send_events.into_iter().flatten() {
         match elem {
