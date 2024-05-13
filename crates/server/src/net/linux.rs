@@ -355,7 +355,7 @@ impl ServerDef for LinuxServer {
     #[instrument(skip_all, level = "trace", name = "iou-register-buffers")]
     unsafe fn register_buffers(&mut self, buffers: &[iovec]) {
         info!("registering buffers");
-        unsafe { self.register_buffers(buffers) };
+        self.uring.submitter().register_buffers(buffers).unwrap();
         info!("finished registering buffers");
     }
 
@@ -463,13 +463,6 @@ impl LinuxServer {
             .submitter()
             .register_sync_cancel(None, cancel_builder)
             .unwrap();
-    }
-
-    /// To register new buffers, unregister must be called first
-    /// # Safety
-    /// buffers must be valid
-    pub unsafe fn register_buffers(&mut self, buffers: &[iovec]) {
-        self.uring.submitter().register_buffers(buffers).unwrap();
     }
 
     /// All requests in the submission queue must be finished or cancelled, or else this function
