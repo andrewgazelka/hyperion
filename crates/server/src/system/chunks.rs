@@ -23,7 +23,7 @@ pub struct ChunkChanges {
 }
 
 #[instrument(skip_all, level = "trace")]
-pub fn generate_changes(
+pub fn generate_chunk_changes(
     _: Receiver<Gametick>,
     mut fetcher: Fetcher<(
         &mut ChunkLocation,

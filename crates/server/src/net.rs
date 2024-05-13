@@ -13,7 +13,7 @@ use rayon_local::RayonLocal;
 use tracing::instrument;
 
 use crate::{
-    event::Scratches,
+    event::{Scratch, Scratches},
     global::Global,
     net::{
         buffers::{BufRef, BufferAllocator},
@@ -128,6 +128,16 @@ impl<'a> Compose<'a> {
     pub fn encoder(&self) -> PacketEncoder {
         let threshold = self.global.shared.compression_threshold;
         PacketEncoder::new(threshold)
+    }
+
+    #[must_use]
+    pub fn scratch(&self) -> &RefCell<Scratch> {
+        self.scratch.get_local()
+    }
+
+    #[must_use]
+    pub fn compressor(&self) -> &RefCell<libdeflater::Compressor> {
+        self.compressor.get_local()
     }
 }
 

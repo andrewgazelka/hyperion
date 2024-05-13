@@ -318,7 +318,7 @@ impl Hyperion {
         world.add_handler(system::ingress::recv_data);
         world.add_handler(system::ingress::sent_data);
 
-        world.add_handler(system::chunks::generate_changes);
+        world.add_handler(system::chunks::generate_chunk_changes);
         world.add_handler(system::chunks::send_updates);
 
         world.add_handler(system::init_player);
