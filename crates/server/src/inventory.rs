@@ -77,16 +77,16 @@ pub struct PlayerInventory {
 
 #[derive(Debug, Error)]
 pub enum SlotChangeError {
-    #[error("More items than expected")]
-    MoreItems,
-    #[error("To much items in stack")]
-    ToMuchInStack,
+    #[error("More items than expected in inventory")]
+    MoreItemsThanExpected,
+    #[error("Fewer items than expected in inventory")]
+    FewerItemsThanExpected,
+    #[error("Invalid stack count")]
+    InvalidStackCount,
     #[error("Change index not found")]
     SlotNotFound,
-    #[error("Less items than expected")]
-    LessItems,
     #[error("Armor slot can only contain armor")]
-    NoArmor,
+    NonArmorInArmorSlot,
 }
 
 /// Struct represents the result of [`PlayerInventory::append_slot_changes`]
@@ -120,6 +120,8 @@ impl PlayerInventory {
         client_proposed_cursor: &ItemStack,
         allow_less: bool,
     ) -> Result<AppendSlotChange, SlotChangeError> {
+        const SLOT_COUNT: i16 = 46;
+        
         // construct result struct
         let mut result = AppendSlotChange {
             update_equipment: false,
@@ -129,7 +131,7 @@ impl PlayerInventory {
         let mut slots: u128 = 0;
         // set the bitmap for changed slots
         for change in slot_change {
-            if change.idx > 45 {
+            if change.idx >= SLOT_COUNT {
                 warn!("Slot not found {:?}", change.idx);
                 return Err(SlotChangeError::SlotNotFound);
             }
@@ -137,9 +139,7 @@ impl PlayerInventory {
 
             // check if the stack is not to big
             if change.stack.count < 0 || change.stack.count > change.stack.item.max_stack() {
-                warn!("To many items in stack {:?}", change.stack);
-                // no negative items
-                return Err(SlotChangeError::ToMuchInStack);
+                return Err(SlotChangeError::InvalidStackCount);
             }
 
             // check if armor slot
@@ -152,7 +152,7 @@ impl PlayerInventory {
             };
             if !armor_slot_ok {
                 warn!("Armor slot can only contain armor {:?}", change.stack);
-                return Err(SlotChangeError::NoArmor);
+                return Err(SlotChangeError::NonArmorInArmorSlot);
             }
 
             // check if the visible items are updated
@@ -201,15 +201,15 @@ impl PlayerInventory {
                     "More items than expected {:?} p:{proposed_count} c:{current_count}",
                     item
                 );
-                return Err(SlotChangeError::MoreItems);
+                return Err(SlotChangeError::MoreItemsThanExpected);
             }
             // check if the player does not destroy items
             if !allow_less && proposed_count < current_count {
                 warn!(
-                    "Less items than expected {:?}p:{proposed_count} c:{current_count}",
+                    "Fewer items than expected {:?}p:{proposed_count} c:{current_count}",
                     item
                 );
-                return Err(SlotChangeError::MoreItems);
+                return Err(SlotChangeError::FewerItemsThanExpected);
             }
         }
 
@@ -423,23 +423,26 @@ mod test {
 
     #[test]
     fn test_inventory() {
+        tracing_subscriber::fmt::init();
+
         let mut inventory = Inventory::<46>::new();
         let item = ItemStack::new(ItemKind::AcaciaBoat, 1, None);
         inventory.set(0, item.clone());
         assert_eq!(inventory.slots[0], item);
     }
 
-    // test append_slot_change
     #[test]
-    fn test_append_slot_change() {
+    fn test_append_slot_changes() {
+        tracing_subscriber::fmt::init();
+
         let mut inventory = PlayerInventory::new();
         let item = ItemStack::new(ItemKind::AcaciaBoat, 1, None);
-        let slot_change = vec![SlotChange {
+        let slot_changes = [SlotChange {
             idx: 0,
             stack: item.clone(),
         }];
         inventory
-            .append_slot_changes(&slot_change, &ItemStack::EMPTY, false)
+            .append_slot_changes(&slot_changes, &ItemStack::EMPTY, false)
             .unwrap();
         assert_eq!(inventory.items.slots[0], item);
     }
