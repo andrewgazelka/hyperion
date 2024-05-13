@@ -11,6 +11,7 @@
 #![feature(duration_millis_float)]
 #![feature(new_uninit)]
 #![feature(sync_unsafe_cell)]
+#![feature(io_slice_advance)]
 #![expect(clippy::type_complexity, reason = "evenio uses a lot of complex types")]
 
 pub use evenio;
