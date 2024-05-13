@@ -1,6 +1,10 @@
 use evenio::prelude::*;
 use tracing::instrument;
-use valence_protocol::text::IntoText;
+use uuid::Uuid;
+use valence_protocol::{
+    packets::play::boss_bar_s2c::{BossBarAction, BossBarColor, BossBarDivision, BossBarFlags},
+    text::IntoText,
+};
 
 use crate::{
     event::Stats,
@@ -17,23 +21,56 @@ pub fn stats_message(
 ) {
     let event = r.event;
 
-    let ms_per_tick_mean_1s = event.ms_per_tick_mean_1s;
-    let ms_per_tick_mean_5s = event.ms_per_tick_mean_5s;
+    let ms_per_tick = event.ms_per_tick;
 
-    let mspt = format!("ms {ms_per_tick_mean_1s:05.2} {ms_per_tick_mean_5s:05.2}");
-    let mspt = mspt.into_cow_text();
+    let title = format!("{ms_per_tick:05.2} ms/tick");
+    let title = title.into_cow_text();
+    let health = (ms_per_tick / 20.0).min(1.0) as f32;
+
+    let color = if health > 0.5 {
+        BossBarColor::Red
+    } else {
+        BossBarColor::White
+    };
+
+    // boss bar
+    let pkt = valence_protocol::packets::play::BossBarS2c {
+        id: Uuid::from_u128(0),
+        action: BossBarAction::Add {
+            title,
+            health,
+            color,
+            division: BossBarDivision::TwentyNotches,
+            flags: BossBarFlags::default(),
+        },
+    };
+
+    // // header footer
+    // let pkt = valence_protocol::packets::play::PlayerListHeaderS2c {
+    //     header: mspt,
+    //     footer: player_count,
+    // };
+
+    broadcast.append(&pkt, &compose).unwrap();
 
     let player_count = global
         .shared
         .player_count
         .load(std::sync::atomic::Ordering::Relaxed);
-    let player_count = format!("{player_count} player online");
-    let player_count = player_count.into_cow_text();
 
-    // header footer
-    let pkt = valence_protocol::packets::play::PlayerListHeaderS2c {
-        header: mspt,
-        footer: player_count,
+    let title = format!("{player_count} player online");
+    let title = title.into_cow_text();
+    let health = (player_count as f32 / 10_000.0).min(1.0);
+
+    let pkt = valence_protocol::packets::play::BossBarS2c {
+        id: Uuid::from_u128(1),
+        action: BossBarAction::Add {
+            title,
+            health,
+            color: BossBarColor::White,
+            division: BossBarDivision::NoDivision,
+            flags: BossBarFlags::default(),
+        },
     };
 
     broadcast.append(&pkt, &compose).unwrap();
