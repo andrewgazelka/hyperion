@@ -33,7 +33,6 @@ signal-hook = "0.3.17"
 uuid = { version = "1.8.0", features = ["v3"] }
 rand_distr = "0.4.3"
 rayon = "1.10.0"
-ndarray = "0.15.6"
 libc = "0.2.153"
 spin = "0.9.8"
 serde = { version = "1.0.197", features = ["derive"] }
