@@ -2,7 +2,7 @@
 // cargo run --example tcp_server --features="os-poll net"
 use std::{
     hash::BuildHasherDefault,
-    io::{self, Read, Write},
+    io::{self, IoSlice, Read, Write},
     net::{SocketAddr, ToSocketAddrs},
     time::Duration,
 };
@@ -19,7 +19,7 @@ use mio::{
 use tracing::{info, instrument, warn};
 
 use crate::{
-    net::{encoder::DataWriteInfo, Fd, ServerDef, ServerEvent, WriteItem, MAX_PACKET_SIZE},
+    net::{Fd, ServerDef, ServerEvent, WriteItem, MAX_PACKET_SIZE},
     CowBytes,
 };
 
@@ -29,9 +29,8 @@ const SERVER: Token = Token(0);
 const EVENT_CAPACITY: usize = 128;
 
 struct ConnectionInfo {
-    pub to_write: Vec<DataWriteInfo>,
+    pub to_write: Vec<IoSlice<'static>>,
     pub connection: TcpStream,
-    pub data_to_write: Vec<u8>,
 }
 
 pub struct GenericServer {
@@ -137,7 +136,6 @@ impl ServerDef for GenericServer {
                     self.connections.insert(token.0, ConnectionInfo {
                         to_write: Vec::new(),
                         connection,
-                        data_to_write: vec![],
                     });
 
                     f(ServerEvent::AddPlayer { fd: Fd(token.0) });
@@ -190,7 +188,8 @@ impl ServerDef for GenericServer {
             return;
         };
 
-        to_write.to_write.push(*info);
+        let io_slice = IoSlice::new(unsafe { info.as_static_slice() });
+        to_write.to_write.push(io_slice);
     }
 
     fn submit_events(&mut self) {
@@ -208,14 +207,9 @@ fn handle_connection_event<'a>(
     f: &mut impl FnMut(ServerEvent<'a>),
 ) -> anyhow::Result<bool> {
     if event.is_writable() {
-        let data = &mut info.data_to_write;
+        let empty = info.to_write.is_empty() || info.to_write[0].len() == 0;
 
-        for elem in &info.to_write {
-            data.extend_from_slice(unsafe { elem.as_slice() });
-        }
-
-        if data.is_empty() {
-            // todo: I think an event cannot be both readable and writable
+        if empty {
             registry.reregister(
                 &mut info.connection,
                 event.token(),
@@ -225,20 +219,22 @@ fn handle_connection_event<'a>(
             return Ok(false);
         }
 
+        let connection = &mut info.connection;
+
         // We can (maybe) write to the connection.
-        match info.connection.write(data) {
-            Ok(n) if n < data.len() => {
-                // remove {n} bytes from the data
-                // todo: is this most efficient
-                data.drain(..n);
-                registry.reregister(
-                    &mut info.connection,
-                    event.token(),
-                    Interest::READABLE.add(Interest::WRITABLE),
-                )?;
-            }
-            Ok(_) => {
-                data.drain(..);
+        match connection.write_vectored(&info.to_write) {
+            Ok(n) => {
+                let mut slice = info.to_write.as_mut_slice();
+                IoSlice::advance_slices(&mut slice, n);
+                let new_len = slice.len();
+                let removed = info.to_write.len() - new_len;
+
+                info.to_write.drain(..removed);
+
+                for _ in 0..removed {
+                    f(ServerEvent::SentData { fd: Fd(token.0) });
+                }
+
                 registry.reregister(
                     &mut info.connection,
                     event.token(),
@@ -254,13 +250,6 @@ fn handle_connection_event<'a>(
             }
             // Other errors we'll consider fatal.
             Err(err) => bail!("failed to write to connection: {err}"),
-        }
-
-        let sent_count = info.to_write.len();
-        info.to_write.clear();
-
-        for _ in 0..sent_count {
-            f(ServerEvent::SentData { fd: Fd(token.0) });
         }
     }
 

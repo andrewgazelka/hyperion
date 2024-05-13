@@ -53,6 +53,14 @@ impl DataWriteInfo {
     pub const unsafe fn as_slice(&self) -> &[u8] {
         std::slice::from_raw_parts(self.start_ptr, self.len as usize)
     }
+
+    /// # Safety
+    /// todo
+    #[allow(dead_code, reason = "nice for unit tests")]
+    #[must_use]
+    pub const unsafe fn as_static_slice(&self) -> &'static [u8] {
+        std::slice::from_raw_parts(self.start_ptr, self.len as usize)
+    }
 }
 
 pub fn append_packet_without_compression<P, B: Buf>(

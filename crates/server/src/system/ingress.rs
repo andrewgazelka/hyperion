@@ -417,7 +417,6 @@ fn process_status(
 ) -> anyhow::Result<()> {
     debug_assert!(*login_state == LoginState::Status);
 
-    #[allow(clippy::single_match, reason = "todo del")]
     match packet.id {
         packets::status::QueryRequestC2s::ID => {
             let query_request: packets::status::QueryRequestC2s = packet.decode()?;
