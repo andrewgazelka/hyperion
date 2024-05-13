@@ -392,7 +392,7 @@ checksum = "79296716171880943b8470b5f8d03aa55eb2e645a4874bdbb28adb49162e012c"
 [[package]]
 name = "bvh"
 version = "0.1.0"
-source = "git+https://github.com/andrewgazelka/bvh-data#a3e6329dbb1b93850d8f3a43323d36681e3eddcc"
+source = "git+https://github.com/andrewgazelka/bvh-data#41fb6789455fe98e7e3c1053790dfd90ff757536"
 dependencies = [
  "arrayvec",
  "glam",
