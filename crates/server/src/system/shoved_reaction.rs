@@ -1,7 +1,4 @@
-use evenio::{
-    event::{Receiver, ReceiverMut, Sender},
-    fetch::Single,
-};
+use evenio::event::{ReceiverMut, Sender};
 use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
 use tracing::instrument;
 

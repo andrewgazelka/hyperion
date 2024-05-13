@@ -8,8 +8,10 @@ use evenio::{
     event::{EventMut, Insert, Remove},
     fetch::{Fetcher, Single},
     query::{Query, With},
+    rayon,
 };
 use glam::I16Vec2;
+use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
 use server::{
     components::{ChunkLocation, FullEntityPose, Vitals, PLAYER_SPAWN_POSITION},
     evenio::{
@@ -17,7 +19,7 @@ use server::{
         event::{Receiver, ReceiverMut, Sender},
     },
     event,
-    event::{Gametick, Shoved},
+    event::{BulkShoved, Gametick, Shoved},
     util::player_skin::PlayerSkin,
     valence_server::{
         entity::EntityKind,
@@ -272,22 +274,20 @@ pub fn zombie_command(
 }
 
 #[instrument(skip_all)]
-pub fn bump_into_player(r: ReceiverMut<Shoved, &Team>, fetcher: Fetcher<&Team>) {
-    let event = r.event;
-    let Ok(&origin_team) = fetcher.get(event.from) else {
-        warn!("Shoved event where origin is not on a team");
-        return;
-    };
+pub fn bump_into_player(mut r: ReceiverMut<BulkShoved>, fetcher: Fetcher<&Team>) {
+    r.event.0.get_all_mut().par_iter_mut().for_each(|lst| {
+        lst.retain(|Shoved { target, from, .. }| {
+            let Ok(&origin_team) = fetcher.get(*from) else {
+                return false;
+            };
 
-    let team = *r.query;
+            let Ok(&team) = fetcher.get(*target) else {
+                return false;
+            };
 
-    // if a zombies bumps into a human, they are hurt
-    if (origin_team, team) == (Team::Zombie, Team::Human) {
-        return;
-    }
-
-    // else we are ignoring the bump
-    EventMut::take(event);
+            (origin_team, team) == (Team::Zombie, Team::Human)
+        });
+    });
 }
 
 #[instrument(skip_all)]
