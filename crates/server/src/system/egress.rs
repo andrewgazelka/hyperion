@@ -64,7 +64,7 @@ pub fn egress(
 
                 pkts.number_sending += 1;
 
-                server.inner.write(write_item);
+                server.write(write_item);
             }
 
             pkts.elems_mut().clear();
@@ -77,7 +77,7 @@ pub fn egress(
             // todo: append broadcast even if cannot send and have packet prios and stuff
             if broadcast_len != 0 {
                 pkts.number_sending += 1;
-                server.inner.write(WriteItem {
+                server.write(WriteItem {
                     info: &broadcast.local_to_write,
                     buffer_idx: broadcast_index,
                     fd: *fd,

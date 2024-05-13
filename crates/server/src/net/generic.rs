@@ -7,7 +7,7 @@ use std::{
     time::Duration,
 };
 
-use anyhow::Context;
+use anyhow::{bail, Context};
 use bytes::BytesMut;
 use fxhash::FxHashMap;
 use libc::iovec;
@@ -90,7 +90,7 @@ impl ServerDef for GenericServer {
     }
 
     #[instrument(skip_all, level = "trace")]
-    fn drain<'a>(&'a mut self, mut f: impl FnMut(ServerEvent<'a>)) -> io::Result<()> {
+    fn drain<'a>(&'a mut self, mut f: impl FnMut(ServerEvent<'a>)) -> anyhow::Result<()> {
         // // todo: this is a bit of a hack, is there a better number? probs dont want people sending more than this
         let mut received_data = BytesMut::with_capacity(MAX_PACKET_SIZE * 2);
 
@@ -102,7 +102,8 @@ impl ServerDef for GenericServer {
             if interrupted(&err) {
                 return Ok(());
             }
-            return Err(err);
+
+            bail!("failed to poll: {err}");
         }
 
         for event in &self.events {
@@ -122,7 +123,7 @@ impl ServerDef for GenericServer {
                         Err(e) => {
                             // If it was any other kind of error, something went
                             // wrong and we terminate with an error.
-                            return Err(e);
+                            bail!("failed to accept connection: {e}");
                         }
                     };
 
@@ -145,14 +146,19 @@ impl ServerDef for GenericServer {
                     // Maybe received an event for a TCP connection.
                     let done = if let Some(connection) = self.connections.get_mut(&token.0) {
                         received_data.clear();
-                        handle_connection_event(
+                        let result = handle_connection_event(
                             self.poll.registry(),
                             connection,
                             event,
                             &mut received_data,
                             token,
                             &mut f,
-                        )?
+                        );
+
+                        result.unwrap_or_else(|err| {
+                            warn!("failed to handle connection event: {err}");
+                            true
+                        })
                     } else {
                         // Sporadic events happen, we can safely ignore them.
                         false
@@ -200,7 +206,7 @@ fn handle_connection_event<'a>(
     received_data: &mut BytesMut,
     token: Token,
     f: &mut impl FnMut(ServerEvent<'a>),
-) -> io::Result<bool> {
+) -> anyhow::Result<bool> {
     if event.is_writable() {
         let data = &mut info.data_to_write;
 
@@ -247,7 +253,7 @@ fn handle_connection_event<'a>(
                 return handle_connection_event(registry, info, event, received_data, token, f)
             }
             // Other errors we'll consider fatal.
-            Err(err) => return Err(err),
+            Err(err) => bail!("failed to write to connection: {err}"),
         }
 
         let sent_count = info.to_write.len();
@@ -285,7 +291,7 @@ fn handle_connection_event<'a>(
                 Err(ref err) if would_block(err) => break,
                 Err(ref err) if interrupted(err) => continue,
                 // Other errors we'll consider fatal.
-                Err(err) => return Err(err),
+                Err(err) => bail!("failed to read from connection: {err}"),
             }
         }
 

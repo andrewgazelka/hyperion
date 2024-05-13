@@ -10,7 +10,7 @@ use fxhash::FxHashMap;
 use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
 use rayon_local::RayonLocal;
 use serde_json::json;
-use tracing::{info, instrument, span, trace, warn, Level};
+use tracing::{instrument, span, trace, warn, Level};
 use valence_protocol::{
     decode::PacketFrame,
     packets,
@@ -79,25 +79,27 @@ pub fn generate_ingress_events(world: &mut World, server: &mut Server) {
 
     let mut recv_data_elements: FxHashMap<Fd, ArrayVec<CowBytes, 16>> = FxHashMap::default();
 
-    server
-        .drain(|event| match event {
-            ServerEvent::AddPlayer { fd } => {
-                world.send(AddPlayer { fd });
-            }
-            ServerEvent::RemovePlayer { fd } => {
-                world.send(RemovePlayer { fd });
-            }
-            ServerEvent::RecvData { fd, data } => {
-                recv_data_elements.entry(fd).or_default().push(data);
-            }
-            ServerEvent::SentData { fd } => {
-                decrease_count
-                    .entry(fd)
-                    .and_modify(|x| *x += 1)
-                    .or_insert(1);
-            }
-        })
-        .unwrap();
+    let result = server.drain(|event| match event {
+        ServerEvent::AddPlayer { fd } => {
+            world.send(AddPlayer { fd });
+        }
+        ServerEvent::RemovePlayer { fd } => {
+            world.send(RemovePlayer { fd });
+        }
+        ServerEvent::RecvData { fd, data } => {
+            recv_data_elements.entry(fd).or_default().push(data);
+        }
+        ServerEvent::SentData { fd } => {
+            decrease_count
+                .entry(fd)
+                .and_modify(|x| *x += 1)
+                .or_insert(1);
+        }
+    });
+
+    if let Err(err) = result {
+        warn!("error draining server: {err}");
+    }
 
     span!(Level::TRACE, "sent-data").in_scope(|| {
         world.send(SentData { decrease_count });
@@ -175,7 +177,7 @@ pub fn sent_data(
     // todo: par iter
     event.decrease_count.iter().for_each(|(fd, count)| {
         let Some(&id) = fd_lookup.get(fd) else {
-            warn!(
+            trace!(
                 "tried to get id for fd {:?} but it seemed to already be removed",
                 fd
             );
@@ -438,7 +440,7 @@ fn process_status(
 
             let send = packets::status::QueryResponseS2c { json: &json };
 
-            info!("sent query response: {query_request:?}");
+            trace!("sent query response: {query_request:?}");
             //
             packets.append_pre_compression_packet(&send)?;
         }
@@ -452,7 +454,7 @@ fn process_status(
 
             packets.append_pre_compression_packet(&send)?;
 
-            info!("sent query pong: {query_ping:?}");
+            trace!("sent query pong: {query_ping:?}");
             *login_state = LoginState::Terminate;
         }
 
