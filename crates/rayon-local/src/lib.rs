@@ -19,7 +19,10 @@ use std::{
 
 #[cfg(feature = "evenio")]
 pub use evenio::*;
-use rayon::iter::{plumbing::UnindexedConsumer, ParallelIterator};
+use rayon::iter::{
+    plumbing::UnindexedConsumer, IntoParallelRefIterator, IntoParallelRefMutIterator,
+    ParallelIterator,
+};
 
 #[derive(Debug)]
 pub struct RayonRef<'a, S> {
@@ -225,6 +228,24 @@ impl<S> RayonLocal<S> {
             .collect();
 
         Self { thread_locals }
+    }
+
+    #[must_use]
+    pub fn par_iter_mut<'a>(&'a mut self) -> rayon::slice::IterMut<'a, S>
+    where
+        &'a mut [S]: IntoParallelRefMutIterator<'a>,
+        S: Send,
+    {
+        self.get_all_mut().par_iter_mut()
+    }
+
+    #[must_use]
+    pub fn par_iter<'a>(&'a self) -> rayon::slice::Iter<'a, S>
+    where
+        &'a [S]: IntoParallelRefIterator<'a>,
+        S: Send + Sync,
+    {
+        self.get_all().par_iter()
     }
 
     pub fn iter(&self) -> impl Iterator<Item = &S> {

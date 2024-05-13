@@ -131,11 +131,11 @@ impl<'a> Compose<'a> {
         PacketEncoder::new(threshold)
     }
     
-    pub fn scratch(&self) -> &RefCell<Scratch> {
+    #[must_use] pub fn scratch(&self) -> &RefCell<Scratch> {
         self.scratch.get_local()
     }
     
-    pub fn compressor(&self) -> &RefCell<libdeflater::Compressor> {
+    #[must_use] pub fn compressor(&self) -> &RefCell<libdeflater::Compressor> {
         self.compressor.get_local()
     }
 }

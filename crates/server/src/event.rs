@@ -149,13 +149,16 @@ pub struct Teleport {
 }
 
 /// i.e., when zombies bump into another player
-#[derive(Event)]
+#[derive(Debug)]
 pub struct Shoved {
-    #[event(target)]
     pub target: EntityId,
     pub from: EntityId,
     pub from_location: Vec3,
 }
+
+#[derive(Event, Debug)]
+pub struct BulkShoved(pub RayonLocal<Vec<Shoved>>);
+
 
 /// An event when server stats are updated.
 #[derive(Event)]
