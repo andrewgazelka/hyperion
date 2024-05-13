@@ -81,6 +81,7 @@ impl<'a> Data for BvhHuman<'a> {
     }
 }
 
+#[instrument(skip_all)]
 pub fn calculate_chunk_level_bvh(
     _: Receiver<Gametick>,
     humans: Fetcher<BvhHuman>,
@@ -174,6 +175,7 @@ pub fn give_armor_on_join(
 }
 
 #[allow(clippy::type_complexity, reason = "required")]
+#[instrument(skip_all)]
 pub fn to_zombie(
     r: ReceiverMut<ToZombie, (&mut Team, &mut Vitals)>,
     mut s: Sender<(
