@@ -1,5 +1,7 @@
 # Hyperion
 
+[![Star History Chart](https://api.star-history.com/svg?repos=andrewgazelka/hyperion&type=Date)](https://star-history.com/#andrewgazelka/hyperion&Date)
+
 [![Discord invite link](https://dcbadge.vercel.app/api/server/PBfnDtj5Wb)](https://discord.gg/PBfnDtj5Wb)
 [![wakatime](https://wakatime.com/badge/github/andrewgazelka/hyperion.svg)](https://wakatime.com/badge/github/andrewgazelka/hyperion)
 
