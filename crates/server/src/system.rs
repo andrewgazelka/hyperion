@@ -59,6 +59,7 @@ pub use player_join_world::{generate_biome_registry, player_join_world};
 pub use player_kick::player_kick;
 pub use pose_update::pose_update;
 pub use rebuild_player_location::rebuild_player_location;
+pub use rebuild_player_location::LookupData;
 pub use recalculate_bounding_boxes::recalculate_bounding_boxes;
 pub use set_player_skin::set_player_skin;
 pub use shoved_reaction::shoved_reaction;

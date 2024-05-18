@@ -1,17 +1,8 @@
 use bvh_region::TrivialHeuristic;
-use evenio::{
-    entity::EntityId,
-    event::Receiver,
-    fetch::{Fetcher, Single},
-    query::Query,
-};
+use evenio::{entity::EntityId, event::ReceiverMut, fetch::Fetcher, query::Query};
 use tracing::{instrument, span};
 
-use crate::{
-    components::FullEntityPose,
-    event::Gametick,
-    singleton::bounding_box::{EntityBoundingBoxes, Stored},
-};
+use crate::{components::FullEntityPose, event::Gametick, singleton::bounding_box::Stored};
 
 #[derive(Query, Debug)]
 pub struct EntityQuery<'a> {
@@ -21,28 +12,26 @@ pub struct EntityQuery<'a> {
 
 #[instrument(skip_all, level = "trace")]
 pub fn recalculate_bounding_boxes(
-    _: Receiver<Gametick>,
-    entity_bounding_boxes: Single<&mut EntityBoundingBoxes>,
+    mut gametick: ReceiverMut<Gametick>,
     entities: Fetcher<EntityQuery>,
 ) {
-    let entity_bounding_boxes = entity_bounding_boxes.0;
-
-    span!(tracing::Level::TRACE, "clear-bounding-boxes").in_scope(|| {
-        entity_bounding_boxes.clear();
-    });
+    let gametick = &mut *gametick.event;
 
     // todo: make par iterator
-    let stored: Vec<_> = span!(tracing::Level::TRACE, "entities-to-vec").in_scope(|| {
-        entities
-            .iter()
-            .map(|query| Stored {
+    let stored = span!(tracing::Level::TRACE, "entities-to-vec").in_scope(|| {
+        let mut res = Vec::with_capacity_in(entities.iter().len(), gametick.allocator());
+
+        for query in &entities {
+            res.push(Stored {
                 aabb: query.pose.bounding,
                 id: query.id,
-            })
-            .collect()
+            });
+        }
+
+        res
     });
 
-    let bvh = bvh_region::Bvh::build::<TrivialHeuristic>(stored);
+    let bvh = bvh_region::Bvh::build::<TrivialHeuristic>(stored, gametick.allocator());
 
-    entity_bounding_boxes.query = bvh;
+    gametick.entity_bounding_boxes = bvh;
 }

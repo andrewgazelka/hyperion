@@ -1,9 +1,11 @@
 #![feature(lint_reasons)]
 #![feature(portable_simd)]
+#![feature(allocator_api)]
 
 // https://www.haroldserrano.com/blog/visualizing-the-boundary-volume-hierarchy-collision-algorithm
 
 use std::{
+    alloc::Allocator,
     cmp::Reverse,
     collections::BinaryHeap,
     fmt::{Debug, Formatter},
@@ -52,9 +54,9 @@ impl BvhNode {
 }
 
 #[derive(Clone)]
-pub struct Bvh<T> {
-    nodes: Vec<BvhNode>,
-    elements: Vec<T>,
+pub struct Bvh<T, A: Allocator = std::alloc::Global> {
+    nodes: Vec<BvhNode, A>,
+    elements: Vec<T, A>,
     root: i32,
 }
 
@@ -116,9 +118,17 @@ fn thread_count_pow2() -> usize {
     max_threads
 }
 
-impl<T: HasAabb + Send + Copy + Sync + Debug> Bvh<T> {
+impl<T: HasAabb + Send + Copy + Sync + Debug, A: Allocator + Clone> Bvh<T, A> {
+    pub fn null_in(allocator: A) -> Self {
+        Self {
+            nodes: Vec::new_in(allocator.clone()),
+            elements: Vec::new_in(allocator),
+            root: 0,
+        }
+    }
+
     #[tracing::instrument(skip_all, fields(elements_len = elements.len()))]
-    pub fn build<H: Heuristic>(mut elements: Vec<T>) -> Self {
+    pub fn build<H: Heuristic>(mut elements: Vec<T, A>, allocator: A) -> Self {
         let max_threads = thread_count_pow2();
 
         let len = elements.len();
@@ -127,7 +137,8 @@ impl<T: HasAabb + Send + Copy + Sync + Debug> Bvh<T> {
         let capacity = ((len / ELEMENTS_TO_ACTIVATE_LEAF) as f64 * 8.0) as usize;
         let capacity = capacity.max(16);
 
-        let mut nodes = vec![BvhNode::DUMMY; capacity];
+        let mut nodes = Vec::with_capacity_in(capacity, allocator);
+        nodes.resize(capacity, BvhNode::DUMMY);
 
         let bvh = BvhBuild {
             start_elements_ptr: elements.as_ptr(),
@@ -243,7 +254,7 @@ impl<T: HasAabb + Send + Copy + Sync + Debug> Bvh<T> {
     }
 }
 
-impl<T> Bvh<T> {
+impl<T, A: Allocator> Bvh<T, A> {
     fn root(&self) -> Node<T> {
         let root = self.root;
         if root < 0 {
@@ -320,7 +331,7 @@ impl BvhNode {
         right: 0,
     };
 
-    fn left<'a, T>(&self, root: &'a Bvh<T>) -> Option<&'a Self> {
+    fn left<'a, T, A: Allocator>(&self, root: &'a Bvh<T, A>) -> Option<&'a Self> {
         let left = self.left;
 
         if left < 0 {
@@ -330,9 +341,9 @@ impl BvhNode {
         root.nodes.get(left as usize)
     }
 
-    fn switch_children<'a, T>(
+    fn switch_children<'a, T, A: Allocator>(
         &'a self,
-        root: &'a Bvh<T>,
+        root: &'a Bvh<T, A>,
         mut process_children: impl FnMut(&'a Self),
         mut process_leaf: impl FnMut(&'a [T]),
     ) {
@@ -358,11 +369,14 @@ impl BvhNode {
     }
 
     // impl Iterator
-    fn children<'a, T>(&'a self, root: &'a Bvh<T>) -> impl Iterator<Item = Node<T>> {
+    fn children<'a, T, A: Allocator>(
+        &'a self,
+        root: &'a Bvh<T, A>,
+    ) -> impl Iterator<Item = Node<T>> {
         self.children_vec(root).into_iter()
     }
 
-    fn children_vec<'a, T>(&'a self, root: &'a Bvh<T>) -> ArrayVec<Node<T>, 2> {
+    fn children_vec<'a, T, A: Allocator>(&'a self, root: &'a Bvh<T, A>) -> ArrayVec<Node<T>, 2> {
         let left = self.left;
 
         // leaf
@@ -391,7 +405,7 @@ impl BvhNode {
     }
 
     /// Only safe to do if already checked if left exists. If left exists then right does as well.
-    unsafe fn right<'a, T>(&self, root: &'a Bvh<T>) -> &'a Self {
+    unsafe fn right<'a, T, A: Allocator>(&self, root: &'a Bvh<T, A>) -> &'a Self {
         let right = self.right;
 
         debug_assert!(right > 0);
@@ -497,16 +511,16 @@ impl BvhNode {
     }
 }
 
-struct BvhIter<'a, T> {
-    bvh: &'a Bvh<T>,
+struct BvhIter<'a, T, A: Allocator> {
+    bvh: &'a Bvh<T, A>,
     target: Aabb,
 }
 
-impl<'a, T> BvhIter<'a, T>
+impl<'a, T, A: Allocator> BvhIter<'a, T, A>
 where
     T: HasAabb,
 {
-    fn consume(bvh: &'a Bvh<T>, target: Aabb, process: &mut impl FnMut(&T) -> bool) {
+    fn consume(bvh: &'a Bvh<T, A>, target: Aabb, process: &mut impl FnMut(&T) -> bool) {
         let root = bvh.root();
 
         let root = match root {

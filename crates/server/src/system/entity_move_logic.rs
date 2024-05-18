@@ -1,6 +1,6 @@
 use evenio::{
     event::Receiver,
-    fetch::{Fetcher, Single},
+    fetch::Fetcher,
     query::{Query, With},
 };
 use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
@@ -10,7 +10,6 @@ use valence_protocol::math::{Vec2, Vec3};
 use crate::{
     components::{EntityReaction, FullEntityPose, Npc, RunningSpeed},
     event::Gametick,
-    singleton::player_aabb_lookup::PlayerBoundingBoxes,
 };
 
 #[derive(Query, Debug)]
@@ -21,12 +20,23 @@ pub struct EntityQuery<'a> {
     _entity: With<&'static Npc>,
 }
 
+#[derive(Copy, Clone)]
+struct MakeSync<T>(T);
+
+#[allow(
+    clippy::non_send_fields_in_send_ty,
+    reason = "todo: remove. https://discord.com/channels/273534239310479360/1120124565591425034/1241512520553074798"
+)]
+unsafe impl<T> Send for MakeSync<T> {}
+unsafe impl<T> Sync for MakeSync<T> {}
+
+#[allow(clippy::redundant_locals, reason = "lookup = lookup is not redundant; it initiates a copy -> move")]
 #[instrument(skip_all, level = "trace")]
-pub fn entity_move_logic(
-    _: Receiver<Gametick>,
-    mut entities: Fetcher<EntityQuery>,
-    lookup: Single<&PlayerBoundingBoxes>,
-) {
+pub fn entity_move_logic(gametick: Receiver<Gametick>, mut entities: Fetcher<EntityQuery>) {
+    let lookup = &gametick.event.player_bounding_boxes;
+
+    let lookup = MakeSync(lookup);
+    
     entities.par_iter_mut().for_each(|query| {
         let EntityQuery {
             running_speed,
@@ -36,8 +46,10 @@ pub fn entity_move_logic(
         } = query;
 
         let current = pose.position;
+        
+        let lookup = lookup;
 
-        let Some(target) = lookup.closest_to(current) else {
+        let Some((target, _)) = lookup.0.get_closest(current) else {
             return;
         };
 

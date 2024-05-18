@@ -15,6 +15,8 @@ use valence_text::Text;
 use crate::{
     components::FullEntityPose,
     net::{Server, MAX_PACKET_SIZE},
+    singleton::bounding_box::Stored,
+    system::LookupData,
     util::player_skin::PlayerSkin,
 };
 
@@ -210,8 +212,6 @@ unsafe impl<A: Allocator + Debug> ScratchBuffer for Scratch<A> {
     }
 }
 
-pub type BumpScratch<'a> = Scratch<&'a Bump>;
-
 impl<A: Allocator> From<A> for Scratch<A> {
     fn from(allocator: A) -> Self {
         Self {
@@ -308,7 +308,26 @@ impl SpeedEffect {
 
 // todo: why need two life times?
 #[derive(Event)]
-pub struct Gametick;
+pub struct Gametick<'a> {
+    pub bump: &'a Bump,
+    pub player_bounding_boxes: bvh_region::Bvh<LookupData, &'a Bump>,
+    pub entity_bounding_boxes: bvh_region::Bvh<Stored, &'a Bump>,
+}
+
+impl<'a> Gametick<'a> {
+    pub fn new(bump: &'a Bump) -> Self {
+        Self {
+            bump,
+            player_bounding_boxes: bvh_region::Bvh::null_in(bump),
+            entity_bounding_boxes: bvh_region::Bvh::null_in(bump),
+        }
+    }
+
+    #[must_use]
+    pub const fn allocator(&self) -> &'a Bump {
+        self.bump
+    }
+}
 
 /// An event that is sent when it is time to send packets to clients.
 #[derive(Event)]

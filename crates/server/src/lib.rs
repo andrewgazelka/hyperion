@@ -30,6 +30,7 @@ use std::{
 };
 
 use anyhow::Context;
+use bumpalo::Bump;
 use derive_more::From;
 use evenio::prelude::*;
 use humansize::{SizeFormatter, BINARY};
@@ -52,8 +53,7 @@ use crate::{
     global::Global,
     net::{buffers::BufferAllocator, Broadcast, Compressors, Server, ServerDef, S2C_BUFFER_SIZE},
     singleton::{
-        fd_lookup::FdLookup, player_aabb_lookup::PlayerBoundingBoxes,
-        player_id_lookup::EntityIdLookup, player_uuid_lookup::PlayerUuidLookup,
+        fd_lookup::FdLookup, player_id_lookup::EntityIdLookup, player_uuid_lookup::PlayerUuidLookup,
     },
     system::{generate_biome_registry, generate_ingress_events},
 };
@@ -203,6 +203,8 @@ pub struct Hyperion {
     tick_on: u64,
 
     server: Server,
+
+    bump: Bump,
 }
 
 impl Hyperion {
@@ -388,9 +390,6 @@ impl Hyperion {
         let player_id_lookup = world.spawn();
         world.insert(player_id_lookup, EntityIdLookup::default());
 
-        let player_location_lookup = world.spawn();
-        world.insert(player_location_lookup, PlayerBoundingBoxes::default());
-
         let fd_lookup = world.spawn();
         world.insert(fd_lookup, FdLookup::default());
 
@@ -400,6 +399,8 @@ impl Hyperion {
             last_ticks: VecDeque::default(),
             tick_on: 0,
             server: server_def,
+            // 1 MiB
+            bump: Bump::with_capacity(1024 * 1024),
         };
 
         game.last_ticks.push_back(Instant::now());
@@ -471,7 +472,8 @@ impl Hyperion {
         generate_ingress_events(&mut self.world, &mut self.server);
 
         tracing::span!(tracing::Level::TRACE, "gametick").in_scope(|| {
-            self.world.send(Gametick);
+            let gametick = Gametick::new(&self.bump);
+            self.world.send(gametick);
         });
 
         let server = &mut self.server;
@@ -486,6 +488,11 @@ impl Hyperion {
                       (~52 days)"
         )]
         let ms = now.elapsed().as_nanos() as f64 / 1_000_000.0;
+
+        tracing::span!(tracing::Level::TRACE, "reset-bump").in_scope(|| {
+            self.bump.reset();
+        });
+
         self.update_tick_stats(ms);
         self.calculate_wait_duration()
     }
