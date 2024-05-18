@@ -1,7 +1,7 @@
 use evenio::{
     entity::EntityId,
     event::{Receiver, Sender},
-    fetch::{Fetcher, Single},
+    fetch::Fetcher,
     prelude::With,
     query::Query,
 };
@@ -13,7 +13,6 @@ use crate::{
     components::{FullEntityPose, Player},
     event,
     event::Gametick,
-    singleton::bounding_box::EntityBoundingBoxes,
 };
 
 #[derive(Query)]
@@ -25,12 +24,14 @@ pub struct PlayerDetectMobHitsQuery<'a> {
 
 #[instrument(skip_all, level = "trace")]
 pub fn player_detect_mob_hits(
-    _: Receiver<Gametick>,
-    entity_bounding_boxes: Single<&EntityBoundingBoxes>,
+    gametick: Receiver<Gametick>,
     mut poses_fetcher: Fetcher<PlayerDetectMobHitsQuery>,
     mut s: Sender<event::BulkShoved>,
 ) {
     let sender = RayonLocal::init(Vec::new);
+
+    let event = gametick.event;
+    let bounding_boxes = &event.entity_bounding_boxes;
 
     poses_fetcher.par_iter_mut().for_each(|query| {
         let PlayerDetectMobHitsQuery { id, pose, _player } = query;
@@ -38,22 +39,20 @@ pub fn player_detect_mob_hits(
         let sender = sender.get_local_raw();
         let sender = unsafe { &mut *sender.get() };
 
-        entity_bounding_boxes
-            .query
-            .get_collisions(pose.bounding, |collision| {
-                // do not include self
-                if collision.id == id {
-                    return true;
-                }
+        bounding_boxes.get_collisions(pose.bounding, |collision| {
+            // do not include self
+            if collision.id == id {
+                return true;
+            }
 
-                sender.push(event::Shoved {
-                    target: id,
-                    from: collision.id,
-                    from_location: collision.aabb.mid(),
-                });
-
-                true
+            sender.push(event::Shoved {
+                target: id,
+                from: collision.id,
+                from_location: collision.aabb.mid(),
             });
+
+            true
+        });
     });
 
     s.send(event::BulkShoved(sender));

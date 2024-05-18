@@ -48,6 +48,6 @@ pub fn rebuild_player_location(
         });
     }
 
-    let bvh = bvh_region::Bvh::build::<TrivialHeuristic>(elements, bump);
+    let bvh = bvh_region::Bvh::build_in::<TrivialHeuristic>(elements, bump);
     gametick.player_bounding_boxes = bvh;
 }

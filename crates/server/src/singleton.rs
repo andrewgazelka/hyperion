@@ -1,6 +1,5 @@
 //! All singletons that are used with [`evenio::fetch::Single`].
 
-pub mod bounding_box;
 pub mod broadcast;
 pub mod fd_lookup;
 pub mod player_id_lookup;

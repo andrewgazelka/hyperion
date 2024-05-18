@@ -38,7 +38,6 @@ use libc::{getrlimit, setrlimit, RLIMIT_NOFILE};
 use libdeflater::CompressionLvl;
 use num_format::Locale;
 use signal_hook::iterator::Signals;
-use singleton::bounding_box;
 use spin::Lazy;
 use tracing::{error, info, instrument, warn};
 use valence_protocol::CompressionThreshold;
@@ -372,9 +371,6 @@ impl Hyperion {
 
         let scratches = world.spawn();
         world.insert(scratches, Scratches::default());
-
-        let bounding_boxes = world.spawn();
-        world.insert(bounding_boxes, bounding_box::EntityBoundingBoxes::default());
 
         let uuid_lookup = world.spawn();
         world.insert(uuid_lookup, PlayerUuidLookup::default());

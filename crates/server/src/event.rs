@@ -15,7 +15,6 @@ use valence_text::Text;
 use crate::{
     components::FullEntityPose,
     net::{Server, MAX_PACKET_SIZE},
-    singleton::bounding_box::Stored,
     system::LookupData,
     util::player_skin::PlayerSkin,
 };
@@ -311,7 +310,7 @@ impl SpeedEffect {
 pub struct Gametick<'a> {
     pub bump: &'a Bump,
     pub player_bounding_boxes: bvh_region::Bvh<LookupData, &'a Bump>,
-    pub entity_bounding_boxes: bvh_region::Bvh<Stored, &'a Bump>,
+    pub entity_bounding_boxes: bvh_region::Bvh<LookupData, &'a Bump>,
 }
 
 impl<'a> Gametick<'a> {

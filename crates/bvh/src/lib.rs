@@ -5,7 +5,7 @@
 // https://www.haroldserrano.com/blog/visualizing-the-boundary-volume-hierarchy-collision-algorithm
 
 use std::{
-    alloc::Allocator,
+    alloc::{Allocator, Global},
     cmp::Reverse,
     collections::BinaryHeap,
     fmt::{Debug, Formatter},
@@ -54,11 +54,15 @@ impl BvhNode {
 }
 
 #[derive(Clone)]
-pub struct Bvh<T, A: Allocator = std::alloc::Global> {
+pub struct Bvh<T, A: Allocator = Global> {
     nodes: Vec<BvhNode, A>,
     elements: Vec<T, A>,
     root: i32,
 }
+
+// even if allocator is not sync, it is safe to be sync
+// because we are not allocating with &Bvh
+unsafe impl<T: Sync, A: Allocator> Sync for Bvh<T, A> {}
 
 impl<T> Default for Bvh<T> {
     fn default() -> Self {
@@ -118,6 +122,13 @@ fn thread_count_pow2() -> usize {
     max_threads
 }
 
+impl<T: HasAabb + Send + Copy + Sync + Debug> Bvh<T, Global> {
+    pub fn build<H: Heuristic>(elements: Vec<T>) -> Self {
+        let allocator = Global;
+        Self::build_in::<H>(elements, allocator)
+    }
+}
+
 impl<T: HasAabb + Send + Copy + Sync + Debug, A: Allocator + Clone> Bvh<T, A> {
     pub fn null_in(allocator: A) -> Self {
         Self {
@@ -128,7 +139,7 @@ impl<T: HasAabb + Send + Copy + Sync + Debug, A: Allocator + Clone> Bvh<T, A> {
     }
 
     #[tracing::instrument(skip_all, fields(elements_len = elements.len()))]
-    pub fn build<H: Heuristic>(mut elements: Vec<T, A>, allocator: A) -> Self {
+    pub fn build_in<H: Heuristic>(mut elements: Vec<T, A>, allocator: A) -> Self {
         let max_threads = thread_count_pow2();
 
         let len = elements.len();

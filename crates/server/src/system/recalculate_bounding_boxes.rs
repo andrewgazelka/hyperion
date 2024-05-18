@@ -2,7 +2,7 @@ use bvh_region::TrivialHeuristic;
 use evenio::{entity::EntityId, event::ReceiverMut, fetch::Fetcher, query::Query};
 use tracing::{instrument, span};
 
-use crate::{components::FullEntityPose, event::Gametick, singleton::bounding_box::Stored};
+use crate::{components::FullEntityPose, event::Gametick, system::LookupData};
 
 #[derive(Query, Debug)]
 pub struct EntityQuery<'a> {
@@ -22,7 +22,7 @@ pub fn recalculate_bounding_boxes(
         let mut res = Vec::with_capacity_in(entities.iter().len(), gametick.allocator());
 
         for query in &entities {
-            res.push(Stored {
+            res.push(LookupData {
                 aabb: query.pose.bounding,
                 id: query.id,
             });
@@ -31,7 +31,7 @@ pub fn recalculate_bounding_boxes(
         res
     });
 
-    let bvh = bvh_region::Bvh::build::<TrivialHeuristic>(stored, gametick.allocator());
+    let bvh = bvh_region::Bvh::build_in::<TrivialHeuristic>(stored, gametick.allocator());
 
     gametick.entity_bounding_boxes = bvh;
 }
