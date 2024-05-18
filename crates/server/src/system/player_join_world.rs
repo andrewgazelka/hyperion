@@ -116,7 +116,7 @@ pub fn player_join_world(
         chat_data: None,
         listed: true,
         ping: 0,
-        game_mode: GameMode::Adventure,
+        game_mode: GameMode::Creative,
         display_name: Some(query.name.to_string().into_cow_text()),
     }];
 
@@ -164,7 +164,7 @@ pub fn player_join_world(
             chat_data: None,
             listed: true,
             ping: 20,
-            game_mode: GameMode::Adventure,
+            game_mode: GameMode::Creative,
             display_name: Some(name.to_string().into_cow_text()),
         })
         .collect::<Vec<_>>();
@@ -288,8 +288,10 @@ pub fn send_keep_alive(packets: &mut Packets, compose: &Compose) -> anyhow::Resu
 }
 
 fn registry_codec_raw() -> anyhow::Result<Compound> {
-    let bytes = include_bytes!("paper-registry.json");
-    let compound = serde_json::from_slice::<Compound>(bytes)?;
+    let bytes = include_bytes!("registries.nbt");
+    let mut bytes = &bytes[..];
+    let bytes_reader = &mut bytes;
+    let (compound, _) = valence_nbt::from_binary(bytes_reader)?;
     Ok(compound)
 }
 
@@ -336,7 +338,7 @@ pub fn generate_biome_registry() -> anyhow::Result<BiomeRegistry> {
         let downfall = biome
             .get("downfall")
             .context("expected biome to have downfall")?;
-        let Value::Double(downfall) = downfall else {
+        let Value::Float(downfall) = downfall else {
             bail!("expected biome downfall to be float but is {downfall:?}");
         };
 
@@ -350,25 +352,25 @@ pub fn generate_biome_registry() -> anyhow::Result<BiomeRegistry> {
         let has_precipitation = biome.get("has_precipitation").with_context(|| {
             format!("expected biome biome for {name} to have has_precipitation")
         })?;
-        let Value::Long(has_precipitation) = has_precipitation else {
-            bail!("expected biome biome has_precipitation to be int but is {has_precipitation:?}");
+        let Value::Byte(has_precipitation) = has_precipitation else {
+            bail!("expected biome biome has_precipitation to be byte but is {has_precipitation:?}");
         };
         let has_precipitation = *has_precipitation == 1;
 
         let temperature = biome
             .get("temperature")
             .context("expected biome to have temperature")?;
-        let Value::Double(temperature) = temperature else {
+        let Value::Float(temperature) = temperature else {
             bail!("expected biome temperature to be doule but is {temperature:?}");
         };
 
         let effects = BiomeEffects::deserialize(effects.clone())?;
 
         let biome = Biome {
-            downfall: *downfall as f32,
+            downfall: *downfall,
             effects,
             has_precipitation,
-            temperature: *temperature as f32,
+            temperature: *temperature,
         };
 
         let ident = Ident::new(name.as_str()).unwrap();
@@ -406,11 +408,11 @@ pub fn send_game_join_packet(encoder: &mut PacketEncoder) -> anyhow::Result<()> 
         enable_respawn_screen: false,
         dimension_name: dimension_name.into(),
         hashed_seed: 0,
-        game_mode: GameMode::Adventure,
+        game_mode: GameMode::Creative,
         is_flat: false,
         last_death_location: None,
         portal_cooldown: 60.into(),
-        previous_game_mode: OptGameMode(Some(GameMode::Adventure)),
+        previous_game_mode: OptGameMode(Some(GameMode::Creative)),
         dimension_type_name: "minecraft:overworld".try_into()?,
         is_debug: false,
     };
