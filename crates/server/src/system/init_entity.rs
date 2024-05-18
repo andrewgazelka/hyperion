@@ -4,7 +4,7 @@ use evenio::{
     prelude::Single,
 };
 use rand_distr::{Distribution, LogNormal};
-use tracing::{info, instrument};
+use tracing::instrument;
 use valence_protocol::{ByteAngle, VarInt, Velocity};
 use valence_server::entity::EntityKind;
 
