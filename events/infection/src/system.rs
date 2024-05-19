@@ -92,7 +92,7 @@ pub fn point_close_player(
     human_locations: Single<&HumanLocations>,
     zombies: Fetcher<(&ChunkLocation, EntityId, With<&Zombie>)>,
     poses: Fetcher<&FullEntityPose>,
-    mut s: Sender<event::PointCompass>,
+    s: Sender<event::PointCompass>,
 ) {
     for (location, id, _) in zombies {
         let Some(ids) = human_locations.bvh.get_closest_slice(location.0) else {
@@ -112,19 +112,16 @@ pub fn point_close_player(
 
         let point_to = BlockPos::from(point_to_pose.position.as_dvec3());
 
-        s.send(event::PointCompass {
-            target: id,
-            point_to,
-        });
+        s.send_to(id, event::PointCompass { point_to });
     }
 }
 
 #[instrument(skip_all)]
 pub fn assign_team_on_join(
     r: ReceiverMut<event::PlayerInit, EntityId>,
-    mut s: Sender<(Insert<Team>, Insert<Human>)>,
+    s: Sender<(Insert<Team>, Insert<Human>)>,
 ) {
-    let target = r.event.target;
+    let target = r.query;
     s.insert(target, Team::Human);
     s.insert(target, Human);
 }
@@ -132,8 +129,8 @@ pub fn assign_team_on_join(
 #[allow(clippy::type_complexity, reason = "required")]
 #[instrument(skip_all)]
 pub fn to_zombie(
-    r: ReceiverMut<ToZombie, (&mut Team, &mut Vitals)>,
-    mut s: Sender<(
+    r: ReceiverMut<ToZombie, (&mut Team, &mut Vitals, EntityId)>,
+    s: Sender<(
         Insert<Team>,
         Insert<Zombie>,
         Remove<Human>,
@@ -144,13 +141,11 @@ pub fn to_zombie(
         event::SpeedEffect,
     )>,
 ) {
-    let (team, vitals) = r.query;
-    let target = r.event.target;
+    let (team, vitals, target) = r.query;
 
     *team = Team::Zombie;
 
-    s.send(event::DisguisePlayer {
-        target,
+    s.send_to(target, event::DisguisePlayer {
         mob: EntityKind::ZOMBIE,
     });
 
@@ -162,22 +157,17 @@ pub fn to_zombie(
     s.insert(target, Zombie);
     s.remove::<Human>(target);
 
-    s.send(event::SetPlayerSkin {
-        target,
-        skin: zombie_skin,
-    });
+    s.send_to(target, event::SetPlayerSkin { skin: zombie_skin });
 
     // teleport
     let position = PLAYER_SPAWN_POSITION;
-    s.send(event::Teleport { target, position });
+    s.send_to(target, event::Teleport { position });
 
-    s.send(event::DisguisePlayer {
-        target,
+    s.send_to(target, event::DisguisePlayer {
         mob: EntityKind::ZOMBIE,
     });
 
-    s.send(event::DisplayPotionEffect {
-        target,
+    s.send_to(target, event::DisplayPotionEffect {
         effect: StatusEffect::Speed,
         amplifier: 0, // speed 3
         duration: 99999,
@@ -187,19 +177,19 @@ pub fn to_zombie(
     });
 
     // speed 2
-    s.send(event::SpeedEffect::new(target, 0));
+    s.send_to(target, event::SpeedEffect::new(0));
 }
 
 #[instrument(skip_all)]
-pub fn respawn_on_death(r: Receiver<event::Death, EntityId>, mut s: Sender<ToZombie>) {
-    let target = r.event.target;
-    s.send(ToZombie { target });
+pub fn respawn_on_death(r: Receiver<event::Death, EntityId>, s: Sender<ToZombie>) {
+    let target = r.query;
+    s.send_to(target, ToZombie);
 }
 
 #[instrument(skip_all)]
 pub fn zombie_command(
     r: ReceiverMut<event::Command, (EntityId, &mut Team)>,
-    mut s: Sender<(event::ChatMessage, ToZombie)>,
+    s: Sender<(event::ChatMessage, ToZombie)>,
 ) {
     // todo: permissions
     let raw = &r.event.raw;
@@ -213,12 +203,11 @@ pub fn zombie_command(
 
     *team = Team::Zombie;
 
-    s.send(event::ChatMessage {
-        target,
+    s.send_to(target, event::ChatMessage {
         message: Text::text("Turning into zombie"),
     });
 
-    s.send(ToZombie { target });
+    s.send_to(target, ToZombie);
 }
 
 #[instrument(skip_all)]

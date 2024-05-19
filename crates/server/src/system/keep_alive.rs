@@ -16,7 +16,7 @@ pub fn keep_alive(
     _: Receiver<Gametick>,
     global: Single<&Global>,
     mut fetcher: Fetcher<(EntityId, &mut KeepAlive, &mut Packets)>,
-    mut s: Sender<KickPlayer>,
+    s: Sender<KickPlayer>,
     compose: Compose,
 ) {
     fetcher.iter_mut().for_each(|(id, keep_alive, packets)| {
@@ -30,8 +30,7 @@ pub fn keep_alive(
         let elapsed = sent.elapsed();
 
         if elapsed > global.keep_alive_timeout {
-            s.send(KickPlayer {
-                target: id,
+            s.send_to(id, KickPlayer {
                 reason: "keep alive timeout".into(),
             });
             return;

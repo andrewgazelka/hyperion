@@ -1,7 +1,6 @@
 use evenio::{
     component::Component,
-    entity::EntityId,
-    event::{Event, Receiver},
+    event::{Receiver, TargetedEvent},
     fetch::Single,
     query::{Query, With},
 };
@@ -12,11 +11,8 @@ use crate::{
     packets::voicechat::{Codec, Msg},
 };
 
-#[derive(Event)]
-pub struct InitVoiceChat {
-    #[event(target)]
-    player: EntityId,
-}
+#[derive(TargetedEvent)]
+pub struct InitVoiceChat;
 
 #[derive(Component)]
 pub struct VoiceChatGlobal {

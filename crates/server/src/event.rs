@@ -2,7 +2,11 @@ use std::{alloc::Allocator, cell::RefCell, fmt::Debug};
 
 use bumpalo::Bump;
 use derive_more::{Deref, DerefMut};
-use evenio::{component::Component, entity::EntityId, event::Event};
+use evenio::{
+    component::Component,
+    entity::EntityId,
+    event::{GlobalEvent, TargetedEvent},
+};
 use glam::Vec3;
 use rayon_local::RayonLocal;
 use valence_generated::{block::BlockState, status_effects::StatusEffect};
@@ -17,10 +21,8 @@ use crate::{
 };
 
 /// An event that is sent when a player clicks in the inventory.
-#[derive(Event, Debug)]
+#[derive(TargetedEvent, Debug)]
 pub struct ClickEvent {
-    #[event(target)]
-    pub by: EntityId,
     pub click_type: ClickType,
     // maybe use smallvec to reduce heap allocations
     pub slot_changes: Vec<SlotChange>,
@@ -106,67 +108,46 @@ pub enum ClickType {
     },
 }
 
-#[derive(Event)]
+#[derive(TargetedEvent)]
 /// An event that is sent when a player is changes his main hand
 pub struct UpdateSelectedSlot {
-    #[event(target)]
-    pub id: EntityId,
-    pub slot: usize,
+    pub slot: u16,
 }
 
 /// This event is sent when the payer equipment gets sent to the client.
-#[derive(Event)]
-pub struct UpdateEquipment {
-    #[event(target)]
-    pub id: EntityId,
-}
+#[derive(TargetedEvent)]
+pub struct UpdateEquipment;
 
 /// Initialize a Minecraft entity (like a zombie) with a given pose.
-#[derive(Event)]
+#[derive(GlobalEvent)]
 pub struct InitEntity {
     /// The pose of the entity.
     pub pose: FullEntityPose,
     pub display: EntityKind,
 }
 
-#[derive(Event)]
+#[derive(TargetedEvent)]
 pub struct Command {
-    #[event(target)]
-    pub by: EntityId,
     pub raw: String,
 }
 
-#[derive(Event)]
+#[derive(TargetedEvent)]
 pub struct PlayerInit {
-    #[event(target)]
-    pub target: EntityId,
-
     /// The name of the player i.e., `Emerald_Explorer`.
     pub username: Box<str>,
     pub pose: FullEntityPose,
 }
 
 /// Sent whenever a player joins the server.
-#[derive(Event)]
-pub struct PlayerJoinWorld {
-    /// The [`EntityId`] of the player.
-    #[event(target)]
-    pub target: EntityId,
-}
+#[derive(TargetedEvent)]
+pub struct PlayerJoinWorld;
 
-#[derive(Event)]
-pub struct PostPlayerJoinWorld {
-    #[event(target)]
-    pub target: EntityId,
-}
+#[derive(TargetedEvent)]
+pub struct PostPlayerJoinWorld;
 
 /// An event that is sent whenever a player is kicked from the server.
-#[derive(Event)]
+#[derive(TargetedEvent)]
 pub struct KickPlayer {
-    /// The [`EntityId`] of the player.
-    #[event(target)] // Works on tuple struct fields as well.
-    pub target: EntityId,
-    /// The reason the player was kicked.
     pub reason: String,
 }
 
@@ -190,28 +171,21 @@ pub enum Pose {
     Digging = 14,
 }
 
-#[derive(Event)]
+#[derive(TargetedEvent)]
 #[event(immutable)]
 pub struct PoseUpdate {
-    #[event(target)]
-    pub target: EntityId,
     pub state: Pose,
 }
 
 /// An event that is sent whenever a player swings an arm.
-#[derive(Event)]
+#[derive(TargetedEvent)]
 pub struct SwingArm {
-    /// The [`EntityId`] of the player.
-    #[event(target)]
-    pub target: EntityId,
     /// The hand the player is swinging.
     pub hand: Hand,
 }
 
-#[derive(Event)]
+#[derive(TargetedEvent)]
 pub struct HurtEntity {
-    #[event(target)]
-    pub target: EntityId,
     pub damage: f32,
 }
 
@@ -220,11 +194,8 @@ pub enum AttackType {
     Melee,
 }
 
-#[derive(Event)]
+#[derive(TargetedEvent)]
 pub struct AttackEntity {
-    /// The [`EntityId`] of the player.
-    #[event(target)]
-    pub target: EntityId,
     /// The location of the player that is hitting.
     pub from_pos: Vec3,
     pub from: EntityId,
@@ -232,22 +203,17 @@ pub struct AttackEntity {
     pub source: AttackType,
 }
 
-#[derive(Event)]
+#[derive(TargetedEvent)]
 #[event(immutable)]
-pub struct Death {
-    #[event(target)]
-    pub target: EntityId,
-}
+pub struct Death;
 
 /// An event to kill all minecraft entities (like zombies, skeletons, etc). This will be sent to the equivalent of
 /// `/killall` in the game.
-#[derive(Event)]
+#[derive(GlobalEvent)]
 pub struct KillAllEntities;
 
-#[derive(Event)]
+#[derive(TargetedEvent)]
 pub struct Teleport {
-    #[event(target)]
-    pub target: EntityId,
     pub position: Vec3,
 }
 
@@ -259,11 +225,11 @@ pub struct Shoved {
     pub from_location: Vec3,
 }
 
-#[derive(Event, Debug)]
+#[derive(GlobalEvent, Debug)]
 pub struct BulkShoved(pub RayonLocal<Vec<Shoved>>);
 
 /// An event when server stats are updated.
-#[derive(Event)]
+#[derive(GlobalEvent)]
 pub struct Stats {
     pub ms_per_tick: f64,
 }
@@ -323,57 +289,46 @@ impl<A: Allocator> From<A> for Scratch<A> {
     }
 }
 
-#[derive(Event)]
+#[derive(TargetedEvent)]
 pub struct BlockStartBreak {
-    #[event(target)]
-    pub by: EntityId,
     pub position: BlockPos,
     pub sequence: i32,
 }
 
-#[derive(Event)]
+#[derive(TargetedEvent)]
 pub struct BlockAbortBreak {
-    #[event(target)]
-    pub by: EntityId,
     pub position: BlockPos,
     pub sequence: i32,
 }
 
-#[derive(Event)]
+#[derive(TargetedEvent)]
 pub struct BlockFinishBreak {
-    #[event(target)]
-    pub by: EntityId,
     pub position: BlockPos,
     pub sequence: i32,
 }
 
-#[derive(Event, Debug)]
+#[derive(GlobalEvent, Debug)]
 pub struct UpdateBlock {
     pub position: BlockPos,
     pub id: BlockState,
     pub sequence: i32,
 }
 
-#[derive(Event)]
+#[derive(TargetedEvent)]
 pub struct ChatMessage {
-    #[event(target)]
-    pub target: EntityId,
     pub message: Text,
 }
 
 impl ChatMessage {
-    pub fn new(target: EntityId, message: impl Into<Text>) -> Self {
+    pub fn new(message: impl Into<Text>) -> Self {
         Self {
-            target,
             message: message.into(),
         }
     }
 }
 
-#[derive(Event)]
+#[derive(TargetedEvent)]
 pub struct DisguisePlayer {
-    #[event(target)]
-    pub target: EntityId,
     pub mob: EntityKind,
 }
 
@@ -383,10 +338,8 @@ pub struct Scratches {
 }
 
 /// This often only displays the effect. For instance, for speed it does not give the actual speed effect.
-#[derive(Event, Copy, Clone)]
+#[derive(TargetedEvent, Copy, Clone)]
 pub struct DisplayPotionEffect {
-    #[event(target)]
-    pub target: EntityId,
     pub effect: StatusEffect,
     pub amplifier: u8,
     pub duration: i32,
@@ -399,17 +352,15 @@ pub struct DisplayPotionEffect {
     pub show_icon: bool,
 }
 
-#[derive(Event, Copy, Clone)]
+#[derive(TargetedEvent, Copy, Clone)]
 pub struct SpeedEffect {
-    #[event(target)]
-    target: EntityId,
     level: u8,
 }
 
 impl SpeedEffect {
     #[must_use]
-    pub const fn new(target: EntityId, level: u8) -> Self {
-        Self { target, level }
+    pub const fn new(level: u8) -> Self {
+        Self { level }
     }
 
     #[must_use]
@@ -419,25 +370,21 @@ impl SpeedEffect {
 }
 
 // todo: why need two life times?
-#[derive(Event)]
+#[derive(GlobalEvent)]
 pub struct Gametick;
 
 /// An event that is sent when it is time to send packets to clients.
-#[derive(Event)]
+#[derive(GlobalEvent)]
 pub struct Egress<'a> {
     pub server: &'a mut Server,
 }
 
-#[derive(Event)]
+#[derive(TargetedEvent)]
 pub struct SetPlayerSkin {
-    #[event(target)]
-    pub target: EntityId,
     pub skin: PlayerSkin,
 }
 
-#[derive(Event)]
+#[derive(TargetedEvent)]
 pub struct PointCompass {
-    #[event(target)]
-    pub target: EntityId,
     pub point_to: BlockPos,
 }

@@ -30,9 +30,9 @@ fn offline_uuid(username: &str) -> anyhow::Result<uuid::Uuid> {
 
 #[instrument(skip_all, level = "trace")]
 pub fn init_player(
-    r: ReceiverMut<PlayerInit, &mut Packets>,
+    r: ReceiverMut<PlayerInit, (EntityId, &mut Packets)>,
     compose: Compose,
-    mut s: Sender<(
+    s: Sender<(
         Insert<FullEntityPose>,
         Insert<PositionSyncMetadata>,
         Insert<Player>,
@@ -53,11 +53,9 @@ pub fn init_player(
     // take ownership
     let event = EventMut::take(r.event);
 
-    let PlayerInit {
-        target: entity,
-        username,
-        pose,
-    } = event;
+    let PlayerInit { username, pose } = event;
+
+    let (id, packets) = r.query;
 
     let uuid = offline_uuid(&username).unwrap();
 
@@ -67,32 +65,30 @@ pub fn init_player(
         properties: Cow::default(),
     };
 
-    let packets = r.query;
-
     packets.append(&pkt, &compose).unwrap();
 
     trace!("PlayerInit: {username}");
 
-    s.insert(entity, pose);
-    s.insert(entity, Player);
-    s.insert(entity, AiTargetable);
-    s.insert(entity, InGameName::from(username));
-    s.insert(entity, ImmuneStatus::default());
-    s.insert(entity, Uuid::from(uuid));
-    s.insert(entity, PositionSyncMetadata::default());
-    s.insert(entity, KeepAlive::default());
+    s.insert(id, pose);
+    s.insert(id, Player);
+    s.insert(id, AiTargetable);
+    s.insert(id, InGameName::from(username));
+    s.insert(id, ImmuneStatus::default());
+    s.insert(id, Uuid::from(uuid));
+    s.insert(id, PositionSyncMetadata::default());
+    s.insert(id, KeepAlive::default());
 
-    s.insert(entity, Prev::from(Vitals::ALIVE));
-    s.insert(entity, Vitals::ALIVE);
-    s.insert(entity, PlayerInventory::new());
+    s.insert(id, Prev::from(Vitals::ALIVE));
+    s.insert(id, Vitals::ALIVE);
+    s.insert(id, PlayerInventory::new());
 
-    s.insert(entity, FullEntityPose::player());
-    s.insert(entity, ChunkChanges::default());
+    s.insert(id, FullEntityPose::player());
+    s.insert(id, ChunkChanges::default());
 
     // so we always send updates
-    s.insert(entity, ChunkLocation::NULL);
+    s.insert(id, ChunkLocation::NULL);
 
-    s.insert(entity, EntityReaction::default());
+    s.insert(id, EntityReaction::default());
 
-    s.send(PlayerJoinWorld { target: entity });
+    s.send_to(id, PlayerJoinWorld);
 }
