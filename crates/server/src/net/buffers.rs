@@ -56,6 +56,7 @@ impl BufferAllocator {
     }
 }
 
+#[derive(Debug)]
 struct BufferAllocatorInner {
     // todo: try on stack? will probs need to increase stack size. idk if this even makes sense to do though.
     // todo: probs just have one continuous buffer and then something that is similar to an arrayvec but references it
@@ -67,6 +68,7 @@ struct BufferAllocatorInner {
 unsafe impl Send for BufferAllocatorInner {}
 unsafe impl Sync for BufferAllocatorInner {}
 
+#[derive(Debug)]
 pub struct BufRef {
     index: u16,
     allocator: Arc<BufferAllocatorInner>,

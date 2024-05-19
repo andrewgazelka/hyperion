@@ -11,7 +11,9 @@
 #![feature(duration_millis_float)]
 #![feature(new_uninit)]
 #![feature(sync_unsafe_cell)]
+#![feature(iter_array_chunks)]
 #![feature(io_slice_advance)]
+#![feature(assert_matches)]
 #![expect(clippy::type_complexity, reason = "evenio uses a lot of complex types")]
 
 pub use evenio;
@@ -63,6 +65,8 @@ pub mod event;
 
 pub mod global;
 pub mod net;
+
+pub mod inventory;
 
 mod packets;
 mod system;
@@ -324,6 +328,8 @@ impl Hyperion {
         world.add_handler(system::init_player);
         world.add_handler(system::despawn_player);
         world.add_handler(system::player_join_world);
+
+        world.add_handler(system::send_player_info);
         world.add_handler(system::player_kick);
         world.add_handler(system::init_entity);
         world.add_handler(system::entity_move_logic);
@@ -336,8 +342,6 @@ impl Hyperion {
         world.add_handler(system::sync_players);
         world.add_handler(system::rebuild_player_location);
         world.add_handler(system::player_detect_mob_hits);
-
-        world.add_handler(system::equipment::set);
 
         world.add_handler(system::check_immunity);
         world.add_handler(system::pkt_attack_player);
@@ -364,6 +368,11 @@ impl Hyperion {
         world.add_handler(system::keep_alive);
         world.add_handler(system::stats_message);
         world.add_handler(system::kill_all);
+
+        world.add_handler(system::get_inventory_actions);
+        world.add_handler(system::update_main_hand);
+        world.add_handler(system::update_equipment);
+        world.add_handler(system::give_command);
 
         let global = world.spawn();
         world.insert(global, Global::new(shared.clone()));

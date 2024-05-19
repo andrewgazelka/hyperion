@@ -12,6 +12,7 @@ use crate::{
         KeepAlive, Player, Uuid, Vitals,
     },
     event::{PlayerInit, PlayerJoinWorld},
+    inventory::PlayerInventory,
     net::{Compose, Packets},
     system::{chunks::ChunkChanges, sync_entity_position::PositionSyncMetadata},
     tracker::Prev,
@@ -45,6 +46,7 @@ pub fn init_player(
         Insert<AiTargetable>,
         Insert<InGameName>,
         Insert<ChunkChanges>,
+        Insert<PlayerInventory>,
         PlayerJoinWorld,
     )>,
 ) {
@@ -82,6 +84,7 @@ pub fn init_player(
 
     s.insert(entity, Prev::from(Vitals::ALIVE));
     s.insert(entity, Vitals::ALIVE);
+    s.insert(entity, PlayerInventory::new());
 
     s.insert(entity, FullEntityPose::player());
     s.insert(entity, ChunkChanges::default());

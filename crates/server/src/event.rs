@@ -1,4 +1,4 @@
-use std::{alloc::Allocator, borrow::Cow, cell::RefCell, fmt::Debug};
+use std::{alloc::Allocator, cell::RefCell, fmt::Debug};
 
 use bumpalo::Bump;
 use derive_more::{Deref, DerefMut};
@@ -6,9 +6,7 @@ use evenio::{component::Component, entity::EntityId, event::Event};
 use glam::Vec3;
 use rayon_local::RayonLocal;
 use valence_generated::{block::BlockState, status_effects::StatusEffect};
-use valence_protocol::{
-    packets::play::entity_equipment_update_s2c::EquipmentEntry, BlockPos, Hand,
-};
+use valence_protocol::{packets::play::click_slot_c2s::SlotChange, BlockPos, Hand, ItemStack};
 use valence_server::entity::EntityKind;
 use valence_text::Text;
 
@@ -17,6 +15,111 @@ use crate::{
     net::{Server, MAX_PACKET_SIZE},
     util::player_skin::PlayerSkin,
 };
+
+/// An event that is sent when a player clicks in the inventory.
+#[derive(Event, Debug)]
+pub struct ClickEvent {
+    #[event(target)]
+    pub by: EntityId,
+    pub click_type: ClickType,
+    // maybe use smallvec to reduce heap allocations
+    pub slot_changes: Vec<SlotChange>,
+    pub carried_item: ItemStack,
+}
+
+/// The type of click that the player performed.
+#[derive(Copy, Clone, Debug)]
+pub enum ClickType {
+    LeftClick {
+        slot: i16,
+        // todo: left click only can result in 1 slot change right?
+        //     slot_change: SlotChange,
+    },
+    RightClick {
+        slot: i16,
+        // todo: left click only can result in 1 slot change right?
+        //   slot_change: SlotChange,
+    },
+    LeftClickOutsideOfWindow,
+    RightClickOutsideOfWindow,
+    ShiftLeftClick {
+        slot: i16,
+        // todo: should be 2 slot changes right?
+        // slot_changes: [SlotChange; 2],
+    },
+    ShiftRightClick {
+        slot: i16,
+        // todo: should be 2 slot changes right?
+        // slot_changes: [SlotChange; 2],
+    },
+    HotbarKeyPress {
+        button: i8,
+        slot: i16,
+        // todo: should be 2 slot changes right?
+        //       slot_changes: [SlotChange; 2],
+    },
+    OffHandSwap {
+        slot: i16,
+        // todo: should be 2 slot changes right?
+        //    slot_changes: [SlotChange; 2],
+    },
+    // todo: support for creative mode
+    CreativeMiddleClick {
+        slot: i16,
+    },
+    QDrop {
+        slot: i16,
+        // todo: left click only can result in 1 slot change right?
+        //  slot_change: SlotChange,
+    },
+    QControlDrop {
+        slot: i16,
+        // todo: left click only can result in 1 slot change right?
+        //    slot_change: SlotChange,
+    },
+    StartLeftMouseDrag,
+    StartRightMouseDrag,
+    StartMiddleMouseDrag,
+    AddSlotLeftDrag {
+        slot: i16,
+    },
+    AddSlotRightDrag {
+        slot: i16,
+    },
+    AddSlotMiddleDrag {
+        slot: i16,
+    },
+    EndLeftMouseDrag {
+        //   slot_changes: Vec<SlotChange>,
+    },
+    EndRightMouseDrag {
+        //     slot_changes: Vec<SlotChange>,
+    },
+    EndMiddleMouseDrag,
+    DoubleClick {
+        slot: i16,
+        //        slot_changes: Vec<SlotChange>,
+    },
+    DoubleClickReverseOrder {
+        slot: i16,
+        //   slot_changes: Vec<SlotChange>,
+    },
+}
+
+#[derive(Event)]
+/// An event that is sent when a player is changes his main hand
+pub struct UpdateSelectedSlot {
+    #[event(target)]
+    pub id: EntityId,
+    pub slot: usize,
+}
+
+/// This event is sent when the payer equipment gets sent to the client.
+#[derive(Event)]
+pub struct UpdateEquipment {
+    #[event(target)]
+    pub id: EntityId,
+}
 
 /// Initialize a Minecraft entity (like a zombie) with a given pose.
 #[derive(Event)]
@@ -258,6 +361,15 @@ pub struct ChatMessage {
     pub message: Text,
 }
 
+impl ChatMessage {
+    pub fn new(target: EntityId, message: impl Into<Text>) -> Self {
+        Self {
+            target,
+            message: message.into(),
+        }
+    }
+}
+
 #[derive(Event)]
 pub struct DisguisePlayer {
     #[event(target)]
@@ -328,18 +440,4 @@ pub struct PointCompass {
     #[event(target)]
     pub target: EntityId,
     pub point_to: BlockPos,
-}
-
-#[derive(Event)]
-pub struct SetEquipment<'a> {
-    #[event(target)]
-    pub target: EntityId,
-    pub equipment: Cow<'a, [EquipmentEntry]>,
-}
-
-impl<'a> SetEquipment<'a> {
-    pub fn new(target: EntityId, equipment: impl Into<Cow<'a, [EquipmentEntry]>>) -> Self {
-        let equipment = equipment.into();
-        Self { target, equipment }
-    }
 }

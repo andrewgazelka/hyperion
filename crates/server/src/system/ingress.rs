@@ -19,7 +19,7 @@ use valence_protocol::{
 };
 
 use crate::{
-    event,
+    event::{self, UpdateSelectedSlot},
     global::Global,
     net::{Server, ServerDef, ServerEvent},
     singleton::fd_lookup::FdLookup,
@@ -49,6 +49,8 @@ pub type IngressSender<'a> = Sender<
         event::BlockFinishBreak,
         event::Command,
         event::PoseUpdate,
+        UpdateSelectedSlot,
+        event::ClickEvent,
     ),
 >;
 
@@ -208,6 +210,8 @@ pub enum SendElem {
     BlockFinishBreak(event::BlockFinishBreak),
     Command(event::Command),
     PoseUpdate(event::PoseUpdate),
+    UpdateSelectedSlot(event::UpdateSelectedSlot),
+    ClickEvent(event::ClickEvent),
 }
 
 #[instrument(skip_all, level = "trace")]
@@ -297,7 +301,7 @@ pub fn recv_data(
                             if let Some(pose) = pose.as_mut() {
                                 let mut query = PacketSwitchQuery { id, pose };
 
-                                crate::packets::switch(frame, sender, &id_lookup, &mut query)
+                                crate::packets::switch(&frame, sender, &id_lookup, &mut query)
                                     .unwrap();
                             }
                         }
@@ -338,6 +342,8 @@ pub fn recv_data(
             SendElem::PoseUpdate(event) => {
                 real_sender.send(event);
             }
+            SendElem::UpdateSelectedSlot(event) => real_sender.send(event),
+            SendElem::ClickEvent(event) => real_sender.send(event),
         }
     }
 

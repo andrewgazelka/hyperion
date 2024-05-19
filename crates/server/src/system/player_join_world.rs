@@ -5,6 +5,7 @@ use evenio::prelude::*;
 use glam::{I16Vec2, IVec3};
 use serde::Deserialize;
 use tracing::{debug, info, instrument, trace, warn};
+use valence_generated::item::ItemKind;
 use valence_nbt::{value::ValueRef, Value};
 use valence_protocol::{
     game_mode::OptGameMode,
@@ -20,7 +21,7 @@ use valence_protocol::{
         },
     },
     text::IntoText,
-    ByteAngle, GameMode, Ident, PacketEncoder, VarInt,
+    ByteAngle, GameMode, Ident, ItemStack, PacketEncoder, VarInt,
 };
 use valence_registry::{
     biome::{Biome, BiomeEffects},
@@ -34,8 +35,9 @@ use crate::{
     },
     config::CONFIG,
     event,
-    event::PlayerJoinWorld,
+    event::{PlayerJoinWorld, UpdateEquipment},
     global::Global,
+    inventory::PlayerInventory,
     net::{Broadcast, Compose, Packets},
     singleton::{player_id_lookup::EntityIdLookup, player_uuid_lookup::PlayerUuidLookup},
     system::init_entity::spawn_entity_packet,
@@ -52,6 +54,7 @@ pub(crate) struct EntityQuery<'a> {
 #[derive(Query)]
 pub(crate) struct PlayerJoinWorldQuery<'a> {
     id: EntityId,
+    inventory: &'a mut PlayerInventory,
     uuid: &'a Uuid,
     pose: &'a FullEntityPose,
     packets: &'a mut Packets,
@@ -60,12 +63,55 @@ pub(crate) struct PlayerJoinWorldQuery<'a> {
 }
 
 #[derive(Query, Debug)]
-pub(crate) struct PlayerQuery<'a> {
+pub(crate) struct PlayerJoinWorldQueryReduced<'a> {
+    packets: &'a mut Packets,
+    _player: With<&'static Player>,
+}
+
+#[derive(Query)]
+pub(crate) struct PlayerInventoryQuery<'a> {
     id: EntityId,
     uuid: &'a Uuid,
     pose: &'a FullEntityPose,
+    inventory: &'a PlayerInventory,
     _player: With<&'static Player>,
     _no_display: Not<&'static Display>,
+}
+
+// This needs to be a separate system
+// or else there are multiple (mut) references to inventory
+pub fn send_player_info(
+    r: Receiver<PlayerJoinWorld, PlayerJoinWorldQueryReduced>,
+    players: Fetcher<PlayerInventoryQuery>,
+    compose: Compose,
+) {
+    let local = r.query.packets;
+    // todo: cache
+    for current_query in players {
+        let id = current_query.id;
+        let pose = current_query.pose;
+        let uuid = current_query.uuid;
+        let inv = current_query.inventory;
+
+        let entity_id = VarInt(id.index().0 as i32);
+
+        let pkt = play::PlayerSpawnS2c {
+            entity_id,
+            player_uuid: uuid.0,
+            position: pose.position.as_dvec3(),
+            yaw: ByteAngle::from_degrees(pose.yaw),
+            pitch: ByteAngle::from_degrees(pose.pitch),
+        };
+
+        local.append(&pkt, &compose).unwrap();
+
+        let equipment = inv.get_entity_equipment();
+        let pkt = crate::packets::vanilla::EntityEquipmentUpdateS2c {
+            entity_id,
+            equipment: Cow::Borrowed(&equipment),
+        };
+        local.append(&pkt, &compose).unwrap();
+    }
 }
 
 // todo: clean up player_join_world; the file is super super super long and hard to understand
@@ -75,7 +121,6 @@ pub fn player_join_world(
     r: Receiver<PlayerJoinWorld, PlayerJoinWorldQuery>,
     entities: Fetcher<EntityQuery>,
     global: Single<&Global>,
-    player_spawns: Fetcher<PlayerQuery>,
     player_list: Fetcher<(&InGameName, &Uuid)>,
     mut uuid_lookup: Single<&mut PlayerUuidLookup>,
     mut id_lookup: Single<&mut EntityIdLookup>,
@@ -83,7 +128,7 @@ pub fn player_join_world(
     chunks: Single<&Chunks>,
     tasks: Single<&Tasks>,
     compose: Compose,
-    mut sender: Sender<event::PostPlayerJoinWorld>,
+    mut sender: Sender<(event::PostPlayerJoinWorld, event::UpdateEquipment)>,
 ) {
     static CACHED_DATA: once_cell::sync::OnceCell<bytes::Bytes> = once_cell::sync::OnceCell::new();
 
@@ -116,7 +161,7 @@ pub fn player_join_world(
         chat_data: None,
         listed: true,
         ping: 0,
-        game_mode: GameMode::Creative,
+        game_mode: GameMode::Survival,
         display_name: Some(query.name.to_string().into_cow_text()),
     }];
 
@@ -135,6 +180,28 @@ pub fn player_join_world(
     }
 
     trace!("appending cached data");
+
+    let inv = query.inventory;
+
+    // give players the items
+    inv.set_first_available(ItemStack::new(ItemKind::NetheriteSword, 1, None));
+    inv.set_first_available(ItemStack::new(ItemKind::Compass, 1, None));
+    inv.set_first_available(ItemStack::new(ItemKind::Book, 15, None));
+    inv.set_boots(ItemStack::new(ItemKind::NetheriteBoots, 1, None));
+    inv.set_leggings(ItemStack::new(ItemKind::NetheriteLeggings, 1, None));
+    inv.set_chestplate(ItemStack::new(ItemKind::NetheriteChestplate, 1, None));
+    inv.set_helmet(ItemStack::new(ItemKind::NetheriteHelmet, 1, None));
+
+    let pack_inv = play::InventoryS2c {
+        window_id: 0,
+        state_id: VarInt(0),
+        slots: Cow::Borrowed(inv.items.get_items()),
+        carried_item: Cow::Borrowed(&ItemStack::EMPTY),
+    };
+
+    local.append(&pack_inv, &compose).unwrap();
+
+    sender.send(UpdateEquipment { id: query.id });
 
     let actions = PlayerListActions::default()
         .with_add_player(true)
@@ -164,7 +231,7 @@ pub fn player_join_world(
             chat_data: None,
             listed: true,
             ping: 20,
-            game_mode: GameMode::Creative,
+            game_mode: GameMode::Survival,
             display_name: Some(name.to_string().into_cow_text()),
         })
         .collect::<Vec<_>>();
@@ -222,25 +289,6 @@ pub fn player_join_world(
             &compose,
         )
         .unwrap();
-
-    // todo: cache
-    for current_query in &player_spawns {
-        let id = current_query.id;
-        let pose = current_query.pose;
-        let uuid = current_query.uuid;
-
-        let entity_id = VarInt(id.index().0 as i32);
-
-        let pkt = play::PlayerSpawnS2c {
-            entity_id,
-            player_uuid: uuid.0,
-            position: pose.position.as_dvec3(),
-            yaw: ByteAngle::from_degrees(pose.yaw),
-            pitch: ByteAngle::from_degrees(pose.pitch),
-        };
-
-        local.append(&pkt, &compose).unwrap();
-    }
 
     global
         .0
@@ -408,11 +456,11 @@ pub fn send_game_join_packet(encoder: &mut PacketEncoder) -> anyhow::Result<()> 
         enable_respawn_screen: false,
         dimension_name: dimension_name.into(),
         hashed_seed: 0,
-        game_mode: GameMode::Creative,
+        game_mode: GameMode::Survival,
         is_flat: false,
         last_death_location: None,
         portal_cooldown: 60.into(),
-        previous_game_mode: OptGameMode(Some(GameMode::Creative)),
+        previous_game_mode: OptGameMode(Some(GameMode::Survival)),
         dimension_type_name: "minecraft:overworld".try_into()?,
         is_debug: false,
     };
@@ -432,7 +480,7 @@ fn send_commands(encoder: &mut PacketEncoder) -> anyhow::Result<()> {
     let root = Node {
         data: NodeData::Root,
         executable: false,
-        children: vec![VarInt(1), VarInt(3)],
+        children: vec![VarInt(1), VarInt(3), VarInt(4)],
         redirect_node: None,
     };
 
@@ -468,6 +516,58 @@ fn send_commands(encoder: &mut PacketEncoder) -> anyhow::Result<()> {
         redirect_node: None,
     };
 
+    // id 4 = give item
+    let give = Node {
+        data: NodeData::Literal {
+            name: "give".to_owned(),
+        },
+        executable: true,
+        children: vec![VarInt(5)],
+        redirect_node: None,
+    };
+
+    // id 5 = give {entity}
+    let give_player = Node {
+        data: NodeData::Argument {
+            name: "player".to_owned(),
+            parser: Parser::Entity {
+                single: true,
+                only_players: true,
+            },
+            suggestion: None,
+        },
+        executable: true,
+        children: vec![VarInt(6)],
+        redirect_node: None,
+    };
+
+    // id 6 = give {entity} {item}
+    let give_item = Node {
+        data: NodeData::Argument {
+            name: "item".to_owned(),
+            parser: Parser::ItemStack,
+            suggestion: None,
+        },
+        executable: true,
+        children: vec![VarInt(7)],
+        redirect_node: None,
+    };
+
+    // id 7 = give count
+    let give_count = Node {
+        data: NodeData::Argument {
+            name: "count".to_owned(),
+            parser: Parser::Integer {
+                min: Some(1),
+                max: Some(64),
+            },
+            suggestion: None,
+        },
+        executable: true,
+        children: vec![],
+        redirect_node: None,
+    };
+
     // id 4 = "ka" replace with "killall"
     // let ka = Node {
     //     data: NodeData::Literal {
@@ -479,7 +579,16 @@ fn send_commands(encoder: &mut PacketEncoder) -> anyhow::Result<()> {
     // };
 
     encoder.append_packet(&CommandTreeS2c {
-        commands: vec![root, spawn, spawn_arg, clear],
+        commands: vec![
+            root,
+            spawn,
+            spawn_arg,
+            clear,
+            give,
+            give_player,
+            give_item,
+            give_count,
+        ],
         root_index: VarInt(0),
     })?;
 

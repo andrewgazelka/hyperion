@@ -2422,6 +2422,7 @@ dependencies = [
  "tokio",
  "toml",
  "tracing",
+ "tracing-subscriber",
  "uuid",
  "valence_anvil",
  "valence_generated",

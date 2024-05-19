@@ -71,7 +71,7 @@ pub fn set_player_skin(r: ReceiverMut<SetPlayerSkin, SetPlayerSkinQuery>, compos
         chat_data: None,
         listed: false,
         ping: 0,
-        game_mode: GameMode::Creative,
+        game_mode: GameMode::Survival,
         display_name: None,
     };
 
@@ -91,8 +91,8 @@ pub fn set_player_skin(r: ReceiverMut<SetPlayerSkin, SetPlayerSkinQuery>, compos
         dimension_type_name: "minecraft:overworld".try_into().unwrap(),
         dimension_name: dimension_name.into(),
         hashed_seed: 0,
-        game_mode: GameMode::Creative,
-        previous_game_mode: OptGameMode(Some(GameMode::Creative)),
+        game_mode: GameMode::Survival,
+        previous_game_mode: OptGameMode(Some(GameMode::Survival)),
         is_debug: false,
         is_flat: false,
         copy_metadata: true,
