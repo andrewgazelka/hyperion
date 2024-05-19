@@ -166,13 +166,21 @@ impl PlayerInventory {
 
         // sum up all items of a kind
         // slot_change.iter().map(|change| &change.stack.item)
-        let count_per_item_kind = slot_change
+        let mut count_per_item_kind = slot_change
             .iter()
             // ignore air
             .filter(|change| change.stack.item != ItemKind::Air)
             .map(|change| (change.stack.item, change.stack.count as isize))
             .into_grouping_map()
             .sum();
+
+        if client_proposed_cursor.item != ItemKind::Air {
+            // add the cursor item to the count
+            count_per_item_kind
+                .entry(client_proposed_cursor.item)
+                .and_modify(|count| *count += client_proposed_cursor.count as isize)
+                .or_insert(client_proposed_cursor.count as isize);
+        }
 
         for (item, count) in count_per_item_kind {
             // sum up all items of a kind
@@ -184,22 +192,19 @@ impl PlayerInventory {
                 .filter(|(idx, stack)| stack.item == item && slots & (1 << idx) > 0)
                 .map(|(_, stack)| stack.count as isize)
                 .sum::<isize>();
-            let mut proposed_count = count;
+            let proposed_count = count;
 
             // check cursor slots
             if self.carried_item.item == item {
                 warn!("Carried {:?}", self.carried_item);
                 current_count += self.carried_item.count as isize;
             }
-            if client_proposed_cursor.item == item {
-                warn!("Proposed {:?}", client_proposed_cursor);
-                proposed_count += client_proposed_cursor.count as isize;
-            }
 
             // check if the player does not invent items
             if proposed_count > current_count {
                 warn!(
-                    "More items than expected {:?} p:{proposed_count} c:{current_count}",
+                    "More items than expected {:?} proposed:{proposed_count} \
+                     current:{current_count}",
                     item
                 );
                 return Err(SlotChangeError::MoreItemsThanExpected);
@@ -420,38 +425,600 @@ impl PlayerInventory {
 
 #[cfg(test)]
 mod test {
-    use std::assert_matches::assert_matches;
-
     use super::*;
 
     #[test]
     fn test_inventory() {
-        let _ = tracing_subscriber::fmt::try_init();
-
+        prepare_tracing();
         let mut inventory = Inventory::<46>::new();
         let item = ItemStack::new(ItemKind::AcaciaBoat, 1, None);
         inventory.set(0, item.clone());
         assert_eq!(inventory.slots[0], item);
     }
 
+    // test append_slot_change
     #[test]
-    fn test_append_slot_changes() {
-        let _ = tracing_subscriber::fmt::try_init();
+    fn test_move_1_boat() {
+        prepare_tracing();
+        let mut inventory = prepare_inventory();
+        inventory.set_main_hand(36).unwrap();
 
-        let mut inventory = PlayerInventory::new();
-        let item = ItemStack::new(ItemKind::AcaciaBoat, 1, None);
-        let slot_changes = [SlotChange {
-            idx: 0,
-            stack: item,
-        }];
-
-        let result = inventory.try_append_changes(&slot_changes, &ItemStack::EMPTY, false);
-
-        // todo: is this the right error?
-        assert_matches!(result, Err(SlotChangeError::MoreItemsThanExpected));
+        let slot_change = vec![
+            SlotChange {
+                idx: 11,
+                stack: ItemStack::new(ItemKind::AcaciaBoat, 1, None),
+            },
+            SlotChange {
+                idx: 36,
+                stack: ItemStack::EMPTY,
+            },
+        ];
+        // Move the boat from slot 36 to slot 11
+        let result = inventory
+            .try_append_changes(&slot_change, &ItemStack::EMPTY, false)
+            .unwrap();
+        assert_eq!(result.update_equipment, true);
+        assert_eq!(
+            inventory.items.slots[11],
+            ItemStack::new(ItemKind::AcaciaBoat, 1, None)
+        );
+        assert_eq!(inventory.items.slots[36], ItemStack::EMPTY);
     }
 
-    // append_slot_change with more items
+    // test move 42 items of mossy cobblestone
     #[test]
-    const fn test_append_slot_change_more_items() {}
+    fn test_move_42_mossy_cobblestone() {
+        prepare_tracing();
+        let mut inventory = prepare_inventory();
+        inventory.set_main_hand(36).unwrap();
+
+        let slot_change = vec![
+            SlotChange {
+                idx: 11,
+                stack: ItemStack::new(ItemKind::MossyCobblestone, 42, None),
+            },
+            SlotChange {
+                idx: 20,
+                stack: ItemStack::EMPTY,
+            },
+        ];
+        // Move the mossy cobblestone from slot 36 to slot 11
+        let result = inventory
+            .try_append_changes(&slot_change, &ItemStack::EMPTY, false)
+            .unwrap();
+        assert_eq!(result.update_equipment, false);
+        assert_eq!(
+            inventory.items.slots[11],
+            ItemStack::new(ItemKind::MossyCobblestone, 42, None)
+        );
+        assert_eq!(inventory.items.slots[20], ItemStack::EMPTY);
+    }
+
+    // split stack of 64 golden apples
+    #[test]
+    fn test_split_stack_64_golden_apples() {
+        prepare_tracing();
+        let mut inventory = prepare_inventory();
+        inventory.set_main_hand(36).unwrap();
+
+        let slot_change = vec![
+            SlotChange {
+                idx: 11,
+                stack: ItemStack::new(ItemKind::GoldenApple, 32, None),
+            },
+            SlotChange {
+                idx: 20,
+                stack: ItemStack::new(ItemKind::GoldenApple, 32, None),
+            },
+            SlotChange {
+                idx: 38,
+                stack: ItemStack::EMPTY,
+            },
+        ];
+        let result = inventory
+            .try_append_changes(&slot_change, &ItemStack::EMPTY, false)
+            .unwrap();
+        assert_eq!(result.update_equipment, false);
+        assert_eq!(
+            inventory.items.slots[11],
+            ItemStack::new(ItemKind::GoldenApple, 32, None)
+        );
+        assert_eq!(
+            inventory.items.slots[20],
+            ItemStack::new(ItemKind::GoldenApple, 32, None)
+        );
+        assert_eq!(inventory.items.slots[38], ItemStack::EMPTY);
+    }
+
+    // split to many items
+    #[test]
+    fn test_split_to_many_items() {
+        prepare_tracing();
+        let mut inventory = prepare_inventory();
+        inventory.set_main_hand(36).unwrap();
+
+        let slot_change = vec![
+            SlotChange {
+                idx: 11,
+                stack: ItemStack::new(ItemKind::GoldenApple, 32, None),
+            },
+            SlotChange {
+                idx: 20,
+                stack: ItemStack::new(ItemKind::GoldenApple, 33, None),
+            },
+            SlotChange {
+                idx: 38,
+                stack: ItemStack::EMPTY,
+            },
+        ];
+        let result = inventory.try_append_changes(&slot_change, &ItemStack::EMPTY, false);
+        assert_eq!(result, Err(SlotChangeError::MoreItemsThanExpected));
+    }
+
+    // pick up cursor
+    #[test]
+    fn test_pick_up_cursor() {
+        prepare_tracing();
+        let mut inventory = prepare_inventory();
+        inventory.set_main_hand(36).unwrap();
+
+        let slot_change = vec![SlotChange {
+            idx: 20,
+            stack: ItemStack::EMPTY,
+        }];
+        let result = inventory
+            .try_append_changes(
+                &slot_change,
+                &ItemStack::new(ItemKind::MossyCobblestone, 42, None),
+                false,
+            )
+            .unwrap();
+        assert_eq!(result.update_equipment, false);
+        assert_eq!(inventory.items.slots[20], ItemStack::EMPTY);
+        assert_eq!(
+            inventory.get_carried_item(),
+            &ItemStack::new(ItemKind::MossyCobblestone, 42, None)
+        );
+    }
+
+    // pick up to many items
+    #[test]
+    fn test_pick_up_to_many_items() {
+        prepare_tracing();
+        let mut inventory = prepare_inventory();
+        inventory.set_main_hand(36).unwrap();
+
+        let slot_change = vec![SlotChange {
+            idx: 20,
+            stack: ItemStack::EMPTY,
+        }];
+        let result = inventory.try_append_changes(
+            &slot_change,
+            &ItemStack::new(ItemKind::MossyCobblestone, 43, None),
+            false,
+        );
+        assert_eq!(result, Err(SlotChangeError::MoreItemsThanExpected));
+    }
+
+    // pick up half of the stack
+    #[test]
+    fn test_pick_up_half_of_stack() {
+        prepare_tracing();
+        let mut inventory = prepare_inventory();
+        inventory.set_main_hand(36).unwrap();
+
+        let slot_change = vec![SlotChange {
+            idx: 20,
+            stack: ItemStack::new(ItemKind::MossyCobblestone, 21, None),
+        }];
+        let result = inventory
+            .try_append_changes(
+                &slot_change,
+                &ItemStack::new(ItemKind::MossyCobblestone, 21, None),
+                false,
+            )
+            .unwrap();
+        assert_eq!(result.update_equipment, false);
+        assert_eq!(
+            inventory.items.slots[20],
+            ItemStack::new(ItemKind::MossyCobblestone, 21, None)
+        );
+        assert_eq!(
+            inventory.get_carried_item(),
+            &ItemStack::new(ItemKind::MossyCobblestone, 21, None)
+        );
+    }
+
+    // pick up to much but leave some
+    #[test]
+    fn test_pick_up_to_much_but_leave_some() {
+        prepare_tracing();
+        let mut inventory = prepare_inventory();
+        inventory.set_main_hand(36).unwrap();
+
+        let slot_change = vec![SlotChange {
+            idx: 20,
+            stack: ItemStack::new(ItemKind::MossyCobblestone, 21, None),
+        }];
+        // Move the golden apples from slot 38 to slot 11 and 20
+        let result = inventory.try_append_changes(
+            &slot_change,
+            &ItemStack::new(ItemKind::MossyCobblestone, 22, None),
+            true,
+        );
+        assert_eq!(result, Err(SlotChangeError::MoreItemsThanExpected));
+    }
+
+    // pick up other item with cursor
+    #[test]
+    fn test_pick_up_other_item_with_cursor() {
+        prepare_tracing();
+        let mut inventory = prepare_inventory();
+        inventory.set_main_hand(36).unwrap();
+
+        let slot_change = vec![SlotChange {
+            idx: 20,
+            stack: ItemStack::EMPTY,
+        }];
+        let result = inventory.try_append_changes(
+            &slot_change,
+            &ItemStack::new(ItemKind::Diamond, 64, None),
+            false,
+        );
+        assert_eq!(result, Err(SlotChangeError::MoreItemsThanExpected));
+    }
+
+    // put cursor in slot
+    #[test]
+    fn test_put_cursor_in_slot() {
+        prepare_tracing();
+        let mut inventory = prepare_inventory();
+        inventory.set_main_hand(36).unwrap();
+        inventory.carried_item = ItemStack::new(ItemKind::NetheriteIngot, 64, None);
+
+        let slot_change = vec![SlotChange {
+            idx: 9,
+            stack: ItemStack::new(ItemKind::NetheriteIngot, 64, None),
+        }];
+        let result = inventory
+            .try_append_changes(&slot_change, &ItemStack::EMPTY, false)
+            .unwrap();
+        assert_eq!(result.update_equipment, false);
+        assert_eq!(
+            inventory.items.slots[9],
+            ItemStack::new(ItemKind::NetheriteIngot, 64, None)
+        );
+        assert_eq!(inventory.get_carried_item(), &ItemStack::EMPTY);
+    }
+
+    // put cursor in slot 44 and change equipment
+    #[test]
+    fn test_put_cursor_in_slot_44_and_change_equipment() {
+        prepare_tracing();
+        let mut inventory: PlayerInventory = prepare_inventory();
+        inventory.set_main_hand(44).unwrap();
+        inventory.carried_item = ItemStack::new(ItemKind::NetheriteIngot, 64, None);
+
+        let slot_change = vec![SlotChange {
+            idx: 44,
+            stack: ItemStack::EMPTY,
+        }];
+        let result = inventory
+            .try_append_changes(&slot_change, &ItemStack::EMPTY, false)
+            .unwrap();
+        assert_eq!(result.update_equipment, true);
+        assert_eq!(inventory.items.slots[44], ItemStack::EMPTY);
+        assert_eq!(inventory.get_carried_item(), &ItemStack::EMPTY);
+    }
+
+    // put 1 item of cursor in slot
+    #[test]
+    fn test_put_1_item_of_cursor_in_slot() {
+        prepare_tracing();
+        let mut inventory = prepare_inventory();
+        inventory.set_main_hand(36).unwrap();
+        inventory.carried_item = ItemStack::new(ItemKind::NetheriteIngot, 64, None);
+
+        let slot_change = vec![SlotChange {
+            idx: 9,
+            stack: ItemStack::new(ItemKind::NetheriteIngot, 1, None),
+        }];
+        let result = inventory
+            .try_append_changes(
+                &slot_change,
+                &ItemStack::new(ItemKind::NetheriteIngot, 63, None),
+                false,
+            )
+            .unwrap();
+        assert_eq!(result.update_equipment, false);
+        assert_eq!(
+            inventory.items.slots[9],
+            ItemStack::new(ItemKind::NetheriteIngot, 1, None)
+        );
+        assert_eq!(
+            inventory.get_carried_item(),
+            &ItemStack::new(ItemKind::NetheriteIngot, 63, None)
+        );
+    }
+
+    // put 1 item of cursor in slot but leave it in cursor
+    #[test]
+    fn test_put_1_item_of_cursor_in_slot_but_leave_it_in_cursor() {
+        prepare_tracing();
+        let mut inventory = prepare_inventory();
+        inventory.set_main_hand(36).unwrap();
+        inventory.carried_item = ItemStack::new(ItemKind::NetheriteIngot, 64, None);
+
+        let slot_change = vec![SlotChange {
+            idx: 9,
+            stack: ItemStack::new(ItemKind::NetheriteIngot, 1, None),
+        }];
+        let result = inventory.try_append_changes(
+            &slot_change,
+            &ItemStack::new(ItemKind::NetheriteIngot, 64, None),
+            false,
+        );
+
+        assert_eq!(result, Err(SlotChangeError::MoreItemsThanExpected));
+    }
+
+    // split cursor with 4 items in multiple slots and leave some in cursor
+    #[test]
+    fn test_split_cursor_with_4_items_in_multiple_slots_and_leave_some_in_cursor() {
+        prepare_tracing();
+        let mut inventory = prepare_inventory();
+        inventory.set_main_hand(36).unwrap();
+        inventory.carried_item = ItemStack::new(ItemKind::NetheriteIngot, 5, None);
+
+        let slot_change = vec![
+            SlotChange {
+                idx: 9,
+                stack: ItemStack::new(ItemKind::NetheriteIngot, 1, None),
+            },
+            SlotChange {
+                idx: 10,
+                stack: ItemStack::new(ItemKind::NetheriteIngot, 1, None),
+            },
+            SlotChange {
+                idx: 11,
+                stack: ItemStack::new(ItemKind::NetheriteIngot, 1, None),
+            },
+            SlotChange {
+                idx: 12,
+                stack: ItemStack::new(ItemKind::NetheriteIngot, 1, None),
+            },
+        ];
+        let result = inventory
+            .try_append_changes(
+                &slot_change,
+                &ItemStack::new(ItemKind::NetheriteIngot, 1, None),
+                true,
+            )
+            .unwrap();
+        assert_eq!(result.update_equipment, false);
+        assert_eq!(
+            inventory.items.slots[9],
+            ItemStack::new(ItemKind::NetheriteIngot, 1, None)
+        );
+        assert_eq!(
+            inventory.items.slots[10],
+            ItemStack::new(ItemKind::NetheriteIngot, 1, None)
+        );
+        assert_eq!(
+            inventory.items.slots[11],
+            ItemStack::new(ItemKind::NetheriteIngot, 1, None)
+        );
+        assert_eq!(
+            inventory.items.slots[12],
+            ItemStack::new(ItemKind::NetheriteIngot, 1, None)
+        );
+        assert_eq!(
+            inventory.get_carried_item(),
+            &ItemStack::new(ItemKind::NetheriteIngot, 1, None)
+        );
+    }
+
+    // split cursor with 4 items in multiple slots and leave to much in cursor
+    #[test]
+    fn test_split_cursor_with_4_items_in_multiple_slots_and_leave_to_much_in_cursor() {
+        prepare_tracing();
+        let mut inventory = prepare_inventory();
+        inventory.set_main_hand(36).unwrap();
+        inventory.carried_item = ItemStack::new(ItemKind::NetheriteIngot, 5, None);
+
+        let slot_change = vec![
+            SlotChange {
+                idx: 9,
+                stack: ItemStack::new(ItemKind::NetheriteIngot, 1, None),
+            },
+            SlotChange {
+                idx: 10,
+                stack: ItemStack::new(ItemKind::NetheriteIngot, 1, None),
+            },
+            SlotChange {
+                idx: 11,
+                stack: ItemStack::new(ItemKind::NetheriteIngot, 1, None),
+            },
+            SlotChange {
+                idx: 12,
+                stack: ItemStack::new(ItemKind::NetheriteIngot, 1, None),
+            },
+        ];
+        let result = inventory.try_append_changes(
+            &slot_change,
+            &ItemStack::new(ItemKind::NetheriteIngot, 2, None),
+            false,
+        );
+        assert_eq!(result, Err(SlotChangeError::MoreItemsThanExpected));
+    }
+
+    // split cursor with 47 items in 3 slots and leave the rest in cursor
+    #[test]
+    fn test_split_cursor_with_47_items_in_3_slots_and_leave_the_rest_in_cursor() {
+        prepare_tracing();
+        let mut inventory = prepare_inventory();
+        inventory.set_main_hand(36).unwrap();
+        inventory.carried_item = ItemStack::new(ItemKind::NetheriteIngot, 47, None);
+
+        let slot_change = vec![
+            SlotChange {
+                idx: 9,
+                stack: ItemStack::new(ItemKind::NetheriteIngot, 15, None),
+            },
+            SlotChange {
+                idx: 10,
+                stack: ItemStack::new(ItemKind::NetheriteIngot, 15, None),
+            },
+            SlotChange {
+                idx: 11,
+                stack: ItemStack::new(ItemKind::NetheriteIngot, 15, None),
+            },
+        ];
+        let result = inventory
+            .try_append_changes(
+                &slot_change,
+                &ItemStack::new(ItemKind::NetheriteIngot, 2, None),
+                true,
+            )
+            .unwrap();
+        assert_eq!(result.update_equipment, false);
+        assert_eq!(
+            inventory.items.slots[9],
+            ItemStack::new(ItemKind::NetheriteIngot, 15, None)
+        );
+        assert_eq!(
+            inventory.items.slots[10],
+            ItemStack::new(ItemKind::NetheriteIngot, 15, None)
+        );
+        assert_eq!(
+            inventory.items.slots[11],
+            ItemStack::new(ItemKind::NetheriteIngot, 15, None)
+        );
+        assert_eq!(
+            inventory.get_carried_item(),
+            &ItemStack::new(ItemKind::NetheriteIngot, 2, None)
+        );
+    }
+
+    // put the right armor in the armor slots but with no armor there
+    #[test]
+    fn test_put_the_right_armor_in_the_armor_slots() {
+        prepare_tracing();
+        let mut inventory = prepare_inventory();
+        inventory.set_main_hand(36).unwrap();
+
+        let slot_change = vec![
+            SlotChange {
+                idx: 5,
+                stack: ItemStack::new(ItemKind::ChainmailHelmet, 1, None),
+            },
+            SlotChange {
+                idx: 6,
+                stack: ItemStack::new(ItemKind::ChainmailChestplate, 1, None),
+            },
+            SlotChange {
+                idx: 7,
+                stack: ItemStack::new(ItemKind::ChainmailLeggings, 1, None),
+            },
+            SlotChange {
+                idx: 8,
+                stack: ItemStack::new(ItemKind::ChainmailBoots, 1, None),
+            },
+        ];
+        let result = inventory.try_append_changes(&slot_change, &ItemStack::EMPTY, false);
+        assert_eq!(result, Err(SlotChangeError::MoreItemsThanExpected));
+    }
+
+    // put helmet to helmet
+    #[test]
+    fn test_put_helmet_to_helmet() {
+        prepare_tracing();
+        let mut inventory = prepare_inventory();
+        inventory.set_main_hand(36).unwrap();
+        inventory.carried_item = ItemStack::new(ItemKind::ChainmailHelmet, 1, None);
+
+        let slot_change = vec![SlotChange {
+            idx: 5,
+            stack: ItemStack::new(ItemKind::ChainmailHelmet, 1, None),
+        }];
+        let result = inventory
+            .try_append_changes(&slot_change, &ItemStack::EMPTY, false)
+            .unwrap();
+        assert_eq!(result.update_equipment, true);
+        assert_eq!(
+            inventory.items.slots[5],
+            ItemStack::new(ItemKind::ChainmailHelmet, 1, None)
+        );
+
+        assert_eq!(inventory.get_carried_item(), &ItemStack::EMPTY);
+    }
+
+    // put helmet to chestplate
+    #[test]
+    fn test_put_helmet_to_chestplate() {
+        prepare_tracing();
+        let mut inventory = prepare_inventory();
+        inventory.set_main_hand(36).unwrap();
+        inventory.carried_item = ItemStack::new(ItemKind::ChainmailHelmet, 1, None);
+
+        let slot_change = vec![SlotChange {
+            idx: 6,
+            stack: ItemStack::new(ItemKind::ChainmailHelmet, 1, None),
+        }];
+        let result = inventory.try_append_changes(&slot_change, &ItemStack::EMPTY, false);
+        assert_eq!(result, Err(SlotChangeError::NonArmorInArmorSlot));
+    }
+
+    // put to many items in cursor stack
+    #[test]
+    fn test_put_to_many_items_in_cursor_stack() {
+        prepare_tracing();
+        let mut inventory = prepare_inventory();
+        inventory.set_main_hand(36).unwrap();
+        inventory.items.set(9, ItemStack::new(ItemKind::NetheriteIngot, 64, None));
+        inventory.items.set(10, ItemStack::new(ItemKind::NetheriteIngot, 64, None));
+
+        let slot_change = vec![SlotChange {
+            idx: 9,
+            stack: ItemStack::EMPTY,
+        },
+        SlotChange {
+            idx: 10,
+            stack: ItemStack::new(ItemKind::NetheriteIngot, 63, None),
+        }];
+        let result = inventory.try_append_changes(&slot_change, &ItemStack::new(ItemKind::NetheriteIngot, 65, None), false);
+        assert_eq!(result, Err(SlotChangeError::InvalidStackCount));
+        
+    }
+
+
+
+    // prepare basic inventory for tests
+    fn prepare_inventory() -> PlayerInventory {
+        let mut inventory = PlayerInventory::new();
+        inventory
+            .items
+            .set(36, ItemStack::new(ItemKind::AcaciaBoat, 1, None));
+
+        inventory
+            .items
+            .set(37, ItemStack::new(ItemKind::IronSword, 1, None));
+
+        inventory
+            .items
+            .set(38, ItemStack::new(ItemKind::GoldenApple, 64, None));
+
+        inventory
+            .items
+            .set(20, ItemStack::new(ItemKind::MossyCobblestone, 42, None));
+
+        inventory
+    }
+
+    fn prepare_tracing() {
+        let _ = tracing_subscriber::fmt()
+            .with_test_writer()
+            .with_max_level(tracing::Level::DEBUG)
+            .try_init();
+    }
 }
