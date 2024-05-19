@@ -14,7 +14,7 @@ use valence_protocol::{
 
 use crate::{
     components::FullEntityPose,
-    event::{self, AttackEntity, AttackType, Pose, SwingArm, UpdateSelectedSlot},
+    event::{self, AttackType, Pose, SwingArm},
     singleton::player_id_lookup::EntityIdLookup,
     system::ingress::SendElem,
 };
@@ -98,15 +98,8 @@ fn update_selected_slot(
 
     let play::UpdateSelectedSlotC2s { slot } = pkt;
 
-    sender.push(
-        UpdateSelectedSlot {
-            slot: (slot + 36) as usize,
-            id: player_id,
-        }
-        .into(),
-    );
-
-    // debug!("update selected slot packet: {:?}", pkt);
+    let elem = SendElem::new(player_id, event::UpdateSelectedSlot { slot });
+    sender.push(elem);
 
     Ok(())
 }
@@ -114,17 +107,16 @@ fn update_selected_slot(
 fn chat_command(
     mut data: &[u8],
     query: &PacketSwitchQuery,
-    // query: PacketSwitchQuery,
     sender: &mut Vec<SendElem>,
 ) -> anyhow::Result<()> {
     let pkt = play::CommandExecutionC2s::decode(&mut data)?;
 
     let event = event::Command {
-        by: query.id,
         raw: pkt.command.0.to_owned(),
     };
 
-    sender.push(event.into());
+    let elem = SendElem::new(query.id, event);
+    sender.push(elem);
 
     Ok(())
 }
@@ -138,12 +130,9 @@ fn hand_swing(
 
     let packet = packet.hand;
 
-    let event = SwingArm {
-        target: query.id,
-        hand: packet,
-    };
+    let event = SwingArm { hand: packet };
 
-    sender.push(event.into());
+    sender.push(SendElem::new(query.id, event));
 
     Ok(())
 }
@@ -165,16 +154,14 @@ fn player_interact_entity(
     let target = packet.entity_id.0;
 
     if let Some(&target) = id_lookup.get(&target) {
-        sender.push(
-            AttackEntity {
-                target,
-                from_pos,
-                from: query.id,
-                damage: 10.0,
-                source: AttackType::Melee,
-            }
-            .into(),
-        );
+        let elem = SendElem::new(target, event::AttackEntity {
+            from_pos,
+            from: query.id,
+            damage: 10.0,
+            source: AttackType::Melee,
+        });
+
+        sender.push(elem);
     }
 
     Ok(())
@@ -198,34 +185,16 @@ fn player_action(
 
     match packet.action {
         PlayerAction::StartDestroyBlock => {
-            sender.push(
-                event::BlockStartBreak {
-                    by: id,
-                    position,
-                    sequence,
-                }
-                .into(),
-            );
+            let elem = SendElem::new(id, event::BlockStartBreak { position, sequence });
+            sender.push(elem);
         }
         PlayerAction::AbortDestroyBlock => {
-            sender.push(
-                event::BlockAbortBreak {
-                    by: id,
-                    position,
-                    sequence,
-                }
-                .into(),
-            );
+            let elem = SendElem::new(id, event::BlockAbortBreak { position, sequence });
+            sender.push(elem);
         }
         PlayerAction::StopDestroyBlock => {
-            sender.push(
-                event::BlockFinishBreak {
-                    by: id,
-                    position,
-                    sequence,
-                }
-                .into(),
-            );
+            let elem = SendElem::new(id, event::BlockFinishBreak { position, sequence });
+            sender.push(elem);
         }
         _ => {}
     }
@@ -245,22 +214,16 @@ fn client_command(
 
     match packet.action {
         ClientCommand::StartSneaking => {
-            sender.push(
-                event::PoseUpdate {
-                    target: id,
-                    state: Pose::Sneaking,
-                }
-                .into(),
-            );
+            let elem = SendElem::new(id, event::PoseUpdate {
+                state: Pose::Sneaking,
+            });
+            sender.push(elem);
         }
         ClientCommand::StopSneaking => {
-            sender.push(
-                event::PoseUpdate {
-                    target: id,
-                    state: Pose::Standing,
-                }
-                .into(),
-            );
+            let elem = SendElem::new(id, event::PoseUpdate {
+                state: Pose::Standing,
+            });
+            sender.push(elem);
         }
         _ => {}
     }
@@ -468,13 +431,13 @@ fn inventory_action(
     let id = query.id;
 
     let event = event::ClickEvent {
-        by: id,
         click_type,
         carried_item,
         slot_changes: slot_changes.iter().cloned().collect(),
     };
 
-    sender.push(event.into());
+    let elem = SendElem::new(id, event);
+    sender.push(elem);
 
     Ok(())
 }

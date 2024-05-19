@@ -13,7 +13,7 @@ pub fn kill_all(
     _r: ReceiverMut<KillAllEntities>,
     entities: Fetcher<(EntityId, &Npc, Not<&Player>)>,
     broadcast: Single<&Broadcast>,
-    mut s: Sender<Despawn>,
+    s: Sender<Despawn>,
     compose: Compose,
 ) {
     let ids = entities.iter().map(|(id, ..)| id).collect::<Vec<_>>();
@@ -27,6 +27,6 @@ pub fn kill_all(
     broadcast.append(&despawn_packet, &compose).unwrap();
 
     for id in ids {
-        s.send(Despawn(id));
+        s.send_to(id, Despawn);
     }
 }

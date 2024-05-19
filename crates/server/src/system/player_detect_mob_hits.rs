@@ -28,7 +28,7 @@ pub fn player_detect_mob_hits(
     _: Receiver<Gametick>,
     entity_bounding_boxes: Single<&EntityBoundingBoxes>,
     mut poses_fetcher: Fetcher<PlayerDetectMobHitsQuery>,
-    mut s: Sender<event::BulkShoved>,
+    s: Sender<event::BulkShoved>,
 ) {
     let sender = RayonLocal::init(Vec::new);
 

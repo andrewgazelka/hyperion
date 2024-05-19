@@ -68,7 +68,7 @@ pub struct PlayerInventory {
     /// Items held by player
     pub items: Inventory<46>,
     /// main hand index
-    main_hand: usize,
+    main_hand: u16,
     /// carried item
     ///
     /// This item will be none when player closes inventory
@@ -158,7 +158,7 @@ impl PlayerInventory {
 
             // check if the visible items are updated
             if matches!(change.idx, 5..=8 | 45)
-                || usize::try_from(change.idx).unwrap() == self.main_hand
+                || u16::try_from(change.idx).unwrap() == self.main_hand
             {
                 result.update_equipment = true;
             }
@@ -263,11 +263,11 @@ impl PlayerInventory {
     /// get item in the main hand
     #[must_use]
     pub fn get_main_hand(&self) -> Option<&ItemStack> {
-        self.items.slots.get(self.main_hand)
+        self.items.slots.get(self.main_hand as usize)
     }
 
     /// set main hand index to
-    pub fn set_main_hand(&mut self, index: usize) -> anyhow::Result<()> {
+    pub fn set_main_hand(&mut self, index: u16) -> anyhow::Result<()> {
         ensure!(
             (36..=44).contains(&index),
             "main hand can only be in the hotbar"

@@ -47,7 +47,7 @@ pub fn spawn_entity_packet(
 pub fn init_entity(
     r: Receiver<InitEntity>,
     mut id_lookup: Single<&mut EntityIdLookup>,
-    mut s: Sender<(
+    s: Sender<(
         Insert<FullEntityPose>,
         Insert<PositionSyncMetadata>,
         Insert<Npc>,

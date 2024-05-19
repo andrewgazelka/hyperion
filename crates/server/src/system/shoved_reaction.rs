@@ -8,7 +8,7 @@ use crate::{
 };
 
 #[instrument(skip_all, level = "trace")]
-pub fn shoved_reaction(mut r: ReceiverMut<BulkShoved>, mut s: Sender<event::AttackEntity>) {
+pub fn shoved_reaction(mut r: ReceiverMut<BulkShoved>, s: Sender<event::AttackEntity>) {
     let result = r
         .event
         .0
@@ -16,18 +16,16 @@ pub fn shoved_reaction(mut r: ReceiverMut<BulkShoved>, mut s: Sender<event::Atta
         .par_iter_mut()
         .flatten()
         .map(|event| {
-            event::AttackEntity {
-                target: event.target,
+            (event.target, event::AttackEntity {
                 from_pos: event.from_location,
                 from: event.from,
-                // todo: determine damage
                 damage: 3.0,
                 source: AttackType::Shove,
-            }
+            })
         })
         .collect_vec_list();
 
-    for event in result.into_iter().flatten() {
-        s.send(event);
+    for (target, event) in result.into_iter().flatten() {
+        s.send_to(target, event);
     }
 }

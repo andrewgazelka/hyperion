@@ -17,13 +17,13 @@ use crate::{
 #[instrument(skip_all, level = "trace")]
 pub fn update_main_hand(
     r: Receiver<UpdateSelectedSlot, (EntityId, &mut PlayerInventory)>,
-    mut sender: Sender<UpdateEquipment>,
+    sender: Sender<UpdateEquipment>,
 ) {
     let (entity_id, inventory) = r.query;
     let c = r.event;
     if inventory.set_main_hand(c.slot).is_ok() {
         // send event
-        sender.send(UpdateEquipment { id: entity_id });
+        sender.send_to(entity_id, UpdateEquipment);
     }
 }
 

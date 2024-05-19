@@ -1,9 +1,9 @@
 use arrayvec::ArrayVec;
 use derive_more::From;
 use evenio::{
-    event::{Despawn, Event, EventMut, Insert, Receiver, Sender, Spawn},
+    entity::EntityId,
+    event::{Despawn, EventMut, GlobalEvent, Insert, Receiver, ReceiverMut, Sender, Spawn},
     fetch::{Fetcher, Single},
-    prelude::{EntityId, ReceiverMut},
     world::World,
 };
 use fxhash::FxHashMap;
@@ -19,7 +19,7 @@ use valence_protocol::{
 };
 
 use crate::{
-    event::{self, UpdateSelectedSlot},
+    event::{self},
     global::Global,
     net::{Server, ServerDef, ServerEvent},
     singleton::fd_lookup::FdLookup,
@@ -49,28 +49,28 @@ pub type IngressSender<'a> = Sender<
         event::BlockFinishBreak,
         event::Command,
         event::PoseUpdate,
-        UpdateSelectedSlot,
+        event::UpdateSelectedSlot,
         event::ClickEvent,
     ),
 >;
 
-#[derive(Event)]
+#[derive(GlobalEvent)]
 pub struct AddPlayer {
     fd: Fd,
 }
 
-#[derive(Event)]
+#[derive(GlobalEvent)]
 pub struct RemovePlayer {
     fd: Fd,
 }
 
 // todo: do we really need three different lifetimes here?
-#[derive(Event)]
+#[derive(GlobalEvent)]
 pub struct RecvDataBulk<'a> {
     elements: FxHashMap<Fd, ArrayVec<CowBytes<'a>, 16>>,
 }
 
-#[derive(Event)]
+#[derive(GlobalEvent)]
 pub struct SentData {
     decrease_count: FxHashMap<Fd, u8>,
 }
@@ -121,7 +121,7 @@ pub fn add_player(
     r: ReceiverMut<AddPlayer>,
     mut fd_lookup: Single<&mut FdLookup>,
     allocator: Single<&mut BufferAllocator>,
-    mut sender: Sender<(
+    sender: Sender<(
         Spawn,
         Insert<LoginState>,
         Insert<DecodeBuffer>,
@@ -151,7 +151,7 @@ pub fn add_player(
 pub fn remove_player(
     r: ReceiverMut<RemovePlayer>,
     mut fd_lookup: Single<&mut FdLookup>,
-    mut sender: Sender<Despawn>,
+    sender: Sender<Despawn>,
 ) {
     let event = r.event;
 
@@ -199,7 +199,7 @@ pub fn sent_data(
 }
 
 #[derive(From)]
-pub enum SendElem {
+pub enum SendData {
     PlayerInit(event::PlayerInit),
     KickPlayer(event::KickPlayer),
     InitEntity(event::InitEntity),
@@ -212,6 +212,20 @@ pub enum SendElem {
     PoseUpdate(event::PoseUpdate),
     UpdateSelectedSlot(event::UpdateSelectedSlot),
     ClickEvent(event::ClickEvent),
+}
+
+pub struct SendElem {
+    id: EntityId,
+    data: SendData,
+}
+
+impl SendElem {
+    pub fn new(id: EntityId, data: impl Into<SendData>) -> Self {
+        Self {
+            id,
+            data: data.into(),
+        }
+    }
 }
 
 #[instrument(skip_all, level = "trace")]
@@ -228,7 +242,7 @@ pub fn recv_data(
         Option<&mut FullEntityPose>,
     )>,
     id_lookup: Single<&EntityIdLookup>,
-    mut real_sender: IngressSender,
+    real_sender: IngressSender,
     compose: Compose,
 ) {
     let event = EventMut::take(r.event);
@@ -310,40 +324,20 @@ pub fn recv_data(
             }
         });
 
-    for elem in send_events.into_iter().flatten() {
-        match elem {
-            SendElem::PlayerInit(event) => {
-                real_sender.send(event);
-            }
-            SendElem::KickPlayer(event) => {
-                real_sender.send(event);
-            }
-            SendElem::InitEntity(event) => {
-                real_sender.send(event);
-            }
-            SendElem::SwingArm(event) => {
-                real_sender.send(event);
-            }
-            SendElem::AttackEntity(event) => {
-                real_sender.send(event);
-            }
-            SendElem::BlockStartBreak(event) => {
-                real_sender.send(event);
-            }
-            SendElem::BlockAbortBreak(event) => {
-                real_sender.send(event);
-            }
-            SendElem::BlockFinishBreak(event) => {
-                real_sender.send(event);
-            }
-            SendElem::Command(event) => {
-                real_sender.send(event);
-            }
-            SendElem::PoseUpdate(event) => {
-                real_sender.send(event);
-            }
-            SendElem::UpdateSelectedSlot(event) => real_sender.send(event),
-            SendElem::ClickEvent(event) => real_sender.send(event),
+    for SendElem { id, data } in send_events.into_iter().flatten() {
+        match data {
+            SendData::PlayerInit(event) => real_sender.send_to(id, event),
+            SendData::KickPlayer(event) => real_sender.send_to(id, event),
+            SendData::InitEntity(event) => real_sender.send(event),
+            SendData::SwingArm(event) => real_sender.send_to(id, event),
+            SendData::AttackEntity(event) => real_sender.send_to(id, event),
+            SendData::BlockStartBreak(event) => real_sender.send_to(id, event),
+            SendData::BlockAbortBreak(event) => real_sender.send_to(id, event),
+            SendData::BlockFinishBreak(event) => real_sender.send_to(id, event),
+            SendData::Command(event) => real_sender.send_to(id, event),
+            SendData::PoseUpdate(event) => real_sender.send_to(id, event),
+            SendData::UpdateSelectedSlot(event) => real_sender.send_to(id, event),
+            SendData::ClickEvent(event) => real_sender.send_to(id, event),
         }
     }
 
@@ -399,14 +393,12 @@ fn process_login(
 
     let username = Box::from(username);
 
-    sender.push(
-        event::PlayerInit {
-            target: id,
-            username,
-            pose: FullEntityPose::player(),
-        }
-        .into(),
-    );
+    let elem = SendElem::new(id, event::PlayerInit {
+        username,
+        pose: FullEntityPose::player(),
+    });
+
+    sender.push(elem);
 
     // todo: impl rest
     *login_state = LoginState::TransitioningPlay {
