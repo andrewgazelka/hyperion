@@ -121,7 +121,7 @@ impl PlayerInventory {
         allow_less: bool,
     ) -> Result<AppendSlotChange, SlotChangeError> {
         const SLOT_COUNT: i16 = 46;
-        
+
         // construct result struct
         let mut result = AppendSlotChange {
             update_equipment: false,

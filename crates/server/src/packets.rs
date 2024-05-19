@@ -1,6 +1,6 @@
 //! <https://wiki.vg/index.php?title=Protocol&oldid=18375>
 
-use std::{borrow::Cow, str::FromStr};
+use std::str::FromStr;
 
 use anyhow::ensure;
 use evenio::{entity::EntityId, query::Query};
@@ -9,22 +9,18 @@ use valence_protocol::{
     decode::PacketFrame,
     math::Vec3,
     packets::play::{
-        self,
-        click_slot_c2s::{ClickMode, SlotChange},
-        client_command_c2s::ClientCommand,
-        player_action_c2s::PlayerAction,
-        player_interact_entity_c2s::EntityInteraction,
+        self, click_slot_c2s::ClickMode, client_command_c2s::ClientCommand,
+        player_action_c2s::PlayerAction, player_interact_entity_c2s::EntityInteraction,
     },
     Decode, Packet,
 };
 
 use crate::{
-    components::FullEntityPose,
+    components::{FullEntityPose, KeepAlive},
     event::{self, AttackEntity, AttackType, Pose, SwingArm, UpdateSelectedSlot},
     singleton::player_id_lookup::EntityIdLookup,
-    system::ingress::{IngressSender, SendElem},
+    system::ingress::SendElem,
 };
-use crate::components::KeepAlive;
 
 pub mod vanilla;
 pub mod voicechat;

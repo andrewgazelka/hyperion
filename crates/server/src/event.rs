@@ -31,7 +31,7 @@ pub struct ClickEvent {
 }
 
 /// The type of click that the player performed.
-#[derive(Clone, Debug)]
+#[derive(Copy, Clone, Debug)]
 pub enum ClickType {
     LeftClick {
         slot: i16,
@@ -362,6 +362,15 @@ pub struct ChatMessage {
     #[event(target)]
     pub target: EntityId,
     pub message: Text,
+}
+
+impl ChatMessage {
+    pub fn new(target: EntityId, message: impl Into<Text>) -> Self {
+        Self {
+            target,
+            message: message.into(),
+        }
+    }
 }
 
 #[derive(Event)]

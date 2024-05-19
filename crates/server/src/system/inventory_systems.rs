@@ -1,21 +1,23 @@
-use std::borrow::{Borrow, Cow};
+use std::borrow::Cow;
 
+use anyhow::bail;
 use evenio::{
     entity::EntityId,
     event::{Receiver, Sender},
     fetch::Fetcher,
     query::{Query, With},
 };
-use tracing::{instrument, warn};
+use tracing::instrument;
 use valence_protocol::{
     packets::play::{self},
     VarInt,
 };
 use valence_server::{ItemKind, ItemStack};
+use valence_text::IntoText;
 
 use crate::{
     components::{InGameName, Player},
-    event::{ClickEvent, Command, UpdateEquipment},
+    event::{ChatMessage, ClickEvent, Command, UpdateEquipment},
     inventory::PlayerInventory,
     net::{Compose, Packets},
 };
@@ -49,7 +51,7 @@ pub fn get_inventory_actions(
         .inventory
         .append_slot_changes(slot_changes, carried_item, false)
     {
-        Ok(restult) if restult.update_equipment => sender.send(UpdateEquipment { id: *by }),
+        Ok(result) if result.update_equipment => sender.send(UpdateEquipment { id: *by }),
         // error must not be handled, the server resets the inventory
         _ => (),
     }
@@ -81,52 +83,61 @@ pub fn give_command(
     r: Receiver<Command, EntityId>,
     mut fetcher: Fetcher<InventoryQuery>,
     compose: Compose,
+    mut sender: Sender<ChatMessage>,
 ) {
-    let command: &String = r.event.raw.borrow();
+    let id = r.query;
+    let mut inner = || -> anyhow::Result<()> {
+        let command = &r.event.raw;
 
-    if !command.starts_with("give") {
-        // not a give command
-        return;
-    }
-
-    let mut arguments = command.split_whitespace();
-
-    // give <player> <item> [amount]
-    let command = arguments.next();
-
-    let player = arguments.next();
-
-    let item = arguments.next();
-
-    let amount = arguments.next();
-
-    // todo make pretty when a proper command lib exists
-    if let (Some(command), Some(player), Some(item), Some(amount)) = (command, player, item, amount)
-    {
-        if !command.eq_ignore_ascii_case("give") {
-            return;
+        if !command.starts_with("give") {
+            // not a give command
+            return Ok(());
         }
+
+        let mut arguments = command.split_whitespace();
+
+        let format = "give <player> <item> [amount]";
+
+        // give <player> <item> [amount]
+        let Some(_) = arguments.next() else {
+            bail!("expected command to be {format}");
+        };
+
+        let Some(player) = arguments.next() else {
+            bail!("expected player to be /give §c<player> <item> [amount]");
+        };
+
+        let Some(item) = arguments.next() else {
+            bail!("expected item to be /give <player> §c<item> [amount]");
+        };
+
+        let Some(amount) = arguments.next() else {
+            bail!("expected amount to be /give <player> <item> §c[amount]");
+        };
 
         let (packet, inventory) =
             if let Some(x) = fetcher.iter_mut().find(|q| q.name.as_ref() == player) {
                 (x.packet, x.inventory)
             } else {
-                warn!("give_command: player not found");
-                return;
+                bail!("give_command: player not found");
             };
 
-        let item = ItemStack::new(
-            ItemKind::from_str(item).unwrap_or(ItemKind::AcaciaBoat),
-            amount.parse().unwrap_or(1),
-            None,
-        );
+        // remove prefix `minecraft:` if it exists
+        let item = item.strip_prefix("minecraft:").unwrap_or(item);
+
+        let Some(item) = ItemKind::from_str(item) else {
+            bail!("give_command: invalid item {item}");
+        };
+
+        let item = ItemStack::new(item, amount.parse().unwrap_or(1), None);
 
         inventory.set_first_available(item);
 
         send_inventory_update(inventory, packet, &compose);
+        Ok(())
+    };
 
-        //  let (entity_id, inventory, packet) = r.query;
-    } else {
-        warn!("give_command: invalid command or arguments");
+    if let Err(err) = inner() {
+        sender.send(ChatMessage::new(id, err.to_string().into_cow_text()));
     }
 }
