@@ -1,4 +1,4 @@
-use std::{alloc::Allocator, cell::RefCell, fmt::Debug};
+use std::{alloc::Allocator, borrow::Cow, cell::RefCell, fmt::Debug};
 
 use bumpalo::Bump;
 use derive_more::{Deref, DerefMut};
@@ -6,8 +6,11 @@ use evenio::{component::Component, entity::EntityId, event::Event};
 use glam::Vec3;
 use rayon_local::RayonLocal;
 use valence_generated::{block::BlockState, status_effects::StatusEffect};
-use valence_protocol::{packets::play::click_slot_c2s::SlotChange, BlockPos, Hand};
-use valence_server::{entity::EntityKind, ItemStack};
+use valence_protocol::{
+    packets::play::{click_slot_c2s::SlotChange, entity_equipment_update_s2c::EquipmentEntry},
+    BlockPos, Hand, ItemStack,
+};
+use valence_server::entity::EntityKind;
 use valence_text::Text;
 
 use crate::{
@@ -154,6 +157,12 @@ pub struct PlayerJoinWorld {
     pub target: EntityId,
 }
 
+#[derive(Event)]
+pub struct PostPlayerJoinWorld {
+    #[event(target)]
+    pub target: EntityId,
+}
+
 /// An event that is sent whenever a player is kicked from the server.
 #[derive(Event)]
 pub struct KickPlayer {
@@ -246,21 +255,20 @@ pub struct Teleport {
 }
 
 /// i.e., when zombies bump into another player
-#[derive(Event)]
+#[derive(Debug)]
 pub struct Shoved {
-    #[event(target)]
     pub target: EntityId,
     pub from: EntityId,
     pub from_location: Vec3,
 }
 
+#[derive(Event, Debug)]
+pub struct BulkShoved(pub RayonLocal<Vec<Shoved>>);
+
 /// An event when server stats are updated.
 #[derive(Event)]
 pub struct Stats {
-    /// The number of milliseconds per tick in the last second.
-    pub ms_per_tick_mean_1s: f64,
-    /// The number of milliseconds per tick in the last 5 seconds.
-    pub ms_per_tick_mean_5s: f64,
+    pub ms_per_tick: f64,
 }
 
 // todo: naming? this seems bad
@@ -422,8 +430,22 @@ pub struct SetPlayerSkin {
 }
 
 #[derive(Event)]
-pub struct Compass {
+pub struct PointCompass {
     #[event(target)]
     pub target: EntityId,
     pub point_to: BlockPos,
+}
+
+#[derive(Event)]
+pub struct SetEquipment<'a> {
+    #[event(target)]
+    pub target: EntityId,
+    pub equipment: Cow<'a, [EquipmentEntry]>,
+}
+
+impl<'a> SetEquipment<'a> {
+    pub fn new(target: EntityId, equipment: impl Into<Cow<'a, [EquipmentEntry]>>) -> Self {
+        let equipment = equipment.into();
+        Self { target, equipment }
+    }
 }

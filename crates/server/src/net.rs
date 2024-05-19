@@ -4,13 +4,23 @@ use std::{cell::RefCell, hash::Hash, net::SocketAddr};
 
 use anyhow::Context;
 use arrayvec::ArrayVec;
+pub use decoder::PacketDecoder;
 use derive_more::{Deref, DerefMut};
 use evenio::{fetch::Single, handler::HandlerParam, prelude::Component};
 use libc::iovec;
 use libdeflater::CompressionLvl;
-use tracing::{debug, instrument};
+use rayon_local::RayonLocal;
+use tracing::instrument;
 
-use crate::{global::Global, net::encoder::DataWriteInfo, CowBytes};
+use crate::{
+    event::{Scratch, Scratches},
+    global::Global,
+    net::{
+        buffers::{BufRef, BufferAllocator},
+        encoder::{append_packet_without_compression, DataWriteInfo, PacketEncoder},
+    },
+    CowBytes,
+};
 
 pub mod buffers;
 
@@ -36,57 +46,11 @@ pub enum ServerEvent<'a> {
     SentData { fd: Fd },
 }
 
-pub struct Server {
-    #[cfg(target_os = "linux")]
-    pub inner: linux::LinuxServer,
-    #[cfg(not(target_os = "linux"))]
-    pub inner: generic::GenericServer,
-}
+#[cfg(target_os = "linux")]
+pub type Server = linux::LinuxServer;
 
-impl ServerDef for Server {
-    #[allow(unused, reason = "this has to do with cross-platform code")]
-    fn new(address: SocketAddr) -> anyhow::Result<Self>
-    where
-        Self: Sized,
-    {
-        let inner = {
-            #[cfg(target_os = "linux")]
-            {
-                linux::LinuxServer::new(address)?
-            }
-
-            #[cfg(not(target_os = "linux"))]
-            {
-                generic::GenericServer::new(address)?
-            }
-        };
-
-        Ok(Self { inner })
-    }
-
-    fn drain<'a>(&'a mut self, f: impl FnMut(ServerEvent<'a>)) -> std::io::Result<()> {
-        self.inner.drain(f)
-    }
-
-    unsafe fn register_buffers(&mut self, buffers: &[iovec]) {
-        for (idx, elem) in buffers.iter().enumerate() {
-            let ptr = elem.iov_base as *const u8;
-            let len = elem.iov_len;
-            let len_readable = humansize::SizeFormatter::new(len, humansize::BINARY);
-            debug!("buffer {idx} {ptr:?} of len {len} = {len_readable}");
-        }
-
-        self.inner.register_buffers(buffers);
-    }
-
-    fn submit_events(&mut self) {
-        self.inner.submit_events();
-    }
-
-    fn write(&mut self, item: WriteItem) {
-        self.inner.write(item);
-    }
-}
+#[cfg(not(target_os = "linux"))]
+pub type Server = generic::GenericServer;
 
 #[derive(Debug, Copy, Clone)]
 pub struct GlobalPacketWriteInfo {
@@ -109,7 +73,7 @@ pub trait ServerDef {
     fn new(address: SocketAddr) -> anyhow::Result<Self>
     where
         Self: Sized;
-    fn drain<'a>(&'a mut self, f: impl FnMut(ServerEvent<'a>)) -> std::io::Result<()>;
+    fn drain<'a>(&'a mut self, f: impl FnMut(ServerEvent<'a>)) -> anyhow::Result<()>;
 
     /// # Safety
     /// todo: not completely sure about all the invariants here
@@ -134,17 +98,6 @@ pub const MINECRAFT_VERSION: &str = "1.20.1";
 
 mod decoder;
 pub mod encoder;
-
-pub use decoder::PacketDecoder;
-use rayon_local::RayonLocal;
-
-use crate::{
-    event::Scratches,
-    net::{
-        buffers::{BufRef, BufferAllocator},
-        encoder::{append_packet_without_compression, PacketEncoder},
-    },
-};
 
 // 128 MiB * num_cores
 pub const S2C_BUFFER_SIZE: usize = 1024 * 1024 * 128;
@@ -175,6 +128,16 @@ impl<'a> Compose<'a> {
     pub fn encoder(&self) -> PacketEncoder {
         let threshold = self.global.shared.compression_threshold;
         PacketEncoder::new(threshold)
+    }
+
+    #[must_use]
+    pub fn scratch(&self) -> &RefCell<Scratch> {
+        self.scratch.get_local()
+    }
+
+    #[must_use]
+    pub fn compressor(&self) -> &RefCell<libdeflater::Compressor> {
+        self.compressor.get_local()
     }
 }
 

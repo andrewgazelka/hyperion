@@ -5,15 +5,11 @@ use evenio::{
     query::Query,
 };
 use tracing::instrument;
-use valence_generated::item::ItemKind;
 use valence_protocol::{
     game_mode::OptGameMode,
     ident,
-    packets::{
-        play,
-        play::{entity_equipment_update_s2c::EquipmentEntry, player_list_s2c::PlayerListEntry},
-    },
-    GameMode, ItemStack, VarInt,
+    packets::{play, play::player_list_s2c::PlayerListEntry},
+    GameMode, VarInt,
 };
 
 use crate::{
@@ -95,8 +91,8 @@ pub fn set_player_skin(r: ReceiverMut<SetPlayerSkin, SetPlayerSkinQuery>, compos
         dimension_type_name: "minecraft:overworld".try_into().unwrap(),
         dimension_name: dimension_name.into(),
         hashed_seed: 0,
-        game_mode: GameMode::Adventure,
-        previous_game_mode: OptGameMode(Some(GameMode::Adventure)),
+        game_mode: GameMode::Creative,
+        previous_game_mode: OptGameMode(Some(GameMode::Creative)),
         is_debug: false,
         is_flat: false,
         copy_metadata: true,
@@ -106,23 +102,4 @@ pub fn set_player_skin(r: ReceiverMut<SetPlayerSkin, SetPlayerSkinQuery>, compos
 
     // send_all_chunks(packets, &compose).unwrap();
     packets.append(&respawn, &compose).unwrap();
-
-    // set slots
-    let compass = ItemStack::new(ItemKind::Compass, 1, None);
-
-    let mainhand = EquipmentEntry {
-        slot: 0,
-        item: compass,
-    };
-    let equipment = vec![mainhand];
-
-    packets
-        .append(
-            &crate::packets::vanilla::EntityEquipmentUpdateS2c {
-                entity_id: VarInt(0),
-                equipment: Cow::Borrowed(&equipment),
-            },
-            &compose,
-        )
-        .unwrap();
 }

@@ -1,12 +1,3 @@
-#![expect(
-    unused,
-    reason = "there are still many changes that need to be made to this file"
-)]
-#![allow(
-    clippy::missing_docs_in_private_items,
-    reason = "most of this is self-explanatory"
-)]
-
 //! <https://wiki.vg/index.php?title=Protocol&oldid=18375>
 
 use std::{borrow::Cow, str::FromStr};
@@ -28,21 +19,17 @@ use valence_protocol::{
 };
 
 use crate::{
-    components::{FullEntityPose, ImmuneStatus, KeepAlive, Vitals},
+    components::FullEntityPose,
     event::{self, AttackEntity, AttackType, Pose, SwingArm, UpdateSelectedSlot},
-    global::Global,
     singleton::player_id_lookup::EntityIdLookup,
     system::ingress::{IngressSender, SendElem},
 };
+use crate::components::KeepAlive;
 
 pub mod vanilla;
 pub mod voicechat;
 
 const fn confirm_teleport(_pkt: &[u8]) {
-    // ignore
-}
-
-const fn custom_payload(_data: &[u8]) {
     // ignore
 }
 
@@ -91,12 +78,6 @@ fn look_and_on_ground(
     full_entity_pose.pitch = pitch;
 
     Ok(())
-}
-
-const fn player_command(data: &[u8]) {
-    // let pkt = play::ClientCommandC2s::decode(&mut data)?;
-
-    // debug!("player command packet: {:?}", pkt);
 }
 
 fn position_and_on_ground(
@@ -186,7 +167,6 @@ fn chat_command(
     // query: PacketSwitchQuery,
     sender: &mut Vec<SendElem>,
 ) -> anyhow::Result<()> {
-    const BASE_RADIUS: f32 = 4.0;
     let pkt = play::CommandExecutionC2s::decode(&mut data)?;
 
     let event = event::Command {
@@ -253,17 +233,6 @@ fn player_interact_entity(
 pub struct PacketSwitchQuery<'a> {
     pub id: EntityId,
     pub pose: &'a mut FullEntityPose,
-    pub vitals: &'a mut Vitals,
-    pub keep_alive: &'a mut KeepAlive,
-    pub immunity: &'a mut ImmuneStatus,
-}
-
-/// i.e., doors, etc
-fn player_interact_block(mut data: &[u8]) -> anyhow::Result<()> {
-    let packet = play::PlayerInteractBlockC2s::decode(&mut data)?;
-
-    // todo!()
-    Ok(())
 }
 
 fn player_action(
@@ -351,7 +320,6 @@ fn client_command(
 
 pub fn switch(
     raw: &PacketFrame,
-    global: &Global,
     sender: &mut Vec<SendElem>,
     id_lookup: &EntityIdLookup,
     query: &mut PacketSwitchQuery,
@@ -362,7 +330,7 @@ pub fn switch(
     match packet_id {
         play::HandSwingC2s::ID => hand_swing(data, query, sender)?,
         play::TeleportConfirmC2s::ID => confirm_teleport(data),
-        play::PlayerInteractBlockC2s::ID => player_interact_block(data)?,
+        // play::PlayerInteractBlockC2s::ID => player_interact_block(data)?,
         play::ClientCommandC2s::ID => client_command(data, sender, query)?,
         // play::ClientSettingsC2s::ID => client_settings(data, player)?,
         // play::CustomPayloadC2s::ID => custom_payload(data),

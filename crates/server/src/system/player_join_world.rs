@@ -5,23 +5,17 @@ use evenio::prelude::*;
 use glam::{I16Vec2, IVec3};
 use serde::Deserialize;
 use tracing::{debug, info, instrument, trace, warn};
+use valence_generated::item::ItemKind;
 use valence_nbt::{value::ValueRef, Value};
-use valence_protocol::{
-    game_mode::OptGameMode,
-    ident,
-    nbt::Compound,
-    packets::{
-        play,
-        play::{
-            player_list_s2c::PlayerListActions,
-            player_position_look_s2c::PlayerPositionLookFlags,
-            team_s2c::{CollisionRule, Mode, NameTagVisibility, TeamColor, TeamFlags},
-            GameJoinS2c,
-        },
+use valence_protocol::{game_mode::OptGameMode, ident, nbt::Compound, packets::{
+    play,
+    play::{
+        player_list_s2c::PlayerListActions,
+        player_position_look_s2c::PlayerPositionLookFlags,
+        team_s2c::{CollisionRule, Mode, NameTagVisibility, TeamColor, TeamFlags},
+        GameJoinS2c,
     },
-    text::IntoText,
-    ByteAngle, GameMode, Ident, ItemKind, ItemStack, PacketEncoder, VarInt,
-};
+}, text::IntoText, ByteAngle, GameMode, Ident, PacketEncoder, VarInt, ItemStack};
 use valence_registry::{
     biome::{Biome, BiomeEffects},
     BiomeRegistry, RegistryCodec,
@@ -33,6 +27,7 @@ use crate::{
         Display, FullEntityPose, InGameName, Player, Uuid, PLAYER_SPAWN_POSITION,
     },
     config::CONFIG,
+    event,
     event::{PlayerJoinWorld, UpdateEquipment},
     global::Global,
     inventory::PlayerInventory,
@@ -126,7 +121,7 @@ pub fn player_join_world(
     chunks: Single<&Chunks>,
     tasks: Single<&Tasks>,
     compose: Compose,
-    mut sender: Sender<UpdateEquipment>,
+    mut sender: Sender<(event::PostPlayerJoinWorld, event::UpdateEquipment)>,
 ) {
     static CACHED_DATA: once_cell::sync::OnceCell<bytes::Bytes> = once_cell::sync::OnceCell::new();
 
@@ -147,6 +142,8 @@ pub fn player_join_world(
 
     let query = r.query;
 
+    let got_id = query.id;
+
     uuid_lookup.insert(query.uuid.0, query.id);
     id_lookup.insert(query.id.index().0 as i32, query.id);
 
@@ -157,7 +154,7 @@ pub fn player_join_world(
         chat_data: None,
         listed: true,
         ping: 0,
-        game_mode: GameMode::Adventure,
+        game_mode: GameMode::Creative,
         display_name: Some(query.name.to_string().into_cow_text()),
     }];
 
@@ -227,7 +224,7 @@ pub fn player_join_world(
             chat_data: None,
             listed: true,
             ping: 20,
-            game_mode: GameMode::Adventure,
+            game_mode: GameMode::Creative,
             display_name: Some(name.to_string().into_cow_text()),
         })
         .collect::<Vec<_>>();
@@ -316,6 +313,8 @@ pub fn player_join_world(
     broadcast.append(&spawn_player, &compose).unwrap();
 
     info!("{} joined the world", query.name);
+
+    sender.send(event::PostPlayerJoinWorld { target: got_id });
 }
 
 pub fn send_keep_alive(packets: &mut Packets, compose: &Compose) -> anyhow::Result<()> {
@@ -330,8 +329,10 @@ pub fn send_keep_alive(packets: &mut Packets, compose: &Compose) -> anyhow::Resu
 }
 
 fn registry_codec_raw() -> anyhow::Result<Compound> {
-    let bytes = include_bytes!("paper-registry.json");
-    let compound = serde_json::from_slice::<Compound>(bytes)?;
+    let bytes = include_bytes!("registries.nbt");
+    let mut bytes = &bytes[..];
+    let bytes_reader = &mut bytes;
+    let (compound, _) = valence_nbt::from_binary(bytes_reader)?;
     Ok(compound)
 }
 
@@ -378,7 +379,7 @@ pub fn generate_biome_registry() -> anyhow::Result<BiomeRegistry> {
         let downfall = biome
             .get("downfall")
             .context("expected biome to have downfall")?;
-        let Value::Double(downfall) = downfall else {
+        let Value::Float(downfall) = downfall else {
             bail!("expected biome downfall to be float but is {downfall:?}");
         };
 
@@ -392,25 +393,25 @@ pub fn generate_biome_registry() -> anyhow::Result<BiomeRegistry> {
         let has_precipitation = biome.get("has_precipitation").with_context(|| {
             format!("expected biome biome for {name} to have has_precipitation")
         })?;
-        let Value::Long(has_precipitation) = has_precipitation else {
-            bail!("expected biome biome has_precipitation to be int but is {has_precipitation:?}");
+        let Value::Byte(has_precipitation) = has_precipitation else {
+            bail!("expected biome biome has_precipitation to be byte but is {has_precipitation:?}");
         };
         let has_precipitation = *has_precipitation == 1;
 
         let temperature = biome
             .get("temperature")
             .context("expected biome to have temperature")?;
-        let Value::Double(temperature) = temperature else {
+        let Value::Float(temperature) = temperature else {
             bail!("expected biome temperature to be doule but is {temperature:?}");
         };
 
         let effects = BiomeEffects::deserialize(effects.clone())?;
 
         let biome = Biome {
-            downfall: *downfall as f32,
+            downfall: *downfall,
             effects,
             has_precipitation,
-            temperature: *temperature as f32,
+            temperature: *temperature,
         };
 
         let ident = Ident::new(name.as_str()).unwrap();
@@ -448,11 +449,11 @@ pub fn send_game_join_packet(encoder: &mut PacketEncoder) -> anyhow::Result<()> 
         enable_respawn_screen: false,
         dimension_name: dimension_name.into(),
         hashed_seed: 0,
-        game_mode: GameMode::Adventure,
+        game_mode: GameMode::Creative,
         is_flat: false,
         last_death_location: None,
         portal_cooldown: 60.into(),
-        previous_game_mode: OptGameMode(Some(GameMode::Adventure)),
+        previous_game_mode: OptGameMode(Some(GameMode::Creative)),
         dimension_type_name: "minecraft:overworld".try_into()?,
         is_debug: false,
     };

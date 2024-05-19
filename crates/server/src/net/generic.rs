@@ -1,14 +1,13 @@
-#![allow(unused, reason = "todo: will be re-added soon-tm")]
 // You can run this example from the root of the mio repo:
 // cargo run --example tcp_server --features="os-poll net"
 use std::{
     hash::BuildHasherDefault,
-    io::{self, Read, Write},
+    io::{self, IoSlice, Read, Write},
     net::{SocketAddr, ToSocketAddrs},
     time::Duration,
 };
 
-use anyhow::Context;
+use anyhow::{bail, Context};
 use bytes::BytesMut;
 use fxhash::FxHashMap;
 use libc::iovec;
@@ -17,11 +16,10 @@ use mio::{
     net::{TcpListener, TcpStream},
     Events, Interest, Poll, Registry, Token,
 };
-use rayon_local::RayonLocal;
 use tracing::{info, instrument, warn};
 
 use crate::{
-    net::{encoder::DataWriteInfo, Fd, ServerDef, ServerEvent, WriteItem, MAX_PACKET_SIZE},
+    net::{Fd, ServerDef, ServerEvent, WriteItem, MAX_PACKET_SIZE},
     CowBytes,
 };
 
@@ -31,9 +29,8 @@ const SERVER: Token = Token(0);
 const EVENT_CAPACITY: usize = 128;
 
 struct ConnectionInfo {
-    pub to_write: Vec<DataWriteInfo>,
+    pub to_write: Vec<IoSlice<'static>>,
     pub connection: TcpStream,
-    pub data_to_write: Vec<u8>,
 }
 
 pub struct GenericServer {
@@ -54,11 +51,6 @@ impl Ids {
         self.token_on += 1;
         Token(next)
     }
-}
-
-struct GenericServerConsumer<'a> {
-    server: &'a mut GenericServer,
-    bytes: BytesMut,
 }
 
 impl ServerDef for GenericServer {
@@ -97,7 +89,7 @@ impl ServerDef for GenericServer {
     }
 
     #[instrument(skip_all, level = "trace")]
-    fn drain<'a>(&'a mut self, mut f: impl FnMut(ServerEvent<'a>)) -> std::io::Result<()> {
+    fn drain<'a>(&'a mut self, mut f: impl FnMut(ServerEvent<'a>)) -> anyhow::Result<()> {
         // // todo: this is a bit of a hack, is there a better number? probs dont want people sending more than this
         let mut received_data = BytesMut::with_capacity(MAX_PACKET_SIZE * 2);
 
@@ -109,14 +101,15 @@ impl ServerDef for GenericServer {
             if interrupted(&err) {
                 return Ok(());
             }
-            return Err(err);
+
+            bail!("failed to poll: {err}");
         }
 
         for event in &self.events {
             match event.token() {
                 SERVER => loop {
                     // Received an event for the TCP server socket, which
-                    // indicates we can accept an connection.
+                    // indicates we can accept a connection.
                     let (mut connection, _) = match self.server.accept() {
                         Ok((connection, address)) => (connection, address),
                         Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
@@ -129,7 +122,7 @@ impl ServerDef for GenericServer {
                         Err(e) => {
                             // If it was any other kind of error, something went
                             // wrong and we terminate with an error.
-                            return Err(e);
+                            bail!("failed to accept connection: {e}");
                         }
                     };
 
@@ -143,7 +136,6 @@ impl ServerDef for GenericServer {
                     self.connections.insert(token.0, ConnectionInfo {
                         to_write: Vec::new(),
                         connection,
-                        data_to_write: vec![],
                     });
 
                     f(ServerEvent::AddPlayer { fd: Fd(token.0) });
@@ -152,14 +144,19 @@ impl ServerDef for GenericServer {
                     // Maybe received an event for a TCP connection.
                     let done = if let Some(connection) = self.connections.get_mut(&token.0) {
                         received_data.clear();
-                        handle_connection_event(
+                        let result = handle_connection_event(
                             self.poll.registry(),
                             connection,
                             event,
                             &mut received_data,
                             token,
                             &mut f,
-                        )?
+                        );
+
+                        result.unwrap_or_else(|err| {
+                            warn!("failed to handle connection event: {err}");
+                            true
+                        })
                     } else {
                         // Sporadic events happen, we can safely ignore them.
                         false
@@ -179,7 +176,7 @@ impl ServerDef for GenericServer {
     }
 
     // todo: make unsafe
-    unsafe fn register_buffers(&mut self, buffers: &[iovec]) {
+    unsafe fn register_buffers(&mut self, _buffers: &[iovec]) {
         // nop
     }
 
@@ -191,7 +188,8 @@ impl ServerDef for GenericServer {
             return;
         };
 
-        to_write.to_write.push(*info);
+        let io_slice = IoSlice::new(unsafe { info.as_static_slice() });
+        to_write.to_write.push(io_slice);
     }
 
     fn submit_events(&mut self) {
@@ -207,16 +205,11 @@ fn handle_connection_event<'a>(
     received_data: &mut BytesMut,
     token: Token,
     f: &mut impl FnMut(ServerEvent<'a>),
-) -> io::Result<bool> {
+) -> anyhow::Result<bool> {
     if event.is_writable() {
-        let data = &mut info.data_to_write;
+        let empty = info.to_write.is_empty() || info.to_write[0].len() == 0;
 
-        for elem in &info.to_write {
-            data.extend_from_slice(unsafe { elem.as_slice() });
-        }
-
-        if data.is_empty() {
-            // todo: I think an event cannot be both readable and writable
+        if empty {
             registry.reregister(
                 &mut info.connection,
                 event.token(),
@@ -226,20 +219,22 @@ fn handle_connection_event<'a>(
             return Ok(false);
         }
 
+        let connection = &mut info.connection;
+
         // We can (maybe) write to the connection.
-        match info.connection.write(data) {
-            Ok(n) if n < data.len() => {
-                // remove {n} bytes from the data
-                // todo: is this most efficient
-                data.drain(..n);
-                registry.reregister(
-                    &mut info.connection,
-                    event.token(),
-                    Interest::READABLE.add(Interest::WRITABLE),
-                )?;
-            }
-            Ok(_) => {
-                data.drain(..);
+        match connection.write_vectored(&info.to_write) {
+            Ok(n) => {
+                let mut slice = info.to_write.as_mut_slice();
+                IoSlice::advance_slices(&mut slice, n);
+                let new_len = slice.len();
+                let removed = info.to_write.len() - new_len;
+
+                info.to_write.drain(..removed);
+
+                for _ in 0..removed {
+                    f(ServerEvent::SentData { fd: Fd(token.0) });
+                }
+
                 registry.reregister(
                     &mut info.connection,
                     event.token(),
@@ -254,14 +249,7 @@ fn handle_connection_event<'a>(
                 return handle_connection_event(registry, info, event, received_data, token, f)
             }
             // Other errors we'll consider fatal.
-            Err(err) => return Err(err),
-        }
-
-        let sent_count = info.to_write.len();
-        info.to_write.clear();
-
-        for _ in 0..sent_count {
-            f(ServerEvent::SentData { fd: Fd(token.0) });
+            Err(err) => bail!("failed to write to connection: {err}"),
         }
     }
 
@@ -292,7 +280,7 @@ fn handle_connection_event<'a>(
                 Err(ref err) if would_block(err) => break,
                 Err(ref err) if interrupted(err) => continue,
                 // Other errors we'll consider fatal.
-                Err(err) => return Err(err),
+                Err(err) => bail!("failed to read from connection: {err}"),
             }
         }
 
@@ -319,8 +307,4 @@ fn would_block(err: &io::Error) -> bool {
 
 fn interrupted(err: &io::Error) -> bool {
     err.kind() == io::ErrorKind::Interrupted
-}
-
-unsafe fn make_static<T>(t: &[T]) -> &'static [T] {
-    core::mem::transmute(t)
 }

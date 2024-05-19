@@ -10,7 +10,7 @@ use fxhash::FxHashMap;
 use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
 use rayon_local::RayonLocal;
 use serde_json::json;
-use tracing::{info, instrument, span, trace, warn, Level};
+use tracing::{instrument, span, trace, warn, Level};
 use valence_protocol::{
     decode::PacketFrame,
     packets,
@@ -29,7 +29,7 @@ use crate::{
 mod player_packet_buffer;
 
 use crate::{
-    components::{FullEntityPose, ImmuneStatus, KeepAlive, LoginState, Vitals},
+    components::{FullEntityPose, LoginState},
     net::{buffers::BufferAllocator, Compose, Fd, Packets, MINECRAFT_VERSION, PROTOCOL_VERSION},
     packets::PacketSwitchQuery,
     singleton::player_id_lookup::EntityIdLookup,
@@ -81,25 +81,27 @@ pub fn generate_ingress_events(world: &mut World, server: &mut Server) {
 
     let mut recv_data_elements: FxHashMap<Fd, ArrayVec<CowBytes, 16>> = FxHashMap::default();
 
-    server
-        .drain(|event| match event {
-            ServerEvent::AddPlayer { fd } => {
-                world.send(AddPlayer { fd });
-            }
-            ServerEvent::RemovePlayer { fd } => {
-                world.send(RemovePlayer { fd });
-            }
-            ServerEvent::RecvData { fd, data } => {
-                recv_data_elements.entry(fd).or_default().push(data);
-            }
-            ServerEvent::SentData { fd } => {
-                decrease_count
-                    .entry(fd)
-                    .and_modify(|x| *x += 1)
-                    .or_insert(1);
-            }
-        })
-        .unwrap();
+    let result = server.drain(|event| match event {
+        ServerEvent::AddPlayer { fd } => {
+            world.send(AddPlayer { fd });
+        }
+        ServerEvent::RemovePlayer { fd } => {
+            world.send(RemovePlayer { fd });
+        }
+        ServerEvent::RecvData { fd, data } => {
+            recv_data_elements.entry(fd).or_default().push(data);
+        }
+        ServerEvent::SentData { fd } => {
+            decrease_count
+                .entry(fd)
+                .and_modify(|x| *x += 1)
+                .or_insert(1);
+        }
+    });
+
+    if let Err(err) = result {
+        warn!("error draining server: {err}");
+    }
 
     span!(Level::TRACE, "sent-data").in_scope(|| {
         world.send(SentData { decrease_count });
@@ -177,7 +179,7 @@ pub fn sent_data(
     // todo: par iter
     event.decrease_count.iter().for_each(|(fd, count)| {
         let Some(&id) = fd_lookup.get(fd) else {
-            warn!(
+            trace!(
                 "tried to get id for fd {:?} but it seemed to already be removed",
                 fd
             );
@@ -224,9 +226,6 @@ pub fn recv_data(
         &mut Packets,
         &Fd,
         Option<&mut FullEntityPose>,
-        Option<&mut Vitals>,
-        Option<&mut KeepAlive>,
-        Option<&mut ImmuneStatus>,
     )>,
     id_lookup: Single<&EntityIdLookup>,
     mut real_sender: IngressSender,
@@ -237,17 +236,9 @@ pub fn recv_data(
     let send_events = RayonLocal::init(Vec::new);
     let elements = event.elements;
 
-    players.par_iter_mut().for_each(
-        |(
-            login_state,
-            decoder,
-            packets,
-            fd,
-            mut pose,
-            mut vitals,
-            mut keep_alive,
-            mut immunity,
-        )| {
+    players
+        .par_iter_mut()
+        .for_each(|(login_state, decoder, packets, fd, mut pose)| {
             let Some(data) = elements.get(fd) else {
                 return;
             };
@@ -307,33 +298,17 @@ pub fn recv_data(
                                 }
                             }
 
-                            if let Some((pose, vitals, keep_alive, immunity)) = itertools::izip!(
-                                pose.as_mut(),
-                                vitals.as_mut(),
-                                keep_alive.as_mut(),
-                                immunity.as_mut()
-                            )
-                            .next()
-                            {
-                                let mut query = PacketSwitchQuery {
-                                    id,
-                                    pose,
-                                    vitals,
-                                    keep_alive,
-                                    immunity,
-                                };
+                            if let Some(pose) = pose.as_mut() {
+                                let mut query = PacketSwitchQuery { id, pose };
 
-                                crate::packets::switch(
-                                    &frame, &global, sender, &id_lookup, &mut query,
-                                )
-                                .unwrap();
+                                crate::packets::switch(&frame, sender, &id_lookup, &mut query)
+                                    .unwrap();
                             }
                         }
                     }
                 }
             }
-        },
-    );
+        });
 
     for elem in send_events.into_iter().flatten() {
         match elem {
@@ -448,7 +423,6 @@ fn process_status(
 ) -> anyhow::Result<()> {
     debug_assert!(*login_state == LoginState::Status);
 
-    #[allow(clippy::single_match, reason = "todo del")]
     match packet.id {
         packets::status::QueryRequestC2s::ID => {
             let query_request: packets::status::QueryRequestC2s = packet.decode()?;
@@ -471,7 +445,7 @@ fn process_status(
 
             let send = packets::status::QueryResponseS2c { json: &json };
 
-            info!("sent query response: {query_request:?}");
+            trace!("sent query response: {query_request:?}");
             //
             packets.append_pre_compression_packet(&send)?;
         }
@@ -485,7 +459,7 @@ fn process_status(
 
             packets.append_pre_compression_packet(&send)?;
 
-            info!("sent query pong: {query_ping:?}");
+            trace!("sent query pong: {query_ping:?}");
             *login_state = LoginState::Terminate;
         }
 

@@ -12,6 +12,7 @@
 #![feature(new_uninit)]
 #![feature(sync_unsafe_cell)]
 #![feature(iter_array_chunks)]
+#![feature(io_slice_advance)]
 #![expect(clippy::type_complexity, reason = "evenio uses a lot of complex types")]
 
 pub use evenio;
@@ -35,12 +36,11 @@ use evenio::prelude::*;
 use humansize::{SizeFormatter, BINARY};
 use libc::{getrlimit, setrlimit, RLIMIT_NOFILE};
 use libdeflater::CompressionLvl;
-use ndarray::s;
 use num_format::Locale;
 use signal_hook::iterator::Signals;
 use singleton::bounding_box;
 use spin::Lazy;
-use tracing::{error, info, instrument, trace, warn};
+use tracing::{error, info, instrument, warn};
 use valence_protocol::CompressionThreshold;
 pub use valence_server;
 
@@ -95,9 +95,6 @@ impl<'a> AsRef<[u8]> for CowBytes<'a> {
         }
     }
 }
-
-/// History size for sliding average.
-const MSPT_HISTORY_SIZE: usize = 100;
 
 /// on macOS, the soft limit for the number of open file descriptors is often 256. This is far too low
 /// to test 10k players with.
@@ -205,8 +202,6 @@ pub struct Hyperion {
     world: World,
     /// Data for what time the last ticks occurred.
     last_ticks: VecDeque<Instant>,
-    /// Data for how many milliseconds previous ticks took.
-    last_ms_per_tick: VecDeque<f64>,
     /// The tick of the game. This is incremented every 50 ms.
     tick_on: u64,
 
@@ -326,7 +321,7 @@ impl Hyperion {
         world.add_handler(system::ingress::recv_data);
         world.add_handler(system::ingress::sent_data);
 
-        world.add_handler(system::chunks::generate_changes);
+        world.add_handler(system::chunks::generate_chunk_changes);
         world.add_handler(system::chunks::send_updates);
 
         world.add_handler(system::init_player);
@@ -346,6 +341,8 @@ impl Hyperion {
         world.add_handler(system::sync_players);
         world.add_handler(system::rebuild_player_location);
         world.add_handler(system::player_detect_mob_hits);
+
+        world.add_handler(system::equipment::set);
 
         world.add_handler(system::check_immunity);
         world.add_handler(system::pkt_attack_player);
@@ -411,7 +408,6 @@ impl Hyperion {
             shared,
             world,
             last_ticks: VecDeque::default(),
-            last_ms_per_tick: VecDeque::default(),
             tick_on: 0,
             server: server_def,
         };
@@ -506,25 +502,7 @@ impl Hyperion {
 
     #[instrument(skip_all, level = "trace")]
     fn update_tick_stats(&mut self, ms: f64) {
-        self.last_ms_per_tick.push_back(ms);
-
-        if self.last_ms_per_tick.len() > MSPT_HISTORY_SIZE {
-            // efficient
-            let arr = ndarray::Array::from_iter(self.last_ms_per_tick.iter().copied().rev());
-
-            // last 1 second (20 ticks) 5 seconds (100 ticks) and 25 seconds (500 ticks)
-            let mean_1_second = arr.slice(s![..20]).mean().unwrap();
-            let mean_5_seconds = arr.slice(s![..100]).mean().unwrap();
-
-            trace!("ms / tick: {mean_1_second:.2}ms");
-
-            self.world.send(Stats {
-                ms_per_tick_mean_1s: mean_1_second,
-                ms_per_tick_mean_5s: mean_5_seconds,
-            });
-
-            self.last_ms_per_tick.pop_front();
-        }
+        self.world.send(Stats { ms_per_tick: ms });
 
         self.tick_on += 1;
     }

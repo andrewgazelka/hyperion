@@ -6,6 +6,7 @@ use evenio::{
     fetch::Fetcher,
     query::Query,
 };
+use tracing::instrument;
 use valence_protocol::packets::play;
 
 use crate::{
@@ -22,10 +23,7 @@ pub struct DisguisePlayerQuery<'a> {
     pose: &'a FullEntityPose,
 }
 
-#[allow(
-    clippy::needless_pass_by_value,
-    reason = "this is used in the event loop"
-)]
+#[instrument(skip_all, level = "trace")]
 pub fn disguise_player(
     r: ReceiverMut<event::DisguisePlayer, DisguisePlayerQuery>,
     all_packets: Fetcher<(&mut Packets, EntityId)>,
@@ -36,23 +34,40 @@ pub fn disguise_player(
     let query = r.query;
     let uuids = &[query.uuid.0];
 
+    let remove_pkt = play::PlayerRemoveS2c {
+        uuids: Cow::Borrowed(uuids),
+    };
+    let spawn_pkt = spawn_entity_packet(query.id, event.mob, *query.uuid, query.pose);
+
+    let mut bytes = Vec::new();
+
+    compose
+        .encoder()
+        .append_packet(
+            &remove_pkt,
+            &mut bytes,
+            &mut *compose.scratch().borrow_mut(),
+            &mut compose.compressor().borrow_mut(),
+        )
+        .unwrap();
+
+    compose
+        .encoder()
+        .append_packet(
+            &spawn_pkt,
+            &mut bytes,
+            &mut *compose.scratch().borrow_mut(),
+            &mut compose.compressor().borrow_mut(),
+        )
+        .unwrap();
+
     // todo: add broadcast with mask
     for (packets, id) in all_packets {
         if id == query.id {
             continue;
         }
 
-        // remove player
-        let pkt = play::PlayerRemoveS2c {
-            uuids: Cow::Borrowed(uuids),
-        };
-
-        packets.append(&pkt, &compose).unwrap();
-
-        // spawn entity with same id
-        let pkt = spawn_entity_packet(query.id, event.mob, *query.uuid, query.pose);
-
-        packets.append(&pkt, &compose).unwrap();
+        packets.append_raw(&bytes);
     }
 
     sender.insert(query.id, Display(event.mob));
