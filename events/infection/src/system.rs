@@ -21,14 +21,7 @@ use server::{
     event,
     event::{BulkShoved, Gametick, Shoved},
     util::player_skin::PlayerSkin,
-    valence_server::{
-        entity::EntityKind,
-        protocol::{
-            packets::play::entity_equipment_update_s2c::EquipmentEntry,
-            status_effects::StatusEffect,
-        },
-        BlockPos, ItemKind, ItemStack, Text,
-    },
+    valence_server::{entity::EntityKind, protocol::status_effects::StatusEffect, BlockPos, Text},
 };
 use tracing::{instrument, warn};
 
@@ -135,44 +128,6 @@ pub fn assign_team_on_join(
     s.insert(target, Team::Human);
     s.insert(target, Human);
 }
-const COMPASS: ItemStack = ItemStack::new(ItemKind::Compass, 1, None);
-const SWORD: ItemStack = ItemStack::new(ItemKind::IronSword, 1, None);
-
-const HELMET: ItemStack = ItemStack::new(ItemKind::NetheriteHelmet, 1, None);
-const CHESTPLATE: ItemStack = ItemStack::new(ItemKind::NetheriteChestplate, 1, None);
-const LEGGINGS: ItemStack = ItemStack::new(ItemKind::NetheriteLeggings, 1, None);
-const BOOTS: ItemStack = ItemStack::new(ItemKind::NetheriteBoots, 1, None);
-
-#[instrument(skip_all)]
-pub fn give_armor_on_join(
-    r: ReceiverMut<event::PostPlayerJoinWorld, EntityId>,
-    mut s: Sender<event::SetEquipment>,
-) {
-    const EQUIPMENT: &[EquipmentEntry] = &[
-        EquipmentEntry {
-            slot: 0,
-            item: SWORD,
-        },
-        EquipmentEntry {
-            slot: 2,
-            item: BOOTS,
-        },
-        EquipmentEntry {
-            slot: 3,
-            item: LEGGINGS,
-        },
-        EquipmentEntry {
-            slot: 4,
-            item: CHESTPLATE,
-        },
-        EquipmentEntry {
-            slot: 5,
-            item: HELMET,
-        },
-    ];
-
-    s.send(event::SetEquipment::new(r.event.target, EQUIPMENT));
-}
 
 #[allow(clippy::type_complexity, reason = "required")]
 #[instrument(skip_all)]
@@ -187,15 +142,8 @@ pub fn to_zombie(
         event::SetPlayerSkin,
         event::DisplayPotionEffect,
         event::SpeedEffect,
-        event::SetEquipment,
     )>,
 ) {
-    // only give compass
-    const EQUIPMENT: &[EquipmentEntry] = &[EquipmentEntry {
-        slot: 0,
-        item: COMPASS,
-    }];
-
     let (team, vitals) = r.query;
     let target = r.event.target;
 
@@ -240,8 +188,6 @@ pub fn to_zombie(
 
     // speed 2
     s.send(event::SpeedEffect::new(target, 0));
-
-    s.send(event::SetEquipment::new(target, EQUIPMENT));
 }
 
 #[instrument(skip_all)]

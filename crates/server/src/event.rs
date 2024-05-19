@@ -1,4 +1,4 @@
-use std::{alloc::Allocator, borrow::Cow, cell::RefCell, fmt::Debug};
+use std::{alloc::Allocator, cell::RefCell, fmt::Debug};
 
 use bumpalo::Bump;
 use derive_more::{Deref, DerefMut};
@@ -6,10 +6,7 @@ use evenio::{component::Component, entity::EntityId, event::Event};
 use glam::Vec3;
 use rayon_local::RayonLocal;
 use valence_generated::{block::BlockState, status_effects::StatusEffect};
-use valence_protocol::{
-    packets::play::{click_slot_c2s::SlotChange, entity_equipment_update_s2c::EquipmentEntry},
-    BlockPos, Hand, ItemStack,
-};
+use valence_protocol::{packets::play::click_slot_c2s::SlotChange, BlockPos, Hand, ItemStack};
 use valence_server::entity::EntityKind;
 use valence_text::Text;
 
@@ -19,8 +16,8 @@ use crate::{
     util::player_skin::PlayerSkin,
 };
 
-#[derive(Event, Debug)]
 /// An event that is sent when a player clicks in the inventory.
+#[derive(Event, Debug)]
 pub struct ClickEvent {
     #[event(target)]
     pub by: EntityId,
@@ -443,18 +440,4 @@ pub struct PointCompass {
     #[event(target)]
     pub target: EntityId,
     pub point_to: BlockPos,
-}
-
-#[derive(Event)]
-pub struct SetEquipment<'a> {
-    #[event(target)]
-    pub target: EntityId,
-    pub equipment: Cow<'a, [EquipmentEntry]>,
-}
-
-impl<'a> SetEquipment<'a> {
-    pub fn new(target: EntityId, equipment: impl Into<Cow<'a, [EquipmentEntry]>>) -> Self {
-        let equipment = equipment.into();
-        Self { target, equipment }
-    }
 }

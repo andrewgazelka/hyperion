@@ -342,8 +342,6 @@ impl Hyperion {
         world.add_handler(system::rebuild_player_location);
         world.add_handler(system::player_detect_mob_hits);
 
-        world.add_handler(system::equipment::set);
-
         world.add_handler(system::check_immunity);
         world.add_handler(system::pkt_attack_player);
         world.add_handler(system::pkt_attack_entity);

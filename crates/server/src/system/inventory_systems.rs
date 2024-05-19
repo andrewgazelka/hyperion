@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 
-use anyhow::bail;
+use anyhow::{bail, Context};
 use evenio::{
     entity::EntityId,
     event::{Receiver, Sender},
@@ -111,8 +111,9 @@ pub fn give_command(
             bail!("expected item to be /give <player> §c<item> [amount]");
         };
 
-        let Some(amount) = arguments.next() else {
-            bail!("expected amount to be /give <player> <item> §c[amount]");
+        let amount = match arguments.next() {
+            Some(amount) => amount.parse().context("expected amount to be a number")?,
+            None => 1,
         };
 
         let (packet, inventory) =
@@ -129,7 +130,7 @@ pub fn give_command(
             bail!("give_command: invalid item {item}");
         };
 
-        let item = ItemStack::new(item, amount.parse().unwrap_or(1), None);
+        let item = ItemStack::new(item, amount, None);
 
         inventory.set_first_available(item);
 

@@ -1,9 +1,6 @@
 //! <https://wiki.vg/index.php?title=Protocol&oldid=18375>
 
-use std::str::FromStr;
-
-use anyhow::ensure;
-use evenio::{entity::EntityId, query::Query};
+use evenio::entity::EntityId;
 use tracing::{info, warn};
 use valence_protocol::{
     decode::PacketFrame,
@@ -16,7 +13,7 @@ use valence_protocol::{
 };
 
 use crate::{
-    components::{FullEntityPose, KeepAlive},
+    components::FullEntityPose,
     event::{self, AttackEntity, AttackType, Pose, SwingArm, UpdateSelectedSlot},
     singleton::player_id_lookup::EntityIdLookup,
     system::ingress::SendElem,
@@ -92,14 +89,6 @@ fn position_and_on_ground(
     Ok(())
 }
 
-fn update_player_abilities(mut data: &[u8]) -> anyhow::Result<()> {
-    let pkt = play::UpdatePlayerAbilitiesC2s::decode(&mut data)?;
-
-    // debug!("update player abilities packet: {:?}", pkt);
-
-    Ok(())
-}
-
 fn update_selected_slot(
     mut data: &[u8],
     sender: &mut Vec<SendElem>,
@@ -120,41 +109,6 @@ fn update_selected_slot(
     // debug!("update selected slot packet: {:?}", pkt);
 
     Ok(())
-}
-
-fn keep_alive(player: &mut KeepAlive) -> anyhow::Result<()> {
-    ensure!(!player.unresponded, "keep alive sent unexpectedly");
-    player.unresponded = false;
-    // player.ping = player.last_keep_alive_sent.elapsed();
-    Ok(())
-}
-
-#[derive(Debug, Copy, Clone)]
-enum HybridPos {
-    Absolute(f32),
-    Relative(f32),
-}
-
-// impl parse
-
-impl FromStr for HybridPos {
-    type Err = anyhow::Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if let Some((l, r)) = s.split_once('~') {
-            ensure!(l.is_empty(), "expected ~ to be at the start of the string");
-
-            if r.is_empty() {
-                return Ok(Self::Relative(0.0));
-            }
-
-            let num = r.parse()?;
-            return Ok(Self::Relative(num));
-        }
-
-        let num = s.parse()?;
-        Ok(Self::Absolute(num))
-    }
 }
 
 fn chat_command(
@@ -362,12 +316,12 @@ fn inventory_action(
     let play::ClickSlotC2s {
         window_id,
         // todo what is that for? something important?
-        state_id,
         slot_idx,
         button,
         mode,
         slot_changes,
         carried_item,
+        ..
     } = packet;
 
     info!("slot changes: {:?}", slot_changes);
@@ -382,9 +336,7 @@ fn inventory_action(
         ClickMode::Click if slot_changes.len() == 1 => {
             let change = slot_changes.iter().next();
 
-            let change = if let Some(change) = change {
-                change.clone()
-            } else {
+            let Some(_) = change else {
                 // todo error
                 warn!("unexpected empty slot change");
                 return Ok(());
