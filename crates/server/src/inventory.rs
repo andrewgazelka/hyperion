@@ -464,7 +464,7 @@ mod test {
         let result = inventory
             .try_append_changes(&slot_change, &ItemStack::EMPTY, false)
             .unwrap();
-        assert_eq!(result.update_equipment, true);
+        assert!(result.update_equipment);
         assert_eq!(
             inventory.items.slots[11],
             ItemStack::new(ItemKind::AcaciaBoat, 1, None)
@@ -493,7 +493,7 @@ mod test {
         let result = inventory
             .try_append_changes(&slot_change, &ItemStack::EMPTY, false)
             .unwrap();
-        assert_eq!(result.update_equipment, false);
+        assert!(!result.update_equipment);
         assert_eq!(
             inventory.items.slots[11],
             ItemStack::new(ItemKind::MossyCobblestone, 42, None)
@@ -525,7 +525,7 @@ mod test {
         let result = inventory
             .try_append_changes(&slot_change, &ItemStack::EMPTY, false)
             .unwrap();
-        assert_eq!(result.update_equipment, false);
+        assert!(!result.update_equipment);
         assert_eq!(
             inventory.items.slots[11],
             ItemStack::new(ItemKind::GoldenApple, 32, None)
@@ -580,7 +580,7 @@ mod test {
                 false,
             )
             .unwrap();
-        assert_eq!(result.update_equipment, false);
+        assert!(!result.update_equipment);
         assert_eq!(inventory.items.slots[20], ItemStack::EMPTY);
         assert_eq!(
             inventory.get_carried_item(),
@@ -625,7 +625,7 @@ mod test {
                 false,
             )
             .unwrap();
-        assert_eq!(result.update_equipment, false);
+        assert!(!result.update_equipment);
         assert_eq!(
             inventory.items.slots[20],
             ItemStack::new(ItemKind::MossyCobblestone, 21, None)
@@ -690,7 +690,7 @@ mod test {
         let result = inventory
             .try_append_changes(&slot_change, &ItemStack::EMPTY, false)
             .unwrap();
-        assert_eq!(result.update_equipment, false);
+        assert!(!result.update_equipment);
         assert_eq!(
             inventory.items.slots[9],
             ItemStack::new(ItemKind::NetheriteIngot, 64, None)
@@ -713,7 +713,7 @@ mod test {
         let result = inventory
             .try_append_changes(&slot_change, &ItemStack::EMPTY, false)
             .unwrap();
-        assert_eq!(result.update_equipment, true);
+        assert!(result.update_equipment);
         assert_eq!(inventory.items.slots[44], ItemStack::EMPTY);
         assert_eq!(inventory.get_carried_item(), &ItemStack::EMPTY);
     }
@@ -737,7 +737,7 @@ mod test {
                 false,
             )
             .unwrap();
-        assert_eq!(result.update_equipment, false);
+        assert!(!result.update_equipment);
         assert_eq!(
             inventory.items.slots[9],
             ItemStack::new(ItemKind::NetheriteIngot, 1, None)
@@ -802,7 +802,7 @@ mod test {
                 true,
             )
             .unwrap();
-        assert_eq!(result.update_equipment, false);
+        assert!(!result.update_equipment);
         assert_eq!(
             inventory.items.slots[9],
             ItemStack::new(ItemKind::NetheriteIngot, 1, None)
@@ -888,7 +888,7 @@ mod test {
                 true,
             )
             .unwrap();
-        assert_eq!(result.update_equipment, false);
+        assert!(!result.update_equipment);
         assert_eq!(
             inventory.items.slots[9],
             ItemStack::new(ItemKind::NetheriteIngot, 15, None)
@@ -951,7 +951,7 @@ mod test {
         let result = inventory
             .try_append_changes(&slot_change, &ItemStack::EMPTY, false)
             .unwrap();
-        assert_eq!(result.update_equipment, true);
+        assert!(result.update_equipment);
         assert_eq!(
             inventory.items.slots[5],
             ItemStack::new(ItemKind::ChainmailHelmet, 1, None)
