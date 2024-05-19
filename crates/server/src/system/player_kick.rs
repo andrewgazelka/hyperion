@@ -18,7 +18,7 @@ pub fn player_kick(
     mut uuid_lookup: Single<&mut PlayerUuidLookup>,
     mut id_lookup: Single<&mut EntityIdLookup>,
     send_info: Compose,
-    mut s: Sender<Despawn>,
+    s: Sender<Despawn>,
 ) {
     let (id, uuid, packets) = r.query;
 
@@ -40,5 +40,5 @@ pub fn player_kick(
         )
         .unwrap();
 
-    s.send(Despawn(id));
+    s.send_to(id, Despawn);
 }

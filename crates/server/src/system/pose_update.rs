@@ -16,7 +16,7 @@ pub fn pose_update(
     // Server to Client (S2C):
     // Entity Metadata packet (0x52).
 
-    let entity_id = r.event.target.index().0 as i32;
+    let entity_id = r.query.index().0 as i32;
 
     // https://wiki.vg/Entity_metadata#Entity_Metadata_Format
 

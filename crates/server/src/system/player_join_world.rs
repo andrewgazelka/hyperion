@@ -35,7 +35,6 @@ use crate::{
     },
     config::CONFIG,
     event,
-    event::{PlayerJoinWorld, UpdateEquipment},
     global::Global,
     inventory::PlayerInventory,
     net::{Broadcast, Compose, Packets},
@@ -81,7 +80,7 @@ pub(crate) struct PlayerInventoryQuery<'a> {
 // This needs to be a separate system
 // or else there are multiple (mut) references to inventory
 pub fn send_player_info(
-    r: Receiver<PlayerJoinWorld, PlayerJoinWorldQueryReduced>,
+    r: Receiver<event::PlayerJoinWorld, PlayerJoinWorldQueryReduced>,
     players: Fetcher<PlayerInventoryQuery>,
     compose: Compose,
 ) {
@@ -118,7 +117,7 @@ pub fn send_player_info(
 #[allow(clippy::too_many_arguments, reason = "todo")]
 #[instrument(skip_all, level = "trace")]
 pub fn player_join_world(
-    r: Receiver<PlayerJoinWorld, PlayerJoinWorldQuery>,
+    r: Receiver<event::PlayerJoinWorld, PlayerJoinWorldQuery>,
     entities: Fetcher<EntityQuery>,
     global: Single<&Global>,
     player_list: Fetcher<(&InGameName, &Uuid)>,
@@ -128,7 +127,7 @@ pub fn player_join_world(
     chunks: Single<&Chunks>,
     tasks: Single<&Tasks>,
     compose: Compose,
-    mut sender: Sender<(event::PostPlayerJoinWorld, event::UpdateEquipment)>,
+    sender: Sender<(event::PostPlayerJoinWorld, event::UpdateEquipment)>,
 ) {
     static CACHED_DATA: once_cell::sync::OnceCell<bytes::Bytes> = once_cell::sync::OnceCell::new();
 
@@ -201,7 +200,7 @@ pub fn player_join_world(
 
     local.append(&pack_inv, &compose).unwrap();
 
-    sender.send(UpdateEquipment { id: query.id });
+    sender.send_to(query.id, event::UpdateEquipment);
 
     let actions = PlayerListActions::default()
         .with_add_player(true)
@@ -321,7 +320,7 @@ pub fn player_join_world(
 
     info!("{} joined the world", query.name);
 
-    sender.send(event::PostPlayerJoinWorld { target: got_id });
+    sender.send_to(got_id, event::PostPlayerJoinWorld);
 }
 
 pub fn send_keep_alive(packets: &mut Packets, compose: &Compose) -> anyhow::Result<()> {

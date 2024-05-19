@@ -28,7 +28,7 @@ pub fn disguise_player(
     r: ReceiverMut<event::DisguisePlayer, DisguisePlayerQuery>,
     all_packets: Fetcher<(&mut Packets, EntityId)>,
     compose: Compose,
-    mut sender: Sender<Insert<Display>>,
+    sender: Sender<Insert<Display>>,
 ) {
     let event = EventMut::take(r.event);
     let query = r.query;

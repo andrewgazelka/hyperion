@@ -32,7 +32,7 @@ pub fn sync_players(
     _: Receiver<Gametick>,
     global: Single<&Global>,
     mut fetcher: Fetcher<SyncPlayersQuery>,
-    mut s: Sender<event::Death>,
+    s: Sender<event::Death>,
     compose: Compose,
 ) {
     let tick = global.tick;
@@ -87,7 +87,7 @@ pub fn sync_players(
                 }
             }
             (Vitals::Alive { .. }, Vitals::Dead) => {
-                s.send(event::Death { target: query.id });
+                s.send_to(query.id, event::Death);
             }
             (Vitals::Dead, Vitals::Alive { health, .. }) => {
                 let _ = packets.append(&play::ClearTitleS2c { reset: true }, &compose);

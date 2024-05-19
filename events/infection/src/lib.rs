@@ -3,7 +3,7 @@
 
 use std::net::ToSocketAddrs;
 
-use evenio::{entity::EntityId, event::Event};
+use evenio::event::TargetedEvent;
 use server::{valence_server::protocol::anyhow, Hyperion};
 
 use crate::components::HumanLocations;
@@ -11,11 +11,8 @@ use crate::components::HumanLocations;
 mod components;
 mod system;
 
-#[derive(Event)]
-struct ToZombie {
-    #[event(target)]
-    target: EntityId,
-}
+#[derive(TargetedEvent)]
+struct ToZombie;
 
 pub fn init_game(address: impl ToSocketAddrs + Send + Sync + 'static) -> anyhow::Result<()> {
     let mut game = Hyperion::init_with(address, |world| {

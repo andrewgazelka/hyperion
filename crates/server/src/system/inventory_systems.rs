@@ -24,7 +24,7 @@ use crate::{
 
 #[derive(Query)]
 pub struct InventoryActionQuery<'a> {
-    _id: EntityId,
+    id: EntityId,
     inventory: &'a mut PlayerInventory,
     packet: &'a mut Packets,
     _player: With<&'static Player>,
@@ -34,14 +34,13 @@ pub struct InventoryActionQuery<'a> {
 pub fn get_inventory_actions(
     r: Receiver<ClickEvent, InventoryActionQuery>,
     compose: Compose,
-    mut sender: Sender<UpdateEquipment>,
+    sender: Sender<UpdateEquipment>,
 ) {
     let click_event = r.event;
 
     let query = r.query;
 
     let ClickEvent {
-        by,
         carried_item,
         slot_changes,
         click_type: _,
@@ -51,7 +50,7 @@ pub fn get_inventory_actions(
         .inventory
         .try_append_changes(slot_changes, carried_item, false)
     {
-        Ok(result) if result.update_equipment => sender.send(UpdateEquipment { id: *by }),
+        Ok(result) if result.update_equipment => sender.send_to(query.id, UpdateEquipment),
         // error must not be handled, the server resets the inventory
         _ => (),
     }
@@ -83,7 +82,7 @@ pub fn give_command(
     r: Receiver<Command, EntityId>,
     mut fetcher: Fetcher<InventoryQuery>,
     compose: Compose,
-    mut sender: Sender<ChatMessage>,
+    sender: Sender<ChatMessage>,
 ) {
     let id = r.query;
     let mut inner = || -> anyhow::Result<()> {
@@ -139,6 +138,6 @@ pub fn give_command(
     };
 
     if let Err(err) = inner() {
-        sender.send(ChatMessage::new(id, err.to_string().into_cow_text()));
+        sender.send_to(id, ChatMessage::new(err.to_string().into_cow_text()));
     }
 }
