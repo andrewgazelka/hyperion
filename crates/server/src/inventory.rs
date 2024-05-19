@@ -128,6 +128,13 @@ impl PlayerInventory {
             update_equipment: false,
         };
 
+        // check if the cursor stack is not too big
+        if client_proposed_cursor.count < 0
+            || client_proposed_cursor.count > client_proposed_cursor.item.max_stack()
+        {
+            return Err(SlotChangeError::InvalidStackCount);
+        }
+
         // Bitmap of the affected slots
         let mut slots: u128 = 0;
         // set the bitmap for changed slots
@@ -975,23 +982,81 @@ mod test {
         prepare_tracing();
         let mut inventory = prepare_inventory();
         inventory.set_main_hand(36).unwrap();
-        inventory.items.set(9, ItemStack::new(ItemKind::NetheriteIngot, 64, None));
-        inventory.items.set(10, ItemStack::new(ItemKind::NetheriteIngot, 64, None));
+        inventory
+            .items
+            .set(9, ItemStack::new(ItemKind::NetheriteIngot, 64, None));
+        inventory
+            .items
+            .set(10, ItemStack::new(ItemKind::NetheriteIngot, 64, None));
 
-        let slot_change = vec![SlotChange {
-            idx: 9,
-            stack: ItemStack::EMPTY,
-        },
-        SlotChange {
-            idx: 10,
-            stack: ItemStack::new(ItemKind::NetheriteIngot, 63, None),
-        }];
-        let result = inventory.try_append_changes(&slot_change, &ItemStack::new(ItemKind::NetheriteIngot, 65, None), false);
+        let slot_change = vec![
+            SlotChange {
+                idx: 9,
+                stack: ItemStack::EMPTY,
+            },
+            SlotChange {
+                idx: 10,
+                stack: ItemStack::new(ItemKind::NetheriteIngot, 63, None),
+            },
+        ];
+        let result = inventory.try_append_changes(
+            &slot_change,
+            &ItemStack::new(ItemKind::NetheriteIngot, 65, None),
+            false,
+        );
         assert_eq!(result, Err(SlotChangeError::InvalidStackCount));
-        
     }
 
+    // put to many items in slot
+    // add Golden Apple to cursor and then put it in slot 38
+    #[test]
+    fn test_put_to_many_items_in_slot() {
+        prepare_tracing();
+        let mut inventory = prepare_inventory();
+        inventory.set_main_hand(36).unwrap();
+        inventory.carried_item = ItemStack::new(ItemKind::GoldenApple, 4, None);
 
+        let slot_change = vec![SlotChange {
+            idx: 38,
+            stack: ItemStack::new(ItemKind::GoldenApple, 68, None),
+        }];
+        let result = inventory.try_append_changes(&slot_change, &ItemStack::EMPTY, false);
+        assert_eq!(result, Err(SlotChangeError::InvalidStackCount));
+    }
+
+    // negative number in cursor
+    #[test]
+    fn test_negative_number_in_cursor() {
+        prepare_tracing();
+        let mut inventory = prepare_inventory();
+        inventory.set_main_hand(36).unwrap();
+
+        let slot_change = vec![SlotChange {
+            idx: 38,
+            stack: ItemStack::EMPTY,
+        }];
+        let result = inventory.try_append_changes(
+            &slot_change,
+            &ItemStack::new(ItemKind::GoldenApple, -1, None),
+            false,
+        );
+        assert_eq!(result, Err(SlotChangeError::InvalidStackCount));
+    }
+
+    // negative number in slot
+    #[test]
+    fn test_negative_number_in_slot() {
+        prepare_tracing();
+        let mut inventory = prepare_inventory();
+        inventory.set_main_hand(36).unwrap();
+
+        let slot_change = vec![SlotChange {
+            idx: 38,
+            stack: ItemStack::new(ItemKind::GoldenApple, -1, None),
+        }];
+        let result = inventory.try_append_changes(&slot_change, &ItemStack::EMPTY, false);
+        assert_eq!(result, Err(SlotChangeError::InvalidStackCount));
+    }
 
     // prepare basic inventory for tests
     fn prepare_inventory() -> PlayerInventory {
