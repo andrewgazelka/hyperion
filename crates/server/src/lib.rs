@@ -13,6 +13,7 @@
 #![feature(sync_unsafe_cell)]
 #![feature(iter_array_chunks)]
 #![feature(io_slice_advance)]
+#![feature(assert_matches)]
 #![expect(clippy::type_complexity, reason = "evenio uses a lot of complex types")]
 
 pub use evenio;

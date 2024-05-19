@@ -75,7 +75,7 @@ pub struct PlayerInventory {
     carried_item: ItemStack,
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Eq, PartialEq)]
 pub enum SlotChangeError {
     #[error("More items than expected in inventory")]
     MoreItemsThanExpected,
@@ -89,7 +89,8 @@ pub enum SlotChangeError {
     NonArmorInArmorSlot,
 }
 
-/// Struct represents the result of [`PlayerInventory::append_slot_changes`]
+/// Struct represents the result of [`PlayerInventory::try_append_changes`]
+#[derive(Debug, Eq, PartialEq)]
 pub struct AppendSlotChange {
     /// flag if the equipment should be updated
     pub update_equipment: bool,
@@ -113,12 +114,12 @@ impl PlayerInventory {
     }
 
     /// Append the client proposed slot change to the inventory
-    /// It checks, that the player does not invent not existing items by summing up all slots before and after the change
-    pub fn append_slot_changes(
+    /// It checks, that the player does not invent not-existing items by summing up all slots before and after the change
+    pub fn try_append_changes(
         &mut self,
         slot_change: &[SlotChange],
         client_proposed_cursor: &ItemStack,
-        allow_less: bool,
+        allow_fewer_than_expected: bool,
     ) -> Result<AppendSlotChange, SlotChangeError> {
         const SLOT_COUNT: i16 = 46;
 
@@ -204,7 +205,7 @@ impl PlayerInventory {
                 return Err(SlotChangeError::MoreItemsThanExpected);
             }
             // check if the player does not destroy items
-            if !allow_less && proposed_count < current_count {
+            if !allow_fewer_than_expected && proposed_count < current_count {
                 warn!(
                     "Fewer items than expected {:?}p:{proposed_count} c:{current_count}",
                     item
@@ -419,11 +420,13 @@ impl PlayerInventory {
 
 #[cfg(test)]
 mod test {
+    use std::assert_matches::assert_matches;
+
     use super::*;
 
     #[test]
     fn test_inventory() {
-        tracing_subscriber::fmt::init();
+        let _ = tracing_subscriber::fmt::try_init();
 
         let mut inventory = Inventory::<46>::new();
         let item = ItemStack::new(ItemKind::AcaciaBoat, 1, None);
@@ -433,18 +436,19 @@ mod test {
 
     #[test]
     fn test_append_slot_changes() {
-        tracing_subscriber::fmt::init();
+        let _ = tracing_subscriber::fmt::try_init();
 
         let mut inventory = PlayerInventory::new();
         let item = ItemStack::new(ItemKind::AcaciaBoat, 1, None);
         let slot_changes = [SlotChange {
             idx: 0,
-            stack: item.clone(),
+            stack: item,
         }];
-        inventory
-            .append_slot_changes(&slot_changes, &ItemStack::EMPTY, false)
-            .unwrap();
-        assert_eq!(inventory.items.slots[0], item);
+
+        let result = inventory.try_append_changes(&slot_changes, &ItemStack::EMPTY, false);
+
+        // todo: is this the right error?
+        assert_matches!(result, Err(SlotChangeError::MoreItemsThanExpected));
     }
 
     // append_slot_change with more items

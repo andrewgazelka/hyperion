@@ -332,7 +332,7 @@ fn inventory_action(
         return Ok(());
     };
 
-    let x = match mode {
+    let click_type = match mode {
         ClickMode::Click if slot_changes.len() == 1 => {
             let change = slot_changes.iter().next();
 
@@ -393,7 +393,7 @@ fn inventory_action(
                 _ => {
                     // Button no supported for hotbar
                     // todo error
-                    warn!("unexpected button for hotbar: {}", button);
+                    warn!("unexpected button for hotbar: {button}");
                     return Ok(());
                 }
             }
@@ -469,7 +469,7 @@ fn inventory_action(
 
     let event = event::ClickEvent {
         by: id,
-        click_type: x,
+        click_type,
         carried_item,
         slot_changes: slot_changes.iter().cloned().collect(),
     };
