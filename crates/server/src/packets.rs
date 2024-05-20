@@ -196,6 +196,18 @@ fn player_action(
             let elem = SendElem::new(id, event::BlockFinishBreak { position, sequence });
             sender.push(elem);
         }
+        PlayerAction::DropItem => {
+            let elem = SendElem::new(id, event::DropItem {
+                drop_type: event::DropType::Single,
+            });
+            sender.push(elem);
+        }
+        PlayerAction::DropAllItems => {
+            let elem = SendElem::new(id, event::DropItem {
+                drop_type: event::DropType::All,
+            });
+            sender.push(elem);
+        }
         _ => {}
     }
 

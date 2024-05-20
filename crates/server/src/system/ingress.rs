@@ -51,6 +51,7 @@ pub type IngressSender<'a> = Sender<
         event::PoseUpdate,
         event::UpdateSelectedSlot,
         event::ClickEvent,
+        event::DropItem,
     ),
 >;
 
@@ -212,6 +213,7 @@ pub enum SendData {
     PoseUpdate(event::PoseUpdate),
     UpdateSelectedSlot(event::UpdateSelectedSlot),
     ClickEvent(event::ClickEvent),
+    DropItem(event::DropItem),
 }
 
 pub struct SendElem {
@@ -338,6 +340,7 @@ pub fn recv_data(
             SendData::PoseUpdate(event) => real_sender.send_to(id, event),
             SendData::UpdateSelectedSlot(event) => real_sender.send_to(id, event),
             SendData::ClickEvent(event) => real_sender.send_to(id, event),
+            SendData::DropItem(event) => real_sender.send_to(id, event),
         }
     }
 

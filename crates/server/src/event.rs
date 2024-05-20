@@ -20,6 +20,16 @@ use crate::{
     util::player_skin::PlayerSkin,
 };
 
+#[derive(TargetedEvent, Debug)]
+pub struct DropItem {
+    pub drop_type: DropType,
+}
+
+pub enum DropType {
+    Single,
+    All,
+}
+
 /// An event that is sent when a player clicks in the inventory.
 #[derive(TargetedEvent, Debug)]
 pub struct ClickEvent {

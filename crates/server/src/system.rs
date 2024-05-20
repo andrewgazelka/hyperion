@@ -8,6 +8,7 @@ pub mod chunks;
 mod compass;
 mod despawn_player;
 mod disguise_player;
+mod drop_items;
 pub mod effect;
 mod egress;
 mod entity_detect_collisions;
