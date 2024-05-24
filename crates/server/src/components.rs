@@ -148,11 +148,28 @@ impl Vitals {
 #[component(immutable)]
 pub struct Uuid(pub uuid::Uuid);
 
+#[derive(Component, Debug)]
+pub struct Arrow;
+
 /// Any living minecraft entity that is NOT a player.
 ///
 /// Example: zombie, skeleton, etc.
 #[derive(Component, Debug)]
 pub struct Npc;
+
+/// Any entity that the server has to calculate physics for, such as arrows. Players do not need
+/// this; physics is calculated by the client.
+#[derive(Component, Debug)]
+pub struct EntityPhysics {
+    pub velocity: Vec3,
+
+    /// Acceleration of gravity on this entity measured in meters/tick^2. Different types of
+    /// entities have different gravities, so this can't be a constant.
+    pub gravity: f32,
+
+    /// Drag of this entity measured in 1/tick.
+    pub drag: f32,
+}
 
 /// The running multiplier of the entity. This defaults to 1.0.
 #[derive(Component, Debug, Copy, Clone)]
@@ -176,10 +193,10 @@ pub struct FullEntityPose {
     /// However, the Notchian server uses double precision floating point numbers for the position.
     pub position: Vec3,
 
-    /// The yaw of the entity. (todo: probably need a separate component for head yaw, perhaps separate this out)
+    /// The yaw of the entity's head measured in degrees. (todo: probably need a separate component for body yaw, perhaps separate this out)
     pub yaw: f32,
 
-    /// The pitch of the entity.
+    /// The pitch of the entity's head measured in degrees.
     pub pitch: f32,
 
     /// The bounding box of the entity.

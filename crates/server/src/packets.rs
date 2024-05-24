@@ -1,7 +1,7 @@
 //! <https://wiki.vg/index.php?title=Protocol&oldid=18375>
 
 use evenio::entity::EntityId;
-use tracing::{debug, info, trace, warn};
+use tracing::{info, trace, warn};
 use valence_protocol::{
     decode::PacketFrame,
     math::Vec3,
@@ -208,7 +208,8 @@ fn player_action(
             sender.send_to(id, event::BlockFinishBreak { position, sequence });
         }
         PlayerAction::ReleaseUseItem => {
-            todo!("implement; shooting a bow")
+            let elem = SendElem::new(id, event::ReleaseItem);
+            sender.push(elem);
         }
         _ => {}
     }
@@ -254,12 +255,12 @@ fn client_command(
 // starting to wind up bow
 pub fn player_interact_item(
     mut data: &[u8],
-    query: &PacketSwitchQuery,
-    sender: &mut Vec<SendElem>,
+    _query: &PacketSwitchQuery,
+    _sender: &mut Vec<SendElem>,
 ) -> anyhow::Result<()> {
     let _packet = play::PlayerInteractItemC2s::decode(&mut data)?;
 
-    todo!("implement; interacting with an item. this is called when starting to wind up a bow");
+    // todo!("implement; interacting with an item. this is called when starting to wind up a bow");
 
     Ok(())
 }

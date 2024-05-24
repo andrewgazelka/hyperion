@@ -184,6 +184,8 @@ pub fn player_join_world(
     inv.set_first_available(ItemStack::new(ItemKind::NetheriteSword, 1, None));
     inv.set_first_available(ItemStack::new(ItemKind::Compass, 1, None));
     inv.set_first_available(ItemStack::new(ItemKind::Book, 15, None));
+    inv.set_first_available(ItemStack::new(ItemKind::Bow, 1, None));
+    inv.set_first_available(ItemStack::new(ItemKind::Arrow, 32, None));
     inv.set_boots(ItemStack::new(ItemKind::NetheriteBoots, 1, None));
     inv.set_leggings(ItemStack::new(ItemKind::NetheriteLeggings, 1, None));
     inv.set_chestplate(ItemStack::new(ItemKind::NetheriteChestplate, 1, None));

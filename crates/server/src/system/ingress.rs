@@ -46,6 +46,7 @@ pub type IngressEventSet = (
     event::BlockStartBreak,
     event::BlockAbortBreak,
     event::BlockFinishBreak,
+    event::ReleaseItem,
     event::Command,
     event::PoseUpdate,
     event::UpdateSelectedSlot,

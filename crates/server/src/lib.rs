@@ -330,7 +330,9 @@ impl Hyperion {
         world.add_handler(system::init_entity);
         world.add_handler(system::entity_move_logic);
         world.add_handler(system::entity_detect_collisions);
+        world.add_handler(system::entity_physics);
         world.add_handler(system::sync_entity_position);
+        world.add_handler(system::sync_entity_velocity);
         world.add_handler(system::recalculate_bounding_boxes);
         world.add_handler(system::update_time);
         world.add_handler(system::send_time);
@@ -356,6 +358,7 @@ impl Hyperion {
         world.add_handler(system::effect::speed);
 
         world.add_handler(system::pkt_hand_swing);
+        world.add_handler(system::release_item);
 
         world.add_handler(system::generate_egress_packets);
 
