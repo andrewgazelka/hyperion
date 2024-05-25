@@ -58,7 +58,7 @@ pub fn get_inventory_actions(
 }
 
 /// Sends an inventory update to the player.
-fn send_inventory_update(inventory: &PlayerInventory, packet: &mut Packets, compose: &Compose) {
+pub fn send_inventory_update(inventory: &PlayerInventory, packet: &mut Packets, compose: &Compose) {
     let pack_inv = play::InventoryS2c {
         window_id: 0,
         state_id: VarInt(0),

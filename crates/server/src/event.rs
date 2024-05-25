@@ -20,11 +20,27 @@ use crate::{
     util::player_skin::PlayerSkin,
 };
 
+#[derive(GlobalEvent, Debug)]
+pub struct GenericBulkCollitionEvent {
+    pub events: RayonLocal<Vec<Collision>>,
+}
+
+#[derive(Debug)]
+/// Part of the [`GenericBulkCollitionEvent`] event.
+/// This will be created by the generic collision system.
+pub struct Collision {
+    /// entit of the queried entity
+    pub enitiy_id: EntityId,
+    /// The colliding entity
+    pub other_entity_id: EntityId,
+}
+
 #[derive(TargetedEvent, Debug)]
 pub struct DropItem {
     pub drop_type: DropType,
 }
 
+#[derive(Debug)]
 pub enum DropType {
     Single,
     All,
@@ -42,80 +58,29 @@ pub struct ClickEvent {
 /// The type of click that the player performed.
 #[derive(Copy, Clone, Debug)]
 pub enum ClickType {
-    LeftClick {
-        slot: i16,
-        // todo: left click only can result in 1 slot change right?
-        //     slot_change: SlotChange,
-    },
-    RightClick {
-        slot: i16,
-        // todo: left click only can result in 1 slot change right?
-        //   slot_change: SlotChange,
-    },
+    LeftClick { slot: i16 },
+    RightClick { slot: i16 },
     LeftClickOutsideOfWindow,
     RightClickOutsideOfWindow,
-    ShiftLeftClick {
-        slot: i16,
-        // todo: should be 2 slot changes right?
-        // slot_changes: [SlotChange; 2],
-    },
-    ShiftRightClick {
-        slot: i16,
-        // todo: should be 2 slot changes right?
-        // slot_changes: [SlotChange; 2],
-    },
-    HotbarKeyPress {
-        button: i8,
-        slot: i16,
-        // todo: should be 2 slot changes right?
-        //       slot_changes: [SlotChange; 2],
-    },
-    OffHandSwap {
-        slot: i16,
-        // todo: should be 2 slot changes right?
-        //    slot_changes: [SlotChange; 2],
-    },
+    ShiftLeftClick { slot: i16 },
+    ShiftRightClick { slot: i16 },
+    HotbarKeyPress { button: i8, slot: i16 },
+    OffHandSwap { slot: i16 },
     // todo: support for creative mode
-    CreativeMiddleClick {
-        slot: i16,
-    },
-    QDrop {
-        slot: i16,
-        // todo: left click only can result in 1 slot change right?
-        //  slot_change: SlotChange,
-    },
-    QControlDrop {
-        slot: i16,
-        // todo: left click only can result in 1 slot change right?
-        //    slot_change: SlotChange,
-    },
+    CreativeMiddleClick { slot: i16 },
+    QDrop { slot: i16 },
+    QControlDrop { slot: i16 },
     StartLeftMouseDrag,
     StartRightMouseDrag,
     StartMiddleMouseDrag,
-    AddSlotLeftDrag {
-        slot: i16,
-    },
-    AddSlotRightDrag {
-        slot: i16,
-    },
-    AddSlotMiddleDrag {
-        slot: i16,
-    },
-    EndLeftMouseDrag {
-        //   slot_changes: Vec<SlotChange>,
-    },
-    EndRightMouseDrag {
-        //     slot_changes: Vec<SlotChange>,
-    },
+    AddSlotLeftDrag { slot: i16 },
+    AddSlotRightDrag { slot: i16 },
+    AddSlotMiddleDrag { slot: i16 },
+    EndLeftMouseDrag {},
+    EndRightMouseDrag {},
     EndMiddleMouseDrag,
-    DoubleClick {
-        slot: i16,
-        //        slot_changes: Vec<SlotChange>,
-    },
-    DoubleClickReverseOrder {
-        slot: i16,
-        //   slot_changes: Vec<SlotChange>,
-    },
+    DoubleClick { slot: i16 },
+    DoubleClickReverseOrder { slot: i16 },
 }
 
 #[derive(TargetedEvent)]

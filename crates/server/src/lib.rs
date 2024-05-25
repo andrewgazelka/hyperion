@@ -57,7 +57,7 @@ use crate::{
         fd_lookup::FdLookup, player_aabb_lookup::PlayerBoundingBoxes,
         player_id_lookup::EntityIdLookup, player_uuid_lookup::PlayerUuidLookup,
     },
-    system::{generate_biome_registry, generate_ingress_events},
+    system::{generate_biome_registry, generate_ingress_events, ItemPickupQuery},
 };
 
 pub mod components;
@@ -69,7 +69,7 @@ pub mod net;
 pub mod inventory;
 
 mod packets;
-mod system;
+pub mod system;
 
 mod bits;
 
@@ -209,6 +209,8 @@ pub struct Hyperion {
     server: Server,
 }
 
+//
+
 impl Hyperion {
     /// Get the [`World`] which is the core part of the ECS framework.
     pub const fn world(&self) -> &World {
@@ -341,7 +343,10 @@ impl Hyperion {
         world.add_handler(system::update_health);
         world.add_handler(system::sync_players);
         world.add_handler(system::rebuild_player_location);
-        world.add_handler(system::player_detect_mob_hits);
+        //   world.add_handler(system::player_detect_mob_hits);
+
+        world.add_handler(system::generic_collision::<ItemPickupQuery>);
+        world.add_handler(system::pickups);
 
         world.add_handler(system::check_immunity);
         world.add_handler(system::pkt_attack_player);
@@ -373,6 +378,7 @@ impl Hyperion {
         world.add_handler(system::update_main_hand);
         world.add_handler(system::update_equipment);
         world.add_handler(system::give_command);
+        world.add_handler(system::drop);
 
         let global = world.spawn();
         world.insert(global, Global::new(shared.clone()));

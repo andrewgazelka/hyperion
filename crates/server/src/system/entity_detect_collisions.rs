@@ -5,7 +5,7 @@ use evenio::{
     query::With,
 };
 use rayon::prelude::*;
-use tracing::instrument;
+use tracing::{info, instrument};
 
 use crate::{
     components::{EntityReaction, FullEntityPose, Npc},
@@ -40,7 +40,8 @@ pub fn entity_detect_collisions(
                         return false;
                     }
 
-                    println!("colliding with {id:?}");
+                    // println!("colliding with {id:?}");
+                    info!("colliding with {id:?}");
                     pose.apply_entity_collision(&collision.aabb, reaction);
 
                     true

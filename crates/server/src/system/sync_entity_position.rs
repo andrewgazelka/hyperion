@@ -15,7 +15,6 @@ use crate::{
 pub(crate) struct EntityQuery<'a> {
     id: EntityId,
     uuid: &'a Uuid,
-
     pose: &'a mut FullEntityPose,
     last_pose: &'a mut PositionSyncMetadata,
 }

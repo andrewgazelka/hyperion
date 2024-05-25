@@ -4,7 +4,7 @@ use bvh_region::aabb::Aabb;
 use derive_more::{Deref, Display, From};
 use evenio::component::Component;
 use glam::{I16Vec2, Vec3};
-use valence_server::entity::EntityKind;
+use valence_server::{entity::EntityKind, ItemStack};
 
 use crate::{
     components::vitals::{Absorption, Regeneration},
@@ -14,6 +14,12 @@ use crate::{
 pub mod chunks;
 pub mod pose;
 pub mod vitals;
+
+// Marker for dropped items
+#[derive(Component, Debug)]
+pub struct DroppedItemComponent {
+    pub item: ItemStack,
+}
 
 #[derive(Component, Deref, From, Display, Debug)]
 pub struct InGameName(Box<str>);
