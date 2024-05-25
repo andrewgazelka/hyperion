@@ -17,7 +17,7 @@ pub fn player_kick(
     r: Receiver<KickPlayer, (EntityId, &Uuid, &mut Packets)>,
     mut uuid_lookup: Single<&mut PlayerUuidLookup>,
     mut id_lookup: Single<&mut EntityIdLookup>,
-    send_info: Compose,
+    compose: Compose,
     s: Sender<Despawn>,
 ) {
     let (id, uuid, packets) = r.query;
@@ -29,15 +29,9 @@ pub fn player_kick(
     let reason = &r.event.reason;
 
     let reason = reason.into_text().color(Color::RED);
-
-    // todo: remove
-    packets
-        .append(
-            &play::DisconnectS2c {
-                reason: reason.into(),
-            },
-            &send_info,
-        )
+    let reason = reason.into();
+    compose
+        .unicast(&play::DisconnectS2c { reason }, *packets)
         .unwrap();
 
     s.send_to(id, Despawn);

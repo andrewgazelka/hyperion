@@ -52,9 +52,9 @@ use crate::{
     },
     event::{Egress, Gametick, Scratches, Stats},
     global::Global,
-    net::{buffers::BufferAllocator, Broadcast, Compressors, Server, ServerDef, S2C_BUFFER_SIZE},
+    net::{Compressors, Io, S2C_BUFFER_SIZE},
     singleton::{
-        fd_lookup::FdLookup, player_aabb_lookup::PlayerBoundingBoxes,
+        fd_lookup::StreamLookup, player_aabb_lookup::PlayerBoundingBoxes,
         player_id_lookup::EntityIdLookup, player_uuid_lookup::PlayerUuidLookup,
     },
     system::{generate_biome_registry, generate_ingress_events},
@@ -205,8 +205,6 @@ pub struct Hyperion {
     last_ticks: VecDeque<Instant>,
     /// The tick of the game. This is incremented every 50 ms.
     tick_on: u64,
-
-    server: Server,
 }
 
 impl Hyperion {
@@ -307,13 +305,8 @@ impl Hyperion {
             .next()
             .context("could not get first address")?;
 
-        let mut server_def = Server::new(address)?;
-
-        let buffers_id = world.spawn();
-        let mut buffers_elem = BufferAllocator::new(&mut server_def);
-
         let broadcast = world.spawn();
-        world.insert(broadcast, Broadcast::new(&mut buffers_elem)?);
+        world.insert(broadcast, Io::new()?);
 
         world.insert(buffers_id, buffers_elem);
 
@@ -401,7 +394,7 @@ impl Hyperion {
         world.insert(player_location_lookup, PlayerBoundingBoxes::default());
 
         let fd_lookup = world.spawn();
-        world.insert(fd_lookup, FdLookup::default());
+        world.insert(fd_lookup, StreamLookup::default());
 
         let mut game = Self {
             shared,

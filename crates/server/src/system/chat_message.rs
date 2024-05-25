@@ -10,7 +10,7 @@ use crate::{
     clippy::needless_pass_by_value,
     reason = "this is used in the event loop"
 )]
-pub fn chat_message(r: ReceiverMut<event::ChatMessage, &mut Packets>, compose: Compose) {
+pub fn chat_message(r: ReceiverMut<event::ChatMessage, &Packets>, compose: Compose) {
     let event = EventMut::take(r.event);
     let packets = r.query;
 
@@ -19,5 +19,5 @@ pub fn chat_message(r: ReceiverMut<event::ChatMessage, &mut Packets>, compose: C
         overlay: false,
     };
 
-    packets.append(&pkt, &compose).unwrap();
+    compose.unicast(&pkt, *packets).unwrap();
 }

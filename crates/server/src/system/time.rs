@@ -1,15 +1,11 @@
 use evenio::prelude::*;
 use tracing::instrument;
 
-use crate::{
-    event::Gametick,
-    global::Global,
-    net::{Broadcast, Compose},
-};
+use crate::{components::Singleton, event::Gametick, global::Global, net::Compose};
 
 #[instrument(skip_all, level = "trace")]
-pub fn send_time(_: Receiver<Gametick>, broadcast: Single<&Broadcast>, compose: Compose) {
-    let tick = compose.global.tick;
+pub fn send_time(_: Receiver<Gametick>, compose: Compose, global: Singleton<Global>) {
+    let tick = global.tick;
     let time_of_day = tick % 24000;
 
     // Only sync with the client every 5 seconds
@@ -19,7 +15,7 @@ pub fn send_time(_: Receiver<Gametick>, broadcast: Single<&Broadcast>, compose: 
             time_of_day,
         };
 
-        broadcast.append(&pkt, &compose).unwrap();
+        compose.broadcast(&pkt).unwrap();
     }
 }
 

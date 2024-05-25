@@ -1,8 +1,11 @@
-use std::time::Instant;
+use std::{
+    ops::{Deref, DerefMut},
+    time::Instant,
+};
 
 use bvh_region::aabb::Aabb;
-use derive_more::{Deref, Display, From};
-use evenio::component::Component;
+use derive_more::{Deref, DerefMut, Display, From};
+use evenio::{component::Component, handler::HandlerParam, prelude::Single};
 use glam::{I16Vec2, Vec3};
 use valence_server::entity::EntityKind;
 
@@ -14,6 +17,39 @@ use crate::{
 pub mod chunks;
 pub mod pose;
 pub mod vitals;
+
+#[derive(Component, Deref, DerefMut)]
+pub struct EgressComm {
+    tx: tokio::sync::mpsc::UnboundedSender<bytes::Bytes>,
+}
+
+#[derive(HandlerParam)]
+pub struct Singleton<'a, T>
+where
+    T: Component<Mutability = evenio::mutability::Mutable>,
+{
+    single: Single<'a, &'static mut T>,
+}
+
+impl<'a, T> Deref for Singleton<'a, T>
+where
+    T: Component<Mutability = evenio::mutability::Mutable>,
+{
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        &self.single.0
+    }
+}
+
+impl<'a, T> DerefMut for Singleton<'a, T>
+where
+    T: Component<Mutability = evenio::mutability::Mutable>,
+{
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.single.0
+    }
+}
 
 #[derive(Component, Deref, From, Display, Debug)]
 pub struct InGameName(Box<str>);

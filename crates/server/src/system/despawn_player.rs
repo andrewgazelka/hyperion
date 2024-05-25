@@ -7,13 +7,12 @@ use valence_protocol::{packets::play, VarInt};
 use crate::{
     components::{InGameName, Uuid},
     global::Global,
-    net::{Broadcast, Compose},
+    net::{Compose, Io},
 };
 
 #[instrument(skip_all, level = "trace")]
 pub fn despawn_player(
     r: Receiver<Despawn, (&Uuid, &InGameName, EntityId)>,
-    broadcast: Single<&Broadcast>,
     compose: Compose,
     global: Single<&Global>,
 ) {
@@ -30,13 +29,13 @@ pub fn despawn_player(
         entity_ids: Cow::Borrowed(entity_ids),
     };
 
-    broadcast.append(&pkt, &compose).unwrap();
+    compose.broadcast(&pkt).send().unwrap();
 
     let pkt = play::PlayerRemoveS2c {
         uuids: uuids.into(),
     };
 
-    broadcast.append(&pkt, &compose).unwrap();
+    compose.broadcast(&pkt).send().unwrap();
 
     info!("{name} disconnected");
 

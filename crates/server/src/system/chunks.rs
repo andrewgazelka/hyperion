@@ -54,7 +54,7 @@ pub fn generate_chunk_changes(
                 chunk_z: i32::from(current_chunk.y).into(),
             };
 
-            packets.append(&center_chunk, &compose).unwrap();
+            compose.unicast(&center_chunk, *packets).unwrap();
 
             last_sent.0 = current_chunk;
 
@@ -82,6 +82,7 @@ pub fn send_updates(
     mut fetcher: Fetcher<(&mut Packets, &mut ChunkChanges)>,
     chunks: Single<&Chunks>,
     tasks: Single<&Tasks>,
+    compose: Compose,
 ) {
     fetcher.par_iter_mut().for_each(|(packets, chunk_changes)| {
         let mut left_over = Vec::new();
@@ -89,7 +90,7 @@ pub fn send_updates(
         for &elem in &chunk_changes.changes {
             match chunks.get_cached_or_load(elem, &tasks) {
                 Ok(Some(ChunkData::Cached(chunk))) => {
-                    packets.append_raw(&chunk);
+                    compose.io().unicast_raw(&chunk, packets.id());
                     continue;
                 }
                 Ok(Some(ChunkData::Task(..)) | None) => {

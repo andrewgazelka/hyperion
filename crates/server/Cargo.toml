@@ -65,6 +65,8 @@ arrayvec = "0.7.4"
 dashmap = "5.5.3"
 bitfield-struct = "0.6.1"
 bitvec = "1.0.1"
+hyperion-proto = { git = "https://github.com/andrewgazelka/hyperion-proto", version = "0.1.0" }
+prost = "0.12.6"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 io-uring = { git = "https://github.com/andrewgazelka/io-uring", branch = "feat-more-fixed-derive" }

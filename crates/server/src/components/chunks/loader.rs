@@ -9,6 +9,7 @@ use tokio::{
     fs::File,
     sync::{Notify, RwLock},
 };
+use tracing::instrument;
 
 use crate::{blocks::get_nyc_save, components::chunks::region::Region};
 
@@ -40,10 +41,12 @@ impl Regions {
         self.root.join(format!("r.{pos_x}.{pos_z}.mca"))
     }
 
+    #[instrument(skip_all, level = "trace")]
     async fn region_file(&self, pos_x: i32, pos_z: i32) -> File {
         File::open(self.region_path(pos_x, pos_z)).await.unwrap()
     }
 
+    #[instrument(skip_all, level = "trace")]
     pub async fn get_region_from_chunk(
         &self,
         pos_x: i32,

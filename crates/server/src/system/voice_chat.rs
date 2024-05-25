@@ -60,5 +60,5 @@ pub fn voice_chat(
     }
     .to_plugin_message();
 
-    packets.append(&pkt, &compose).unwrap();
+    compose.unicast(&pkt, *packets).unwrap();
 }

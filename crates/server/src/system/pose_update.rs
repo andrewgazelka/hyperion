@@ -4,13 +4,13 @@ use valence_protocol::{packets::play, Encode, RawBytes, VarInt};
 
 use crate::{
     event,
-    net::{Broadcast, Compose},
+    net::{Compose, Io},
 };
 
 #[instrument(skip_all)]
 pub fn pose_update(
     r: Receiver<event::PoseUpdate, EntityId>,
-    broadcast: Single<&Broadcast>,
+    broadcast: Single<&Io>,
     compose: Compose,
 ) {
     // Server to Client (S2C):
@@ -46,5 +46,5 @@ pub fn pose_update(
         tracked_values: RawBytes(&bytes),
     };
 
-    broadcast.append(&tracker, &compose).unwrap();
+    compose.broadcast(&tracker).unwrap();
 }

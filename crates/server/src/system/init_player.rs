@@ -65,7 +65,7 @@ pub fn init_player(
         properties: Cow::default(),
     };
 
-    packets.append(&pkt, &compose).unwrap();
+    compose.unicast(&pkt, *packets).unwrap();
 
     trace!("PlayerInit: {username}");
 

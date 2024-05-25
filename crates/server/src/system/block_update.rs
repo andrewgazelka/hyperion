@@ -1,4 +1,4 @@
-use evenio::{event::Receiver, fetch::Single};
+use evenio::event::Receiver;
 use valence_protocol::{packets::play, VarInt};
 
 use crate::{event, net::Compose};
@@ -7,11 +7,7 @@ use crate::{event, net::Compose};
     clippy::needless_pass_by_value,
     reason = "this is used in the event loop"
 )]
-pub fn block_update(
-    r: Receiver<event::UpdateBlock>,
-    broadcast: Single<&crate::net::Broadcast>,
-    encode: Compose,
-) {
+pub fn block_update(r: Receiver<event::UpdateBlock>, compose: Compose) {
     let event = r.event;
 
     let pkt = play::BlockUpdateS2c {
@@ -19,11 +15,11 @@ pub fn block_update(
         block_id: event.id,
     };
 
-    broadcast.append(&pkt, &encode).unwrap();
+    compose.broadcast(&pkt).send().unwrap();
 
     let pkt = play::PlayerActionResponseS2c {
         sequence: VarInt(event.sequence),
     };
 
-    broadcast.append(&pkt, &encode).unwrap();
+    compose.broadcast(&pkt).send().unwrap();
 }

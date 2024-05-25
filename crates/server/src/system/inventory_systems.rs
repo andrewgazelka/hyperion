@@ -66,7 +66,7 @@ fn send_inventory_update(inventory: &PlayerInventory, packet: &mut Packets, comp
         carried_item: Cow::Borrowed(inventory.get_carried_item()),
     };
 
-    packet.append(&pack_inv, compose).unwrap();
+    compose.unicast(&pack_inv, *packet).unwrap();
 }
 
 #[derive(Query)]

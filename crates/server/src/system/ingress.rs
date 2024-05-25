@@ -21,8 +21,7 @@ use valence_protocol::{
 use crate::{
     event::{self},
     global::Global,
-    net::{Server, ServerDef, ServerEvent},
-    singleton::fd_lookup::FdLookup,
+    singleton::fd_lookup::StreamLookup,
     CowBytes,
 };
 
@@ -30,9 +29,9 @@ mod player_packet_buffer;
 
 use crate::{
     components::{FullEntityPose, LoginState},
-    net::{buffers::BufferAllocator, Compose, Fd, Packets, MINECRAFT_VERSION, PROTOCOL_VERSION},
+    net::{Compose, Packets, MINECRAFT_VERSION, PROTOCOL_VERSION},
     packets::PacketSwitchQuery,
-    singleton::player_id_lookup::EntityIdLookup,
+    singleton::{fd_lookup::StreamId, player_id_lookup::EntityIdLookup},
     system::ingress::player_packet_buffer::DecodeBuffer,
 };
 
@@ -56,23 +55,23 @@ pub type IngressSender<'a> = Sender<
 
 #[derive(GlobalEvent)]
 pub struct AddPlayer {
-    fd: Fd,
+    stream: u64,
 }
 
 #[derive(GlobalEvent)]
 pub struct RemovePlayer {
-    fd: Fd,
+    stream: u64,
 }
 
 // todo: do we really need three different lifetimes here?
 #[derive(GlobalEvent)]
 pub struct RecvDataBulk<'a> {
-    elements: FxHashMap<Fd, ArrayVec<CowBytes<'a>, 16>>,
+    elements: FxHashMap<StreamId, ArrayVec<CowBytes<'a>, 16>>,
 }
 
 #[derive(GlobalEvent)]
 pub struct SentData {
-    decrease_count: FxHashMap<Fd, u8>,
+    decrease_count: FxHashMap<StreamId, u8>,
 }
 
 #[instrument(skip_all, level = "trace")]
@@ -119,7 +118,7 @@ pub fn generate_ingress_events(world: &mut World, server: &mut Server) {
 #[allow(clippy::too_many_arguments, reason = "todo")]
 pub fn add_player(
     r: ReceiverMut<AddPlayer>,
-    mut fd_lookup: Single<&mut FdLookup>,
+    mut fd_lookup: Single<&mut StreamLookup>,
     allocator: Single<&mut BufferAllocator>,
     sender: Sender<(
         Spawn,
@@ -150,7 +149,7 @@ pub fn add_player(
 #[allow(clippy::too_many_arguments, reason = "todo")]
 pub fn remove_player(
     r: ReceiverMut<RemovePlayer>,
-    mut fd_lookup: Single<&mut FdLookup>,
+    mut fd_lookup: Single<&mut StreamLookup>,
     sender: Sender<Despawn>,
 ) {
     let event = r.event;
@@ -172,7 +171,7 @@ pub fn remove_player(
 pub fn sent_data(
     r: Receiver<SentData>,
     mut players: Fetcher<&mut Packets>,
-    fd_lookup: Single<&FdLookup>,
+    fd_lookup: Single<&StreamLookup>,
 ) {
     let event = r.event;
 
@@ -232,7 +231,7 @@ impl SendElem {
 #[allow(clippy::too_many_arguments, reason = "todo")]
 pub fn recv_data(
     r: ReceiverMut<RecvDataBulk>,
-    fd_lookup: Single<&mut FdLookup>,
+    fd_lookup: Single<&mut StreamLookup>,
     global: Single<&Global>,
     mut players: Fetcher<(
         &mut LoginState,
@@ -266,7 +265,7 @@ pub fn recv_data(
 
                 decoder.queue_slice(data.as_ref());
 
-                let scratch = compose.scratch.get_local();
+                let scratch = compose.scratch();
                 let mut scratch = scratch.borrow_mut();
                 let scratch = &mut *scratch;
 

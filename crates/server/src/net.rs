@@ -1,88 +1,26 @@
 //! All the networking related code.
 
-use std::{cell::RefCell, hash::Hash, net::SocketAddr};
+use std::{cell::RefCell, hash::Hash};
 
-use anyhow::Context;
-use arrayvec::ArrayVec;
+use bytes::BytesMut;
 pub use decoder::PacketDecoder;
 use derive_more::{Deref, DerefMut};
 use evenio::{fetch::Single, handler::HandlerParam, prelude::Component};
-use libc::iovec;
+use hyperion_proto::ChunkPosition;
 use libdeflater::CompressionLvl;
+use prost::encoding::{encode_varint, WireType};
 use rayon_local::RayonLocal;
 use tracing::instrument;
 
 use crate::{
     event::{Scratch, Scratches},
     global::Global,
-    net::{
-        buffers::{BufRef, BufferAllocator},
-        encoder::{append_packet_without_compression, DataWriteInfo, PacketEncoder},
-    },
-    CowBytes,
+    net::encoder::PacketEncoder,
 };
 
-pub mod buffers;
-
-#[cfg(target_os = "linux")]
-mod linux;
-
-#[cfg(not(target_os = "linux"))]
-mod generic;
-
-#[derive(Debug, Copy, Clone, Component, PartialEq, Eq, Hash)]
-pub struct Fd(
-    #[cfg(target_os = "linux")] linux::Fixed,
-    #[cfg(not(target_os = "linux"))] usize,
-);
+pub mod proxy;
 
 pub const RING_SIZE: usize = MAX_PACKET_SIZE * 2;
-
-#[allow(unused, reason = "these are used on linux")]
-pub enum ServerEvent<'a> {
-    AddPlayer { fd: Fd },
-    RemovePlayer { fd: Fd },
-    RecvData { fd: Fd, data: CowBytes<'a> },
-    SentData { fd: Fd },
-}
-
-#[cfg(target_os = "linux")]
-pub type Server = linux::LinuxServer;
-
-#[cfg(not(target_os = "linux"))]
-pub type Server = generic::GenericServer;
-
-#[derive(Debug, Copy, Clone)]
-pub struct GlobalPacketWriteInfo {
-    pub start_ptr: *const u8,
-    pub len: u32,
-    pub buffer_idx: u16,
-}
-
-unsafe impl Send for GlobalPacketWriteInfo {}
-unsafe impl Sync for GlobalPacketWriteInfo {}
-
-#[allow(unused, reason = "this is used on linux")]
-pub struct WriteItem<'a> {
-    pub info: &'a DataWriteInfo,
-    pub buffer_idx: u16,
-    pub fd: Fd,
-}
-
-pub trait ServerDef {
-    fn new(address: SocketAddr) -> anyhow::Result<Self>
-    where
-        Self: Sized;
-    fn drain<'a>(&'a mut self, f: impl FnMut(ServerEvent<'a>)) -> anyhow::Result<()>;
-
-    /// # Safety
-    /// todo: not completely sure about all the invariants here
-    unsafe fn register_buffers(&mut self, buffers: &[iovec]);
-
-    fn write(&mut self, item: WriteItem);
-
-    fn submit_events(&mut self);
-}
 
 /// The Minecraft protocol version this library currently targets.
 pub const PROTOCOL_VERSION: i32 = 763;
@@ -116,14 +54,80 @@ impl Compressors {
     }
 }
 
+#[derive(Component, Copy, Clone, Debug, PartialEq, Eq, Hash)]
+pub struct Packets {
+    id: u64,
+}
+impl Packets {
+    pub fn id(&self) -> u64 {
+        self.id
+    }
+}
+
 #[derive(HandlerParam, Copy, Clone)]
 pub struct Compose<'a> {
-    pub compressor: Single<'a, &'static Compressors>,
-    pub scratch: Single<'a, &'static Scratches>,
-    pub global: Single<'a, &'static Global>,
+    compressor: Single<'a, &'static Compressors>,
+    scratch: Single<'a, &'static Scratches>,
+    global: Single<'a, &'static Global>,
+    io: Single<'a, &'static Io>,
 }
 
 impl<'a> Compose<'a> {
+    /// Broadcast globally to all players
+    ///     
+    /// See <https://github.com/andrewgazelka/hyperion-proto/blob/main/src/server_to_proxy.proto#L17-L22>
+    pub fn broadcast<'b, P>(&self, packet: &'b P) -> Broadcast<'a, 'b, P>
+    where
+        P: valence_protocol::Packet + valence_protocol::Encode,
+    {
+        Broadcast {
+            packet,
+            optional: false,
+            compose: *self,
+        }
+    }
+
+    pub fn io(&self) -> &Io {
+        &self.io
+    }
+
+    pub fn broadcast_local<P>(&self, packet: &'a P, center: ChunkPosition) -> BroadcastLocal<'a, P>
+    where
+        P: valence_protocol::Packet + valence_protocol::Encode,
+    {
+        BroadcastLocal {
+            packet,
+            optional: false,
+            compose: *self,
+            radius: 0,
+            center,
+        }
+    }
+
+    pub fn unicast<P>(&self, packet: &P, id: Packets) -> anyhow::Result<()>
+    where
+        P: valence_protocol::Packet + valence_protocol::Encode,
+    {
+        Unicast {
+            packet,
+            id: id.id,
+            compose: *self,
+        }
+        .send()
+    }
+
+    pub fn multicast<P>(&self, packet: &P, ids: &[Packets]) -> anyhow::Result<()>
+    where
+        P: valence_protocol::Packet + valence_protocol::Encode,
+    {
+        Multicast {
+            packet,
+            compose: *self,
+            ids: unsafe { core::slice::from_raw_parts(ids.as_ptr().cast(), ids.len()) },
+        }
+        .send()
+    }
+
     #[must_use]
     pub fn encoder(&self) -> PacketEncoder {
         let threshold = self.global.shared.compression_threshold;
@@ -141,311 +145,258 @@ impl<'a> Compose<'a> {
     }
 }
 
-/// Stores indices of packets
-#[derive(Component, Debug)]
-pub struct Packets {
-    buffer: BufRef,
-    pub local_to_write: ArrayVec<DataWriteInfo, 2>,
-    pub number_sending: u8,
+/// This is useful for the ECS, so we can use Single<&mut Broadcast> instead of having to use a marker struct
+#[derive(Component)]
+pub struct Io {
+    buffer: RayonLocal<BytesMut>,
+    temp_buffer: RayonLocal<Vec<u8>>,
 }
 
-impl Packets {
-    #[instrument(skip_all)]
-    pub fn new(allocator: &mut BufferAllocator) -> anyhow::Result<Self> {
-        Ok(Self {
-            buffer: allocator.obtain().context("failed to obtain buffer")?,
-            local_to_write: ArrayVec::new(),
-            number_sending: 0,
-        })
+struct Broadcast<'a, 'b, P> {
+    packet: &'b P,
+    optional: bool,
+    compose: Compose<'a>,
+}
+
+struct Unicast<'a, 'b, P> {
+    packet: &'b P,
+    id: u64,
+    compose: Compose<'a>,
+}
+
+impl<'a, 'b, P> Unicast<'a, 'b, P>
+where
+    P: valence_protocol::Packet + valence_protocol::Encode,
+{
+    fn send(&self) -> anyhow::Result<()> {
+        self.compose
+            .io
+            .unicast_private(self.packet, self.id, &self.compose)
+    }
+}
+
+struct Multicast<'a, 'b, P> {
+    packet: &'b P,
+    ids: &'a [u64],
+    compose: Compose<'a>,
+}
+
+impl<'a, 'b, P> Multicast<'a, 'b, P>
+where
+    P: valence_protocol::Packet + valence_protocol::Encode,
+{
+    fn send(&self) -> anyhow::Result<()> {
+        self.compose
+            .io
+            .multicast_private(self.packet, self.ids, &self.compose)
+    }
+}
+
+impl<'a, 'b, P> Broadcast<'a, 'b, P> {
+    pub fn optional(mut self) -> Self {
+        self.optional = true;
+        self
     }
 
-    #[must_use]
-    pub const fn index(&self) -> u16 {
-        self.buffer.index()
-    }
-
-    pub fn elems_mut(&mut self) -> &mut ArrayVec<DataWriteInfo, 2> {
-        &mut self.local_to_write
-    }
-
-    #[must_use]
-    pub const fn elems(&self) -> &ArrayVec<DataWriteInfo, 2> {
-        &self.local_to_write
-    }
-
-    pub fn set_successfully_sent(&mut self, d_count: u8) {
-        debug_assert!(self.number_sending >= d_count);
-        self.number_sending -= d_count;
-    }
-
-    pub fn append<P>(&mut self, pkt: &P, compose: &Compose) -> anyhow::Result<()>
+    pub fn send(self) -> anyhow::Result<()>
     where
         P: valence_protocol::Packet + valence_protocol::Encode,
     {
-        let scratch = compose.scratch.get_local();
-        let mut scratch = scratch.borrow_mut();
+        self.compose
+            .io
+            .broadcast_private(self.packet, &self.compose, self.optional)
+    }
+}
+
+struct BroadcastLocal<'a, P> {
+    packet: &'a P,
+    compose: Compose<'a>,
+    radius: u32,
+    center: ChunkPosition,
+    optional: bool,
+}
+
+impl<'a, P> BroadcastLocal<'a, P> {
+    fn radius(mut self, radius: u32) -> Self {
+        self.radius = radius;
+        self
+    }
+
+    fn optional(mut self) -> Self {
+        self.optional = true;
+        self
+    }
+
+    pub fn send(self) -> anyhow::Result<()>
+    where
+        P: valence_protocol::Packet + valence_protocol::Encode,
+    {
+        self.compose.io.broadcast_local_private(
+            self.packet,
+            &self.compose,
+            self.center,
+            self.radius,
+            self.optional,
+        )
+    }
+}
+
+impl Io {
+    #[instrument(skip_all)]
+    pub fn new() -> anyhow::Result<Self> {
+        Ok(Self {
+            buffer: RayonLocal::init_with_defaults(),
+            temp_buffer: RayonLocal::init_with_defaults(),
+        })
+    }
+
+    pub fn split(&mut self) -> impl Iterator<Item = BytesMut> + '_ {
+        self.buffer.get_all_mut().into_iter().map(|buf| buf.split())
+    }
+
+    unsafe fn encode_packet<P>(&self, packet: &P, compose: &Compose) -> anyhow::Result<&[u8]>
+    where
+        P: valence_protocol::Packet + valence_protocol::Encode,
+    {
+        let temp_buffer = self.temp_buffer.get_local_raw();
+        let temp_buffer = unsafe { &mut *temp_buffer.get() };
+
+        temp_buffer.clear();
 
         let compressor = compose.compressor.get_local();
         let mut compressor = compressor.borrow_mut();
 
-        let enc = compose.encoder();
+        let scratch = compose.scratch.get_local();
+        let mut scratch = scratch.borrow_mut();
 
-        let result = enc.append_packet(pkt, &mut *self.buffer, &mut *scratch, &mut compressor)?;
+        compose
+            .encoder()
+            .append_packet(packet, temp_buffer, &mut *scratch, &mut compressor)?;
 
-        self.push(result);
-        Ok(())
+        Ok(temp_buffer.as_slice())
     }
 
-    pub fn append_pre_compression_packet<P>(&mut self, pkt: &P) -> anyhow::Result<()>
+    fn broadcast_private<P>(
+        &self,
+        packet: &P,
+        compose: &Compose,
+        optional: bool,
+    ) -> anyhow::Result<()>
     where
         P: valence_protocol::Packet + valence_protocol::Encode,
     {
-        // todo: why need DerefMut?
-        let buf = &mut self.buffer;
-        let buf = &mut **buf;
-
-        let result = append_packet_without_compression(pkt, buf)?;
-
-        self.push(result);
+        let bytes = unsafe { self.encode_packet(packet, compose) }?;
+        self.broadcast_raw(bytes, optional);
         Ok(())
     }
 
-    pub fn append_raw(&mut self, data: &[u8]) {
-        let buffer = &mut *self.buffer;
-        let start_ptr = buffer.append(data);
-
-        let writer = DataWriteInfo {
-            start_ptr,
-            len: data.len() as u32,
-        };
-
-        self.push(writer);
+    fn broadcast_local_private<P>(
+        &self,
+        packet: &P,
+        compose: &Compose,
+        center: ChunkPosition,
+        radius: u32,
+        optional: bool,
+    ) -> anyhow::Result<()>
+    where
+        P: valence_protocol::Packet + valence_protocol::Encode,
+    {
+        let bytes = unsafe { self.encode_packet(packet, compose) }?;
+        self.broadcast_local_raw(bytes, center, radius, optional);
+        Ok(())
     }
 
-    fn push(&mut self, writer: DataWriteInfo) {
-        let to_write = &mut self.local_to_write;
+    fn unicast_private<P>(&self, packet: &P, id: u64, compose: &Compose) -> anyhow::Result<()>
+    where
+        P: valence_protocol::Packet + valence_protocol::Encode,
+    {
+        let bytes = unsafe { self.encode_packet(packet, compose) }?;
+        self.unicast_raw(bytes, id);
+        Ok(())
+    }
 
-        if let Some(last) = to_write.last_mut() {
-            let start_pointer_if_contiguous = unsafe { last.start_ptr.add(last.len as usize) };
-            if start_pointer_if_contiguous == writer.start_ptr {
-                last.len += writer.len;
-                return;
-            }
+    fn multicast_private<P>(&self, packet: &P, ids: &[u64], compose: &Compose) -> anyhow::Result<()>
+    where
+        P: valence_protocol::Packet + valence_protocol::Encode,
+    {
+        let bytes = unsafe { self.encode_packet(packet, compose) }?;
+        self.multicast_raw(bytes, ids);
+        Ok(())
+    }
+
+    pub fn broadcast_local_raw(
+        &self,
+        data: &[u8],
+        center: ChunkPosition,
+        radius: u32,
+        optional: bool,
+    ) {
+        const TAG: u64 = 3;
+
+        let buffer = self.buffer.get_local_raw();
+        let buffer = unsafe { &mut *buffer.get() };
+
+        encode_varint(TAG, buffer);
+
+        prost::encoding::encode_key(1, WireType::LengthDelimited, buffer);
+        encode_varint(data.len() as u64, buffer);
+        buffer.extend_from_slice(data);
+
+        if radius != 0 {
+            prost::encoding::uint32::encode(2, &radius, buffer);
         }
 
-        to_write.push(writer);
+        prost::encoding::message::encode(3, &center, buffer);
+
+        if optional {
+            prost::encoding::bool::encode(4, &optional, buffer);
+        }
     }
 
-    pub fn add_successful_send(&mut self, d_count: usize) {
-        self.number_sending += d_count as u8;
+    pub fn broadcast_raw(&self, data: &[u8], optional: bool) {
+        const TAG: u64 = 2;
+
+        let buffer = self.buffer.get_local_raw();
+        let buffer = unsafe { &mut *buffer.get() };
+
+        encode_varint(TAG, buffer);
+
+        prost::encoding::encode_key(1, WireType::LengthDelimited, buffer);
+        encode_varint(data.len() as u64, buffer);
+        buffer.extend_from_slice(data);
+
+        if optional {
+            prost::encoding::bool::encode(2, &optional, buffer);
+        }
     }
 
-    pub fn get_write_mut(&mut self) -> &mut ArrayVec<DataWriteInfo, 2> {
-        &mut self.local_to_write
+    pub fn unicast_raw(&self, data: &[u8], id: u64) {
+        const TAG: u64 = 5;
+
+        let buffer = self.buffer.get_local_raw();
+        let buffer = unsafe { &mut *buffer.get() };
+
+        encode_varint(TAG, buffer);
+
+        prost::encoding::encode_key(1, WireType::LengthDelimited, buffer);
+        encode_varint(data.len() as u64, buffer);
+        buffer.extend_from_slice(data);
+
+        prost::encoding::uint64::encode(2, &id, buffer);
     }
 
-    #[must_use]
-    pub const fn can_send(&self) -> bool {
-        self.number_sending == 0
-    }
-}
+    pub fn multicast_raw(&self, data: &[u8], ids: &[u64]) {
+        const TAG: u64 = 4;
 
-#[derive(Debug, Default)]
-pub struct LocalBroadcast {
-    pub data: Vec<u8>,
-}
+        let buffer = self.buffer.get_local_raw();
+        let buffer = unsafe { &mut *buffer.get() };
 
-/// This is useful for the ECS so we can use Single<&mut Broadcast> instead of having to use a marker struct
-#[derive(Component)]
-pub struct Broadcast {
-    pub buffer: BufRef,
-    pub local_to_write: DataWriteInfo,
-    packets: RayonLocal<LocalBroadcast>,
-}
+        encode_varint(TAG, buffer);
 
-impl Broadcast {
-    #[instrument(skip_all, name = "Broadcast::new")]
-    pub fn new(allocator: &mut BufferAllocator) -> anyhow::Result<Self> {
-        let buffer = allocator.obtain().unwrap();
-        // trace!("initializing broadcast buffers");
-        // todo: try_init
-        let packets = RayonLocal::init_with_defaults();
+        prost::encoding::encode_key(1, WireType::LengthDelimited, buffer);
+        encode_varint(ids.len() as u64, buffer);
+        buffer.extend_from_slice(data);
 
-        Ok(Self {
-            packets,
-            buffer,
-            local_to_write: DataWriteInfo::NULL,
-        })
-    }
-
-    pub fn packets_mut(&mut self) -> &mut RayonLocal<LocalBroadcast> {
-        &mut self.packets
-    }
-
-    #[must_use]
-    pub const fn packets(&self) -> &RayonLocal<LocalBroadcast> {
-        &self.packets
-    }
-
-    pub fn append<P>(&self, pkt: &P, compose: &Compose) -> anyhow::Result<()>
-    where
-        P: valence_protocol::Packet + valence_protocol::Encode,
-    {
-        // trace!("broadcasting {}", P::NAME);
-
-        let scratch = compose.scratch.get_local();
-        let mut scratch = scratch.borrow_mut();
-
-        let compressor = compose.compressor.get_local();
-        let mut compressor = compressor.borrow_mut();
-
-        let encoder = compose.encoder();
-
-        let local = self.packets.get_local_raw();
-        let local = unsafe { &mut *local.get() };
-
-        let buf = &mut local.data;
-
-        encoder.append_packet(pkt, buf, &mut *scratch, &mut compressor)?;
-
-        Ok(())
-    }
-
-    pub fn append_raw(&self, data: &[u8]) {
-        let local = self.packets.get_local_raw();
-        let local = unsafe { &mut *local.get() };
-
-        let buf = &mut local.data;
-        buf.extend_from_slice(data);
+        prost::encoding::uint64::encode_packed(2, ids, buffer);
     }
 }
-
-// #[cfg(test)]
-// mod tests {
-//     use bumpalo::Bump;
-//     use valence_protocol::{packets::login::LoginHelloC2s, Bounded};
-//
-//     use super::*;
-//     use crate::events::Scratch;
-//
-//     #[test]
-//     fn test_append_pre_compression_packet() {
-//         let mut buf = IoBuf::new(
-//             CompressionThreshold::DEFAULT,
-//             CompressionLvl::new(4).unwrap(),
-//         );
-//         let mut packets = Packets::default();
-//
-//         let pkt = LoginHelloC2s {
-//             username: Bounded::default(),
-//             profile_id: None,
-//         };
-//
-//         let bump = Bump::new();
-//         let mut scratch = Scratch::from(&bump);
-//
-//         packets
-//             .append_pre_compression_packet(&pkt, &mut buf)
-//             .unwrap();
-//
-//         assert_eq!(packets.get_write().len(), 1);
-//
-//         let len = packets.get_write()[0].len;
-//
-//         assert_eq!(len, 4); // Packet length for an empty LoginHelloC2s
-//     }
-//     #[test]
-//     fn test_append_packet() {
-//         let mut buf = IoBuf::new(
-//             CompressionThreshold::DEFAULT,
-//             CompressionLvl::new(4).unwrap(),
-//         );
-//         let mut packets = Packets::default();
-//
-//         let pkt = LoginHelloC2s {
-//             username: Bounded::default(),
-//             profile_id: None,
-//         };
-//
-//         let bump = Bump::new();
-//         let mut scratch = Scratch::from(&bump);
-//         packets.append(&pkt, &mut buf, &mut scratch).unwrap();
-//
-//         assert_eq!(packets.get_write().len(), 1);
-//         let len = packets.get_write()[0].len;
-//         assert_eq!(len, 4); // Packet length for an empty LoginHelloC2s
-//     }
-//
-//     #[test]
-//     fn test_append_raw() {
-//         let mut buf = IoBuf::new(
-//             CompressionThreshold::DEFAULT,
-//             CompressionLvl::new(4).unwrap(),
-//         );
-//         let mut packets = Packets::default();
-//
-//         let data = b"Hello, world!";
-//         packets.append_raw(data, &mut buf);
-//
-//         assert_eq!(packets.get_write().len(), 1);
-//
-//         let len = packets.get_write()[0].len;
-//         assert_eq!(len, data.len() as u32);
-//     }
-//
-//     #[test]
-//     fn test_clear() {
-//         let mut buf = IoBuf::new(
-//             CompressionThreshold::DEFAULT,
-//             CompressionLvl::new(4).unwrap(),
-//         );
-//         let mut packets = Packets::default();
-//
-//         let pkt = LoginHelloC2s {
-//             username: Bounded::default(),
-//             profile_id: None,
-//         };
-//
-//         let bump = Bump::new();
-//         let mut scratch = Scratch::from(&bump);
-//
-//         packets.append(&pkt, &mut buf, &mut scratch).unwrap();
-//         assert_eq!(packets.get_write().len(), 1);
-//
-//         packets.clear();
-//         assert_eq!(packets.get_write().len(), 0);
-//     }
-//
-//     #[test]
-//     fn test_contiguous_packets() {
-//         let mut buf = IoBuf::new(
-//             CompressionThreshold::DEFAULT,
-//             CompressionLvl::new(4).unwrap(),
-//         );
-//         let mut packets = Packets::default();
-//
-//         let pkt1 = LoginHelloC2s {
-//             username: Bounded::default(),
-//             profile_id: None,
-//         };
-//         let pkt2 = LoginHelloC2s {
-//             username: Bounded::default(),
-//             profile_id: None,
-//         };
-//
-//         let bump = Bump::new();
-//         let mut scratch = Scratch::from(&bump);
-//
-//         packets
-//             .append_pre_compression_packet(&pkt1, &mut buf, &mut scratch)
-//             .unwrap();
-//         packets
-//             .append_pre_compression_packet(&pkt2, &mut buf, &mut scratch)
-//             .unwrap();
-//
-//         assert_eq!(packets.get_write().len(), 1);
-//
-//         let len = packets.get_write()[0].len;
-//         assert_eq!(len, 8); // Combined length of both packets
-//     }
-// }

@@ -14,11 +14,7 @@ use valence_protocol::{packets::play::click_slot_c2s::SlotChange, BlockPos, Hand
 use valence_server::entity::EntityKind;
 use valence_text::Text;
 
-use crate::{
-    components::FullEntityPose,
-    net::{Server, MAX_PACKET_SIZE},
-    util::player_skin::PlayerSkin,
-};
+use crate::{components::FullEntityPose, net::MAX_PACKET_SIZE, util::player_skin::PlayerSkin};
 
 /// An event that is sent when a player clicks in the inventory.
 #[derive(TargetedEvent, Debug)]
@@ -375,9 +371,7 @@ pub struct Gametick;
 
 /// An event that is sent when it is time to send packets to clients.
 #[derive(GlobalEvent)]
-pub struct Egress<'a> {
-    pub server: &'a mut Server,
-}
+pub struct Egress;
 
 #[derive(TargetedEvent)]
 pub struct SetPlayerSkin {

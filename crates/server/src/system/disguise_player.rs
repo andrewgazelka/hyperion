@@ -67,7 +67,7 @@ pub fn disguise_player(
             continue;
         }
 
-        packets.append_raw(&bytes);
+        compose.io().unicast_raw(&bytes, packets.id());
     }
 
     sender.insert(query.id, Display(event.mob));
