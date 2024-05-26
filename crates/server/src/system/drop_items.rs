@@ -26,7 +26,7 @@ use valence_server::{
 use super::{inventory_systems::send_inventory_update, sync_entity_position::PositionSyncMetadata};
 use crate::{
     components::{Display, DroppedItemComponent, FullEntityPose, Player, Uuid},
-    event::{DropItem, GenericBulkCollitionEvent},
+    event::{DropItem, DropType, GenericBulkCollitionEvent},
     inventory::{self, PlayerInventory},
     net::{Broadcast, Compose, Packets},
     singleton::broadcast,
@@ -36,7 +36,7 @@ use crate::{
 pub struct DropQuery<'a> {
     // id: EntityId,
     position: &'a mut FullEntityPose,
-    // inventory: &'a mut PlayerInventory,
+    inventory: &'a mut PlayerInventory,
     packet: &'a mut Packets,
     _player: With<&'static Player>,
 }
@@ -53,6 +53,7 @@ pub fn drop(
         Insert<Display>,
         Spawn,
     )>,
+    broadcast: Single<&Broadcast>,
 ) {
     // let event = r.event;
     let query = r.query;
@@ -74,8 +75,23 @@ pub fn drop(
 
     s.insert(id, uuid);
     s.insert(id, PositionSyncMetadata::default());
+
+    let mut stack = query.inventory.get_main_hand().unwrap().clone();
+
+    if let DropType::Single = r.event.drop_type {
+        // remove one item from the stack
+        stack = stack.with_count(1);
+
+        // remove one item from the inventory
+        query.inventory.get_main_hand_mut().unwrap().count -= 1;
+    } else {
+        // remove all items from the stack
+        let item_ref = query.inventory.get_main_hand_mut().unwrap();
+        *item_ref = ItemStack::EMPTY;
+    }
+
     s.insert(id, DroppedItemComponent {
-        item: ItemStack::new(ItemKind::IronSword, 1, None),
+        item: stack.clone(),
     });
     s.insert(id, Display(EntityKind::ITEM));
     s.insert(id, uuid);
@@ -96,8 +112,6 @@ pub fn drop(
         velocity: Velocity([1; 3]),
     };
 
-    let stack = ItemStack::new(ItemKind::IronSword, 1, None);
-
     // we probably need a vector here because we dont know how big the buffer will be with nbt tags
     let mut buffer = Vec::<u8>::new();
     // index 8
@@ -112,8 +126,8 @@ pub fn drop(
         tracked_values: RawBytes::from(buffer.as_slice()),
     };
 
-    query.packet.append(&packet2, &compose).unwrap();
-    query.packet.append(&packet3, &compose).unwrap();
+    broadcast.append(&packet2, &compose).unwrap();
+    broadcast.append(&packet3, &compose).unwrap();
 }
 
 #[derive(Query, Clone)]

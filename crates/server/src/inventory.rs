@@ -278,6 +278,12 @@ impl PlayerInventory {
         self.items.slots.get(self.main_hand as usize)
     }
 
+    /// get item in the main hand mutable
+    #[must_use]
+    pub fn get_main_hand_mut(&mut self) -> Option<&mut ItemStack> {
+        self.items.slots.get_mut(self.main_hand as usize)
+    }
+
     /// set main hand index to
     pub fn set_main_hand(&mut self, index: u16) -> anyhow::Result<()> {
         ensure!(
