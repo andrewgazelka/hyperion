@@ -324,6 +324,9 @@ pub fn recv_data(
             }
         });
 
+    // todo:
+    // Let's remove this janky way of sending events with the targeted event system that I currently have implemented
+    // and am working out the edges. <https://github.com/andrewgazelka/targeted-bulk>
     for SendElem { id, data } in send_events.into_iter().flatten() {
         match data {
             SendData::PlayerInit(event) => real_sender.send_to(id, event),
