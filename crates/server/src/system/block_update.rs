@@ -17,6 +17,7 @@ pub fn block_update(r: Receiver<event::UpdateBlock>, compose: Compose) {
 
     compose.broadcast(&pkt).send().unwrap();
 
+    // todo: I feel like the response should go before, no?
     let pkt = play::PlayerActionResponseS2c {
         sequence: VarInt(event.sequence),
     };

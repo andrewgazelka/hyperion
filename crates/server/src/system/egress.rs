@@ -1,14 +1,10 @@
 use evenio::{event::ReceiverMut, fetch::Single};
 use tracing::instrument;
 
-use crate::{
-    components::{EgressComm, Singleton},
-    event::Egress,
-    net::IoBuf,
-};
+use crate::{components::EgressComm, event::Egress, net::IoBuf};
 
 #[instrument(skip_all, level = "trace")]
-pub fn egress(_: ReceiverMut<Egress>, mut io: Single<&mut IoBuf>, egress: Singleton<EgressComm>) {
+pub fn egress(_: ReceiverMut<Egress>, mut io: Single<&mut IoBuf>, egress: Single<&EgressComm>) {
     // ByteMut::with_capacity(1024);
     // ByteMut [----------------------------------------------------------------------] ALLOC [A]
     // we write 30 bytes to the buffer

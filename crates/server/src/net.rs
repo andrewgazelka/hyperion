@@ -72,15 +72,15 @@ impl Packets {
 
 #[derive(HandlerParam, Copy, Clone)]
 pub struct Compose<'a> {
-    compressor: Single<'a, &'static Compressors>,
-    scratch: Single<'a, &'static Scratches>,
-    global: Single<'a, &'static Global>,
-    io_buf: Single<'a, &'static IoBuf>,
+    pub compressor: Single<&'a Compressors>,
+    pub scratch: Single<&'a Scratches>,
+    pub global: Single<&'a Global>,
+    pub io_buf: Single<&'a IoBuf>,
 }
 
 impl<'a> Compose<'a> {
     /// Broadcast globally to all players
-    ///     
+    ///
     /// See <https://github.com/andrewgazelka/hyperion-proto/blob/main/src/server_to_proxy.proto#L17-L22>
     pub const fn broadcast<'b, P>(&self, packet: &'b P) -> Broadcast<'a, 'b, 'static, P>
     where
@@ -392,7 +392,7 @@ impl IoBuf {
         // tag 1
         // len [ data ]
         // data
-        // tag 2 
+        // tag 2
     }
 
     pub fn unicast_raw(&self, data: &[u8], id: u64) {

@@ -1,10 +1,10 @@
 use evenio::prelude::*;
 use tracing::instrument;
 
-use crate::{components::Singleton, event::Gametick, global::Global, net::Compose};
+use crate::{event::Gametick, global::Global, net::Compose};
 
 #[instrument(skip_all, level = "trace")]
-pub fn send_time(_: Receiver<Gametick>, compose: Compose, global: Singleton<Global>) {
+pub fn send_time(_: Receiver<Gametick>, compose: Compose, global: Single<&Global>) {
     let tick = global.tick;
     let time_of_day = tick % 24000;
 

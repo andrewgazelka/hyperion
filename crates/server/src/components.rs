@@ -23,34 +23,6 @@ pub struct EgressComm {
     tx: tokio::sync::mpsc::UnboundedSender<bytes::Bytes>,
 }
 
-#[derive(HandlerParam)]
-pub struct Singleton<'a, T>
-where
-    T: Component<Mutability = evenio::mutability::Mutable>,
-{
-    single: Single<'a, &'static mut T>,
-}
-
-impl<'a, T> Deref for Singleton<'a, T>
-where
-    T: Component<Mutability = evenio::mutability::Mutable>,
-{
-    type Target = T;
-
-    fn deref(&self) -> &Self::Target {
-        self.single.0
-    }
-}
-
-impl<'a, T> DerefMut for Singleton<'a, T>
-where
-    T: Component<Mutability = evenio::mutability::Mutable>,
-{
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        self.single.0
-    }
-}
-
 #[derive(Component, Deref, From, Display, Debug)]
 pub struct InGameName(Box<str>);
 
