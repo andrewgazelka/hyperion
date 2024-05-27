@@ -6,7 +6,7 @@ use dashmap::{DashMap, DashSet};
 use derive_more::{Deref, DerefMut};
 use evenio::component::Component;
 use fxhash::FxBuildHasher;
-use glam::I16Vec2;
+use glam::{I16Vec2, IVec2};
 use itertools::Itertools;
 use libdeflater::{CompressionLvl, Compressor};
 use tokio::{runtime::Runtime, task::JoinHandle};
@@ -14,9 +14,13 @@ use tracing::{error, instrument};
 use valence_anvil::parsing::parse_chunk;
 use valence_generated::block::BlockState;
 use valence_nbt::{compound, List};
-use valence_protocol::{packets::play, ChunkPos, CompressionThreshold, Encode, FixedArray, Ident};
+use valence_protocol::{
+    packets::play, BlockPos, ChunkPos, CompressionThreshold, Encode, FixedArray, Ident,
+};
 use valence_registry::{biome::BiomeId, BiomeRegistry, RegistryIdx};
-use valence_server::layer::chunk::{bit_width, BiomeContainer, BlockStateContainer, UnloadedChunk};
+use valence_server::layer::chunk::{
+    bit_width, BiomeContainer, BlockStateContainer, Chunk, UnloadedChunk,
+};
 
 use crate::{
     bits::BitStorage, chunk::heightmap, components::chunks::loader::Regions, default,
@@ -59,21 +63,15 @@ impl Default for Tasks {
 
 #[derive(Debug)]
 pub struct LoadedChunk {
-    pub raw: Bytes,
+    /// The raw (usually compressed) bytes of the chunk that are sent to the client via the Minecraft protocol.
+    pub packet_bytes: Bytes,
+
+    pub chunk: Option<UnloadedChunk>,
 }
 
 #[derive(Component)]
 pub struct Chunks {
     inner: Arc<ChunksInner>,
-}
-
-impl Chunks {
-    pub fn new(registry: &BiomeRegistry) -> anyhow::Result<Self> {
-        let inner = ChunksInner::new(registry)?;
-        Ok(Self {
-            inner: Arc::new(inner),
-        })
-    }
 }
 
 pub struct ChunksInner {
@@ -114,6 +112,13 @@ pub enum ChunkData {
 }
 
 impl Chunks {
+    pub fn new(registry: &BiomeRegistry) -> anyhow::Result<Self> {
+        let inner = ChunksInner::new(registry)?;
+        Ok(Self {
+            inner: Arc::new(inner),
+        })
+    }
+
     /// todo: doesn't work in loading state
     #[allow(clippy::missing_panics_doc, reason = "todo use unwrap unchecked")]
     pub fn get_and_wait(&self, position: I16Vec2, tasks: &Tasks) -> anyhow::Result<Option<Bytes>> {
@@ -122,13 +127,62 @@ impl Chunks {
             Some(ChunkData::Cached(data)) => Some(data),
             Some(ChunkData::Task(handle)) => {
                 tasks.block_on(handle)?;
-                let res = self.inner.cache.get(&position).unwrap().raw.clone();
+                let res = self
+                    .inner
+                    .cache
+                    .get(&position)
+                    .unwrap()
+                    .packet_bytes
+                    .clone();
                 Some(res)
             }
         };
 
         Ok(result)
     }
+
+    /// Returns the unloaded chunk if it is loaded, otherwise `None`.
+    // todo: return type: what do you think about the type right here?
+    // This seems really complicated.
+    // I wonder if we can just implement something, where we can return an `impl Deref`
+    // and see if this would make more sense or not.
+    #[must_use]
+
+    pub fn get_loaded_chunk(
+        &self,
+        chunk_position: I16Vec2,
+    ) -> Option<dashmap::mapref::one::MappedRef<I16Vec2, LoadedChunk, UnloadedChunk, FxBuildHasher>>
+    {
+        let loaded_ref = self.inner.cache.get(&chunk_position)?;
+
+        loaded_ref.try_map(|loaded| loaded.chunk.as_ref()).ok()
+    }
+
+    #[must_use]
+    pub fn get_block(&self, position: BlockPos) -> Option<BlockState> {
+        const START_Y: i32 = -64;
+        let chunk_pos: IVec2 = IVec2::new(position.x, position.z) >> 4;
+        let chunk_start_block: IVec2 = chunk_pos << 4;
+        let chunk_pos = chunk_pos.as_i16vec2();
+
+        let chunk = self.get_loaded_chunk(chunk_pos)?;
+
+        // todo: is this right for negative numbers?
+        // I have no idea... let's test
+        // non-absolute difference should work as well, but we want a u32
+        let x = u32::try_from(position.x - chunk_start_block[0]).unwrap();
+        let y = u32::try_from(position.y - START_Y).unwrap();
+        let z = u32::try_from(position.z - chunk_start_block[1]).unwrap();
+
+        Some(chunk.block_state(x, y, z))
+    }
+
+    // todo: allow modifying the chunk. we will need to implement resending
+    // So,
+    // for instance, if a player modifies a chunk, we're going to need to rebroadcast it to all the players in that region.
+    // However, I'm going to wait until my broadcasting code using the new proxy is done before I do this.
+    // If you want to implement this, I also recommend waiting until that's done.
+    // That should be done in a couple of days, probably.
 
     #[instrument(skip_all, level = "trace")]
     pub fn get_cached_or_load(
@@ -137,7 +191,7 @@ impl Chunks {
         tasks: &Tasks,
     ) -> anyhow::Result<Option<ChunkData>> {
         if let Some(result) = self.inner.cache.get(&position) {
-            return Ok(Some(ChunkData::Cached(result.raw.clone())));
+            return Ok(Some(ChunkData::Cached(result.packet_bytes.clone())));
         }
 
         if !self.inner.loading.insert(position) {
@@ -172,9 +226,10 @@ impl Chunks {
 
             let Ok(chunk) = parse_chunk(raw_chunk.data, &inner.biome_to_id) else {
                 error!("failed to parse chunk {position:?}");
-                inner
-                    .cache
-                    .insert(position, LoadedChunk { raw: Bytes::new() });
+                inner.cache.insert(position, LoadedChunk {
+                    packet_bytes: Bytes::new(),
+                    chunk: None,
+                });
 
                 inner.loading.remove(&position);
 
@@ -183,16 +238,18 @@ impl Chunks {
 
             STATE.with_borrow_mut(|state| {
                 let Ok(Some(bytes)) = encode_chunk_packet(&chunk, position, state) else {
-                    inner
-                        .cache
-                        .insert(position, LoadedChunk { raw: Bytes::new() });
+                    inner.cache.insert(position, LoadedChunk {
+                        packet_bytes: Bytes::new(),
+                        chunk: None,
+                    });
 
                     inner.loading.remove(&position);
                     return;
                 };
 
                 inner.cache.insert(position, LoadedChunk {
-                    raw: bytes.freeze(),
+                    packet_bytes: bytes.freeze(),
+                    chunk: Some(chunk),
                 });
 
                 let present = inner.loading.remove(&position);

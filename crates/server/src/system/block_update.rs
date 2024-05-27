@@ -21,6 +21,7 @@ pub fn block_update(
 
     broadcast.append(&pkt, &encode).unwrap();
 
+    // todo: I feel like the response should go before, no?
     let pkt = play::PlayerActionResponseS2c {
         sequence: VarInt(event.sequence),
     };

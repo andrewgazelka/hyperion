@@ -13,7 +13,7 @@ use evenio::{
 use glam::I16Vec2;
 use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
 use server::{
-    components::{ChunkLocation, FullEntityPose, Vitals, PLAYER_SPAWN_POSITION},
+    components::{chunks::Chunks, ChunkLocation, FullEntityPose, Vitals, PLAYER_SPAWN_POSITION},
     evenio::{
         entity::EntityId,
         event::{Receiver, ReceiverMut, Sender},
@@ -72,6 +72,29 @@ impl<'a> Data for BvhHuman<'a> {
     fn data(&self) -> &[EntityId] {
         core::slice::from_ref(&self.id)
     }
+}
+
+#[instrument(skip_all)]
+pub fn block_finish_break(
+    r: Receiver<event::BlockFinishBreak, ()>,
+    chunks: Single<&Chunks>,
+    sender: Sender<event::UpdateBlock>,
+) {
+    let position = r.event.position;
+
+    let block = chunks.get_block(position);
+
+    println!("block finish break {position:?} {block:?}");
+
+    let Some(block) = block else {
+        return;
+    };
+
+    sender.send(event::UpdateBlock {
+        position,
+        id: block,
+        sequence: r.event.sequence,
+    });
 }
 
 #[instrument(skip_all)]
