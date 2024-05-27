@@ -158,9 +158,9 @@ dependencies = [
 
 [[package]]
 name = "async-executor"
-version = "1.11.0"
+version = "1.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b10202063978b3351199d68f8b22c4e47e4b1b822f8d43fd862d5ea8c006b29a"
+checksum = "c8828ec6e544c02b0d6691d21ed9f9218d0384a82542855073c2a3f58304aaf0"
 dependencies = [
  "async-task",
  "concurrent-queue",
@@ -851,15 +851,40 @@ dependencies = [
 [[package]]
 name = "evenio"
 version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ead7361e14542019e9f883d2022399ef419ac240085b29ed23715f7746094e78"
+dependencies = [
+ "ahash",
+ "bumpalo",
+ "evenio_macros 0.6.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "hashbrown",
+ "indexmap",
+ "slab",
+]
+
+[[package]]
+name = "evenio"
+version = "0.6.0"
 source = "git+https://github.com/rj00a/evenio#de1fca3d486fb1ee4ee8e100f9b0e803373f300a"
 dependencies = [
  "ahash",
  "bumpalo",
- "evenio_macros",
+ "evenio_macros 0.6.0 (git+https://github.com/rj00a/evenio)",
  "hashbrown",
  "indexmap",
  "rayon",
  "slab",
+]
+
+[[package]]
+name = "evenio_macros"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5aa8c1192efdb4d5734fbdb3cbab6f018807c335eb52b01b3d1b964467cf0097"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.66",
 ]
 
 [[package]]
@@ -1326,7 +1351,7 @@ dependencies = [
 [[package]]
 name = "hyperion-proto"
 version = "0.1.0"
-source = "git+https://github.com/andrewgazelka/hyperion-proto#f82ea84d245d3c433edd8d53589af747c933b0f7"
+source = "git+https://github.com/andrewgazelka/hyperion-proto#7fa4069b8eb8310472938e8504930a64cdb5572f"
 dependencies = [
  "prost",
  "prost-build",
@@ -1397,7 +1422,7 @@ dependencies = [
  "anyhow",
  "bvh",
  "clap",
- "evenio",
+ "evenio 0.6.0 (git+https://github.com/rj00a/evenio)",
  "fastrand 2.1.0",
  "glam",
  "serde_json",
@@ -1713,16 +1738,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "num-format"
-version = "0.4.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a652d9771a63711fd3c3deb670acfbe5c30a4072e664d7a3bf5a9e1056ac72c3"
-dependencies = [
- "arrayvec",
- "itoa",
-]
-
-[[package]]
 name = "num-traits"
 version = "0.2.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1989,9 +2004,9 @@ dependencies = [
 
 [[package]]
 name = "proc-macro2"
-version = "1.0.83"
+version = "1.0.84"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0b33eb56c327dec362a9e55b3ad14f9d2f0904fb5a5b03b513ab5465399e9f43"
+checksum = "ec96c6a92621310b51366f1e28d05ef11489516e93be030060e5fc12024a49d6"
 dependencies = [
  "unicode-ident",
 ]
@@ -2129,7 +2144,7 @@ name = "rayon-local"
 version = "0.1.0"
 dependencies = [
  "divan",
- "evenio",
+ "evenio 0.6.0 (git+https://github.com/rj00a/evenio)",
  "rayon",
 ]
 
@@ -2398,18 +2413,18 @@ checksum = "61697e0a1c7e512e84a621326239844a24d8207b4669b41bc18b32ea5cbf988b"
 
 [[package]]
 name = "serde"
-version = "1.0.202"
+version = "1.0.203"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "226b61a0d411b2ba5ff6d7f73a476ac4f8bb900373459cd00fab8512828ba395"
+checksum = "7253ab4de971e72fb7be983802300c30b5a7f0c2e56fab8abfc6a214307c0094"
 dependencies = [
  "serde_derive",
 ]
 
 [[package]]
 name = "serde_derive"
-version = "1.0.202"
+version = "1.0.203"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6048858004bcff69094cd972ed40a32500f153bd3be9f716b2eed2e8217c4838"
+checksum = "500cbc0ebeb6f46627f50f3f5811ccf6bf00643be300b4c3eabc0ef55dc5b5ba"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2464,7 +2479,7 @@ dependencies = [
  "derive_more 0.99.17",
  "dirs-next",
  "divan",
- "evenio",
+ "evenio 0.6.0 (git+https://github.com/rj00a/evenio)",
  "fastrand 2.1.0",
  "flate2",
  "fxhash",
@@ -2479,7 +2494,6 @@ dependencies = [
  "mio",
  "more-asserts",
  "no_denormals",
- "num-format",
  "once_cell",
  "parking_lot",
  "prost",
@@ -2498,6 +2512,7 @@ dependencies = [
  "spin_sleep",
  "tango-bench 0.5.0",
  "tar",
+ "targeted-bulk",
  "thiserror",
  "tokio",
  "toml",
@@ -2728,6 +2743,15 @@ dependencies = [
  "filetime",
  "libc",
  "xattr",
+]
+
+[[package]]
+name = "targeted-bulk"
+version = "0.1.0"
+source = "git+https://github.com/andrewgazelka/targeted-bulk#1cea45a1b14cf31cceaf69ebd0ce075987dd6cfb"
+dependencies = [
+ "evenio 0.6.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "rayon",
 ]
 
 [[package]]

@@ -1,16 +1,15 @@
 //! All the networking related code.
 
-use std::{cell::RefCell, hash::Hash};
+use std::{borrow::Cow, cell::RefCell, hash::Hash};
 
 use bytes::BytesMut;
 pub use decoder::PacketDecoder;
-use derive_more::{Deref, DerefMut};
+use derive_more::{Constructor, Deref, DerefMut};
 use evenio::{fetch::Single, handler::HandlerParam, prelude::Component};
 use hyperion_proto::ChunkPosition;
 use libdeflater::CompressionLvl;
 use prost::encoding::{encode_varint, WireType};
 use rayon_local::RayonLocal;
-use tracing::instrument;
 
 use crate::{
     event::{Scratch, Scratches},
@@ -54,12 +53,19 @@ impl Compressors {
     }
 }
 
-#[derive(Component, Copy, Clone, Debug, PartialEq, Eq, Hash)]
+impl Default for Compressors {
+    fn default() -> Self {
+        Self::new(CompressionLvl::default())
+    }
+}
+
+#[derive(Component, Copy, Clone, Debug, PartialEq, Eq, Hash, Constructor)]
 pub struct Packets {
     id: u64,
 }
 impl Packets {
-    pub fn id(&self) -> u64 {
+    #[must_use]
+    pub const fn id(&self) -> u64 {
         self.id
     }
 }
@@ -69,14 +75,14 @@ pub struct Compose<'a> {
     compressor: Single<'a, &'static Compressors>,
     scratch: Single<'a, &'static Scratches>,
     global: Single<'a, &'static Global>,
-    io: Single<'a, &'static Io>,
+    io_buf: Single<'a, &'static IoBuf>,
 }
 
 impl<'a> Compose<'a> {
     /// Broadcast globally to all players
     ///     
     /// See <https://github.com/andrewgazelka/hyperion-proto/blob/main/src/server_to_proxy.proto#L17-L22>
-    pub fn broadcast<'b, P>(&self, packet: &'b P) -> Broadcast<'a, 'b, P>
+    pub const fn broadcast<'b, P>(&self, packet: &'b P) -> Broadcast<'a, 'b, 'static, P>
     where
         P: valence_protocol::Packet + valence_protocol::Encode,
     {
@@ -84,14 +90,20 @@ impl<'a> Compose<'a> {
             packet,
             optional: false,
             compose: *self,
+            exclude: Cow::Borrowed(&[]),
         }
     }
 
-    pub fn io(&self) -> &Io {
-        &self.io
+    #[must_use]
+    pub fn io_buf(&self) -> &IoBuf {
+        &self.io_buf
     }
 
-    pub fn broadcast_local<P>(&self, packet: &'a P, center: ChunkPosition) -> BroadcastLocal<'a, P>
+    pub const fn broadcast_local<'b, P>(
+        &'a self,
+        packet: &'b P,
+        center: ChunkPosition,
+    ) -> BroadcastLocal<'a, 'b, 'static, P>
     where
         P: valence_protocol::Packet + valence_protocol::Encode,
     {
@@ -100,6 +112,7 @@ impl<'a> Compose<'a> {
             optional: false,
             compose: *self,
             radius: 0,
+            exclude: Cow::Borrowed(&[]),
             center,
         }
     }
@@ -146,16 +159,18 @@ impl<'a> Compose<'a> {
 }
 
 /// This is useful for the ECS, so we can use Single<&mut Broadcast> instead of having to use a marker struct
-#[derive(Component)]
-pub struct Io {
+#[derive(Component, Default)]
+pub struct IoBuf {
     buffer: RayonLocal<BytesMut>,
     temp_buffer: RayonLocal<Vec<u8>>,
 }
 
-struct Broadcast<'a, 'b, P> {
+// todo: do we need this many lifetimes? we definitely need 'a and 'b I think
+pub struct Broadcast<'a, 'b, 'c, P> {
     packet: &'b P,
     optional: bool,
     compose: Compose<'a>,
+    exclude: Cow<'c, [u64]>,
 }
 
 struct Unicast<'a, 'b, P> {
@@ -170,7 +185,7 @@ where
 {
     fn send(&self) -> anyhow::Result<()> {
         self.compose
-            .io
+            .io_buf
             .unicast_private(self.packet, self.id, &self.compose)
     }
 }
@@ -187,13 +202,14 @@ where
 {
     fn send(&self) -> anyhow::Result<()> {
         self.compose
-            .io
+            .io_buf
             .multicast_private(self.packet, self.ids, &self.compose)
     }
 }
 
-impl<'a, 'b, P> Broadcast<'a, 'b, P> {
-    pub fn optional(mut self) -> Self {
+impl<'a, 'b, 'c, P> Broadcast<'a, 'b, 'c, P> {
+    #[must_use]
+    pub const fn optional(mut self) -> Self {
         self.optional = true;
         self
     }
@@ -202,27 +218,49 @@ impl<'a, 'b, P> Broadcast<'a, 'b, P> {
     where
         P: valence_protocol::Packet + valence_protocol::Encode,
     {
+        let bytes = unsafe {
+            self.compose
+                .io_buf
+                .encode_packet(self.packet, &self.compose)
+        }?;
+
         self.compose
-            .io
-            .broadcast_private(self.packet, &self.compose, self.optional)
+            .io_buf
+            .broadcast_raw(bytes, self.optional, &self.exclude);
+
+        Ok(())
+    }
+
+    // todo: discuss whether we should have Into<Cow<'c, [u64]>> or Cow<'c, [u64]>
+    // I personally think it makes sense to have `Cow` just so we can have a more flexible API.
+    pub fn exclude<'d>(self, exclude: impl Into<Cow<'d, [u64]>>) -> Broadcast<'a, 'b, 'd, P> {
+        Broadcast {
+            packet: self.packet,
+            optional: self.optional,
+            compose: self.compose,
+            exclude: exclude.into(),
+        }
     }
 }
 
-struct BroadcastLocal<'a, P> {
-    packet: &'a P,
+pub struct BroadcastLocal<'a, 'b, 'c, P> {
+    packet: &'b P,
     compose: Compose<'a>,
     radius: u32,
     center: ChunkPosition,
     optional: bool,
+    exclude: Cow<'c, [u64]>,
 }
 
-impl<'a, P> BroadcastLocal<'a, P> {
-    fn radius(mut self, radius: u32) -> Self {
+impl<'a, 'b, 'c, P> BroadcastLocal<'a, 'b, 'c, P> {
+    #[must_use]
+    pub const fn radius(mut self, radius: u32) -> Self {
         self.radius = radius;
         self
     }
 
-    fn optional(mut self) -> Self {
+    #[must_use]
+    pub const fn optional(mut self) -> Self {
         self.optional = true;
         self
     }
@@ -231,27 +269,38 @@ impl<'a, P> BroadcastLocal<'a, P> {
     where
         P: valence_protocol::Packet + valence_protocol::Encode,
     {
-        self.compose.io.broadcast_local_private(
-            self.packet,
-            &self.compose,
+        let bytes = unsafe {
+            self.compose
+                .io_buf
+                .encode_packet(self.packet, &self.compose)
+        }?;
+
+        self.compose.io_buf.broadcast_local_raw(
+            bytes,
             self.center,
             self.radius,
             self.optional,
-        )
+            &self.exclude,
+        );
+
+        Ok(())
+    }
+
+    pub fn exclude<'d>(self, exclude: impl Into<Cow<'d, [u64]>>) -> BroadcastLocal<'a, 'b, 'd, P> {
+        BroadcastLocal {
+            packet: self.packet,
+            compose: self.compose,
+            radius: self.radius,
+            center: self.center,
+            optional: self.optional,
+            exclude: exclude.into(),
+        }
     }
 }
 
-impl Io {
-    #[instrument(skip_all)]
-    pub fn new() -> anyhow::Result<Self> {
-        Ok(Self {
-            buffer: RayonLocal::init_with_defaults(),
-            temp_buffer: RayonLocal::init_with_defaults(),
-        })
-    }
-
+impl IoBuf {
     pub fn split(&mut self) -> impl Iterator<Item = BytesMut> + '_ {
-        self.buffer.get_all_mut().into_iter().map(|buf| buf.split())
+        self.buffer.get_all_mut().iter_mut().map(BytesMut::split)
     }
 
     unsafe fn encode_packet<P>(&self, packet: &P, compose: &Compose) -> anyhow::Result<&[u8]>
@@ -276,36 +325,6 @@ impl Io {
         Ok(temp_buffer.as_slice())
     }
 
-    fn broadcast_private<P>(
-        &self,
-        packet: &P,
-        compose: &Compose,
-        optional: bool,
-    ) -> anyhow::Result<()>
-    where
-        P: valence_protocol::Packet + valence_protocol::Encode,
-    {
-        let bytes = unsafe { self.encode_packet(packet, compose) }?;
-        self.broadcast_raw(bytes, optional);
-        Ok(())
-    }
-
-    fn broadcast_local_private<P>(
-        &self,
-        packet: &P,
-        compose: &Compose,
-        center: ChunkPosition,
-        radius: u32,
-        optional: bool,
-    ) -> anyhow::Result<()>
-    where
-        P: valence_protocol::Packet + valence_protocol::Encode,
-    {
-        let bytes = unsafe { self.encode_packet(packet, compose) }?;
-        self.broadcast_local_raw(bytes, center, radius, optional);
-        Ok(())
-    }
-
     fn unicast_private<P>(&self, packet: &P, id: u64, compose: &Compose) -> anyhow::Result<()>
     where
         P: valence_protocol::Packet + valence_protocol::Encode,
@@ -324,12 +343,17 @@ impl Io {
         Ok(())
     }
 
+    #[allow(
+        clippy::needless_pass_by_value,
+        reason = "todo should have something that impl copy/clone"
+    )]
     pub fn broadcast_local_raw(
         &self,
         data: &[u8],
         center: ChunkPosition,
         radius: u32,
         optional: bool,
+        exclude: &[u64],
     ) {
         const TAG: u64 = 3;
 
@@ -351,23 +375,24 @@ impl Io {
         if optional {
             prost::encoding::bool::encode(4, &optional, buffer);
         }
+
+        if !exclude.is_empty() {
+            prost::encoding::uint64::encode_packed(5, exclude, buffer);
+        }
     }
 
-    pub fn broadcast_raw(&self, data: &[u8], optional: bool) {
-        const TAG: u64 = 2;
+    pub fn broadcast_raw(&self, data: &[u8], optional: bool, exclude: &[u64]) {
+        const TAG: u32 = 2;
 
         let buffer = self.buffer.get_local_raw();
         let buffer = unsafe { &mut *buffer.get() };
 
-        encode_varint(TAG, buffer);
-
-        prost::encoding::encode_key(1, WireType::LengthDelimited, buffer);
-        encode_varint(data.len() as u64, buffer);
-        buffer.extend_from_slice(data);
-
-        if optional {
-            prost::encoding::bool::encode(2, &optional, buffer);
-        }
+        // tag 2
+        // len [ BroadcastPacket ]
+        // tag 1
+        // len [ data ]
+        // data
+        // tag 2 
     }
 
     pub fn unicast_raw(&self, data: &[u8], id: u64) {
@@ -398,5 +423,99 @@ impl Io {
         buffer.extend_from_slice(data);
 
         prost::encoding::uint64::encode_packed(2, ids, buffer);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use evenio::{
+        event::{GlobalEvent, Receiver},
+        prelude::World,
+    };
+    use hyperion_proto as proto;
+    use prost::Message;
+
+    use crate::{
+        event::Scratches,
+        global::Global,
+        net::{Compose, Compressors, IoBuf},
+    };
+
+    fn rand_bytes_array(len: usize) -> Vec<u8> {
+        (0..len).map(|_| fastrand::u8(..)).collect()
+    }
+
+    fn rand_u64_array(len: usize) -> Vec<u64> {
+        (0..len).map(|_| fastrand::u64(..)).collect()
+    }
+
+    fn test_handler(_: Receiver<TestEvent>, compose: Compose) {
+        let mut buf = Vec::new();
+
+        for _ in 0..1 {
+            let len = fastrand::usize(..100);
+            let taxicab_radius = fastrand::u32(..300);
+
+            let center_x = fastrand::i32(..);
+            let center_y = fastrand::i32(..);
+
+            let center = proto::ChunkPosition::new(center_x, center_y);
+            let center = Some(center);
+
+            let optional = fastrand::bool();
+
+            let len_exclude = fastrand::usize(..100);
+            let exclude = rand_u64_array(len_exclude);
+
+            let data = rand_bytes_array(len);
+
+            // encode using hyperion's definition
+            compose.io_buf().broadcast_raw(&data, optional, &exclude);
+
+            let local = proto::BroadcastLocal {
+                data,
+                taxicab_radius,
+                center,
+                optional,
+                exclude,
+            };
+
+            let local = proto::ServerToProxyMessage::BroadcastLocal(local);
+            let local = proto::ServerToProxy {
+                server_to_proxy_message: Some(local),
+            };
+
+            // encode using prost's definition which is almost surely correct according to protobuf spec
+            local.encode(&mut buf).unwrap();
+
+            let hyperion_buf = compose.io_buf();
+            let hyperion_buf = hyperion_buf.buffer.get_local_raw();
+            let hyperion_buf = unsafe { &mut *hyperion_buf.get() };
+            let hyperion_buf = &**hyperion_buf;
+
+            assert_eq!(buf, hyperion_buf);
+
+
+        }
+    }
+
+    #[derive(GlobalEvent)]
+    struct TestEvent;
+
+    #[test]
+    fn test_round_trip() {
+        fastrand::seed(7);
+        let mut world = World::new();
+
+        // todo: this is a bad way to do things (probably) but I don't really care
+        let id = world.spawn();
+        world.insert(id, Compressors::default());
+        world.insert(id, Scratches::default());
+        world.insert(id, Global::default());
+        world.insert(id, IoBuf::default());
+
+        world.add_handler(test_handler);
+
+        world.send(TestEvent);
     }
 }

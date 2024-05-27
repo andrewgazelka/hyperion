@@ -37,7 +37,6 @@ use evenio::prelude::*;
 use humansize::{SizeFormatter, BINARY};
 use libc::{getrlimit, setrlimit, RLIMIT_NOFILE};
 use libdeflater::CompressionLvl;
-use num_format::Locale;
 use signal_hook::iterator::Signals;
 use singleton::bounding_box;
 use spin::Lazy;
@@ -52,12 +51,12 @@ use crate::{
     },
     event::{Egress, Gametick, Scratches, Stats},
     global::Global,
-    net::{Compressors, Io, S2C_BUFFER_SIZE},
+    net::{Compressors, IoBuf, S2C_BUFFER_SIZE},
     singleton::{
         fd_lookup::StreamLookup, player_aabb_lookup::PlayerBoundingBoxes,
         player_id_lookup::EntityIdLookup, player_uuid_lookup::PlayerUuidLookup,
     },
-    system::{generate_biome_registry, generate_ingress_events},
+    system::generate_biome_registry,
 };
 
 pub mod components;
@@ -113,15 +112,9 @@ pub fn adjust_file_descriptor_limits(recommended_min: u64) -> std::io::Result<()
 
     if unsafe { getrlimit(RLIMIT_NOFILE, &mut limits) } == 0 {
         // Create a stack-allocated buffer...
-        let mut rlim_cur = num_format::Buffer::default();
-        rlim_cur.write_formatted(&limits.rlim_cur, &Locale::en);
 
-        info!("current soft limit: {rlim_cur}");
-
-        let mut rlim_max = num_format::Buffer::default();
-        rlim_max.write_formatted(&limits.rlim_max, &Locale::en);
-
-        info!("current hard limit: {rlim_max}");
+        info!("current soft limit: {}", limits.rlim_cur);
+        info!("current hard limit: {}", limits.rlim_max);
     } else {
         error!("Failed to get the current file handle limits");
         return Err(std::io::Error::last_os_error());
@@ -135,10 +128,8 @@ pub fn adjust_file_descriptor_limits(recommended_min: u64) -> std::io::Result<()
     }
 
     limits.rlim_cur = limits.rlim_max;
-    let mut new_limit = num_format::Buffer::default();
-    new_limit.write_formatted(&limits.rlim_cur, &Locale::en);
 
-    info!("setting soft limit to: {new_limit}");
+    info!("setting soft limit to: {}", limits.rlim_cur);
 
     if unsafe { setrlimit(RLIMIT_NOFILE, &limits) } != 0 {
         error!("Failed to set the file handle limits");
@@ -306,9 +297,7 @@ impl Hyperion {
             .context("could not get first address")?;
 
         let broadcast = world.spawn();
-        world.insert(broadcast, Io::new()?);
-
-        world.insert(buffers_id, buffers_elem);
+        world.insert(broadcast, IoBuf::default());
 
         world.add_handler(system::ingress::add_player);
         world.add_handler(system::ingress::remove_player);
@@ -401,7 +390,6 @@ impl Hyperion {
             world,
             last_ticks: VecDeque::default(),
             tick_on: 0,
-            server: server_def,
         };
 
         game.last_ticks.push_back(Instant::now());
@@ -470,16 +458,12 @@ impl Hyperion {
 
         self.last_ticks.push_back(now);
 
-        generate_ingress_events(&mut self.world, &mut self.server);
-
         tracing::span!(tracing::Level::TRACE, "gametick").in_scope(|| {
             self.world.send(Gametick);
         });
 
-        let server = &mut self.server;
-
         tracing::span!(tracing::Level::TRACE, "egress-event").in_scope(|| {
-            self.world.send(Egress { server });
+            self.world.send(Egress);
         });
 
         #[expect(

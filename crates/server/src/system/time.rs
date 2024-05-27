@@ -15,7 +15,7 @@ pub fn send_time(_: Receiver<Gametick>, compose: Compose, global: Singleton<Glob
             time_of_day,
         };
 
-        compose.broadcast(&pkt).unwrap();
+        compose.broadcast(&pkt).send().unwrap();
     }
 }
 

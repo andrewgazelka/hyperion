@@ -2,9 +2,7 @@ use std::io::Cursor;
 
 use anyhow::{bail, Context};
 use bytes::BytesMut;
-use hyperion_proto::{
-    PlayerConnect, PlayerDisconnect, PlayerPackets, ProxyToServer, ProxyToServerMessage,
-};
+use hyperion_proto::{PlayerConnect, PlayerDisconnect, ProxyToServer, ProxyToServerMessage};
 use parking_lot::Mutex;
 use prost::{encoding::decode_varint, Message};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -12,19 +10,23 @@ use tracing::instrument;
 
 use crate::components::chunks::Tasks;
 
-struct ReceiveState {
-    player_connect: Vec<PlayerConnect>,
-    player_disconnect: Vec<PlayerDisconnect>,
-    packets: Vec<PlayerPackets>,
+pub struct ReceiveState {
+    pub player_connect: Vec<PlayerConnect>,
+    pub player_disconnect: Vec<PlayerDisconnect>,
+    pub packets: targeted_bulk::TargetedEvents<bytes::Bytes, u64>,
 }
 
-struct ProxyComms {
-    tx: tokio::sync::mpsc::UnboundedSender<bytes::Bytes>,
-    shared: Mutex<ReceiveState>,
+pub struct ProxyComms {
+    pub tx: tokio::sync::mpsc::UnboundedSender<bytes::Bytes>,
+
+    /// Should we use std Mutex instead? think we will need to benchmark
+    ///
+    /// <https://users.rust-lang.org/t/which-mutex-to-use-parking-lot-or-std-sync/85060/6>
+    pub shared: Mutex<ReceiveState>,
 }
 
 fn init_proxy_comms(
-    tasks: Tasks,
+    tasks: &Tasks,
     socket: tokio::net::TcpStream,
     mut server_to_proxy: tokio::sync::mpsc::UnboundedReceiver<bytes::Bytes>,
     shared: Mutex<ReceiveState>,
@@ -52,7 +54,10 @@ fn init_proxy_comms(
                     shared.lock().player_disconnect.push(message);
                 }
                 ProxyToServerMessage::PlayerPackets(message) => {
-                    shared.lock().packets.push(message);
+                    shared
+                        .lock()
+                        .packets
+                        .push_exclusive(message.stream, message.data);
                 }
             }
         }

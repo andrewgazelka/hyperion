@@ -9,7 +9,7 @@ use valence_protocol::{
 use crate::{
     event::Stats,
     global::Global,
-    net::{Compose, Io},
+    net::{Compose, IoBuf},
 };
 
 #[instrument(skip_all, level = "trace")]

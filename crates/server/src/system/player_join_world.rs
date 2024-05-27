@@ -172,7 +172,7 @@ pub fn player_join_world(
     compose.broadcast(&text).send().unwrap();
 
     let local = query.packets;
-    compose.io().unicast_raw(&cached_data, local.id());
+    compose.io_buf().unicast_raw(cached_data, local.id());
 
     trace!("appending cached data");
 

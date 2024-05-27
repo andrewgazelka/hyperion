@@ -38,7 +38,7 @@ where
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
-        &self.single.0
+        self.single.0
     }
 }
 
@@ -47,7 +47,7 @@ where
     T: Component<Mutability = evenio::mutability::Mutable>,
 {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.single.0
+        self.single.0
     }
 }
 
