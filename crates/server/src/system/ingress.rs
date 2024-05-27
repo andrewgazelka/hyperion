@@ -1,4 +1,3 @@
-use arrayvec::ArrayVec;
 use derive_more::From;
 use evenio::{
     entity::EntityId,
@@ -7,10 +6,9 @@ use evenio::{
     world::World,
 };
 use fxhash::FxHashMap;
-use rayon::iter::{IntoParallelRefIterator, IntoParallelRefMutIterator, ParallelIterator};
-use rayon_local::RayonLocal;
+use rayon::iter::ParallelIterator;
 use serde_json::json;
-use tracing::{instrument, span, trace, warn, Level};
+use tracing::{instrument, trace, warn};
 use valence_protocol::{
     decode::PacketFrame,
     packets,
@@ -22,7 +20,6 @@ use crate::{
     event::{self},
     global::Global,
     singleton::fd_lookup::StreamLookup,
-    CowBytes,
 };
 
 mod player_packet_buffer;
@@ -30,7 +27,6 @@ mod player_packet_buffer;
 use crate::{
     components::{FullEntityPose, LoginState},
     net::{proxy::ProxyComms, Compose, Packets, MINECRAFT_VERSION, PROTOCOL_VERSION},
-    packets::PacketSwitchQuery,
     singleton::{fd_lookup::StreamId, player_id_lookup::EntityIdLookup},
     system::ingress::player_packet_buffer::DecodeBuffer,
 };
@@ -108,7 +104,7 @@ pub fn generate_ingress_events(world: &mut World, server: &mut ProxyComms) {
 #[allow(clippy::too_many_arguments, reason = "todo")]
 pub fn add_player(
     r: ReceiverMut<AddPlayer>,
-    mut fd_lookup: Single<&mut StreamLookup>,
+    fd_lookup: Single<&mut StreamLookup>,
     sender: Sender<(
         Spawn,
         Insert<LoginState>,
@@ -215,7 +211,7 @@ pub fn recv_data(
     r: ReceiverMut<RecvDataBulk>,
     fd_lookup: Single<&mut StreamLookup>,
     global: Single<&Global>,
-    mut players: Fetcher<(
+    players: Fetcher<(
         &mut LoginState,
         &mut DecodeBuffer,
         &Packets,

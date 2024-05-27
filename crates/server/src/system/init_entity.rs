@@ -13,7 +13,7 @@ use crate::{
         Display, EntityReaction, FullEntityPose, ImmuneStatus, Npc, RunningSpeed, Uuid, Vitals,
     },
     event::InitEntity,
-    net::{Compose, IoBuf},
+    net::Compose,
     singleton::player_id_lookup::EntityIdLookup,
     system::sync_entity_position::PositionSyncMetadata,
 };

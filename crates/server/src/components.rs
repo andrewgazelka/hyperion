@@ -1,11 +1,8 @@
-use std::{
-    ops::{Deref, DerefMut},
-    time::Instant,
-};
+use std::time::Instant;
 
 use bvh_region::aabb::Aabb;
 use derive_more::{Deref, DerefMut, Display, From};
-use evenio::{component::Component, handler::HandlerParam, prelude::Single};
+use evenio::component::Component;
 use glam::{I16Vec2, Vec3};
 use valence_server::entity::EntityKind;
 

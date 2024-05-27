@@ -8,11 +8,7 @@ use crate::{
 };
 
 #[instrument(skip_all)]
-pub fn pose_update(
-    r: Receiver<event::PoseUpdate, EntityId>,
-    broadcast: Single<&IoBuf>,
-    compose: Compose,
-) {
+pub fn pose_update(r: Receiver<event::PoseUpdate, EntityId>, compose: Compose) {
     // Server to Client (S2C):
     // Entity Metadata packet (0x52).
 

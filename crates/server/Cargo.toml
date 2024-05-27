@@ -96,6 +96,7 @@ cast_precision_loss = "allow"
 missing_errors_doc = "allow"
 module_name_repetitions = "allow"
 missing_panics_doc = "allow"
+needless_pass_by_value = "allow"
 
 perf = "deny"
 style = "deny"

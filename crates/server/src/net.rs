@@ -8,7 +8,7 @@ use derive_more::{Constructor, Deref, DerefMut};
 use evenio::{fetch::Single, handler::HandlerParam, prelude::Component};
 use hyperion_proto::ChunkPosition;
 use libdeflater::CompressionLvl;
-use prost::encoding::{encode_varint, WireType};
+use prost::Message;
 use rayon_local::RayonLocal;
 
 use crate::{
@@ -61,12 +61,12 @@ impl Default for Compressors {
 
 #[derive(Component, Copy, Clone, Debug, PartialEq, Eq, Hash, Constructor)]
 pub struct Packets {
-    id: u64,
+    stream_id: u64,
 }
 impl Packets {
     #[must_use]
-    pub const fn id(&self) -> u64 {
-        self.id
+    pub const fn stream(&self) -> u64 {
+        self.stream_id
     }
 }
 
@@ -123,7 +123,7 @@ impl<'a> Compose<'a> {
     {
         Unicast {
             packet,
-            id: id.id,
+            id: id.stream_id,
             compose: *self,
         }
         .send()
@@ -162,7 +162,7 @@ impl<'a> Compose<'a> {
 #[derive(Component, Default)]
 pub struct IoBuf {
     buffer: RayonLocal<BytesMut>,
-    temp_buffer: RayonLocal<Vec<u8>>,
+    temp_buffer: RayonLocal<BytesMut>,
 }
 
 // todo: do we need this many lifetimes? we definitely need 'a and 'b I think
@@ -218,11 +218,10 @@ impl<'a, 'b, 'c, P> Broadcast<'a, 'b, 'c, P> {
     where
         P: valence_protocol::Packet + valence_protocol::Encode,
     {
-        let bytes = unsafe {
-            self.compose
-                .io_buf
-                .encode_packet(self.packet, &self.compose)
-        }?;
+        let bytes = self
+            .compose
+            .io_buf
+            .encode_packet(self.packet, &self.compose)?;
 
         self.compose
             .io_buf
@@ -269,11 +268,10 @@ impl<'a, 'b, 'c, P> BroadcastLocal<'a, 'b, 'c, P> {
     where
         P: valence_protocol::Packet + valence_protocol::Encode,
     {
-        let bytes = unsafe {
-            self.compose
-                .io_buf
-                .encode_packet(self.packet, &self.compose)
-        }?;
+        let bytes = self
+            .compose
+            .io_buf
+            .encode_packet(self.packet, &self.compose)?;
 
         self.compose.io_buf.broadcast_local_raw(
             bytes,
@@ -303,14 +301,12 @@ impl IoBuf {
         self.buffer.get_all_mut().iter_mut().map(BytesMut::split)
     }
 
-    unsafe fn encode_packet<P>(&self, packet: &P, compose: &Compose) -> anyhow::Result<&[u8]>
+    fn encode_packet<P>(&self, packet: &P, compose: &Compose) -> anyhow::Result<bytes::Bytes>
     where
         P: valence_protocol::Packet + valence_protocol::Encode,
     {
         let temp_buffer = self.temp_buffer.get_local_raw();
         let temp_buffer = unsafe { &mut *temp_buffer.get() };
-
-        temp_buffer.clear();
 
         let compressor = compose.compressor.get_local();
         let mut compressor = compressor.borrow_mut();
@@ -318,18 +314,19 @@ impl IoBuf {
         let scratch = compose.scratch.get_local();
         let mut scratch = scratch.borrow_mut();
 
-        compose
-            .encoder()
-            .append_packet(packet, temp_buffer, &mut *scratch, &mut compressor)?;
+        let result =
+            compose
+                .encoder()
+                .append_packet(packet, temp_buffer, &mut *scratch, &mut compressor)?;
 
-        Ok(temp_buffer.as_slice())
+        Ok(result.freeze())
     }
 
     fn unicast_private<P>(&self, packet: &P, id: u64, compose: &Compose) -> anyhow::Result<()>
     where
         P: valence_protocol::Packet + valence_protocol::Encode,
     {
-        let bytes = unsafe { self.encode_packet(packet, compose) }?;
+        let bytes = self.encode_packet(packet, compose)?;
         self.unicast_raw(bytes, id);
         Ok(())
     }
@@ -338,7 +335,7 @@ impl IoBuf {
     where
         P: valence_protocol::Packet + valence_protocol::Encode,
     {
-        let bytes = unsafe { self.encode_packet(packet, compose) }?;
+        let bytes = self.encode_packet(packet, compose)?;
         self.multicast_raw(bytes, ids);
         Ok(())
     }
@@ -349,80 +346,69 @@ impl IoBuf {
     )]
     pub fn broadcast_local_raw(
         &self,
-        data: &[u8],
+        data: bytes::Bytes,
         center: ChunkPosition,
         radius: u32,
         optional: bool,
         exclude: &[u64],
     ) {
-        const TAG: u64 = 3;
-
         let buffer = self.buffer.get_local_raw();
         let buffer = unsafe { &mut *buffer.get() };
 
-        encode_varint(TAG, buffer);
+        let to_send = hyperion_proto::BroadcastLocal {
+            data,
+            taxicab_radius: radius,
+            center: Some(center),
+            optional,
+            exclude: exclude.to_vec(),
+        };
 
-        prost::encoding::encode_key(1, WireType::LengthDelimited, buffer);
-        encode_varint(data.len() as u64, buffer);
-        buffer.extend_from_slice(data);
-
-        if radius != 0 {
-            prost::encoding::uint32::encode(2, &radius, buffer);
-        }
-
-        prost::encoding::message::encode(3, &center, buffer);
-
-        if optional {
-            prost::encoding::bool::encode(4, &optional, buffer);
-        }
-
-        if !exclude.is_empty() {
-            prost::encoding::uint64::encode_packed(5, exclude, buffer);
-        }
+        hyperion_proto::ServerToProxy::from(to_send)
+            .encode(buffer)
+            .unwrap();
     }
 
-    pub fn broadcast_raw(&self, data: &[u8], optional: bool, exclude: &[u64]) {
-        const TAG: u32 = 2;
-
+    pub fn broadcast_raw(&self, data: bytes::Bytes, optional: bool, exclude: &[u64]) {
         let buffer = self.buffer.get_local_raw();
         let buffer = unsafe { &mut *buffer.get() };
 
-        // tag 2
-        // len [ BroadcastPacket ]
-        // tag 1
-        // len [ data ]
-        // data
-        // tag 2
+        let to_send = hyperion_proto::BroadcastGlobal {
+            data,
+            optional,
+            // todo: Right now, we are using `to_vec`.
+            // We want to probably allow encoding without allocation in the future.
+            // Fortunately, `to_vec` will not require any allocation if the buffer is empty.
+            exclude: exclude.to_vec(),
+        };
+
+        hyperion_proto::ServerToProxy::from(to_send)
+            .encode(buffer)
+            .unwrap();
     }
 
-    pub fn unicast_raw(&self, data: &[u8], id: u64) {
-        const TAG: u64 = 5;
-
+    pub fn unicast_raw(&self, data: bytes::Bytes, stream: u64) {
         let buffer = self.buffer.get_local_raw();
         let buffer = unsafe { &mut *buffer.get() };
 
-        encode_varint(TAG, buffer);
+        let to_send = hyperion_proto::Unicast { data, stream };
 
-        prost::encoding::encode_key(1, WireType::LengthDelimited, buffer);
-        encode_varint(data.len() as u64, buffer);
-        buffer.extend_from_slice(data);
-
-        prost::encoding::uint64::encode(2, &id, buffer);
+        hyperion_proto::ServerToProxy::from(to_send)
+            .encode(buffer)
+            .unwrap();
     }
 
-    pub fn multicast_raw(&self, data: &[u8], ids: &[u64]) {
-        const TAG: u64 = 4;
-
+    pub fn multicast_raw(&self, data: bytes::Bytes, streams: &[u64]) {
         let buffer = self.buffer.get_local_raw();
         let buffer = unsafe { &mut *buffer.get() };
 
-        encode_varint(TAG, buffer);
+        let to_send = hyperion_proto::Multicast {
+            data,
+            stream: streams.to_vec(),
+        };
 
-        prost::encoding::encode_key(1, WireType::LengthDelimited, buffer);
-        encode_varint(ids.len() as u64, buffer);
-        buffer.extend_from_slice(data);
-
-        prost::encoding::uint64::encode_packed(2, ids, buffer);
+        hyperion_proto::ServerToProxy::from(to_send)
+            .encode(buffer)
+            .unwrap();
     }
 }
 
@@ -441,7 +427,7 @@ mod tests {
         net::{Compose, Compressors, IoBuf},
     };
 
-    fn rand_bytes_array(len: usize) -> Vec<u8> {
+    fn rand_bytes(len: usize) -> bytes::Bytes {
         (0..len).map(|_| fastrand::u8(..)).collect()
     }
 
@@ -450,7 +436,7 @@ mod tests {
     }
 
     fn test_handler(_: Receiver<TestEvent>, compose: Compose) {
-        let mut buf = Vec::new();
+        let mut left_buf = Vec::new();
 
         for _ in 0..1 {
             let len = fastrand::usize(..100);
@@ -460,19 +446,26 @@ mod tests {
             let center_y = fastrand::i32(..);
 
             let center = proto::ChunkPosition::new(center_x, center_y);
-            let center = Some(center);
 
             let optional = fastrand::bool();
 
             let len_exclude = fastrand::usize(..100);
             let exclude = rand_u64_array(len_exclude);
 
-            let data = rand_bytes_array(len);
+            let data = rand_bytes(len);
 
             // encode using hyperion's definition
-            compose.io_buf().broadcast_raw(&data, optional, &exclude);
+            compose.io_buf().broadcast_local_raw(
+                data.clone(),
+                center,
+                taxicab_radius,
+                optional,
+                &exclude,
+            );
 
-            let local = proto::BroadcastLocal {
+            let center = Some(center);
+
+            let left = proto::BroadcastLocal {
                 data,
                 taxicab_radius,
                 center,
@@ -480,22 +473,20 @@ mod tests {
                 exclude,
             };
 
-            let local = proto::ServerToProxyMessage::BroadcastLocal(local);
-            let local = proto::ServerToProxy {
-                server_to_proxy_message: Some(local),
+            let left = proto::ServerToProxyMessage::BroadcastLocal(left);
+            let left = proto::ServerToProxy {
+                server_to_proxy_message: Some(left),
             };
 
             // encode using prost's definition which is almost surely correct according to protobuf spec
-            local.encode(&mut buf).unwrap();
+            left.encode(&mut left_buf).unwrap();
 
-            let hyperion_buf = compose.io_buf();
-            let hyperion_buf = hyperion_buf.buffer.get_local_raw();
-            let hyperion_buf = unsafe { &mut *hyperion_buf.get() };
-            let hyperion_buf = &**hyperion_buf;
+            let right_buf = compose.io_buf();
+            let right_buf = right_buf.buffer.get_local_raw();
+            let right_buf = unsafe { &mut *right_buf.get() };
+            let right_buf = &**right_buf;
 
-            assert_eq!(buf, hyperion_buf);
-
-
+            assert_eq!(left_buf, right_buf);
         }
     }
 

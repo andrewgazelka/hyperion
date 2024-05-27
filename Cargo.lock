@@ -1351,7 +1351,7 @@ dependencies = [
 [[package]]
 name = "hyperion-proto"
 version = "0.1.0"
-source = "git+https://github.com/andrewgazelka/hyperion-proto#7fa4069b8eb8310472938e8504930a64cdb5572f"
+source = "git+https://github.com/andrewgazelka/hyperion-proto#8469460d22f8afcf5fc000bf0c8523d829c25992"
 dependencies = [
  "prost",
  "prost-build",

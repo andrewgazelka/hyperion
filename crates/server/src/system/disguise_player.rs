@@ -1,9 +1,9 @@
 use std::borrow::Cow;
 
+use bytes::BytesMut;
 use evenio::{
     entity::EntityId,
     event::{EventMut, Insert, ReceiverMut, Sender},
-    fetch::Fetcher,
     query::Query,
 };
 use tracing::instrument;
@@ -21,12 +21,12 @@ pub struct DisguisePlayerQuery<'a> {
     id: EntityId,
     uuid: &'a Uuid,
     pose: &'a FullEntityPose,
+    packets: &'a Packets,
 }
 
 #[instrument(skip_all, level = "trace")]
 pub fn disguise_player(
     r: ReceiverMut<event::DisguisePlayer, DisguisePlayerQuery>,
-    all_packets: Fetcher<(&mut Packets, EntityId)>,
     compose: Compose,
     sender: Sender<Insert<Display>>,
 ) {
@@ -39,7 +39,7 @@ pub fn disguise_player(
     };
     let spawn_pkt = spawn_entity_packet(query.id, event.mob, *query.uuid, query.pose);
 
-    let mut bytes = Vec::new();
+    let mut bytes = BytesMut::new();
 
     compose
         .encoder()
@@ -61,14 +61,11 @@ pub fn disguise_player(
         )
         .unwrap();
 
-    // todo: add broadcast with mask
-    for (packets, id) in all_packets {
-        if id == query.id {
-            continue;
-        }
+    let bytes = bytes.freeze();
 
-        compose.io_buf().unicast_raw(&bytes, packets.id());
-    }
+    compose
+        .io_buf()
+        .broadcast_raw(bytes, false, &[query.packets.stream()]);
 
     sender.insert(query.id, Display(event.mob));
 }

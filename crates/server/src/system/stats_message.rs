@@ -6,11 +6,7 @@ use valence_protocol::{
     text::IntoText,
 };
 
-use crate::{
-    event::Stats,
-    global::Global,
-    net::{Compose, IoBuf},
-};
+use crate::{event::Stats, global::Global, net::Compose};
 
 #[instrument(skip_all, level = "trace")]
 pub fn stats_message(r: ReceiverMut<Stats>, compose: Compose, global: Single<&Global>) {

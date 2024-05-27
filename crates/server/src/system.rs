@@ -48,7 +48,6 @@ pub use egress::egress;
 pub use entity_detect_collisions::entity_detect_collisions;
 pub use entity_move_logic::entity_move_logic;
 pub use generate_egress_packets::generate_egress_packets;
-pub use ingress::generate_ingress_events;
 pub use init_entity::init_entity;
 pub use init_player::init_player;
 pub use inventory_systems::{get_inventory_actions, give_command};

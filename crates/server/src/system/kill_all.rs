@@ -5,7 +5,7 @@ use valence_protocol::VarInt;
 use crate::{
     components::{Npc, Player},
     event::KillAllEntities,
-    net::{Compose, IoBuf},
+    net::Compose,
 };
 
 #[instrument(skip_all)]

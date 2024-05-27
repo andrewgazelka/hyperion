@@ -131,16 +131,18 @@ pub fn player_join_world(
 
     let compression_level = global.0.shared.compression_threshold;
 
-    let cached_data = CACHED_DATA.get_or_init(|| {
-        let mut encoder = PacketEncoder::new();
-        encoder.set_compression(compression_level);
+    let cached_data = CACHED_DATA
+        .get_or_init(|| {
+            let mut encoder = PacketEncoder::new();
+            encoder.set_compression(compression_level);
 
-        info!("caching world data for new players");
-        inner(&mut encoder, &chunks, &tasks).unwrap();
+            info!("caching world data for new players");
+            inner(&mut encoder, &chunks, &tasks).unwrap();
 
-        let bytes = encoder.take();
-        bytes.freeze()
-    });
+            let bytes = encoder.take();
+            bytes.freeze()
+        })
+        .clone();
 
     trace!("got cached data");
 
@@ -172,7 +174,7 @@ pub fn player_join_world(
     compose.broadcast(&text).send().unwrap();
 
     let local = query.packets;
-    compose.io_buf().unicast_raw(cached_data, local.id());
+    compose.io_buf().unicast_raw(cached_data, local.stream());
 
     trace!("appending cached data");
 

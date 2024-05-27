@@ -1,5 +1,4 @@
 //! Lookup players by their UUID
-use std::ops::{Deref, DerefMut};
 
 use derive_more::{Deref, DerefMut};
 use evenio::{entity::EntityId, prelude::Component};

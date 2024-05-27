@@ -31,7 +31,6 @@ pub struct PositionSyncMetadata {
 pub fn sync_entity_position(
     _: Receiver<Gametick>,
     mut entities: Fetcher<EntityQuery>,
-    broadcast: Single<&IoBuf>,
     compose: Compose,
 ) {
     entities.par_iter_mut().for_each(|query| {

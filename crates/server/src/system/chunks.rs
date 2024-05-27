@@ -90,7 +90,7 @@ pub fn send_updates(
         for &elem in &chunk_changes.changes {
             match chunks.get_cached_or_load(elem, &tasks) {
                 Ok(Some(ChunkData::Cached(chunk))) => {
-                    compose.io_buf().unicast_raw(&chunk, packets.id());
+                    compose.io_buf().unicast_raw(chunk, packets.stream());
                     continue;
                 }
                 Ok(Some(ChunkData::Task(..)) | None) => {

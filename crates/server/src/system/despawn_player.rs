@@ -7,7 +7,7 @@ use valence_protocol::{packets::play, VarInt};
 use crate::{
     components::{InGameName, Uuid},
     global::Global,
-    net::{Compose, IoBuf},
+    net::Compose,
 };
 
 #[instrument(skip_all, level = "trace")]
