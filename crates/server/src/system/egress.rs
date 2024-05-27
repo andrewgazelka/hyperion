@@ -2,7 +2,7 @@ use evenio::{
     event::ReceiverMut,
     fetch::{Fetcher, Single},
 };
-use tracing::{instrument, log::warn};
+use tracing::instrument;
 
 use crate::{
     components::LoginState,

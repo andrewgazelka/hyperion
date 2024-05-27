@@ -5,9 +5,6 @@
 
 extern crate core;
 
-#[cfg(feature = "evenio")]
-mod evenio;
-
 pub mod locals;
 
 use std::{

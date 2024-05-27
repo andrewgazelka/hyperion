@@ -118,9 +118,9 @@ impl Compressors {
 
 #[derive(HandlerParam, Copy, Clone)]
 pub struct Compose<'a> {
-    pub compressor: Single<'a, &'static Compressors>,
-    pub scratch: Single<'a, &'static Scratches>,
-    pub global: Single<'a, &'static Global>,
+    pub compressor: Single<&'a Compressors>,
+    pub scratch: Single<&'a Scratches>,
+    pub global: Single<&'a Global>,
 }
 
 impl<'a> Compose<'a> {
