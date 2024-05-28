@@ -184,6 +184,7 @@ impl<'a, 'b, ES: EventSet> SenderLocal<'a, 'b, ES> {
 
     // todo: what does track caller do?
     #[track_caller]
+    #[expect(dead_code, reason = "will be used in the future probably")]
     pub fn send<E: GlobalEvent + 'static>(&mut self, event: E) {
         // The event type and event set are all compile time known, so the compiler
         // should be able to optimize this away.
@@ -321,6 +322,8 @@ pub fn recv_data(
                     {
                         if *packets_to_transition == 0 {
                             *login_state = LoginState::Play;
+
+                            compose.io_buf().set_receive_broadcasts(*packets);
                         } else {
                             *packets_to_transition -= 1;
                         }

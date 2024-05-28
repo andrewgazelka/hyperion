@@ -233,6 +233,9 @@ skip = [
     "derive_more",
     "redox_syscall",
     "bitfield-struct",
+    "evenio", # todo: fix it is because targeted bulk
+    "evenio_macros", # todo: fix... it is because targeted bulk
+
     #{ crate = "ansi_term@0.11.0", reason = "you can specify a reason why it can't be updated/removed" },
 ]
 # Similarly to `skip` allows you to skip certain crates during duplicate
@@ -259,11 +262,12 @@ unknown-git = "warn"
 allow-registry = ["https://github.com/rust-lang/crates.io-index"]
 # List of URLs for allowed Git repositories
 allow-git = [
-    "https://github.com/rj00a/evenio",
+    "https://github.com/andrewgazelka/evenio?branch=feat-sender-state-public",
     "https://github.com/andrewgazelka/io-uring",
     "https://github.com/andrewgazelka/valence",
     "https://github.com/andrewgazelka/bvh-data",
-#    "https://github.com/andrewgazelka/rust-mc-bot"
+    "https://github.com/andrewgazelka/hyperion-proto",
+    "https://github.com/andrewgazelka/targeted-bulk",
 ]
 
 [sources.allow-org]

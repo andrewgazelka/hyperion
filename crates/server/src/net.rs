@@ -393,38 +393,38 @@ impl IoBuf {
         optional: bool,
         exclude: &[u64],
     ) {
-        // let buffer = self.buffer.get_local_raw();
-        // let buffer = unsafe { &mut *buffer.get() };
-        //
-        // let to_send = hyperion_proto::BroadcastLocal {
-        //     data,
-        //     taxicab_radius: radius,
-        //     center: Some(center),
-        //     optional,
-        //     exclude: exclude.to_vec(),
-        // };
-        //
-        // hyperion_proto::ServerToProxy::from(to_send)
-        //     .encode_length_delimited(buffer)
-        //     .unwrap();
+        let buffer = self.buffer.get_local_raw();
+        let buffer = unsafe { &mut *buffer.get() };
+
+        let to_send = hyperion_proto::BroadcastLocal {
+            data,
+            taxicab_radius: radius,
+            center: Some(center),
+            optional,
+            exclude: exclude.to_vec(),
+        };
+
+        hyperion_proto::ServerToProxy::from(to_send)
+            .encode_length_delimited(buffer)
+            .unwrap();
     }
 
     pub fn broadcast_raw(&self, data: bytes::Bytes, optional: bool, exclude: &[u64]) {
-        // let buffer = self.buffer.get_local_raw();
-        // let buffer = unsafe { &mut *buffer.get() };
-        //
-        // let to_send = hyperion_proto::BroadcastGlobal {
-        //     data,
-        //     optional,
-        //     // todo: Right now, we are using `to_vec`.
-        //     // We want to probably allow encoding without allocation in the future.
-        //     // Fortunately, `to_vec` will not require any allocation if the buffer is empty.
-        //     exclude: exclude.to_vec(),
-        // };
-        //
-        // hyperion_proto::ServerToProxy::from(to_send)
-        //     .encode_length_delimited(buffer)
-        //     .unwrap();
+        let buffer = self.buffer.get_local_raw();
+        let buffer = unsafe { &mut *buffer.get() };
+
+        let to_send = hyperion_proto::BroadcastGlobal {
+            data,
+            optional,
+            // todo: Right now, we are using `to_vec`.
+            // We want to probably allow encoding without allocation in the future.
+            // Fortunately, `to_vec` will not require any allocation if the buffer is empty.
+            exclude: exclude.to_vec(),
+        };
+
+        hyperion_proto::ServerToProxy::from(to_send)
+            .encode_length_delimited(buffer)
+            .unwrap();
     }
 
     pub fn unicast_raw(&self, data: bytes::Bytes, stream: u64) {
@@ -445,6 +445,19 @@ impl IoBuf {
         let to_send = hyperion_proto::Multicast {
             data,
             stream: streams.to_vec(),
+        };
+
+        hyperion_proto::ServerToProxy::from(to_send)
+            .encode_length_delimited(buffer)
+            .unwrap();
+    }
+
+    pub fn set_receive_broadcasts(&self, stream: StreamId) {
+        let buffer = self.buffer.get_local_raw();
+        let buffer = unsafe { &mut *buffer.get() };
+
+        let to_send = hyperion_proto::SetReceiveBroadcasts {
+            stream: stream.stream_id,
         };
 
         hyperion_proto::ServerToProxy::from(to_send)

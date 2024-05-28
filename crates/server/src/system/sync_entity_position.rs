@@ -143,7 +143,8 @@ pub enum EntityMovement {
 }
 
 impl EntityMovement {
-    fn write_packets(&self, id: EntityId, metadata: PacketMetadata, compose: &Compose) {
+    // todo: add logic for metadata
+    fn write_packets(&self, id: EntityId, _metadata: PacketMetadata, compose: &Compose) {
         #[expect(
             clippy::cast_possible_wrap,
             reason = "wrapping is okay in this scenario"
