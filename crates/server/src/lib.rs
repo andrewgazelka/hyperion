@@ -51,15 +51,16 @@ use crate::{
     },
     event::{Egress, Gametick, Scratches, Stats},
     global::Global,
-    net::{Compressors, IoBuf, S2C_BUFFER_SIZE},
+    net::{
+        proxy::{init_proxy_comms, ReceiveState},
+        Compressors, IoBuf, S2C_BUFFER_SIZE,
+    },
     singleton::{
         fd_lookup::StreamLookup, player_aabb_lookup::PlayerBoundingBoxes,
         player_id_lookup::EntityIdLookup, player_uuid_lookup::PlayerUuidLookup,
     },
-    system::generate_biome_registry,
+    system::{generate_biome_registry, ingress::generate_ingress_events},
 };
-use crate::net::proxy::{init_proxy_comms, ReceiveState};
-use crate::system::ingress::generate_ingress_events;
 
 pub mod components;
 pub mod event;
@@ -198,7 +199,7 @@ pub struct Hyperion {
     last_ticks: VecDeque<Instant>,
     /// The tick of the game. This is incremented every 50 ms.
     tick_on: u64,
-    
+
     receive_state: ReceiveState,
 }
 
@@ -300,11 +301,10 @@ impl Hyperion {
             .next()
             .context("could not get first address")?;
 
-
         let tasks = Tasks::default();
 
         let (receive_state, egress_comm) = init_proxy_comms(&tasks, address);
-        
+
         let id = world.spawn();
         world.insert(id, egress_comm);
 
@@ -317,7 +317,6 @@ impl Hyperion {
         world.add_handler(system::ingress::add_player);
         world.add_handler(system::ingress::remove_player);
         world.add_handler(system::ingress::recv_data);
-        world.add_handler(system::ingress::sent_data);
 
         world.add_handler(system::chunks::generate_chunk_changes);
         world.add_handler(system::chunks::send_updates);

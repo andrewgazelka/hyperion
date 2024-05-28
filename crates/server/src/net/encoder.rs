@@ -12,6 +12,7 @@ use crate::{event::ScratchBuffer, net::MAX_PACKET_SIZE, singleton::ring::Buf};
 
 mod util;
 
+#[derive(Default)]
 pub struct PacketEncoder {
     threshold: CompressionThreshold,
 }

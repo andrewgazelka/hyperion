@@ -19,14 +19,14 @@ use crate::{
     components::{InGameName, Player},
     event::{ChatMessage, ClickEvent, Command, UpdateEquipment},
     inventory::PlayerInventory,
-    net::{Compose, Packets},
+    net::{Compose, StreamId},
 };
 
 #[derive(Query)]
 pub struct InventoryActionQuery<'a> {
     id: EntityId,
     inventory: &'a mut PlayerInventory,
-    packet: &'a mut Packets,
+    packet: &'a mut StreamId,
     _player: With<&'static Player>,
 }
 
@@ -54,11 +54,11 @@ pub fn get_inventory_actions(
         // error must not be handled, the server resets the inventory
         _ => (),
     }
-    send_inventory_update(query.inventory, query.packet, &compose);
+    send_inventory_update(query.inventory, *query.packet, &compose);
 }
 
 /// Sends an inventory update to the player.
-fn send_inventory_update(inventory: &PlayerInventory, packet: &mut Packets, compose: &Compose) {
+fn send_inventory_update(inventory: &PlayerInventory, packet: StreamId, compose: &Compose) {
     let pack_inv = play::InventoryS2c {
         window_id: 0,
         state_id: VarInt(0),
@@ -66,14 +66,14 @@ fn send_inventory_update(inventory: &PlayerInventory, packet: &mut Packets, comp
         carried_item: Cow::Borrowed(inventory.get_carried_item()),
     };
 
-    compose.unicast(&pack_inv, *packet).unwrap();
+    compose.unicast(&pack_inv, packet).unwrap();
 }
 
 #[derive(Query)]
 pub struct InventoryQuery<'a> {
     name: &'a InGameName,
     inventory: &'a mut PlayerInventory,
-    packet: &'a mut Packets,
+    packet: &'a mut StreamId,
     _player: With<&'static Player>,
 }
 
@@ -133,7 +133,7 @@ pub fn give_command(
 
         inventory.set_first_available(item);
 
-        send_inventory_update(inventory, packet, &compose);
+        send_inventory_update(inventory, *packet, &compose);
         Ok(())
     };
 

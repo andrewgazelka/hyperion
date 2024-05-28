@@ -7,12 +7,12 @@ use valence_protocol::{
 
 use crate::{
     event,
-    net::{Compose, Packets},
+    net::{Compose, StreamId},
 };
 
 #[derive(Query)]
 pub struct TeleportQuery<'a> {
-    packets: &'a mut Packets,
+    packets: &'a mut StreamId,
 }
 
 #[instrument(skip_all)]

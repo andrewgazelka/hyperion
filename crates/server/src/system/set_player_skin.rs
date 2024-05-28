@@ -15,12 +15,12 @@ use valence_protocol::{
 use crate::{
     components::{InGameName, Uuid},
     event::SetPlayerSkin,
-    net::{Compose, Packets},
+    net::{Compose, StreamId},
 };
 
 #[derive(Query)]
 pub(crate) struct SetPlayerSkinQuery<'a> {
-    packets: &'a mut Packets,
+    packets: &'a mut StreamId,
     uuid: &'a Uuid,
     username: &'a InGameName,
 }

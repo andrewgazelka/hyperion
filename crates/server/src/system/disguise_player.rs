@@ -12,7 +12,7 @@ use valence_protocol::packets::play;
 use crate::{
     components::{Display, FullEntityPose, Uuid},
     event,
-    net::{Compose, Packets},
+    net::{Compose, StreamId},
     system::init_entity::spawn_entity_packet,
 };
 
@@ -21,7 +21,7 @@ pub struct DisguisePlayerQuery<'a> {
     id: EntityId,
     uuid: &'a Uuid,
     pose: &'a FullEntityPose,
-    packets: &'a Packets,
+    packets: &'a StreamId,
 }
 
 #[instrument(skip_all, level = "trace")]

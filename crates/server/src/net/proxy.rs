@@ -22,7 +22,7 @@ use crate::{
 pub struct ReceiveStateInner {
     pub player_connect: Vec<PlayerConnect>,
     pub player_disconnect: Vec<PlayerDisconnect>,
-    pub packets: targeted_bulk::TargetedEvents<bytes::Bytes, u64>,
+    pub packets: targeted_bulk::TargetedEvents<Bytes, u64>,
 }
 
 #[derive(Component, Deref, DerefMut)]
@@ -50,6 +50,12 @@ async fn inner(
 
             let fst = tokio::spawn(async move {
                 while let Some(bytes) = server_to_proxy.recv().await {
+                    let bytes_slice = bytes.as_ref();
+
+                    info!("got bytes: {bytes_slice:X?}");
+
+                    info!("writing {bytes:?}");
+
                     if write.write_all(&bytes).await.is_err() {
                         error!("error writing to proxy");
                         return server_to_proxy;

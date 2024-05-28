@@ -8,13 +8,14 @@ use derive_more::{Constructor, Deref, DerefMut};
 use evenio::{fetch::Single, handler::HandlerParam, prelude::Component};
 use hyperion_proto::ChunkPosition;
 use libdeflater::CompressionLvl;
-use prost::Message;
+use prost::{encoding::encode_varint, Message};
 use rayon_local::RayonLocal;
+use tracing::info;
 
 use crate::{
     event::{Scratch, Scratches},
     global::Global,
-    net::encoder::PacketEncoder,
+    net::encoder::{append_packet_without_compression, PacketEncoder},
 };
 
 pub mod proxy;
@@ -60,10 +61,10 @@ impl Default for Compressors {
 }
 
 #[derive(Component, Copy, Clone, Debug, PartialEq, Eq, Hash, Constructor)]
-pub struct Packets {
+pub struct StreamId {
     stream_id: u64,
 }
-impl Packets {
+impl StreamId {
     #[must_use]
     pub const fn stream(&self) -> u64 {
         self.stream_id
@@ -117,7 +118,7 @@ impl<'a> Compose<'a> {
         }
     }
 
-    pub fn unicast<P>(&self, packet: &P, id: Packets) -> anyhow::Result<()>
+    pub fn unicast<P>(&self, packet: &P, id: StreamId) -> anyhow::Result<()>
     where
         P: valence_protocol::Packet + valence_protocol::Encode,
     {
@@ -125,11 +126,28 @@ impl<'a> Compose<'a> {
             packet,
             id: id.stream_id,
             compose: *self,
+
+            // todo: Should we have this true by default, or is there a better way?
+            // Or a better word for no_compress, or should we just use negative field names?
+            compress: true,
         }
         .send()
     }
 
-    pub fn multicast<P>(&self, packet: &P, ids: &[Packets]) -> anyhow::Result<()>
+    pub fn unicast_no_compression<P>(&self, packet: &P, id: StreamId) -> anyhow::Result<()>
+    where
+        P: valence_protocol::Packet + valence_protocol::Encode,
+    {
+        Unicast {
+            packet,
+            id: id.stream_id,
+            compose: *self,
+            compress: false,
+        }
+        .send()
+    }
+
+    pub fn multicast<P>(&self, packet: &P, ids: &[StreamId]) -> anyhow::Result<()>
     where
         P: valence_protocol::Packet + valence_protocol::Encode,
     {
@@ -177,6 +195,7 @@ struct Unicast<'a, 'b, P> {
     packet: &'b P,
     id: u64,
     compose: Compose<'a>,
+    compress: bool,
 }
 
 impl<'a, 'b, P> Unicast<'a, 'b, P>
@@ -186,7 +205,7 @@ where
     fn send(&self) -> anyhow::Result<()> {
         self.compose
             .io_buf
-            .unicast_private(self.packet, self.id, &self.compose)
+            .unicast_private(self.packet, self.id, &self.compose, self.compress)
     }
 }
 
@@ -322,11 +341,34 @@ impl IoBuf {
         Ok(result.freeze())
     }
 
-    fn unicast_private<P>(&self, packet: &P, id: u64, compose: &Compose) -> anyhow::Result<()>
+    fn encode_packet_no_compression<P>(&self, packet: &P) -> anyhow::Result<bytes::Bytes>
     where
         P: valence_protocol::Packet + valence_protocol::Encode,
     {
-        let bytes = self.encode_packet(packet, compose)?;
+        let temp_buffer = self.temp_buffer.get_local_raw();
+        let temp_buffer = unsafe { &mut *temp_buffer.get() };
+
+        let result = append_packet_without_compression(packet, temp_buffer)?;
+
+        Ok(result.freeze())
+    }
+
+    fn unicast_private<P>(
+        &self,
+        packet: &P,
+        id: u64,
+        compose: &Compose,
+        compress: bool,
+    ) -> anyhow::Result<()>
+    where
+        P: valence_protocol::Packet + valence_protocol::Encode,
+    {
+        let bytes = if compress {
+            self.encode_packet(packet, compose)?
+        } else {
+            self.encode_packet_no_compression(packet)?
+        };
+
         self.unicast_raw(bytes, id);
         Ok(())
     }
@@ -352,38 +394,38 @@ impl IoBuf {
         optional: bool,
         exclude: &[u64],
     ) {
-        let buffer = self.buffer.get_local_raw();
-        let buffer = unsafe { &mut *buffer.get() };
-
-        let to_send = hyperion_proto::BroadcastLocal {
-            data,
-            taxicab_radius: radius,
-            center: Some(center),
-            optional,
-            exclude: exclude.to_vec(),
-        };
-
-        hyperion_proto::ServerToProxy::from(to_send)
-            .encode_length_delimited(buffer)
-            .unwrap();
+        // let buffer = self.buffer.get_local_raw();
+        // let buffer = unsafe { &mut *buffer.get() };
+        //
+        // let to_send = hyperion_proto::BroadcastLocal {
+        //     data,
+        //     taxicab_radius: radius,
+        //     center: Some(center),
+        //     optional,
+        //     exclude: exclude.to_vec(),
+        // };
+        //
+        // hyperion_proto::ServerToProxy::from(to_send)
+        //     .encode_length_delimited(buffer)
+        //     .unwrap();
     }
 
     pub fn broadcast_raw(&self, data: bytes::Bytes, optional: bool, exclude: &[u64]) {
-        let buffer = self.buffer.get_local_raw();
-        let buffer = unsafe { &mut *buffer.get() };
-
-        let to_send = hyperion_proto::BroadcastGlobal {
-            data,
-            optional,
-            // todo: Right now, we are using `to_vec`.
-            // We want to probably allow encoding without allocation in the future.
-            // Fortunately, `to_vec` will not require any allocation if the buffer is empty.
-            exclude: exclude.to_vec(),
-        };
-
-        hyperion_proto::ServerToProxy::from(to_send)
-            .encode_length_delimited(buffer)
-            .unwrap();
+        // let buffer = self.buffer.get_local_raw();
+        // let buffer = unsafe { &mut *buffer.get() };
+        //
+        // let to_send = hyperion_proto::BroadcastGlobal {
+        //     data,
+        //     optional,
+        //     // todo: Right now, we are using `to_vec`.
+        //     // We want to probably allow encoding without allocation in the future.
+        //     // Fortunately, `to_vec` will not require any allocation if the buffer is empty.
+        //     exclude: exclude.to_vec(),
+        // };
+        //
+        // hyperion_proto::ServerToProxy::from(to_send)
+        //     .encode_length_delimited(buffer)
+        //     .unwrap();
     }
 
     pub fn unicast_raw(&self, data: bytes::Bytes, stream: u64) {
@@ -392,9 +434,9 @@ impl IoBuf {
 
         let to_send = hyperion_proto::Unicast { data, stream };
 
-        hyperion_proto::ServerToProxy::from(to_send)
-            .encode_length_delimited(buffer)
-            .unwrap();
+        let to_send = hyperion_proto::ServerToProxy::from(to_send);
+
+        to_send.encode_length_delimited(buffer).unwrap();
     }
 
     pub fn multicast_raw(&self, data: bytes::Bytes, streams: &[u64]) {

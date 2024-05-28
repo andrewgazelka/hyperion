@@ -17,6 +17,9 @@ pub fn egress(_: ReceiverMut<Egress>, mut io: Single<&mut IoBuf>, egress: Single
     // left in previous bytesMut [ UNUSED 30 bytes ] [ ----------------------------- ] ALLOC [A]
 
     for bytes in io.split() {
+        if bytes.is_empty() {
+            continue;
+        }
         egress.send(bytes.freeze()).unwrap();
     }
 }

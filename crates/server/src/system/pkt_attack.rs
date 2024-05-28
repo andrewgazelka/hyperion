@@ -5,13 +5,13 @@ use valence_protocol::{packets::play, VarInt};
 use crate::{
     components::{EntityReaction, FullEntityPose, ImmuneStatus, Player, Vitals},
     event::AttackEntity,
-    net::{Compose, Packets},
+    net::{Compose, StreamId},
 };
 
 #[derive(Query)]
 pub struct AttackPlayerQuery<'a> {
     id: EntityId,
-    packets: &'a mut Packets,
+    packets: &'a mut StreamId,
     _player: With<&'static Player>,
 }
 

@@ -865,11 +865,11 @@ dependencies = [
 [[package]]
 name = "evenio"
 version = "0.6.0"
-source = "git+https://github.com/rj00a/evenio#4e97b7a61f8747c2bf690447bbe3dcc7a16137fa"
+source = "git+https://github.com/andrewgazelka/evenio?branch=feat-sender-state-public#250d07778f5d9e71317f16a7775c8429e405c93c"
 dependencies = [
  "ahash",
  "bumpalo",
- "evenio_macros 0.6.0 (git+https://github.com/rj00a/evenio)",
+ "evenio_macros 0.6.0 (git+https://github.com/andrewgazelka/evenio?branch=feat-sender-state-public)",
  "hashbrown",
  "indexmap",
  "rayon",
@@ -890,7 +890,7 @@ dependencies = [
 [[package]]
 name = "evenio_macros"
 version = "0.6.0"
-source = "git+https://github.com/rj00a/evenio#4e97b7a61f8747c2bf690447bbe3dcc7a16137fa"
+source = "git+https://github.com/andrewgazelka/evenio?branch=feat-sender-state-public#250d07778f5d9e71317f16a7775c8429e405c93c"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1351,7 +1351,7 @@ dependencies = [
 [[package]]
 name = "hyperion-proto"
 version = "0.1.0"
-source = "git+https://github.com/andrewgazelka/hyperion-proto#8469460d22f8afcf5fc000bf0c8523d829c25992"
+source = "git+https://github.com/andrewgazelka/hyperion-proto#a248399c55c1e8a02681f8c5bc4795e9ea63438e"
 dependencies = [
  "prost",
  "prost-build",
@@ -1422,7 +1422,7 @@ dependencies = [
  "anyhow",
  "bvh",
  "clap",
- "evenio 0.6.0 (git+https://github.com/rj00a/evenio)",
+ "evenio 0.6.0 (git+https://github.com/andrewgazelka/evenio?branch=feat-sender-state-public)",
  "fastrand 2.1.0",
  "glam",
  "serde_json",
@@ -2143,7 +2143,7 @@ name = "rayon-local"
 version = "0.1.0"
 dependencies = [
  "divan",
- "evenio 0.6.0 (git+https://github.com/rj00a/evenio)",
+ "evenio 0.6.0 (git+https://github.com/andrewgazelka/evenio?branch=feat-sender-state-public)",
  "rayon",
 ]
 
@@ -2478,7 +2478,7 @@ dependencies = [
  "derive_more 0.99.17",
  "dirs-next",
  "divan",
- "evenio 0.6.0 (git+https://github.com/rj00a/evenio)",
+ "evenio 0.6.0 (git+https://github.com/andrewgazelka/evenio?branch=feat-sender-state-public)",
  "fastrand 2.1.0",
  "flate2",
  "fxhash",
@@ -2747,7 +2747,7 @@ dependencies = [
 [[package]]
 name = "targeted-bulk"
 version = "0.1.0"
-source = "git+https://github.com/andrewgazelka/targeted-bulk#1cea45a1b14cf31cceaf69ebd0ce075987dd6cfb"
+source = "git+https://github.com/andrewgazelka/targeted-bulk#121927bd5b80b801f2ace1d6391a5d6b990cc46e"
 dependencies = [
  "evenio 0.6.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "rayon",

@@ -14,7 +14,7 @@ use crate::{
     },
     config::CONFIG,
     event::Gametick,
-    net::{Compose, Packets},
+    net::{Compose, StreamId},
 };
 
 #[derive(Component, Deref, DerefMut, Default)]
@@ -28,7 +28,7 @@ pub fn generate_chunk_changes(
     mut fetcher: Fetcher<(
         &mut ChunkLocation,
         &mut FullEntityPose,
-        &mut Packets,
+        &mut StreamId,
         &mut ChunkChanges,
     )>,
     compose: Compose,
@@ -79,7 +79,7 @@ pub fn generate_chunk_changes(
 #[instrument(skip_all, level = "trace")]
 pub fn send_updates(
     _: Receiver<Gametick>,
-    mut fetcher: Fetcher<(&mut Packets, &mut ChunkChanges)>,
+    mut fetcher: Fetcher<(&mut StreamId, &mut ChunkChanges)>,
     chunks: Single<&Chunks>,
     tasks: Single<&Tasks>,
     compose: Compose,

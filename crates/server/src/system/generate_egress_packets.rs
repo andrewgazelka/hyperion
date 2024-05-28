@@ -5,7 +5,7 @@ use valence_protocol::{packets::play, VarInt, Velocity};
 use crate::{
     components::EntityReaction,
     event::Gametick,
-    net::{Compose, Packets},
+    net::{Compose, StreamId},
 };
 
 fn vel_m_per_tick(input: glam::Vec3) -> Velocity {
@@ -17,7 +17,7 @@ fn vel_m_per_tick(input: glam::Vec3) -> Velocity {
 #[instrument(skip_all, level = "trace")]
 pub fn generate_egress_packets(
     _: Receiver<Gametick>,
-    mut connections: Fetcher<(&mut Packets, &mut EntityReaction)>,
+    mut connections: Fetcher<(&mut StreamId, &mut EntityReaction)>,
     compose: Compose,
 ) {
     connections.iter_mut().for_each(|(packets, reaction)| {

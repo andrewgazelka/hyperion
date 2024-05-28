@@ -10,11 +10,11 @@ use crate::{
     components::Uuid,
     event,
     event::SpeedEffect,
-    net::{Compose, Packets},
+    net::{Compose, StreamId},
 };
 
 #[instrument(skip_all, level = "trace")]
-pub fn display(r: Receiver<event::DisplayPotionEffect, &mut Packets>, compose: Compose) {
+pub fn display(r: Receiver<event::DisplayPotionEffect, &mut StreamId>, compose: Compose) {
     let &event::DisplayPotionEffect {
         effect,
         amplifier,
@@ -49,7 +49,7 @@ pub fn display(r: Receiver<event::DisplayPotionEffect, &mut Packets>, compose: C
     compose.unicast(&pkt, *packets).unwrap();
 }
 
-pub fn speed(r: Receiver<SpeedEffect, (&mut Packets, &Uuid)>, compose: Compose) {
+pub fn speed(r: Receiver<SpeedEffect, (&mut StreamId, &Uuid)>, compose: Compose) {
     // speed 1 - > 0.10000000149011612
 
     // eneric.max_health	20.0	1.0	1024.0	Max Health.

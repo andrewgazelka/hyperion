@@ -37,7 +37,7 @@ use crate::{
     event,
     global::Global,
     inventory::PlayerInventory,
-    net::{Compose, Packets},
+    net::{Compose, StreamId},
     singleton::{player_id_lookup::EntityIdLookup, player_uuid_lookup::PlayerUuidLookup},
     system::init_entity::spawn_entity_packet,
 };
@@ -56,14 +56,14 @@ pub(crate) struct PlayerJoinWorldQuery<'a> {
     inventory: &'a mut PlayerInventory,
     uuid: &'a Uuid,
     pose: &'a FullEntityPose,
-    packets: &'a Packets,
+    packets: &'a StreamId,
     name: &'a InGameName,
     _player: With<&'static Player>,
 }
 
 #[derive(Query, Debug)]
 pub(crate) struct PlayerJoinWorldQueryReduced<'a> {
-    packets: &'a mut Packets,
+    packets: &'a mut StreamId,
     _player: With<&'static Player>,
 }
 
@@ -331,13 +331,13 @@ pub fn player_join_world(
     sender.send_to(got_id, event::PostPlayerJoinWorld);
 }
 
-pub fn send_keep_alive(packets: &mut Packets, compose: &Compose) -> anyhow::Result<()> {
+pub fn send_keep_alive(packets: StreamId, compose: &Compose) -> anyhow::Result<()> {
     let pkt = play::KeepAliveS2c {
         // The ID can be set to zero because it doesn't matter
         id: 0,
     };
 
-    compose.unicast(&pkt, *packets)?;
+    compose.unicast(&pkt, packets)?;
 
     Ok(())
 }

@@ -6,7 +6,7 @@ use crate::{
     event,
     event::Gametick,
     global::Global,
-    net::{Compose, Packets},
+    net::{Compose, StreamId},
     tracker::Prev,
     Vitals,
 };
@@ -24,7 +24,7 @@ pub struct SyncPlayersQuery<'a> {
     id: EntityId,
     prev_vitals: &'a mut Prev<Vitals>,
     vitals: &'a mut Vitals,
-    packets: &'a mut Packets,
+    packets: &'a mut StreamId,
 }
 
 #[instrument(skip_all)]

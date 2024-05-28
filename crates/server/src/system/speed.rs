@@ -9,11 +9,11 @@ use valence_server::Ident;
 use crate::{
     components::Uuid,
     event,
-    net::{Compose, Packets},
+    net::{Compose, StreamId},
 };
 
 #[instrument(skip_all, level = "trace")]
-pub fn effect(r: Receiver<event::DisplayPotionEffect, (&mut Packets, &Uuid)>, compose: Compose) {
+pub fn effect(r: Receiver<event::DisplayPotionEffect, (&mut StreamId, &Uuid)>, compose: Compose) {
     let &event::DisplayPotionEffect {
         effect,
         amplifier,

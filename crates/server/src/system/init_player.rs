@@ -13,7 +13,7 @@ use crate::{
     },
     event::{PlayerInit, PlayerJoinWorld},
     inventory::PlayerInventory,
-    net::{Compose, Packets},
+    net::{Compose, StreamId},
     system::{chunks::ChunkChanges, sync_entity_position::PositionSyncMetadata},
     tracker::Prev,
 };
@@ -30,7 +30,7 @@ fn offline_uuid(username: &str) -> anyhow::Result<uuid::Uuid> {
 
 #[instrument(skip_all, level = "trace")]
 pub fn init_player(
-    r: ReceiverMut<PlayerInit, (EntityId, &mut Packets)>,
+    r: ReceiverMut<PlayerInit, (EntityId, &mut StreamId)>,
     compose: Compose,
     s: Sender<(
         Insert<FullEntityPose>,
