@@ -1,67 +1,106 @@
-use std::io::Cursor;
+use std::{io::Cursor, net::SocketAddr, sync::Arc};
 
 use anyhow::{bail, Context};
-use bytes::BytesMut;
+use bytes::{Bytes, BytesMut};
+use derive_more::{Deref, DerefMut};
+use evenio::component::Component;
 use hyperion_proto::{PlayerConnect, PlayerDisconnect, ProxyToServer, ProxyToServerMessage};
-use parking_lot::Mutex;
+use parking_lot::{Mutex, RawMutex};
 use prost::{encoding::decode_varint, Message};
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tracing::instrument;
+use tokio::{
+    io::{AsyncReadExt, AsyncWriteExt},
+    sync::mpsc::UnboundedSender,
+};
+use tracing::{error, info, instrument, warn};
 
-use crate::components::chunks::Tasks;
+use crate::{
+    components::{chunks::Tasks, EgressComm},
+    SHUTDOWN,
+};
 
-pub struct ReceiveState {
+#[derive(Default)]
+pub struct ReceiveStateInner {
     pub player_connect: Vec<PlayerConnect>,
     pub player_disconnect: Vec<PlayerDisconnect>,
     pub packets: targeted_bulk::TargetedEvents<bytes::Bytes, u64>,
 }
 
-pub struct ProxyComms {
-    pub tx: tokio::sync::mpsc::UnboundedSender<bytes::Bytes>,
+#[derive(Component, Deref, DerefMut)]
+pub struct ReceiveState(Arc<Mutex<ReceiveStateInner>>);
 
-    /// Should we use std Mutex instead? think we will need to benchmark
-    ///
-    /// <https://users.rust-lang.org/t/which-mutex-to-use-parking-lot-or-std-sync/85060/6>
-    pub shared: Mutex<ReceiveState>,
+async fn inner(
+    socket: SocketAddr,
+    mut server_to_proxy: tokio::sync::mpsc::UnboundedReceiver<bytes::Bytes>,
+    shared: Arc<Mutex<ReceiveStateInner>>,
+) {
+    let listener = tokio::net::TcpListener::bind(socket).await.unwrap();
+
+    tokio::spawn(async move {
+        loop {
+            let (socket, _) = listener.accept().await.unwrap();
+
+            let addr = socket.peer_addr().unwrap();
+
+            info!("Proxy connection established on {addr}");
+
+            let shared = shared.clone();
+
+            let (read, mut write) = socket.into_split();
+            let read = tokio::io::BufReader::new(read);
+
+            let fst = tokio::spawn(async move {
+                while let Some(bytes) = server_to_proxy.recv().await {
+                    if write.write_all(&bytes).await.is_err() {
+                        error!("error writing to proxy");
+                        return server_to_proxy;
+                    }
+                }
+
+                warn!("proxy shut down");
+
+                server_to_proxy
+            });
+
+            tokio::spawn(async move {
+                let mut reader = ProxyReader::new(read);
+
+                while let Ok(message) = reader.next().await {
+                    match message {
+                        ProxyToServerMessage::PlayerConnect(message) => {
+                            shared.lock().player_connect.push(message);
+                        }
+                        ProxyToServerMessage::PlayerDisconnect(message) => {
+                            shared.lock().player_disconnect.push(message);
+                        }
+                        ProxyToServerMessage::PlayerPackets(message) => {
+                            shared
+                                .lock()
+                                .packets
+                                .push_exclusive(message.stream, message.data);
+                        }
+                    }
+                }
+                error!("error reading from proxy");
+            });
+
+            // todo: handle player disconnects on proxy shut down
+            // Ideally, we should design for there being multiple proxies,
+            // and all proxies should store all the players on them.
+            // Then we can disconnect all those players related to that proxy.
+            server_to_proxy = fst.await.unwrap();
+        }
+    });
 }
 
-fn init_proxy_comms(
-    tasks: &Tasks,
-    socket: tokio::net::TcpStream,
-    mut server_to_proxy: tokio::sync::mpsc::UnboundedReceiver<bytes::Bytes>,
-    shared: Mutex<ReceiveState>,
-) {
-    let (read, mut write) = socket.into_split();
-    let read = tokio::io::BufReader::new(read);
+pub fn init_proxy_comms(tasks: &Tasks, socket: SocketAddr) -> (ReceiveState, EgressComm) {
+    let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+    let shared = Arc::new(Mutex::new(ReceiveStateInner::default()));
 
-    tasks.spawn(async move {
-        while let Some(bytes) = server_to_proxy.recv().await {
-            write.write_all(&bytes).await.unwrap();
-        }
+    tasks.block_on(async {
+        inner(socket, rx, shared.clone()).await;
     });
 
-    tasks.spawn(async move {
-        let mut reader = ProxyReader::new(read);
-
-        loop {
-            let message = reader.next().await.unwrap();
-
-            match message {
-                ProxyToServerMessage::PlayerConnect(message) => {
-                    shared.lock().player_connect.push(message);
-                }
-                ProxyToServerMessage::PlayerDisconnect(message) => {
-                    shared.lock().player_disconnect.push(message);
-                }
-                ProxyToServerMessage::PlayerPackets(message) => {
-                    shared
-                        .lock()
-                        .packets
-                        .push_exclusive(message.stream, message.data);
-                }
-            }
-        }
-    });
+    (ReceiveState(shared), EgressComm::from(tx))
 }
 
 #[derive(Debug)]

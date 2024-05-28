@@ -58,6 +58,8 @@ use crate::{
     },
     system::generate_biome_registry,
 };
+use crate::net::proxy::{init_proxy_comms, ReceiveState};
+use crate::system::ingress::generate_ingress_events;
 
 pub mod components;
 pub mod event;
@@ -196,6 +198,8 @@ pub struct Hyperion {
     last_ticks: VecDeque<Instant>,
     /// The tick of the game. This is incremented every 50 ms.
     tick_on: u64,
+    
+    receive_state: ReceiveState,
 }
 
 impl Hyperion {
@@ -296,6 +300,17 @@ impl Hyperion {
             .next()
             .context("could not get first address")?;
 
+
+        let tasks = Tasks::default();
+
+        let (receive_state, egress_comm) = init_proxy_comms(&tasks, address);
+        
+        let id = world.spawn();
+        world.insert(id, egress_comm);
+
+        let tasks_id = world.spawn();
+        world.insert(tasks_id, tasks);
+
         let broadcast = world.spawn();
         world.insert(broadcast, IoBuf::default());
 
@@ -373,9 +388,6 @@ impl Hyperion {
             generate_biome_registry().context("failed to generate biome registry")?;
         world.insert(chunks, Chunks::new(&biome_registry)?);
 
-        let tasks = world.spawn();
-        world.insert(tasks, Tasks::default());
-
         let player_id_lookup = world.spawn();
         world.insert(player_id_lookup, EntityIdLookup::default());
 
@@ -390,6 +402,7 @@ impl Hyperion {
             world,
             last_ticks: VecDeque::default(),
             tick_on: 0,
+            receive_state,
         };
 
         game.last_ticks.push_back(Instant::now());
@@ -457,6 +470,8 @@ impl Hyperion {
         }
 
         self.last_ticks.push_back(now);
+
+        generate_ingress_events(&mut self.world, &self.receive_state);
 
         tracing::span!(tracing::Level::TRACE, "gametick").in_scope(|| {
             self.world.send(Gametick);

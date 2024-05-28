@@ -6,6 +6,7 @@ use evenio::{
     world::World,
 };
 use fxhash::FxHashMap;
+use parking_lot::Mutex;
 use rayon::iter::ParallelIterator;
 use serde_json::json;
 use tracing::{instrument, trace, warn};
@@ -26,10 +27,11 @@ mod player_packet_buffer;
 
 use crate::{
     components::{FullEntityPose, LoginState},
-    net::{proxy::ProxyComms, Compose, Packets, MINECRAFT_VERSION, PROTOCOL_VERSION},
+    net::{Compose, Packets, MINECRAFT_VERSION, PROTOCOL_VERSION},
     singleton::{fd_lookup::StreamId, player_id_lookup::EntityIdLookup},
     system::ingress::player_packet_buffer::DecodeBuffer,
 };
+use crate::net::proxy::ReceiveStateInner;
 
 pub type IngressSender<'a> = Sender<
     'a,
@@ -75,10 +77,10 @@ pub struct SentData {
     clippy::significant_drop_in_scrutinee,
     reason = "I think this is fine. However, let's double check in perf"
 )]
-pub fn generate_ingress_events(world: &mut World, server: &mut ProxyComms) {
+pub fn generate_ingress_events(world: &mut World, shared: &Mutex<ReceiveStateInner>) {
     // todo: should we just lock once?
 
-    let mut recv = server.shared.lock();
+    let mut recv = shared.lock();
 
     for connect in recv.player_connect.drain(..) {
         world.send(AddPlayer {

@@ -15,7 +15,7 @@ pub mod chunks;
 pub mod pose;
 pub mod vitals;
 
-#[derive(Component, Deref, DerefMut)]
+#[derive(Component, Deref, DerefMut, From)]
 pub struct EgressComm {
     tx: tokio::sync::mpsc::UnboundedSender<bytes::Bytes>,
 }

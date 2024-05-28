@@ -364,7 +364,7 @@ impl IoBuf {
         };
 
         hyperion_proto::ServerToProxy::from(to_send)
-            .encode(buffer)
+            .encode_length_delimited(buffer)
             .unwrap();
     }
 
@@ -382,7 +382,7 @@ impl IoBuf {
         };
 
         hyperion_proto::ServerToProxy::from(to_send)
-            .encode(buffer)
+            .encode_length_delimited(buffer)
             .unwrap();
     }
 
@@ -393,7 +393,7 @@ impl IoBuf {
         let to_send = hyperion_proto::Unicast { data, stream };
 
         hyperion_proto::ServerToProxy::from(to_send)
-            .encode(buffer)
+            .encode_length_delimited(buffer)
             .unwrap();
     }
 
@@ -407,7 +407,7 @@ impl IoBuf {
         };
 
         hyperion_proto::ServerToProxy::from(to_send)
-            .encode(buffer)
+            .encode_length_delimited(buffer)
             .unwrap();
     }
 }
@@ -479,7 +479,7 @@ mod tests {
             };
 
             // encode using prost's definition which is almost surely correct according to protobuf spec
-            left.encode(&mut left_buf).unwrap();
+            left.encode_length_delimited(&mut left_buf).unwrap();
 
             let right_buf = compose.io_buf();
             let right_buf = right_buf.buffer.get_local_raw();
