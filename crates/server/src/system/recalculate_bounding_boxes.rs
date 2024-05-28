@@ -22,11 +22,9 @@ pub struct EntityQuery<'a> {
 #[instrument(skip_all, level = "trace")]
 pub fn recalculate_bounding_boxes(
     _: Receiver<Gametick>,
-    entity_bounding_boxes: Single<&mut EntityBoundingBoxes>,
+    mut entity_bounding_boxes: Single<&mut EntityBoundingBoxes>,
     entities: Fetcher<EntityQuery>,
 ) {
-    let entity_bounding_boxes = entity_bounding_boxes.0;
-
     span!(tracing::Level::TRACE, "clear-bounding-boxes").in_scope(|| {
         entity_bounding_boxes.clear();
     });

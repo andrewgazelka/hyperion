@@ -4,7 +4,7 @@ use valence_protocol::{packets::play, Encode, RawBytes, VarInt};
 
 use crate::{
     event,
-    net::{Compose, IoBuf},
+    net::Compose,
 };
 
 #[instrument(skip_all)]

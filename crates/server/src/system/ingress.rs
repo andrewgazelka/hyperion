@@ -1,19 +1,16 @@
 use std::{alloc::Layout, any, ptr, ptr::NonNull};
 
 use bumpalo::Bump;
-use derive_more::From;
 use evenio::{
     entity::EntityId,
     event::{
-        Despawn, EventMut, EventSet, GlobalEvent, GlobalEventIdx, Insert, Receiver, ReceiverMut,
-        Sender, Spawn, TargetedEvent, TargetedEventIdx,
+        Despawn, EventMut, EventSet, GlobalEvent, GlobalEventIdx, Insert, ReceiverMut, Sender,
+        Spawn, TargetedEvent, TargetedEventIdx,
     },
     fetch::{Fetcher, Single},
     world::World,
 };
-use fxhash::FxHashMap;
 use parking_lot::Mutex;
-use rayon::iter::ParallelIterator;
 use rayon_local::RayonLocal;
 use serde_json::json;
 use tracing::{debug, info, instrument, trace, warn};
@@ -345,6 +342,21 @@ pub fn recv_data(
             }
         }
     });
+
+    // send the events
+
+    for local in send_events {
+        let world = sender.world();
+        for (id, ptr, idx) in local.pending_targeted {
+            unsafe { world.queue_targeted(id, ptr, idx) };
+        }
+
+        for (ptr, idx) in local.pending_global {
+            unsafe { world.queue_global(ptr, idx) };
+        }
+
+        // todo: flush event queue
+    }
 }
 
 fn process_handshake(login_state: &mut LoginState, packet: &PacketFrame) -> anyhow::Result<()> {

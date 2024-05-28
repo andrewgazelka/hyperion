@@ -40,7 +40,6 @@ pub fn despawn_player(
     info!("{name} disconnected");
 
     global
-        .0
         .shared
         .player_count
         .fetch_sub(1, std::sync::atomic::Ordering::Relaxed);

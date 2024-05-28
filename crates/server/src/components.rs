@@ -246,8 +246,8 @@ impl FullEntityPose {
 ///
 /// - We want to be able to detect collisions in parallel.
 /// - Since we are accessing bounding boxes in parallel,
-/// we need to be able to make sure the bounding boxes are immutable (unless we have something like a
-/// [`std::sync::Arc`] or [`std::sync::RwLock`], but this is not efficient).
+///   we need to be able to make sure the bounding boxes are immutable (unless we have something like a
+///   [`std::sync::Arc`] or [`std::sync::RwLock`], but this is not efficient).
 /// - Therefore, we have an [`EntityReaction`] component which is used to store the reaction of an entity to collisions.
 /// - Later we can apply the reaction to the entity's [`FullEntityPose`] to move the entity.
 #[derive(Component, Default, Debug)]

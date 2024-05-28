@@ -5,18 +5,12 @@ use bytes::{Bytes, BytesMut};
 use derive_more::{Deref, DerefMut};
 use evenio::component::Component;
 use hyperion_proto::{PlayerConnect, PlayerDisconnect, ProxyToServer, ProxyToServerMessage};
-use parking_lot::{Mutex, RawMutex};
+use parking_lot::Mutex;
 use prost::{encoding::decode_varint, Message};
-use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt},
-    sync::mpsc::UnboundedSender,
-};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tracing::{error, info, instrument, warn};
 
-use crate::{
-    components::{chunks::Tasks, EgressComm},
-    SHUTDOWN,
-};
+use crate::components::{chunks::Tasks, EgressComm};
 
 #[derive(Default)]
 pub struct ReceiveStateInner {

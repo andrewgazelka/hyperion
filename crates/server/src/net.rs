@@ -8,9 +8,8 @@ use derive_more::{Constructor, Deref, DerefMut};
 use evenio::{fetch::Single, handler::HandlerParam, prelude::Component};
 use hyperion_proto::ChunkPosition;
 use libdeflater::CompressionLvl;
-use prost::{encoding::encode_varint, Message};
+use prost::Message;
 use rayon_local::RayonLocal;
-use tracing::info;
 
 use crate::{
     event::{Scratch, Scratches},

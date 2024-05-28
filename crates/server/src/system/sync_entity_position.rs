@@ -7,7 +7,7 @@ use valence_protocol::{packets::play, ByteAngle, VarInt};
 use crate::{
     components::{FullEntityPose, Uuid},
     event::Gametick,
-    net::{Compose, IoBuf},
+    net::Compose,
     singleton::broadcast::{PacketMetadata, PacketNecessity},
 };
 
