@@ -2,10 +2,7 @@ use evenio::prelude::*;
 use tracing::instrument;
 use valence_protocol::{packets::play, Encode, RawBytes, VarInt};
 
-use crate::{
-    event,
-    net::Compose,
-};
+use crate::{event, net::Compose};
 
 #[instrument(skip_all)]
 pub fn pose_update(r: Receiver<event::PoseUpdate, EntityId>, compose: Compose) {
