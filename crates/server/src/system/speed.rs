@@ -9,11 +9,11 @@ use valence_server::Ident;
 use crate::{
     components::Uuid,
     event,
-    net::{Compose, Packets},
+    net::{Compose, StreamId},
 };
 
 #[instrument(skip_all, level = "trace")]
-pub fn effect(r: Receiver<event::DisplayPotionEffect, (&mut Packets, &Uuid)>, compose: Compose) {
+pub fn effect(r: Receiver<event::DisplayPotionEffect, (&mut StreamId, &Uuid)>, compose: Compose) {
     let &event::DisplayPotionEffect {
         effect,
         amplifier,
@@ -45,7 +45,7 @@ pub fn effect(r: Receiver<event::DisplayPotionEffect, (&mut Packets, &Uuid)>, co
         factor_codec: None,
     };
 
-    packets.append(&pkt, &compose).unwrap();
+    compose.unicast(&pkt, *packets).unwrap();
 
     // speed 1 - > 0.10000000149011612
 
@@ -89,5 +89,5 @@ pub fn effect(r: Receiver<event::DisplayPotionEffect, (&mut Packets, &Uuid)>, co
         properties: vec![prop],
     };
 
-    packets.append(&pkt, &compose).unwrap();
+    compose.unicast(&pkt, *packets).unwrap();
 }

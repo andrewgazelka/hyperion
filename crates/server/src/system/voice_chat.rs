@@ -7,7 +7,7 @@ use evenio::{
 
 use crate::{
     components::{Player, Uuid},
-    net::{Compose, Packets},
+    net::{Compose, StreamId},
     packets::voicechat::{Codec, Msg},
 };
 
@@ -30,7 +30,7 @@ pub struct VoiceChatGlobal {
 
 #[derive(Query)]
 pub struct PlayerQuery<'a> {
-    packets: &'a mut Packets,
+    packets: &'a mut StreamId,
     uuid: &'a Uuid,
     _player: With<&'static Player>,
 }
@@ -60,5 +60,5 @@ pub fn voice_chat(
     }
     .to_plugin_message();
 
-    packets.append(&pkt, &compose).unwrap();
+    compose.unicast(&pkt, *packets).unwrap();
 }

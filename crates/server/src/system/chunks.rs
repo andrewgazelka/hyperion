@@ -14,7 +14,7 @@ use crate::{
     },
     config::CONFIG,
     event::Gametick,
-    net::{Compose, Packets},
+    net::{Compose, StreamId},
 };
 
 #[derive(Component, Deref, DerefMut, Default)]
@@ -28,7 +28,7 @@ pub fn generate_chunk_changes(
     mut fetcher: Fetcher<(
         &mut ChunkLocation,
         &mut FullEntityPose,
-        &mut Packets,
+        &mut StreamId,
         &mut ChunkChanges,
     )>,
     compose: Compose,
@@ -54,7 +54,7 @@ pub fn generate_chunk_changes(
                 chunk_z: i32::from(current_chunk.y).into(),
             };
 
-            packets.append(&center_chunk, &compose).unwrap();
+            compose.unicast(&center_chunk, *packets).unwrap();
 
             last_sent.0 = current_chunk;
 
@@ -79,9 +79,10 @@ pub fn generate_chunk_changes(
 #[instrument(skip_all, level = "trace")]
 pub fn send_updates(
     _: Receiver<Gametick>,
-    mut fetcher: Fetcher<(&mut Packets, &mut ChunkChanges)>,
+    mut fetcher: Fetcher<(&mut StreamId, &mut ChunkChanges)>,
     chunks: Single<&Chunks>,
     tasks: Single<&Tasks>,
+    compose: Compose,
 ) {
     fetcher.par_iter_mut().for_each(|(packets, chunk_changes)| {
         let mut left_over = Vec::new();
@@ -89,7 +90,7 @@ pub fn send_updates(
         for &elem in &chunk_changes.changes {
             match chunks.get_cached_or_load(elem, &tasks) {
                 Ok(Some(ChunkData::Cached(chunk))) => {
-                    packets.append_raw(&chunk);
+                    compose.io_buf().unicast_raw(chunk, packets.stream());
                     continue;
                 }
                 Ok(Some(ChunkData::Task(..)) | None) => {

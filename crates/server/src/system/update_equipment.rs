@@ -3,7 +3,6 @@ use std::borrow::Cow;
 use evenio::{
     entity::EntityId,
     event::{Receiver, Sender},
-    fetch::Single,
 };
 use tracing::instrument;
 use valence_protocol::VarInt;
@@ -11,7 +10,7 @@ use valence_protocol::VarInt;
 use crate::{
     event::{UpdateEquipment, UpdateSelectedSlot},
     inventory::PlayerInventory,
-    net::{Broadcast, Compose},
+    net::Compose,
 };
 
 #[instrument(skip_all, level = "trace")]
@@ -29,18 +28,15 @@ pub fn update_main_hand(
 #[instrument(skip_all, level = "trace")]
 pub fn update_equipment(
     r: Receiver<UpdateEquipment, (EntityId, &PlayerInventory)>,
-    broadcast: Single<&Broadcast>,
     compose: Compose,
 ) {
     let (entity_id, inventory) = r.query;
 
-    broadcast
-        .append(
-            &crate::packets::vanilla::EntityEquipmentUpdateS2c {
-                entity_id: VarInt(entity_id.index().0 as i32),
-                equipment: Cow::Borrowed(&inventory.get_entity_equipment()),
-            },
-            &compose,
-        )
+    compose
+        .broadcast(&crate::packets::vanilla::EntityEquipmentUpdateS2c {
+            entity_id: VarInt(entity_id.index().0 as i32),
+            equipment: Cow::Borrowed(&inventory.get_entity_equipment()),
+        })
+        .send()
         .unwrap();
 }

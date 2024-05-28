@@ -37,7 +37,7 @@ use crate::{
     event,
     global::Global,
     inventory::PlayerInventory,
-    net::{Broadcast, Compose, Packets},
+    net::{Compose, StreamId},
     singleton::{player_id_lookup::EntityIdLookup, player_uuid_lookup::PlayerUuidLookup},
     system::init_entity::spawn_entity_packet,
 };
@@ -56,14 +56,14 @@ pub(crate) struct PlayerJoinWorldQuery<'a> {
     inventory: &'a mut PlayerInventory,
     uuid: &'a Uuid,
     pose: &'a FullEntityPose,
-    packets: &'a mut Packets,
+    packets: &'a StreamId,
     name: &'a InGameName,
     _player: With<&'static Player>,
 }
 
 #[derive(Query, Debug)]
 pub(crate) struct PlayerJoinWorldQueryReduced<'a> {
-    packets: &'a mut Packets,
+    packets: &'a mut StreamId,
     _player: With<&'static Player>,
 }
 
@@ -84,7 +84,6 @@ pub fn send_player_info(
     players: Fetcher<PlayerInventoryQuery>,
     compose: Compose,
 ) {
-    let local = r.query.packets;
     // todo: cache
     for current_query in players {
         let id = current_query.id;
@@ -102,14 +101,14 @@ pub fn send_player_info(
             pitch: ByteAngle::from_degrees(pose.pitch),
         };
 
-        local.append(&pkt, &compose).unwrap();
+        compose.unicast(&pkt, *r.query.packets).unwrap();
 
         let equipment = inv.get_entity_equipment();
         let pkt = crate::packets::vanilla::EntityEquipmentUpdateS2c {
             entity_id,
             equipment: Cow::Borrowed(&equipment),
         };
-        local.append(&pkt, &compose).unwrap();
+        compose.unicast(&pkt, *r.query.packets).unwrap();
     }
 }
 
@@ -123,7 +122,6 @@ pub fn player_join_world(
     player_list: Fetcher<(&InGameName, &Uuid)>,
     mut uuid_lookup: Single<&mut PlayerUuidLookup>,
     mut id_lookup: Single<&mut EntityIdLookup>,
-    broadcast: Single<&Broadcast>,
     chunks: Single<&Chunks>,
     tasks: Single<&Tasks>,
     compose: Compose,
@@ -131,18 +129,20 @@ pub fn player_join_world(
 ) {
     static CACHED_DATA: once_cell::sync::OnceCell<bytes::Bytes> = once_cell::sync::OnceCell::new();
 
-    let compression_level = global.0.shared.compression_threshold;
+    let compression_level = global.shared.compression_threshold;
 
-    let cached_data = CACHED_DATA.get_or_init(|| {
-        let mut encoder = PacketEncoder::new();
-        encoder.set_compression(compression_level);
+    let cached_data = CACHED_DATA
+        .get_or_init(|| {
+            let mut encoder = PacketEncoder::new();
+            encoder.set_compression(compression_level);
 
-        info!("caching world data for new players");
-        inner(&mut encoder, &chunks, &tasks).unwrap();
+            info!("caching world data for new players");
+            inner(&mut encoder, &chunks, &tasks).unwrap();
 
-        let bytes = encoder.take();
-        bytes.freeze()
-    });
+            let bytes = encoder.take();
+            bytes.freeze()
+        })
+        .clone();
 
     trace!("got cached data");
 
@@ -171,12 +171,10 @@ pub fn player_join_world(
         overlay: false,
     };
 
-    broadcast.append(&text, &compose).unwrap();
+    compose.broadcast(&text).send().unwrap();
 
     let local = query.packets;
-    {
-        local.append_raw(cached_data);
-    }
+    compose.io_buf().unicast_raw(cached_data, local.stream());
 
     trace!("appending cached data");
 
@@ -198,7 +196,7 @@ pub fn player_join_world(
         carried_item: Cow::Borrowed(&ItemStack::EMPTY),
     };
 
-    local.append(&pack_inv, &compose).unwrap();
+    compose.unicast(&pack_inv, *local).unwrap();
 
     sender.send_to(query.id, event::UpdateEquipment);
 
@@ -212,12 +210,13 @@ pub fn player_join_world(
         entries: Cow::Borrowed(entries),
     };
 
-    broadcast.append(&info, &compose).unwrap();
+    compose.broadcast(&info).send().unwrap();
 
     for entity in entities {
         info!("spawning entity");
         let pkt = spawn_entity_packet(entity.id, entity.skin.0, *entity.uuid, entity.pose);
-        local.append(&pkt, &compose).unwrap();
+
+        compose.unicast(&pkt, *local).unwrap();
     }
 
     // todo: cache
@@ -235,62 +234,70 @@ pub fn player_join_world(
         })
         .collect::<Vec<_>>();
 
-    let player_names: Vec<_> = player_list
-        .iter()
-        .map(|(name, _)| &***name) // todo: lol
-        .collect();
+    // let player_names: Vec<_> = player_list
+    //     .iter()
+    //     .map(|(name, _)| &***name) // todo: lol
+    //     .collect();
 
-    local
-        .append(
-            &play::TeamS2c {
-                team_name: "no_tag",
-                mode: Mode::AddEntities {
-                    entities: player_names,
-                },
-            },
-            &compose,
-        )
-        .unwrap();
+    // compose
+    //     .broadcast(&play::TeamS2c {
+    //         team_name: "no_tag",
+    //         mode: Mode::AddEntities {
+    //             entities: player_names,
+    //         },
+    //     })
+    //     .send()
+    //     .unwrap();
+    //
+    // let current_name = query.name;
+    //
+    //
+    //
+    //
+    // // broadcast
+    // //     .append(
+    // //         &play::TeamS2c {
+    // //             team_name: "no_tag",
+    // //             mode: Mode::AddEntities {
+    // //                 entities: vec![current_name],
+    // //             },
+    // //         },
+    // //         &compose,
+    // //     )
+    // //     .unwrap();
+    // compose.broadcast(&play::TeamS2c {
+    //     team_name: "no_tag",
+    //     mode: Mode::AddEntities {
+    //         entities: vec![current_name],
+    //     },
+    // })
+    // .send()
+    // .unwrap();
 
-    let current_name = query.name;
-
-    broadcast
-        .append(
-            &play::TeamS2c {
-                team_name: "no_tag",
-                mode: Mode::AddEntities {
-                    entities: vec![current_name],
-                },
-            },
-            &compose,
-        )
-        .unwrap();
-
-    local
-        .append(
+    compose
+        .unicast(
             &play::PlayerListS2c {
                 actions,
                 entries: Cow::Owned(entries),
             },
-            &compose,
+            *local,
         )
         .unwrap();
 
     let tick = global.tick;
     let time_of_day = tick % 24000;
 
-    local
-        .append(
+    compose
+        .unicast(
             &play::WorldTimeUpdateS2c {
                 world_age: tick,
                 time_of_day,
             },
-            &compose,
+            *local,
         )
         .unwrap();
 
     global
-        .0
         .shared
         .player_count
         .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
@@ -303,8 +310,8 @@ pub fn player_join_world(
         pitch: ByteAngle::from_degrees(query.pose.pitch),
     };
 
-    local
-        .append(
+    compose
+        .unicast(
             &play::PlayerPositionLookS2c {
                 position: query.pose.position.as_dvec3(),
                 yaw: query.pose.yaw,
@@ -312,24 +319,24 @@ pub fn player_join_world(
                 flags: PlayerPositionLookFlags::default(),
                 teleport_id: 1.into(),
             },
-            &compose,
+            *local,
         )
         .unwrap();
 
-    broadcast.append(&spawn_player, &compose).unwrap();
+    compose.broadcast(&spawn_player).send().unwrap();
 
     info!("{} joined the world", query.name);
 
     sender.send_to(got_id, event::PostPlayerJoinWorld);
 }
 
-pub fn send_keep_alive(packets: &mut Packets, compose: &Compose) -> anyhow::Result<()> {
+pub fn send_keep_alive(packets: StreamId, compose: &Compose) -> anyhow::Result<()> {
     let pkt = play::KeepAliveS2c {
         // The ID can be set to zero because it doesn't matter
         id: 0,
     };
 
-    packets.append(&pkt, compose)?;
+    compose.unicast(&pkt, packets)?;
 
     Ok(())
 }

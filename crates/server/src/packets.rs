@@ -16,7 +16,7 @@ use crate::{
     components::FullEntityPose,
     event::{self, AttackType, Pose, SwingArm},
     singleton::player_id_lookup::EntityIdLookup,
-    system::ingress::SendElem,
+    system::ingress::ThreadLocalIngressSender,
 };
 
 pub mod vanilla;
@@ -91,15 +91,14 @@ fn position_and_on_ground(
 
 fn update_selected_slot(
     mut data: &[u8],
-    sender: &mut Vec<SendElem>,
+    sender: &mut ThreadLocalIngressSender,
     player_id: EntityId,
 ) -> anyhow::Result<()> {
     let pkt = play::UpdateSelectedSlotC2s::decode(&mut data)?;
 
     let play::UpdateSelectedSlotC2s { slot } = pkt;
 
-    let elem = SendElem::new(player_id, event::UpdateSelectedSlot { slot });
-    sender.push(elem);
+    sender.send_to(player_id, event::UpdateSelectedSlot { slot });
 
     Ok(())
 }
@@ -107,7 +106,7 @@ fn update_selected_slot(
 fn chat_command(
     mut data: &[u8],
     query: &PacketSwitchQuery,
-    sender: &mut Vec<SendElem>,
+    sender: &mut ThreadLocalIngressSender,
 ) -> anyhow::Result<()> {
     let pkt = play::CommandExecutionC2s::decode(&mut data)?;
 
@@ -115,8 +114,7 @@ fn chat_command(
         raw: pkt.command.0.to_owned(),
     };
 
-    let elem = SendElem::new(query.id, event);
-    sender.push(elem);
+    sender.send_to(query.id, event);
 
     Ok(())
 }
@@ -124,7 +122,7 @@ fn chat_command(
 fn hand_swing(
     mut data: &[u8],
     query: &PacketSwitchQuery,
-    sender: &mut Vec<SendElem>,
+    sender: &mut ThreadLocalIngressSender,
 ) -> anyhow::Result<()> {
     let packet = play::HandSwingC2s::decode(&mut data)?;
 
@@ -132,7 +130,7 @@ fn hand_swing(
 
     let event = SwingArm { hand: packet };
 
-    sender.push(SendElem::new(query.id, event));
+    sender.send_to(query.id, event);
 
     Ok(())
 }
@@ -142,7 +140,7 @@ fn player_interact_entity(
     query: &PacketSwitchQuery,
     id_lookup: &EntityIdLookup,
     from_pos: Vec3,
-    sender: &mut Vec<SendElem>,
+    sender: &mut ThreadLocalIngressSender,
 ) -> anyhow::Result<()> {
     let packet = play::PlayerInteractEntityC2s::decode(&mut data)?;
 
@@ -154,14 +152,21 @@ fn player_interact_entity(
     let target = packet.entity_id.0;
 
     if let Some(&target) = id_lookup.get(&target) {
-        let elem = SendElem::new(target, event::AttackEntity {
+        // let elem = SendElem::new(target, event::AttackEntity {
+        //     from_pos,
+        //     from: query.id,
+        //     damage: 10.0,
+        //     source: AttackType::Melee,
+        // });
+        //
+        // sender.push(elem);
+
+        sender.send_to(target, event::AttackEntity {
             from_pos,
             from: query.id,
             damage: 10.0,
             source: AttackType::Melee,
         });
-
-        sender.push(elem);
     }
 
     Ok(())
@@ -174,7 +179,7 @@ pub struct PacketSwitchQuery<'a> {
 
 fn player_action(
     mut data: &[u8],
-    sender: &mut Vec<SendElem>,
+    sender: &mut ThreadLocalIngressSender,
     query: &PacketSwitchQuery,
 ) -> anyhow::Result<()> {
     let packet = play::PlayerActionC2s::decode(&mut data)?;
@@ -185,16 +190,19 @@ fn player_action(
 
     match packet.action {
         PlayerAction::StartDestroyBlock => {
-            let elem = SendElem::new(id, event::BlockStartBreak { position, sequence });
-            sender.push(elem);
+            // let elem = SendElem::new(id, event::BlockStartBreak { position, sequence });
+            // sender.push(elem);
+            sender.send_to(id, event::BlockStartBreak { position, sequence });
         }
         PlayerAction::AbortDestroyBlock => {
-            let elem = SendElem::new(id, event::BlockAbortBreak { position, sequence });
-            sender.push(elem);
+            // let elem = SendElem::new(id, event::BlockAbortBreak { position, sequence });
+            // sender.push(elem);
+            sender.send_to(id, event::BlockAbortBreak { position, sequence });
         }
         PlayerAction::StopDestroyBlock => {
-            let elem = SendElem::new(id, event::BlockFinishBreak { position, sequence });
-            sender.push(elem);
+            // let elem = SendElem::new(id, event::BlockFinishBreak { position, sequence });
+            // sender.push(elem);
+            sender.send_to(id, event::BlockFinishBreak { position, sequence });
         }
         _ => {}
     }
@@ -205,7 +213,7 @@ fn player_action(
 // for sneaking
 fn client_command(
     mut data: &[u8],
-    sender: &mut Vec<SendElem>,
+    sender: &mut ThreadLocalIngressSender,
     query: &PacketSwitchQuery,
 ) -> anyhow::Result<()> {
     let packet = play::ClientCommandC2s::decode(&mut data)?;
@@ -214,16 +222,22 @@ fn client_command(
 
     match packet.action {
         ClientCommand::StartSneaking => {
-            let elem = SendElem::new(id, event::PoseUpdate {
+            // let elem = SendElem::new(id, event::PoseUpdate {
+            //     state: Pose::Sneaking,
+            // });
+            // sender.push(elem);
+            sender.send_to(id, event::PoseUpdate {
                 state: Pose::Sneaking,
             });
-            sender.push(elem);
         }
         ClientCommand::StopSneaking => {
-            let elem = SendElem::new(id, event::PoseUpdate {
+            // let elem = SendElem::new(id, event::PoseUpdate {
+            //     state: Pose::Standing,
+            // });
+            // sender.push(elem);
+            sender.send_to(id, event::PoseUpdate {
                 state: Pose::Standing,
             });
-            sender.push(elem);
         }
         _ => {}
     }
@@ -233,7 +247,7 @@ fn client_command(
 
 pub fn switch(
     raw: &PacketFrame,
-    sender: &mut Vec<SendElem>,
+    sender: &mut ThreadLocalIngressSender,
     id_lookup: &EntityIdLookup,
     query: &mut PacketSwitchQuery,
 ) -> anyhow::Result<()> {
@@ -271,7 +285,7 @@ pub fn switch(
 // for inventory events
 fn inventory_action(
     mut data: &[u8],
-    sender: &mut Vec<SendElem>,
+    sender: &mut ThreadLocalIngressSender,
     query: &PacketSwitchQuery,
 ) -> anyhow::Result<()> {
     let packet = play::ClickSlotC2s::decode(&mut data)?;
@@ -436,8 +450,7 @@ fn inventory_action(
         slot_changes: slot_changes.iter().cloned().collect(),
     };
 
-    let elem = SendElem::new(id, event);
-    sender.push(elem);
+    sender.send_to(id, event);
 
     Ok(())
 }

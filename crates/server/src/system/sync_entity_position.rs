@@ -7,7 +7,7 @@ use valence_protocol::{packets::play, ByteAngle, VarInt};
 use crate::{
     components::{FullEntityPose, Uuid},
     event::Gametick,
-    net::{Broadcast, Compose},
+    net::Compose,
     singleton::broadcast::{PacketMetadata, PacketNecessity},
 };
 
@@ -31,7 +31,6 @@ pub struct PositionSyncMetadata {
 pub fn sync_entity_position(
     _: Receiver<Gametick>,
     mut entities: Fetcher<EntityQuery>,
-    broadcast: Single<&Broadcast>,
     compose: Compose,
 ) {
     entities.par_iter_mut().for_each(|query| {
@@ -111,7 +110,7 @@ pub fn sync_entity_position(
             exclude_player: Some(uuid.0),
         };
 
-        movement.write_packets(id, &broadcast, metadata, &compose);
+        movement.write_packets(id, metadata, &compose);
 
         if let EntityMovement::Teleport { .. } = movement {
             sync_meta.rounding_error = Vec3::ZERO;
@@ -144,13 +143,8 @@ pub enum EntityMovement {
 }
 
 impl EntityMovement {
-    fn write_packets(
-        &self,
-        id: EntityId,
-        broadcast: &Broadcast,
-        _metadata: PacketMetadata,
-        compose: &Compose,
-    ) {
+    // todo: add logic for metadata
+    fn write_packets(&self, id: EntityId, _metadata: PacketMetadata, compose: &Compose) {
         #[expect(
             clippy::cast_possible_wrap,
             reason = "wrapping is okay in this scenario"
@@ -174,8 +168,8 @@ impl EntityMovement {
                     head_yaw: yaw,
                 };
 
-                broadcast.append(&pos, compose).unwrap();
-                broadcast.append(&look, compose).unwrap();
+                compose.broadcast(&pos).send().unwrap();
+                compose.broadcast(&look).send().unwrap();
             }
             Self::Position { delta } => {
                 let pos = play::MoveRelativeS2c {
@@ -184,7 +178,7 @@ impl EntityMovement {
                     on_ground: false,
                 };
 
-                broadcast.append(&pos, compose).unwrap();
+                compose.broadcast(&pos).send().unwrap();
             }
             Self::Rotation { pitch, yaw } => {
                 let pos = play::RotateS2c {
@@ -199,8 +193,8 @@ impl EntityMovement {
                     head_yaw: yaw,
                 };
 
-                broadcast.append(&pos, compose).unwrap();
-                broadcast.append(&look, compose).unwrap();
+                compose.broadcast(&pos).send().unwrap();
+                compose.broadcast(&look).send().unwrap();
             }
             Self::Teleport { pos, pitch, yaw } => {
                 let pos = play::EntityPositionS2c {
@@ -216,8 +210,8 @@ impl EntityMovement {
                     head_yaw: yaw,
                 };
 
-                broadcast.append(&pos, compose).unwrap();
-                broadcast.append(&look, compose).unwrap();
+                compose.broadcast(&pos).send().unwrap();
+                compose.broadcast(&look).send().unwrap();
             }
             Self::None => {}
         }

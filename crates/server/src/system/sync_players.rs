@@ -6,7 +6,7 @@ use crate::{
     event,
     event::Gametick,
     global::Global,
-    net::{Compose, Packets},
+    net::{Compose, StreamId},
     tracker::Prev,
     Vitals,
 };
@@ -24,7 +24,7 @@ pub struct SyncPlayersQuery<'a> {
     id: EntityId,
     prev_vitals: &'a mut Prev<Vitals>,
     vitals: &'a mut Vitals,
-    packets: &'a mut Packets,
+    packets: &'a mut StreamId,
 }
 
 #[instrument(skip_all)]
@@ -61,18 +61,18 @@ pub fn sync_players(
                 if (*previous_health - *current_health).abs() > f32::EPSILON {
                     // TODO: Sync absorption hearts
 
-                    let _ = packets.append(
+                    let _ = compose.unicast(
                         &play::HealthUpdateS2c {
                             health: *current_health,
                             food: VarInt(20),
                             food_saturation: 5.0,
                         },
-                        &compose,
+                        *packets,
                     );
                 }
 
                 if previous_regeneration.end_tick != current_regeneration.end_tick {
-                    let _ = packets.append(
+                    let _ = compose.unicast(
                         &play::EntityStatusEffectS2c {
                             entity_id,
                             effect_id: REGENERATION,
@@ -82,7 +82,7 @@ pub fn sync_players(
                                 .with_show_icon(true),
                             factor_codec: None,
                         },
-                        &compose,
+                        *packets,
                     );
                 }
             }
@@ -90,21 +90,21 @@ pub fn sync_players(
                 s.send_to(query.id, event::Death);
             }
             (Vitals::Dead, Vitals::Alive { health, .. }) => {
-                let _ = packets.append(&play::ClearTitleS2c { reset: true }, &compose);
-                let _ = packets.append(
+                let _ = compose.unicast(&play::ClearTitleS2c { reset: true }, *packets);
+                let _ = compose.unicast(
                     &play::GameStateChangeS2c {
                         kind: play::game_state_change_s2c::GameEventKind::ChangeGameMode,
                         value: SURVIVAL,
                     },
-                    &compose,
+                    *packets,
                 );
-                let _ = packets.append(
+                let _ = compose.unicast(
                     &play::HealthUpdateS2c {
                         health: *health,
                         food: VarInt(20),
                         food_saturation: 5.0,
                     },
-                    &compose,
+                    *packets,
                 );
                 // TODO: Update absorption and regeneration
             }

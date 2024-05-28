@@ -5,14 +5,13 @@ use valence_protocol::VarInt;
 use crate::{
     components::{Npc, Player},
     event::KillAllEntities,
-    net::{Broadcast, Compose},
+    net::Compose,
 };
 
 #[instrument(skip_all)]
 pub fn kill_all(
     _r: ReceiverMut<KillAllEntities>,
     entities: Fetcher<(EntityId, &Npc, Not<&Player>)>,
-    broadcast: Single<&Broadcast>,
     s: Sender<Despawn>,
     compose: Compose,
 ) {
@@ -24,7 +23,7 @@ pub fn kill_all(
     let despawn_packet = valence_protocol::packets::play::EntitiesDestroyS2c { entity_ids };
 
     // todo: use shared scratch if possible
-    broadcast.append(&despawn_packet, &compose).unwrap();
+    compose.broadcast(&despawn_packet).send().unwrap();
 
     for id in ids {
         s.send_to(id, Despawn);

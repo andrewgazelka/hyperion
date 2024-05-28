@@ -5,13 +5,13 @@ use valence_protocol::{packets::play, VarInt};
 use crate::{
     components::{EntityReaction, FullEntityPose, ImmuneStatus, Player, Vitals},
     event::AttackEntity,
-    net::{Broadcast, Compose, Packets},
+    net::{Compose, StreamId},
 };
 
 #[derive(Query)]
 pub struct AttackPlayerQuery<'a> {
     id: EntityId,
-    packets: &'a mut Packets,
+    packets: &'a mut StreamId,
     _player: With<&'static Player>,
 }
 
@@ -48,7 +48,7 @@ pub fn pkt_attack_player(attack: Receiver<AttackEntity, AttackPlayerQuery>, comp
     // local is id 0
     damage_broadcast.entity_id = VarInt(0);
 
-    packets.append(&damage_broadcast, &compose).unwrap();
+    compose.unicast(&damage_broadcast, *packets).unwrap();
 }
 
 /// Handle Damage and knockback
@@ -56,7 +56,6 @@ pub fn pkt_attack_player(attack: Receiver<AttackEntity, AttackPlayerQuery>, comp
 pub fn pkt_attack_entity(
     global: Single<&crate::global::Global>,
     attack: Receiver<AttackEntity, AttackEntityQuery>,
-    broadcast: Single<&Broadcast>,
     compose: Compose,
 ) {
     let AttackEntityQuery {
@@ -69,7 +68,7 @@ pub fn pkt_attack_entity(
 
     let damage_broadcast = get_package(entity_id);
 
-    broadcast.append(&damage_broadcast, &compose).unwrap();
+    compose.broadcast(&damage_broadcast).send().unwrap();
 
     let event = attack.event;
 

@@ -7,7 +7,7 @@ use crate::{
     components::KeepAlive,
     event::{Gametick, KickPlayer},
     global::Global,
-    net::{Compose, Packets},
+    net::{Compose, StreamId},
     system::player_join_world::send_keep_alive,
 };
 
@@ -15,7 +15,7 @@ use crate::{
 pub fn keep_alive(
     _: Receiver<Gametick>,
     global: Single<&Global>,
-    mut fetcher: Fetcher<(EntityId, &mut KeepAlive, &mut Packets)>,
+    mut fetcher: Fetcher<(EntityId, &mut KeepAlive, &mut StreamId)>,
     s: Sender<KickPlayer>,
     compose: Compose,
 ) {
@@ -39,7 +39,7 @@ pub fn keep_alive(
         if !keep_alive.unresponded && elapsed.as_secs() >= 5 {
             *sent = Instant::now();
 
-            send_keep_alive(packets, &compose).unwrap();
+            send_keep_alive(*packets, &compose).unwrap();
 
             trace!("keep alive");
         }

@@ -6,19 +6,10 @@ use valence_protocol::{
     text::IntoText,
 };
 
-use crate::{
-    event::Stats,
-    global::Global,
-    net::{Broadcast, Compose},
-};
+use crate::{event::Stats, global::Global, net::Compose};
 
 #[instrument(skip_all, level = "trace")]
-pub fn stats_message(
-    r: ReceiverMut<Stats>,
-    broadcast: Single<&Broadcast>,
-    compose: Compose,
-    global: Single<&Global>,
-) {
+pub fn stats_message(r: ReceiverMut<Stats>, compose: Compose, global: Single<&Global>) {
     let event = r.event;
 
     let ms_per_tick = event.ms_per_tick;
@@ -45,7 +36,7 @@ pub fn stats_message(
         },
     };
 
-    broadcast.append(&pkt, &compose).unwrap();
+    compose.broadcast(&pkt).send().unwrap();
 
     let player_count = global
         .shared
@@ -67,5 +58,5 @@ pub fn stats_message(
         },
     };
 
-    broadcast.append(&pkt, &compose).unwrap();
+    compose.broadcast(&pkt).send().unwrap();
 }

@@ -4,11 +4,11 @@ use valence_protocol::packets::play;
 
 use crate::{
     event,
-    net::{Compose, Packets},
+    net::{Compose, StreamId},
 };
 
 #[instrument(skip_all, level = "trace")]
-pub fn compass(r: Receiver<event::PointCompass, &mut Packets>, compose: Compose) {
+pub fn compass(r: Receiver<event::PointCompass, &mut StreamId>, compose: Compose) {
     let event = r.event;
 
     let packets = r.query;
@@ -18,5 +18,5 @@ pub fn compass(r: Receiver<event::PointCompass, &mut Packets>, compose: Compose)
         angle: 0.0,
     };
 
-    packets.append(&pkt, &compose).unwrap();
+    compose.unicast(&pkt, *packets).unwrap();
 }

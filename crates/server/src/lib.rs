@@ -37,7 +37,6 @@ use evenio::prelude::*;
 use humansize::{SizeFormatter, BINARY};
 use libc::{getrlimit, setrlimit, RLIMIT_NOFILE};
 use libdeflater::CompressionLvl;
-use num_format::Locale;
 use signal_hook::iterator::Signals;
 use singleton::bounding_box;
 use spin::Lazy;
@@ -52,12 +51,15 @@ use crate::{
     },
     event::{Egress, Gametick, Scratches, Stats},
     global::Global,
-    net::{buffers::BufferAllocator, Broadcast, Compressors, Server, ServerDef, S2C_BUFFER_SIZE},
+    net::{
+        proxy::{init_proxy_comms, ReceiveState},
+        Compressors, IoBuf, S2C_BUFFER_SIZE,
+    },
     singleton::{
-        fd_lookup::FdLookup, player_aabb_lookup::PlayerBoundingBoxes,
+        fd_lookup::StreamLookup, player_aabb_lookup::PlayerBoundingBoxes,
         player_id_lookup::EntityIdLookup, player_uuid_lookup::PlayerUuidLookup,
     },
-    system::{generate_biome_registry, generate_ingress_events},
+    system::{generate_biome_registry, ingress::generate_ingress_events},
 };
 
 pub mod components;
@@ -113,15 +115,9 @@ pub fn adjust_file_descriptor_limits(recommended_min: u64) -> std::io::Result<()
 
     if unsafe { getrlimit(RLIMIT_NOFILE, &mut limits) } == 0 {
         // Create a stack-allocated buffer...
-        let mut rlim_cur = num_format::Buffer::default();
-        rlim_cur.write_formatted(&limits.rlim_cur, &Locale::en);
 
-        info!("current soft limit: {rlim_cur}");
-
-        let mut rlim_max = num_format::Buffer::default();
-        rlim_max.write_formatted(&limits.rlim_max, &Locale::en);
-
-        info!("current hard limit: {rlim_max}");
+        info!("current soft limit: {}", limits.rlim_cur);
+        info!("current hard limit: {}", limits.rlim_max);
     } else {
         error!("Failed to get the current file handle limits");
         return Err(std::io::Error::last_os_error());
@@ -135,10 +131,8 @@ pub fn adjust_file_descriptor_limits(recommended_min: u64) -> std::io::Result<()
     }
 
     limits.rlim_cur = limits.rlim_max;
-    let mut new_limit = num_format::Buffer::default();
-    new_limit.write_formatted(&limits.rlim_cur, &Locale::en);
 
-    info!("setting soft limit to: {new_limit}");
+    info!("setting soft limit to: {}", limits.rlim_cur);
 
     if unsafe { setrlimit(RLIMIT_NOFILE, &limits) } != 0 {
         error!("Failed to set the file handle limits");
@@ -206,7 +200,7 @@ pub struct Hyperion {
     /// The tick of the game. This is incremented every 50 ms.
     tick_on: u64,
 
-    server: Server,
+    receive_state: ReceiveState,
 }
 
 impl Hyperion {
@@ -307,20 +301,22 @@ impl Hyperion {
             .next()
             .context("could not get first address")?;
 
-        let mut server_def = Server::new(address)?;
+        let tasks = Tasks::default();
 
-        let buffers_id = world.spawn();
-        let mut buffers_elem = BufferAllocator::new(&mut server_def);
+        let (receive_state, egress_comm) = init_proxy_comms(&tasks, address);
+
+        let id = world.spawn();
+        world.insert(id, egress_comm);
+
+        let tasks_id = world.spawn();
+        world.insert(tasks_id, tasks);
 
         let broadcast = world.spawn();
-        world.insert(broadcast, Broadcast::new(&mut buffers_elem)?);
-
-        world.insert(buffers_id, buffers_elem);
+        world.insert(broadcast, IoBuf::default());
 
         world.add_handler(system::ingress::add_player);
         world.add_handler(system::ingress::remove_player);
         world.add_handler(system::ingress::recv_data);
-        world.add_handler(system::ingress::sent_data);
 
         world.add_handler(system::chunks::generate_chunk_changes);
         world.add_handler(system::chunks::send_updates);
@@ -391,9 +387,6 @@ impl Hyperion {
             generate_biome_registry().context("failed to generate biome registry")?;
         world.insert(chunks, Chunks::new(&biome_registry)?);
 
-        let tasks = world.spawn();
-        world.insert(tasks, Tasks::default());
-
         let player_id_lookup = world.spawn();
         world.insert(player_id_lookup, EntityIdLookup::default());
 
@@ -401,14 +394,14 @@ impl Hyperion {
         world.insert(player_location_lookup, PlayerBoundingBoxes::default());
 
         let fd_lookup = world.spawn();
-        world.insert(fd_lookup, FdLookup::default());
+        world.insert(fd_lookup, StreamLookup::default());
 
         let mut game = Self {
             shared,
             world,
             last_ticks: VecDeque::default(),
             tick_on: 0,
-            server: server_def,
+            receive_state,
         };
 
         game.last_ticks.push_back(Instant::now());
@@ -477,16 +470,14 @@ impl Hyperion {
 
         self.last_ticks.push_back(now);
 
-        generate_ingress_events(&mut self.world, &mut self.server);
+        generate_ingress_events(&mut self.world, &self.receive_state);
 
         tracing::span!(tracing::Level::TRACE, "gametick").in_scope(|| {
             self.world.send(Gametick);
         });
 
-        let server = &mut self.server;
-
         tracing::span!(tracing::Level::TRACE, "egress-event").in_scope(|| {
-            self.world.send(Egress { server });
+            self.world.send(Egress);
         });
 
         #[expect(

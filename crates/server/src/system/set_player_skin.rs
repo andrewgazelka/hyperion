@@ -15,12 +15,12 @@ use valence_protocol::{
 use crate::{
     components::{InGameName, Uuid},
     event::SetPlayerSkin,
-    net::{Compose, Packets},
+    net::{Compose, StreamId},
 };
 
 #[derive(Query)]
 pub(crate) struct SetPlayerSkinQuery<'a> {
-    packets: &'a mut Packets,
+    packets: &'a mut StreamId,
     uuid: &'a Uuid,
     username: &'a InGameName,
 }
@@ -43,7 +43,7 @@ pub fn set_player_skin(r: ReceiverMut<SetPlayerSkin, SetPlayerSkinQuery>, compos
         entity_ids: Cow::Borrowed(entity_ids),
     };
 
-    packets.append(&pkt, &compose).unwrap();
+    compose.unicast(&pkt, *packets).unwrap();
 
     let uuids = &[query.uuid.0];
 
@@ -52,7 +52,7 @@ pub fn set_player_skin(r: ReceiverMut<SetPlayerSkin, SetPlayerSkinQuery>, compos
         uuids: Cow::Borrowed(uuids),
     };
 
-    packets.append(&pkt, &compose).unwrap();
+    compose.unicast(&pkt, *packets).unwrap();
 
     let skin = event.skin;
 
@@ -83,7 +83,7 @@ pub fn set_player_skin(r: ReceiverMut<SetPlayerSkin, SetPlayerSkinQuery>, compos
         entries: Cow::Borrowed(entries),
     };
 
-    packets.append(&pkt, &compose).unwrap();
+    compose.unicast(&pkt, *packets).unwrap();
 
     let dimension_name = ident!("overworld");
     // // respawn
@@ -100,6 +100,6 @@ pub fn set_player_skin(r: ReceiverMut<SetPlayerSkin, SetPlayerSkinQuery>, compos
         portal_cooldown: 42.into(),
     };
 
-    // send_all_chunks(packets, &compose).unwrap();
-    packets.append(&respawn, &compose).unwrap();
+    // send_all_chunks(compose, *packets).unwrap();
+    compose.unicast(&respawn, *packets).unwrap();
 }

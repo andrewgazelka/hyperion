@@ -2,17 +2,10 @@ use evenio::prelude::*;
 use tracing::instrument;
 use valence_protocol::{packets::play, Encode, RawBytes, VarInt};
 
-use crate::{
-    event,
-    net::{Broadcast, Compose},
-};
+use crate::{event, net::Compose};
 
 #[instrument(skip_all)]
-pub fn pose_update(
-    r: Receiver<event::PoseUpdate, EntityId>,
-    broadcast: Single<&Broadcast>,
-    compose: Compose,
-) {
+pub fn pose_update(r: Receiver<event::PoseUpdate, EntityId>, compose: Compose) {
     // Server to Client (S2C):
     // Entity Metadata packet (0x52).
 
@@ -46,5 +39,5 @@ pub fn pose_update(
         tracked_values: RawBytes(&bytes),
     };
 
-    broadcast.append(&tracker, &compose).unwrap();
+    compose.broadcast(&tracker).send().unwrap();
 }

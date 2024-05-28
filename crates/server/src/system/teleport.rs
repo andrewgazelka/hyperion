@@ -7,12 +7,12 @@ use valence_protocol::{
 
 use crate::{
     event,
-    net::{Compose, Packets},
+    net::{Compose, StreamId},
 };
 
 #[derive(Query)]
 pub struct TeleportQuery<'a> {
-    packets: &'a mut Packets,
+    packets: &'a mut StreamId,
 }
 
 #[instrument(skip_all)]
@@ -29,9 +29,10 @@ pub fn teleport(r: Receiver<event::Teleport, TeleportQuery>, compose: Compose) {
     let teleport_id = fastrand::i32(..);
     let teleport_id = VarInt(teleport_id);
 
-    query
-        .packets
-        .append(
+    let packets = query.packets;
+
+    compose
+        .unicast(
             &play::PlayerPositionLookS2c {
                 position: event.position.as_dvec3(),
                 yaw: 0.0,
@@ -39,7 +40,7 @@ pub fn teleport(r: Receiver<event::Teleport, TeleportQuery>, compose: Compose) {
                 flags: PlayerPositionLookFlags::default(),
                 teleport_id,
             },
-            &compose,
+            *packets,
         )
         .unwrap();
 }
