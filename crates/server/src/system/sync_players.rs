@@ -67,7 +67,7 @@ pub fn sync_players(
                             food: VarInt(20),
                             food_saturation: 5.0,
                         },
-                        *packets,
+                        packets,
                     );
                 }
 
@@ -82,7 +82,7 @@ pub fn sync_players(
                                 .with_show_icon(true),
                             factor_codec: None,
                         },
-                        *packets,
+                        packets,
                     );
                 }
             }
@@ -90,13 +90,13 @@ pub fn sync_players(
                 s.send_to(query.id, event::Death);
             }
             (Vitals::Dead, Vitals::Alive { health, .. }) => {
-                let _ = compose.unicast(&play::ClearTitleS2c { reset: true }, *packets);
+                let _ = compose.unicast(&play::ClearTitleS2c { reset: true }, packets);
                 let _ = compose.unicast(
                     &play::GameStateChangeS2c {
                         kind: play::game_state_change_s2c::GameEventKind::ChangeGameMode,
                         value: SURVIVAL,
                     },
-                    *packets,
+                    packets,
                 );
                 let _ = compose.unicast(
                     &play::HealthUpdateS2c {
@@ -104,7 +104,7 @@ pub fn sync_players(
                         food: VarInt(20),
                         food_saturation: 5.0,
                     },
-                    *packets,
+                    packets,
                 );
                 // TODO: Update absorption and regeneration
             }

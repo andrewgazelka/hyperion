@@ -56,7 +56,7 @@ pub(crate) struct PlayerJoinWorldQuery<'a> {
     inventory: &'a mut PlayerInventory,
     uuid: &'a Uuid,
     pose: &'a FullEntityPose,
-    packets: &'a StreamId,
+    packets: &'a mut StreamId,
     name: &'a InGameName,
     _player: With<&'static Player>,
 }
@@ -101,14 +101,14 @@ pub fn send_player_info(
             pitch: ByteAngle::from_degrees(pose.pitch),
         };
 
-        compose.unicast(&pkt, *r.query.packets).unwrap();
+        compose.unicast(&pkt, r.query.packets).unwrap();
 
         let equipment = inv.get_entity_equipment();
         let pkt = crate::packets::vanilla::EntityEquipmentUpdateS2c {
             entity_id,
             equipment: Cow::Borrowed(&equipment),
         };
-        compose.unicast(&pkt, *r.query.packets).unwrap();
+        compose.unicast(&pkt, r.query.packets).unwrap();
     }
 }
 
@@ -174,7 +174,7 @@ pub fn player_join_world(
     compose.broadcast(&text).send().unwrap();
 
     let local = query.packets;
-    compose.io_buf().unicast_raw(cached_data, local.stream());
+    compose.io_buf().unicast_raw(cached_data, local);
 
     trace!("appending cached data");
 
@@ -198,7 +198,7 @@ pub fn player_join_world(
         carried_item: Cow::Borrowed(&ItemStack::EMPTY),
     };
 
-    compose.unicast(&pack_inv, *local).unwrap();
+    compose.unicast(&pack_inv, local).unwrap();
 
     sender.send_to(query.id, event::UpdateEquipment);
 
@@ -218,7 +218,7 @@ pub fn player_join_world(
         info!("spawning entity");
         let pkt = spawn_entity_packet(entity.id, entity.skin.0, *entity.uuid, entity.pose);
 
-        compose.unicast(&pkt, *local).unwrap();
+        compose.unicast(&pkt, local).unwrap();
     }
 
     // todo: cache
@@ -282,7 +282,7 @@ pub fn player_join_world(
                 actions,
                 entries: Cow::Owned(entries),
             },
-            *local,
+            local,
         )
         .unwrap();
 
@@ -295,7 +295,7 @@ pub fn player_join_world(
                 world_age: tick,
                 time_of_day,
             },
-            *local,
+            local,
         )
         .unwrap();
 
@@ -321,7 +321,7 @@ pub fn player_join_world(
                 flags: PlayerPositionLookFlags::default(),
                 teleport_id: 1.into(),
             },
-            *local,
+            local,
         )
         .unwrap();
 
@@ -332,7 +332,7 @@ pub fn player_join_world(
     sender.send_to(got_id, event::PostPlayerJoinWorld);
 }
 
-pub fn send_keep_alive(packets: StreamId, compose: &Compose) -> anyhow::Result<()> {
+pub fn send_keep_alive(packets: &mut StreamId, compose: &Compose) -> anyhow::Result<()> {
     let pkt = play::KeepAliveS2c {
         // The ID can be set to zero because it doesn't matter
         id: 0,

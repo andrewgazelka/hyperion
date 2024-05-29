@@ -30,7 +30,7 @@ pub fn generate_egress_packets(
                 velocity,
             };
 
-            compose.unicast(&pkt, *packets).unwrap();
+            compose.unicast(&pkt, packets).unwrap();
         }
 
         *reaction = EntityReaction::default();

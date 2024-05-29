@@ -1,4 +1,4 @@
-use std::{alloc::Layout, any, ptr, ptr::NonNull};
+use std::{alloc::Layout, any, cell::RefCell, ptr, ptr::NonNull};
 
 use bumpalo::Bump;
 use evenio::{
@@ -126,14 +126,11 @@ pub fn add_player(
         Insert<StreamId>,
     )>,
 ) {
-    info!("got a player with stream {}", r.event.stream);
     let event = r.event;
 
     let new_player = sender.spawn();
     sender.insert(new_player, LoginState::Handshake);
     sender.insert(new_player, DecodeBuffer::default());
-
-    trace!("got a player with stream {}", event.stream);
 
     sender.insert(new_player, StreamId::new(event.stream));
 
@@ -242,7 +239,7 @@ pub fn recv_data(
     players: Fetcher<(
         &mut LoginState,
         &mut DecodeBuffer,
-        &StreamId,
+        &mut StreamId,
         Option<&mut FullEntityPose>,
     )>,
     id_lookup: Single<&EntityIdLookup>,
@@ -253,8 +250,9 @@ pub fn recv_data(
 
     let bumps = recv_data.bumps;
 
-    let send_events: RayonLocal<SenderLocal<IngressEventSet>> =
-        bumps.map_ref(|bump| SenderLocal::new(sender.state(), bump));
+    let send_events = bumps
+        .map_ref(|bump| SenderLocal::new(sender.state(), bump))
+        .map(RefCell::new);
 
     recv_data.events.drain_par(|stream_id, data| {
         let stream_id = stream_id.inner();
@@ -268,8 +266,8 @@ pub fn recv_data(
         // since we can get multiple mutable references per thread.
         // However, as long as we do it once at the beginning of the scope and don't try to get it multiple times,
         // it should be fine.
-        let send_events = send_events.get_local_raw();
-        let send_events = unsafe { &mut *send_events.get() };
+        let send_events = send_events.get_local();
+        let send_events = &mut *send_events.borrow_mut();
 
         // The reason we are using `get_unchecked`
         // is because there are mutable accesses which require exclusive access to players.
@@ -293,7 +291,7 @@ pub fn recv_data(
             match *login_state {
                 LoginState::Handshake => process_handshake(login_state, &frame).unwrap(),
                 LoginState::Status => {
-                    process_status(login_state, &frame, *packets, &compose).unwrap();
+                    process_status(login_state, &frame, packets, &compose).unwrap();
                 }
                 LoginState::Terminate => {
                     // // todo: does this properly terminate the connection? I don't think so probably
@@ -308,7 +306,7 @@ pub fn recv_data(
                         entity_id,
                         login_state,
                         &frame,
-                        *packets,
+                        packets,
                         decoder,
                         &global,
                         send_events,
@@ -350,6 +348,7 @@ pub fn recv_data(
     // send the events
 
     for local in send_events {
+        let local = local.into_inner();
         let world = sender.world();
         for (id, ptr, idx) in local.pending_targeted {
             unsafe { world.queue_targeted(id, ptr, idx) };
@@ -359,7 +358,7 @@ pub fn recv_data(
             unsafe { world.queue_global(ptr, idx) };
         }
 
-        // todo: flush event queue
+        // todo: should we flush event queue? I don't think we need to.
     }
 }
 
@@ -389,7 +388,7 @@ fn process_login(
     id: EntityId,
     login_state: &mut LoginState,
     packet: &PacketFrame,
-    stream_id: StreamId,
+    stream_id: &mut StreamId,
     decoder: &mut DecodeBuffer,
     global: &Global,
     sender: &mut ThreadLocalIngressSender,
@@ -431,7 +430,7 @@ fn process_login(
 fn process_status(
     login_state: &mut LoginState,
     packet: &PacketFrame,
-    packets: StreamId,
+    packets: &mut StreamId,
     compose: &Compose,
 ) -> anyhow::Result<()> {
     debug_assert!(*login_state == LoginState::Status);

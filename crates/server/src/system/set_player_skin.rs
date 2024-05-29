@@ -43,7 +43,7 @@ pub fn set_player_skin(r: ReceiverMut<SetPlayerSkin, SetPlayerSkinQuery>, compos
         entity_ids: Cow::Borrowed(entity_ids),
     };
 
-    compose.unicast(&pkt, *packets).unwrap();
+    compose.unicast(&pkt, packets).unwrap();
 
     let uuids = &[query.uuid.0];
 
@@ -52,7 +52,7 @@ pub fn set_player_skin(r: ReceiverMut<SetPlayerSkin, SetPlayerSkinQuery>, compos
         uuids: Cow::Borrowed(uuids),
     };
 
-    compose.unicast(&pkt, *packets).unwrap();
+    compose.unicast(&pkt, packets).unwrap();
 
     let skin = event.skin;
 
@@ -83,7 +83,7 @@ pub fn set_player_skin(r: ReceiverMut<SetPlayerSkin, SetPlayerSkinQuery>, compos
         entries: Cow::Borrowed(entries),
     };
 
-    compose.unicast(&pkt, *packets).unwrap();
+    compose.unicast(&pkt, packets).unwrap();
 
     let dimension_name = ident!("overworld");
     // // respawn
@@ -101,5 +101,5 @@ pub fn set_player_skin(r: ReceiverMut<SetPlayerSkin, SetPlayerSkinQuery>, compos
     };
 
     // send_all_chunks(compose, *packets).unwrap();
-    compose.unicast(&respawn, *packets).unwrap();
+    compose.unicast(&respawn, packets).unwrap();
 }

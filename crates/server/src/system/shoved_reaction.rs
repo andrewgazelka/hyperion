@@ -1,5 +1,7 @@
-use evenio::event::{ReceiverMut, Sender};
-use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
+use std::cell::RefCell;
+
+use evenio::event::{EventMut, ReceiverMut, Sender};
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use tracing::instrument;
 
 use crate::{
@@ -8,12 +10,15 @@ use crate::{
 };
 
 #[instrument(skip_all, level = "trace")]
-pub fn shoved_reaction(mut r: ReceiverMut<BulkShoved>, s: Sender<event::AttackEntity>) {
-    let result = r
-        .event
+pub fn shoved_reaction(r: ReceiverMut<BulkShoved>, s: Sender<event::AttackEntity>) {
+    let event = EventMut::take(r.event);
+
+    let result = event
         .0
-        .get_all_mut()
-        .par_iter_mut()
+        .into_inner()
+        .into_vec()
+        .into_par_iter()
+        .map(RefCell::into_inner)
         .flatten()
         .map(|event| {
             (event.target, event::AttackEntity {

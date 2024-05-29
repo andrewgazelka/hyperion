@@ -1,15 +1,16 @@
 //! All the networking related code.
 
-use std::{borrow::Cow, cell::RefCell, hash::Hash};
+use std::{borrow::Cow, cell::RefCell, fmt::Debug, hash::Hash};
 
 use bytes::BytesMut;
 pub use decoder::PacketDecoder;
-use derive_more::{Constructor, Deref, DerefMut};
+use derive_more::{Deref, DerefMut};
 use evenio::{fetch::Single, handler::HandlerParam, prelude::Component};
 use hyperion_proto::ChunkPosition;
 use libdeflater::CompressionLvl;
 use prost::Message;
 use rayon_local::RayonLocal;
+use slotmap::KeyData;
 
 use crate::{
     event::{Scratch, Scratches},
@@ -59,11 +60,37 @@ impl Default for Compressors {
     }
 }
 
-#[derive(Component, Copy, Clone, Debug, PartialEq, Eq, Hash, Constructor)]
+#[derive(Component, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct StreamId {
     stream_id: u64,
+
+    /// This starts at 0. Every single packet we encode, we increment this by 1,
+    /// and we wrap it around if we ever get to the maximum value.
+    /// This is used so that the proxy will always send these packets in order.
+    /// It's sent as part of the protocol.  
+    packet_order: u64,
 }
+
+impl Debug for StreamId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let stream_id = KeyData::from_ffi(self.stream_id);
+
+        f.debug_struct("StreamId")
+            .field("stream_id", &stream_id)
+            .field("packet_on", &self.packet_order)
+            .finish()
+    }
+}
+
 impl StreamId {
+    #[must_use]
+    pub const fn new(stream_id: u64) -> Self {
+        Self {
+            stream_id,
+            packet_order: 0,
+        }
+    }
+
     #[must_use]
     pub const fn stream(&self) -> u64 {
         self.stream_id
@@ -72,6 +99,7 @@ impl StreamId {
 
 #[derive(HandlerParam, Copy, Clone)]
 pub struct Compose<'a> {
+    // todo: make these other things private for safety
     pub compressor: Single<&'a Compressors>,
     pub scratch: Single<&'a Scratches>,
     pub global: Single<&'a Global>,
@@ -117,13 +145,13 @@ impl<'a> Compose<'a> {
         }
     }
 
-    pub fn unicast<P>(&self, packet: &P, id: StreamId) -> anyhow::Result<()>
+    pub fn unicast<P>(&self, packet: &P, stream_id: &mut StreamId) -> anyhow::Result<()>
     where
         P: valence_protocol::Packet + valence_protocol::Encode,
     {
         Unicast {
             packet,
-            id: id.stream_id,
+            stream_id,
             compose: *self,
 
             // todo: Should we have this true by default, or is there a better way?
@@ -133,13 +161,17 @@ impl<'a> Compose<'a> {
         .send()
     }
 
-    pub fn unicast_no_compression<P>(&self, packet: &P, id: StreamId) -> anyhow::Result<()>
+    pub fn unicast_no_compression<P>(
+        &self,
+        packet: &P,
+        stream_id: &mut StreamId,
+    ) -> anyhow::Result<()>
     where
         P: valence_protocol::Packet + valence_protocol::Encode,
     {
         Unicast {
             packet,
-            id: id.stream_id,
+            stream_id,
             compose: *self,
             compress: false,
         }
@@ -178,8 +210,8 @@ impl<'a> Compose<'a> {
 /// This is useful for the ECS, so we can use Single<&mut Broadcast> instead of having to use a marker struct
 #[derive(Component, Default)]
 pub struct IoBuf {
-    buffer: RayonLocal<BytesMut>,
-    temp_buffer: RayonLocal<BytesMut>,
+    buffer: RayonLocal<RefCell<BytesMut>>,
+    temp_buffer: RayonLocal<RefCell<BytesMut>>,
 }
 
 // todo: do we need this many lifetimes? we definitely need 'a and 'b I think
@@ -190,21 +222,24 @@ pub struct Broadcast<'a, 'b, 'c, P> {
     exclude: Cow<'c, [u64]>,
 }
 
-struct Unicast<'a, 'b, P> {
+struct Unicast<'a, 'b, 'c, P> {
     packet: &'b P,
-    id: u64,
+    stream_id: &'c mut StreamId,
     compose: Compose<'a>,
     compress: bool,
 }
 
-impl<'a, 'b, P> Unicast<'a, 'b, P>
+impl<'a, 'b, 'c, P> Unicast<'a, 'b, 'c, P>
 where
     P: valence_protocol::Packet + valence_protocol::Encode,
 {
-    fn send(&self) -> anyhow::Result<()> {
-        self.compose
-            .io_buf
-            .unicast_private(self.packet, self.id, &self.compose, self.compress)
+    fn send(&mut self) -> anyhow::Result<()> {
+        self.compose.io_buf.unicast_private(
+            self.packet,
+            self.stream_id,
+            &self.compose,
+            self.compress,
+        )
     }
 }
 
@@ -315,18 +350,22 @@ impl<'a, 'b, 'c, P> BroadcastLocal<'a, 'b, 'c, P> {
 }
 
 impl IoBuf {
-    pub fn split(&mut self) -> impl Iterator<Item = BytesMut> + '_ {
-        self.buffer.get_all_mut().iter_mut().map(BytesMut::split)
+    pub fn split(&mut self) -> impl DoubleEndedIterator<Item = BytesMut> + '_ {
+        self.buffer
+            .get_all_mut()
+            .iter_mut()
+            .map(|x| x.borrow_mut())
+            .map(|mut x| x.split())
     }
 
     fn encode_packet<P>(&self, packet: &P, compose: &Compose) -> anyhow::Result<bytes::Bytes>
     where
         P: valence_protocol::Packet + valence_protocol::Encode,
     {
-        let temp_buffer = self.temp_buffer.get_local_raw();
-        let temp_buffer = unsafe { &mut *temp_buffer.get() };
+        let temp_buffer = self.temp_buffer.get_local();
+        let temp_buffer = &mut *temp_buffer.borrow_mut();
 
-        let compressor = compose.compressor.get_local();
+        let compressor = compose.compressor();
         let mut compressor = compressor.borrow_mut();
 
         let scratch = compose.scratch.get_local();
@@ -344,8 +383,8 @@ impl IoBuf {
     where
         P: valence_protocol::Packet + valence_protocol::Encode,
     {
-        let temp_buffer = self.temp_buffer.get_local_raw();
-        let temp_buffer = unsafe { &mut *temp_buffer.get() };
+        let temp_buffer = self.temp_buffer.get_local();
+        let temp_buffer = &mut *temp_buffer.borrow_mut();
 
         let result = append_packet_without_compression(packet, temp_buffer)?;
 
@@ -355,7 +394,7 @@ impl IoBuf {
     fn unicast_private<P>(
         &self,
         packet: &P,
-        id: u64,
+        id: &mut StreamId,
         compose: &Compose,
         compress: bool,
     ) -> anyhow::Result<()>
@@ -393,8 +432,8 @@ impl IoBuf {
         optional: bool,
         exclude: &[u64],
     ) {
-        let buffer = self.buffer.get_local_raw();
-        let buffer = unsafe { &mut *buffer.get() };
+        let buffer = self.buffer.get_local();
+        let buffer = &mut *buffer.borrow_mut();
 
         let to_send = hyperion_proto::BroadcastLocal {
             data,
@@ -410,8 +449,8 @@ impl IoBuf {
     }
 
     pub fn broadcast_raw(&self, data: bytes::Bytes, optional: bool, exclude: &[u64]) {
-        let buffer = self.buffer.get_local_raw();
-        let buffer = unsafe { &mut *buffer.get() };
+        let buffer = self.buffer.get_local();
+        let buffer = &mut *buffer.borrow_mut();
 
         let to_send = hyperion_proto::BroadcastGlobal {
             data,
@@ -427,20 +466,25 @@ impl IoBuf {
             .unwrap();
     }
 
-    pub fn unicast_raw(&self, data: bytes::Bytes, stream: u64) {
-        let buffer = self.buffer.get_local_raw();
-        let buffer = unsafe { &mut *buffer.get() };
+    pub fn unicast_raw(&self, data: bytes::Bytes, stream: &mut StreamId) {
+        let buffer = self.buffer.get_local();
+        let buffer = &mut *buffer.borrow_mut();
 
-        let to_send = hyperion_proto::Unicast { data, stream };
+        let to_send = hyperion_proto::Unicast {
+            data,
+            stream: stream.stream_id,
+            order: stream.packet_order,
+        };
 
         let to_send = hyperion_proto::ServerToProxy::from(to_send);
-
         to_send.encode_length_delimited(buffer).unwrap();
+
+        stream.packet_order += 1;
     }
 
     pub fn multicast_raw(&self, data: bytes::Bytes, streams: &[u64]) {
-        let buffer = self.buffer.get_local_raw();
-        let buffer = unsafe { &mut *buffer.get() };
+        let buffer = self.buffer.get_local();
+        let buffer = &mut *buffer.borrow_mut();
 
         let to_send = hyperion_proto::Multicast {
             data,
@@ -453,8 +497,8 @@ impl IoBuf {
     }
 
     pub fn set_receive_broadcasts(&self, stream: StreamId) {
-        let buffer = self.buffer.get_local_raw();
-        let buffer = unsafe { &mut *buffer.get() };
+        let buffer = self.buffer.get_local();
+        let buffer = &mut *buffer.borrow_mut();
 
         let to_send = hyperion_proto::SetReceiveBroadcasts {
             stream: stream.stream_id,
@@ -536,8 +580,8 @@ mod tests {
             left.encode_length_delimited(&mut left_buf).unwrap();
 
             let right_buf = compose.io_buf();
-            let right_buf = right_buf.buffer.get_local_raw();
-            let right_buf = unsafe { &mut *right_buf.get() };
+            let right_buf = right_buf.buffer.get_local();
+            let right_buf = right_buf.borrow_mut();
             let right_buf = &**right_buf;
 
             assert_eq!(left_buf, right_buf);

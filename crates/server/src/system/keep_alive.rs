@@ -39,7 +39,7 @@ pub fn keep_alive(
         if !keep_alive.unresponded && elapsed.as_secs() >= 5 {
             *sent = Instant::now();
 
-            send_keep_alive(*packets, &compose).unwrap();
+            send_keep_alive(packets, &compose).unwrap();
 
             trace!("keep alive");
         }

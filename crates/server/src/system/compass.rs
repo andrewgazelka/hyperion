@@ -18,5 +18,5 @@ pub fn compass(r: Receiver<event::PointCompass, &mut StreamId>, compose: Compose
         angle: 0.0,
     };
 
-    compose.unicast(&pkt, *packets).unwrap();
+    compose.unicast(&pkt, packets).unwrap();
 }

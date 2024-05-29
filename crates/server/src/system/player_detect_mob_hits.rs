@@ -1,3 +1,5 @@
+use std::cell::RefCell;
+
 use evenio::{
     entity::EntityId,
     event::{Receiver, Sender},
@@ -30,13 +32,13 @@ pub fn player_detect_mob_hits(
     mut poses_fetcher: Fetcher<PlayerDetectMobHitsQuery>,
     s: Sender<event::BulkShoved>,
 ) {
-    let sender = RayonLocal::init(Vec::new);
+    let sender = RayonLocal::init(Vec::new).map(RefCell::new);
 
     poses_fetcher.par_iter_mut().for_each(|query| {
         let PlayerDetectMobHitsQuery { id, pose, _player } = query;
 
-        let sender = sender.get_local_raw();
-        let sender = unsafe { &mut *sender.get() };
+        let sender = sender.get_local();
+        let mut sender = sender.borrow_mut();
 
         entity_bounding_boxes
             .query
