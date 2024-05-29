@@ -31,7 +31,7 @@ pub fn player_kick(
     let reason = reason.into_text().color(Color::RED);
     let reason = reason.into();
     compose
-        .unicast(&play::DisconnectS2c { reason }, *packets)
+        .unicast(&play::DisconnectS2c { reason }, packets)
         .unwrap();
 
     s.send_to(id, Despawn);

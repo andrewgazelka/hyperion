@@ -48,7 +48,7 @@ pub fn pkt_attack_player(attack: Receiver<AttackEntity, AttackPlayerQuery>, comp
     // local is id 0
     damage_broadcast.entity_id = VarInt(0);
 
-    compose.unicast(&damage_broadcast, *packets).unwrap();
+    compose.unicast(&damage_broadcast, packets).unwrap();
 }
 
 /// Handle Damage and knockback

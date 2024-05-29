@@ -46,7 +46,7 @@ pub fn display(r: Receiver<event::DisplayPotionEffect, &mut StreamId>, compose: 
         factor_codec: None,
     };
 
-    compose.unicast(&pkt, *packets).unwrap();
+    compose.unicast(&pkt, packets).unwrap();
 }
 
 pub fn speed(r: Receiver<SpeedEffect, (&mut StreamId, &Uuid)>, compose: Compose) {
@@ -99,5 +99,5 @@ pub fn speed(r: Receiver<SpeedEffect, (&mut StreamId, &Uuid)>, compose: Compose)
         properties: vec![prop],
     };
 
-    compose.unicast(&pkt, *packets).unwrap();
+    compose.unicast(&pkt, packets).unwrap();
 }

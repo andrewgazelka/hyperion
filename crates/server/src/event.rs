@@ -222,7 +222,7 @@ pub struct Shoved {
 }
 
 #[derive(GlobalEvent, Debug)]
-pub struct BulkShoved(pub RayonLocal<Vec<Shoved>>);
+pub struct BulkShoved(pub RayonLocal<RefCell<Vec<Shoved>>>);
 
 /// An event when server stats are updated.
 #[derive(GlobalEvent)]

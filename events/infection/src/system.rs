@@ -236,6 +236,7 @@ pub fn zombie_command(
 #[instrument(skip_all)]
 pub fn bump_into_player(mut r: ReceiverMut<BulkShoved>, fetcher: Fetcher<&Team>) {
     r.event.0.get_all_mut().par_iter_mut().for_each(|lst| {
+        let mut lst = lst.borrow_mut();
         lst.retain(|Shoved { target, from, .. }| {
             let Ok(&origin_team) = fetcher.get(*from) else {
                 return false;
