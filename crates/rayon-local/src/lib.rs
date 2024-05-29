@@ -1,25 +1,19 @@
 #![feature(allocator_api)]
 #![feature(lint_reasons)]
 #![feature(impl_trait_in_assoc_type)]
+#![feature(thread_id_value)]
 //! A simple thread-local storage abstraction for Rayon.
 
 extern crate core;
 
-pub mod locals;
-
 use std::{
-    alloc::{AllocError, Allocator, Layout},
-    cell::UnsafeCell,
-    ops::{Deref, DerefMut, Index, IndexMut},
-    ptr::NonNull,
+    ops::{Deref, DerefMut},
+    sync::atomic::{AtomicU64, Ordering},
 };
 
 #[cfg(feature = "evenio")]
 pub use evenio::*;
-use rayon::iter::{
-    plumbing::UnindexedConsumer, IntoParallelRefIterator, IntoParallelRefMutIterator,
-    ParallelIterator,
-};
+use rayon::iter::IntoParallelRefMutIterator;
 
 #[derive(Debug)]
 pub struct RayonRef<'a, S> {
@@ -48,22 +42,13 @@ impl<'a, S> DerefMut for RayonRef<'a, S> {
 #[cfg_attr(feature = "evenio", derive(::evenio::component::Component))]
 #[derive(Debug)]
 pub struct RayonLocal<S> {
-    thread_locals: Box<[UnsafeCell<S>]>,
+    thread_locals: Box<[S]>,
+    pinned: Box<[AtomicU64]>,
 }
 
 #[must_use]
 pub fn count() -> usize {
     rayon::current_num_threads() + 1
-}
-
-impl<'a, S> IntoIterator for &'a RayonLocal<S> {
-    type Item = &'a S;
-
-    type IntoIter = impl Iterator<Item = &'a S>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        self.iter()
-    }
 }
 
 impl<S> IntoIterator for RayonLocal<S> {
@@ -72,10 +57,7 @@ impl<S> IntoIterator for RayonLocal<S> {
     type IntoIter = impl Iterator<Item = S>;
 
     fn into_iter(self) -> Self::IntoIter {
-        self.thread_locals
-            .into_vec()
-            .into_iter()
-            .map(UnsafeCell::into_inner)
+        self.thread_locals.into_vec().into_iter()
     }
 }
 
@@ -89,74 +71,6 @@ impl<'a, S> IntoIterator for &'a mut RayonLocal<S> {
     }
 }
 
-impl<S> Index<usize> for RayonLocal<S> {
-    type Output = S;
-
-    fn index(&self, index: usize) -> &Self::Output {
-        unsafe { &*self.thread_locals[index].get() }
-    }
-}
-
-impl<S> IndexMut<usize> for RayonLocal<S> {
-    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
-        unsafe { &mut *self.thread_locals[index].get() }
-    }
-}
-
-unsafe impl<A: Allocator> Allocator for RayonLocal<A> {
-    fn allocate(&self, layout: Layout) -> Result<NonNull<[u8]>, AllocError> {
-        let local = unsafe { &mut *self.get_local_raw().get() };
-        local.allocate(layout)
-    }
-
-    fn allocate_zeroed(&self, layout: Layout) -> Result<NonNull<[u8]>, AllocError> {
-        let local = unsafe { &mut *self.get_local_raw().get() };
-        local.allocate_zeroed(layout)
-    }
-
-    unsafe fn deallocate(&self, ptr: NonNull<u8>, layout: Layout) {
-        let local = unsafe { &mut *self.get_local_raw().get() };
-        local.deallocate(ptr, layout);
-    }
-
-    unsafe fn grow(
-        &self,
-        ptr: NonNull<u8>,
-        old_layout: Layout,
-        new_layout: Layout,
-    ) -> Result<NonNull<[u8]>, AllocError> {
-        let local = unsafe { &mut *self.get_local_raw().get() };
-        local.grow(ptr, old_layout, new_layout)
-    }
-
-    unsafe fn grow_zeroed(
-        &self,
-        ptr: NonNull<u8>,
-        old_layout: Layout,
-        new_layout: Layout,
-    ) -> Result<NonNull<[u8]>, AllocError> {
-        let local = unsafe { &mut *self.get_local_raw().get() };
-        local.grow_zeroed(ptr, old_layout, new_layout)
-    }
-
-    unsafe fn shrink(
-        &self,
-        ptr: NonNull<u8>,
-        old_layout: Layout,
-        new_layout: Layout,
-    ) -> Result<NonNull<[u8]>, AllocError> {
-        let local = unsafe { &mut *self.get_local_raw().get() };
-        local.shrink(ptr, old_layout, new_layout)
-    }
-
-    fn by_ref(&self) -> &Self
-    where
-        Self: Sized,
-    {
-        self
-    }
-}
-
 #[expect(clippy::non_send_fields_in_send_ty, reason = "todo: is this safe?")]
 unsafe impl<S> Send for RayonLocal<S> {}
 unsafe impl<S> Sync for RayonLocal<S> {}
@@ -167,64 +81,30 @@ impl<S: Default> Default for RayonLocal<S> {
     }
 }
 
-pub struct RayonLocalIter<'a, S> {
-    local: &'a mut RayonLocal<S>,
-    // idx: usize,
-}
-
-impl<'a, S> ParallelIterator for RayonLocalIter<'a, S>
-where
-    S: Send + Sync + 'a,
-{
-    type Item = &'a mut S;
-
-    fn drive_unindexed<C>(self, consumer: C) -> C::Result
-    where
-        C: UnindexedConsumer<Self::Item>,
-    {
-        rayon::iter::repeat(())
-            .map(|()| {
-                let locals = &*self.local.thread_locals;
-                let idx = self.local.idx();
-                let local = &locals[idx];
-                unsafe { &mut *local.get() }
-            })
-            .drive_unindexed(consumer)
-    }
-}
-
 impl<S: Default> RayonLocal<S> {
     /// Create a new `RayonLocal` with the default value of `S` for each thread.
     #[must_use]
     pub fn init_with_defaults() -> Self {
-        let num_threads = rayon::current_num_threads();
-
-        let thread_locals = (0..=num_threads)
-            .map(|_| UnsafeCell::new(S::default()))
-            .collect();
-
-        Self { thread_locals }
+        Self::init(S::default)
     }
 }
 
 impl<S> RayonLocal<S> {
     /// Create a new `RayonLocal` with the value of `S` provided by the closure for each thread.
     pub fn init(mut f: impl FnMut() -> S) -> Self {
-        let num_threads = rayon::current_num_threads();
-
-        let thread_locals = (0..=num_threads).map(|_| UnsafeCell::new(f())).collect();
-
-        Self { thread_locals }
+        Self::init_with_index(|_| f())
     }
 
-    pub fn init_with_index(mut f: impl FnMut(usize) -> S) -> Self {
+    pub fn init_with_index(f: impl FnMut(usize) -> S) -> Self {
         let num_threads = rayon::current_num_threads();
 
-        let thread_locals = (0..=num_threads)
-            .map(|idx| UnsafeCell::new(f(idx)))
-            .collect();
+        let thread_locals = (0..=num_threads).map(f).collect();
+        let pinned = (0..=num_threads).map(|_| AtomicU64::new(0)).collect();
 
-        Self { thread_locals }
+        Self {
+            thread_locals,
+            pinned,
+        }
     }
 
     #[must_use]
@@ -236,38 +116,28 @@ impl<S> RayonLocal<S> {
         self.get_all_mut().par_iter_mut()
     }
 
-    #[must_use]
-    pub fn par_iter<'a>(&'a self) -> rayon::slice::Iter<'a, S>
-    where
-        &'a [S]: IntoParallelRefIterator<'a>,
-        S: Send + Sync,
-    {
-        self.get_all().par_iter()
-    }
-
-    pub fn iter(&self) -> impl Iterator<Item = &S> {
-        self.get_all().iter()
-    }
-
     pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut S> {
         self.get_all_mut().iter_mut()
     }
 
-    unsafe fn get_ref(&self) -> RayonRef<S> {
-        let locals = &*self.thread_locals;
-        let idx = self.idx();
-        let local = &locals[idx];
-        let local = unsafe { &mut *local.get() };
-        RayonRef { inner: local }
+    #[must_use]
+    pub fn as_refs(&self) -> RayonLocal<&S> {
+        self.map_ref(|x| x)
     }
 
     pub fn map_ref<'a, T, F>(&'a self, f: F) -> RayonLocal<T>
     where
         F: Fn(&'a S) -> T,
     {
-        let thread_locals = self.get_all().iter().map(f).map(UnsafeCell::new).collect();
+        let thread_locals = self.get_all().iter().map(f).collect();
+        let pinned = (0..=rayon::current_num_threads())
+            .map(|_| AtomicU64::new(0))
+            .collect();
 
-        RayonLocal { thread_locals }
+        RayonLocal {
+            thread_locals,
+            pinned,
+        }
     }
 
     pub fn map<T, F>(self, f: F) -> RayonLocal<T>
@@ -275,40 +145,54 @@ impl<S> RayonLocal<S> {
         F: Fn(S) -> T,
     {
         let thread_locals = self.thread_locals.into_vec();
-        let thread_locals = thread_locals
-            .into_iter()
-            .map(UnsafeCell::into_inner)
-            .map(f)
-            .map(UnsafeCell::new)
+        let thread_locals = thread_locals.into_iter().map(f).collect();
+
+        let pinned = (0..=rayon::current_num_threads())
+            .map(|_| AtomicU64::new(0))
             .collect();
 
-        RayonLocal { thread_locals }
+        RayonLocal {
+            thread_locals,
+            pinned,
+        }
     }
 
     #[must_use]
     pub fn idx(&self) -> usize {
-        // this is so the main thread will still have a place to put data
-        // todo: priority—this is currently unsafe in the situation where there is another thread beyond the main thread
-        rayon::current_thread_index().unwrap_or(self.thread_locals.len() - 1)
+        let len = self.thread_locals.len();
+        let idx = rayon::current_thread_index().unwrap_or(len - 1);
+
+        self.assert_pinned_thead(idx);
+
+        idx
     }
 
-    /// Get the local value for the current thread.
-    ///
-    /// # Panics
-    /// If the current thread is not a Rayon thread.
+    fn assert_pinned_thead(&self, idx: usize) {
+        let atomic = self.pinned.get(idx).expect("thread idx is out of bounds");
+        let current_thread_id = std::thread::current().id().as_u64().get();
+
+        let previous = atomic.swap(current_thread_id, Ordering::Relaxed);
+
+        assert!(
+            !(previous != current_thread_id && previous != 0),
+            "thread id changed from {previous} to {current_thread_id}"
+        );
+    }
+
     #[must_use]
     pub fn get_local(&self) -> &S {
-        unsafe { &*self.thread_locals[self.idx()].get() }
-    }
-
-    #[must_use]
-    pub fn get_local_raw(&self) -> &UnsafeCell<S> {
         &self.thread_locals[self.idx()]
     }
 
+    /// Get the thread local that is not bound to any `rayon` thread.
+    /// This is often going to be what is going to be accessed if you're not in a `rayon` context.
+    pub fn get_non_rayon_local(&mut self) -> &mut S {
+        &mut self.thread_locals[self.idx()]
+    }
+
     #[must_use]
-    pub const fn get_raw(&self, index: usize) -> &UnsafeCell<S> {
-        &self.thread_locals[index]
+    pub fn into_inner(self) -> Box<[S]> {
+        self.thread_locals
     }
 
     /// Get a mutable reference to all thread-local values.
@@ -326,45 +210,17 @@ impl<S> RayonLocal<S> {
         let len = self.thread_locals.len();
         unsafe { core::slice::from_raw_parts(start_ptr.cast(), len) }
     }
-
-    // /// Get a mutable reference to one thread-local value, using a round-robin
-    // pub fn get_round_robin(&mut self) -> &mut S {
-    //     let index = self.idx;
-    //     self.idx = (self.idx + 1) % self.thread_locals.len();
-    //     unsafe { &mut *self.thread_locals[index].get() }
-    // }
-    pub fn one(&mut self) -> &mut S {
-        unsafe { &mut *self.thread_locals[0].get() }
-    }
 }
 
 #[cfg(test)]
 mod tests {
-    use rayon::prelude::*;
-
     use super::*;
-    use crate::locals::RayonIterExt;
 
     #[test]
     fn test_init() {
         let local = RayonLocal::<i32>::init_with_defaults();
         assert_eq!(local.thread_locals.len(), rayon::current_num_threads() + 1);
         assert!(local.get_all().iter().all(|&x| x == 0));
-    }
-
-    #[test]
-    fn test_get_rayon_local() {
-        let mut local = RayonLocal::<i32>::init_with_defaults();
-
-        (0..100)
-            .into_par_iter()
-            .with_locals(&mut local)
-            .for_each(|(mut local, i)| {
-                *local += i;
-            });
-
-        let sum: i32 = local.get_all().iter().copied().sum();
-        assert_eq!(sum, (0..100).sum());
     }
 
     // #[test]

@@ -54,7 +54,7 @@ pub fn generate_chunk_changes(
                 chunk_z: i32::from(current_chunk.y).into(),
             };
 
-            compose.unicast(&center_chunk, *packets).unwrap();
+            compose.unicast(&center_chunk, packets).unwrap();
 
             last_sent.0 = current_chunk;
 
@@ -84,26 +84,28 @@ pub fn send_updates(
     tasks: Single<&Tasks>,
     compose: Compose,
 ) {
-    fetcher.par_iter_mut().for_each(|(packets, chunk_changes)| {
-        let mut left_over = Vec::new();
+    fetcher
+        .par_iter_mut()
+        .for_each(|(stream_id, chunk_changes)| {
+            let mut left_over = Vec::new();
 
-        for &elem in &chunk_changes.changes {
-            match chunks.get_cached_or_load(elem, &tasks) {
-                Ok(Some(ChunkData::Cached(chunk))) => {
-                    compose.io_buf().unicast_raw(chunk, packets.stream());
-                    continue;
-                }
-                Ok(Some(ChunkData::Task(..)) | None) => {
-                    left_over.push(elem);
-                    continue;
-                }
-                Err(err) => {
-                    error!("failed to get chunk {elem:?}: {err}");
-                    continue;
+            for &elem in &chunk_changes.changes {
+                match chunks.get_cached_or_load(elem, &tasks) {
+                    Ok(Some(ChunkData::Cached(chunk))) => {
+                        compose.io_buf().unicast_raw(chunk, stream_id);
+                        continue;
+                    }
+                    Ok(Some(ChunkData::Task(..)) | None) => {
+                        left_over.push(elem);
+                        continue;
+                    }
+                    Err(err) => {
+                        error!("failed to get chunk {elem:?}: {err}");
+                        continue;
+                    }
                 }
             }
-        }
 
-        chunk_changes.changes = left_over.into_iter().collect();
-    });
+            chunk_changes.changes = left_over.into_iter().collect();
+        });
 }

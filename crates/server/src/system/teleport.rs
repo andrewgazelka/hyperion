@@ -40,7 +40,7 @@ pub fn teleport(r: Receiver<event::Teleport, TeleportQuery>, compose: Compose) {
                 flags: PlayerPositionLookFlags::default(),
                 teleport_id,
             },
-            *packets,
+            packets,
         )
         .unwrap();
 }

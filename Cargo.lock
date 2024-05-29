@@ -1345,7 +1345,7 @@ dependencies = [
 [[package]]
 name = "hyperion-proto"
 version = "0.1.0"
-source = "git+https://github.com/andrewgazelka/hyperion-proto#13cb9aee1324e477f7842303aa4d7d880270bd3a"
+source = "git+https://github.com/andrewgazelka/hyperion-proto#06bb017aa619c0e2920f78ea7aec8a343a195258"
 dependencies = [
  "prost",
  "prost-build",
@@ -2496,6 +2496,7 @@ dependencies = [
  "serde_json",
  "sha2",
  "signal-hook",
+ "slotmap",
  "spin",
  "spin_sleep",
  "tango-bench 0.5.0",
@@ -2568,6 +2569,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8f92a496fb766b417c996b9c5e57daf2f7ad3b0bebe1ccfca4856390e3d3bb67"
 dependencies = [
  "autocfg",
+]
+
+[[package]]
+name = "slotmap"
+version = "1.0.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dbff4acf519f630b3a3ddcfaea6c06b42174d9a44bc70c620e9ed1649d58b82a"
+dependencies = [
+ "version_check",
 ]
 
 [[package]]
@@ -2736,7 +2746,7 @@ dependencies = [
 [[package]]
 name = "targeted-bulk"
 version = "0.1.0"
-source = "git+https://github.com/andrewgazelka/targeted-bulk#121927bd5b80b801f2ace1d6391a5d6b990cc46e"
+source = "git+https://github.com/andrewgazelka/targeted-bulk#5267e7c53e7f0d34db1014feeff73a6bb10e47b1"
 dependencies = [
  "evenio 0.6.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "rayon",
@@ -2914,7 +2924,7 @@ dependencies = [
  "serde",
  "serde_spanned",
  "toml_datetime",
- "winnow 0.6.8",
+ "winnow 0.6.9",
 ]
 
 [[package]]
@@ -3671,9 +3681,9 @@ dependencies = [
 
 [[package]]
 name = "winnow"
-version = "0.6.8"
+version = "0.6.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c3c52e9c97a68071b23e836c9380edae937f17b9c4667bd021973efc689f618d"
+checksum = "86c949fede1d13936a99f14fafd3e76fd642b556dd2ce96287fbe2e0151bfac6"
 dependencies = [
  "memchr",
 ]
