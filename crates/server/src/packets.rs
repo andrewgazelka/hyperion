@@ -208,8 +208,7 @@ fn player_action(
             sender.send_to(id, event::BlockFinishBreak { position, sequence });
         }
         PlayerAction::ReleaseUseItem => {
-            let elem = SendElem::new(id, event::ReleaseItem);
-            sender.push(elem);
+            sender.send_to(id, event::ReleaseItem);
         }
         _ => {}
     }
@@ -256,7 +255,7 @@ fn client_command(
 pub fn player_interact_item(
     mut data: &[u8],
     _query: &PacketSwitchQuery,
-    _sender: &mut Vec<SendElem>,
+    _sender: &mut ThreadLocalIngressSender,
 ) -> anyhow::Result<()> {
     let _packet = play::PlayerInteractItemC2s::decode(&mut data)?;
 

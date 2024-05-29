@@ -63,6 +63,7 @@ bitvec = "1.0.1"
 hyperion-proto = { git = "https://github.com/andrewgazelka/hyperion-proto", version = "0.1.0" }
 prost = "0.12.6"
 targeted-bulk = { git = "https://github.com/andrewgazelka/targeted-bulk", version = "0.1.0" }
+line_drawing = "1.0.0"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 io-uring = { git = "https://github.com/andrewgazelka/io-uring", branch = "feat-more-fixed-derive" }

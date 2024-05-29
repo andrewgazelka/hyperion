@@ -6,9 +6,9 @@ use valence_protocol::{packets::play, ByteAngle, VarInt, Velocity};
 use valence_server::entity::EntityKind;
 
 use crate::{
-    components::{Arrow, EntityPhysics, FullEntityPose, Uuid},
+    components::{Arrow, EntityPhysics, EntityPhysicsState, FullEntityPose, Uuid},
     event::ReleaseItem,
-    net::{Broadcast, Compose},
+    net::Compose,
     system::sync_entity_position::PositionSyncMetadata,
 };
 
@@ -20,7 +20,6 @@ pub struct ReleaseItemQuery<'a> {
 #[instrument(skip_all, level = "trace")]
 pub fn release_item(
     r: Receiver<ReleaseItem, ReleaseItemQuery>,
-    broadcast: Single<&mut Broadcast>,
     compose: Compose,
     s: Sender<(
         Insert<Arrow>,
@@ -49,6 +48,7 @@ pub fn release_item(
     let (pitch_sin, pitch_cos) = query.pose.pitch.to_radians().sin_cos();
     let (yaw_sin, yaw_cos) = query.pose.yaw.to_radians().sin_cos();
     let velocity = Vec3::new(-pitch_cos * yaw_sin, -pitch_sin, pitch_cos * yaw_cos) * initial_speed;
+    let encoded_velocity = Velocity(velocity.to_array().map(|a| (a * 8000.0) as i16));
 
     // TODO: Vanilla minecraft doesn't include x/z offsets
     let position = Vec3::new(
@@ -59,7 +59,7 @@ pub fn release_item(
 
     s.insert(id, Arrow);
     s.insert(id, EntityPhysics {
-        velocity,
+        state: EntityPhysicsState::Moving { velocity },
         gravity: 0.05,
         drag: 0.01,
     });
@@ -81,8 +81,18 @@ pub fn release_item(
         yaw: ByteAngle::from_degrees(query.pose.yaw),
         head_yaw: ByteAngle::from_degrees(0.0),
         data: VarInt::default(),
-        velocity: Velocity(velocity.to_array().map(|a| (a * 8000.0) as i16)),
+        velocity: encoded_velocity,
     };
 
-    broadcast.append(&pkt, &compose).unwrap();
+    compose.broadcast(&pkt).send().unwrap();
+
+    // At least one velocity packet is needed for the arrow to not immediately fall to the ground,
+    // so one velocity packet needs to be sent manually instead of relying on
+    // sync_entity_velocity.rs in case the arrow hits a wall on the same tick.
+    let pkt = play::EntityVelocityUpdateS2c {
+        entity_id,
+        velocity: encoded_velocity,
+    };
+
+    compose.broadcast(&pkt).send().unwrap();
 }

@@ -161,6 +161,12 @@ impl Chunks {
     #[must_use]
     pub fn get_block(&self, position: BlockPos) -> Option<BlockState> {
         const START_Y: i32 = -64;
+
+        if position.y < START_Y {
+            // This block is in the void.
+            return Some(BlockState::VOID_AIR);
+        }
+
         let chunk_pos: IVec2 = IVec2::new(position.x, position.z) >> 4;
         let chunk_start_block: IVec2 = chunk_pos << 4;
         let chunk_pos = chunk_pos.as_i16vec2();

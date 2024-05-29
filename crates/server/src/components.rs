@@ -4,6 +4,7 @@ use bvh_region::aabb::Aabb;
 use derive_more::{Deref, DerefMut, Display, From};
 use evenio::component::Component;
 use glam::{I16Vec2, Vec3};
+use valence_protocol::BlockPos;
 use valence_server::entity::EntityKind;
 
 use crate::{
@@ -157,11 +158,17 @@ pub struct Arrow;
 #[derive(Component, Debug)]
 pub struct Npc;
 
+#[derive(Debug)]
+pub enum EntityPhysicsState {
+    Moving { velocity: Vec3 },
+    Stuck { block_position: BlockPos },
+}
+
 /// Any entity that the server has to calculate physics for, such as arrows. Players do not need
 /// this; physics is calculated by the client.
 #[derive(Component, Debug)]
 pub struct EntityPhysics {
-    pub velocity: Vec3,
+    pub state: EntityPhysicsState,
 
     /// Acceleration of gravity on this entity measured in meters/tick^2. Different types of
     /// entities have different gravities, so this can't be a constant.
