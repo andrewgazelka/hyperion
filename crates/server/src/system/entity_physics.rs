@@ -59,13 +59,12 @@ pub fn entity_physics(
                 // would also be a cost to converting f64 to f32.
                 let distance_travelled_until_collision = block
                     .collision_shapes()
-                    .map(|aabb| {
+                    .filter_map(|aabb| {
                         (aabb + block_position_dvec)
                             .ray_intersection(old_position_dvec, direction_dvec)
-                    })
-                    .filter_map(|x| x) // Only keep collisions, not misses.
+                    }) // Only keep collisions, not misses.
                     .map(|collision| collision[0]) // Keep the near position.
-                    .fold(f64::INFINITY, |a, b| a.min(b)); // Get the lowest value in this iterator which will get the earliest collision that will occur.
+                    .fold(f64::INFINITY, f64::min); // Get the lowest value in this iterator which will get the earliest collision that will occur.
 
                 if distance_travelled_until_collision != f64::INFINITY {
                     // A collision occured.
