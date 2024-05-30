@@ -303,6 +303,11 @@ pub struct BlockFinishBreak {
     pub sequence: i32,
 }
 
+/// Sent when a player releases the "Use Item" button (usually right click) on an item which
+/// supports it.
+#[derive(TargetedEvent)]
+pub struct ReleaseItem;
+
 #[derive(GlobalEvent, Debug)]
 pub struct UpdateBlock {
     pub position: BlockPos,

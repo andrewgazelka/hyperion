@@ -1,7 +1,7 @@
 //! <https://wiki.vg/index.php?title=Protocol&oldid=18375>
 
 use evenio::entity::EntityId;
-use tracing::{info, warn};
+use tracing::{info, trace, warn};
 use valence_protocol::{
     decode::PacketFrame,
     math::Vec3,
@@ -177,12 +177,15 @@ pub struct PacketSwitchQuery<'a> {
     pub pose: &'a mut FullEntityPose,
 }
 
+// i.e., shooting a bow
 fn player_action(
     mut data: &[u8],
     sender: &mut ThreadLocalIngressSender,
     query: &PacketSwitchQuery,
 ) -> anyhow::Result<()> {
     let packet = play::PlayerActionC2s::decode(&mut data)?;
+
+    info!("player action: {:?}", packet);
 
     let id = query.id;
     let position = packet.position;
@@ -203,6 +206,9 @@ fn player_action(
             // let elem = SendElem::new(id, event::BlockFinishBreak { position, sequence });
             // sender.push(elem);
             sender.send_to(id, event::BlockFinishBreak { position, sequence });
+        }
+        PlayerAction::ReleaseUseItem => {
+            sender.send_to(id, event::ReleaseItem);
         }
         _ => {}
     }
@@ -245,6 +251,19 @@ fn client_command(
     Ok(())
 }
 
+// starting to wind up bow
+pub fn player_interact_item(
+    mut data: &[u8],
+    _query: &PacketSwitchQuery,
+    _sender: &mut ThreadLocalIngressSender,
+) -> anyhow::Result<()> {
+    let _packet = play::PlayerInteractItemC2s::decode(&mut data)?;
+
+    // todo!("implement; interacting with an item. this is called when starting to wind up a bow");
+
+    Ok(())
+}
+
 pub fn switch(
     raw: &PacketFrame,
     sender: &mut ThreadLocalIngressSender,
@@ -271,11 +290,12 @@ pub fn switch(
         play::PlayerInteractEntityC2s::ID => {
             player_interact_entity(data, query, id_lookup, query.pose.position, sender)?;
         }
+        play::PlayerInteractItemC2s::ID => player_interact_item(data, query, sender)?,
         // play::KeepAliveC2s::ID => keep_alive(query.keep_alive)?,
         play::CommandExecutionC2s::ID => chat_command(data, query, sender)?,
         play::ClickSlotC2s::ID => inventory_action(data, sender, query)?,
         _ => {
-            // info!("unknown packet id: 0x{:02X}", packet_id)
+            trace!("unknown packet id: 0x{:02X}", packet_id);
         }
     }
 
