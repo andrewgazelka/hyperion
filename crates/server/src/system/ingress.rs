@@ -51,6 +51,7 @@ pub type IngressEventSet = (
     event::PoseUpdate,
     event::UpdateSelectedSlot,
     event::ClickEvent,
+    event::InteractEvent,
 );
 
 pub type ThreadLocalIngressSender<'a, 'b> = SenderLocal<'a, 'b, IngressEventSet>;

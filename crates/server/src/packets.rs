@@ -254,12 +254,17 @@ fn client_command(
 // starting to wind up bow
 pub fn player_interact_item(
     mut data: &[u8],
-    _query: &PacketSwitchQuery,
-    _sender: &mut ThreadLocalIngressSender,
+    query: &PacketSwitchQuery,
+    sender: &mut ThreadLocalIngressSender,
 ) -> anyhow::Result<()> {
     let _packet = play::PlayerInteractItemC2s::decode(&mut data)?;
 
-    // todo!("implement; interacting with an item. this is called when starting to wind up a bow");
+
+    info!("implement; interacting with an item. this is called when starting to wind up a bow");
+
+
+    let id = query.id;
+    sender.send_to(id, event::InteractEvent); 
 
     Ok(())
 }

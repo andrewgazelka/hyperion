@@ -17,10 +17,19 @@ use valence_text::IntoText;
 
 use crate::{
     components::{InGameName, Player},
-    event::{ChatMessage, ClickEvent, Command, UpdateEquipment},
+    event::{ChatMessage, ClickEvent, InteractEvent, Command, UpdateEquipment},
     inventory::PlayerInventory,
     net::{Compose, StreamId},
 };
+
+#[instrument(skip_all, level = "trace")]
+pub fn item_interact(
+    r: Receiver<InteractEvent, InventoryActionQuery>,
+    _compose: Compose,
+    _sender: Sender<UpdateEquipment>,
+) {
+    r.query.inventory.interact();
+}
 
 #[derive(Query)]
 pub struct InventoryActionQuery<'a> {

@@ -7,14 +7,17 @@ use valence_server::entity::EntityKind;
 
 use crate::{
     components::{Arrow, EntityPhysics, EntityPhysicsState, FullEntityPose, Uuid},
+    inventory::PlayerInventory,
     event::ReleaseItem,
     net::Compose,
     system::sync_entity_position::PositionSyncMetadata,
 };
 
+
 #[derive(Query)]
 pub struct ReleaseItemQuery<'a> {
     pose: &'a FullEntityPose,
+    inventory: &'a mut PlayerInventory,
 }
 
 #[instrument(skip_all, level = "trace")]
@@ -42,8 +45,9 @@ pub fn release_item(
 
     let uuid = Uuid::from(uuid::Uuid::new_v4());
 
-    // TODO: Get this value normally
-    let initial_speed = 3.0;
+    let duration = query.inventory.interact_duration().unwrap().as_secs_f32();
+    // TODO: Eyeballed this number, verify correctness
+    let initial_speed = f32::min(duration, 1.0) * 4.22;
 
     let (pitch_sin, pitch_cos) = query.pose.pitch.to_radians().sin_cos();
     let (yaw_sin, yaw_cos) = query.pose.yaw.to_radians().sin_cos();
