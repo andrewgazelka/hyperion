@@ -259,12 +259,9 @@ pub fn player_interact_item(
 ) -> anyhow::Result<()> {
     let _packet = play::PlayerInteractItemC2s::decode(&mut data)?;
 
-
-    info!("implement; interacting with an item. this is called when starting to wind up a bow");
-
-
     let id = query.id;
-    sender.send_to(id, event::InteractEvent); 
+
+    sender.send_to(id, event::ItemInteract); 
 
     Ok(())
 }
