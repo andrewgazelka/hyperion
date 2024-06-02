@@ -54,11 +54,7 @@ pub fn release_item(
     let encoded_velocity = Velocity(velocity.to_array().map(|a| (a * 8000.0) as i16));
 
     // TODO: Vanilla minecraft doesn't include x/z offsets
-    let position = Vec3::new(
-        yaw_sin.mul_add(-0.5, query.pose.position.x),
-        query.pose.position.y + 1.5,
-        yaw_cos.mul_add(0.5, query.pose.position.z),
-    );
+    let position = query.pose.position + Vec3::new(0.0, 1.52, 0.0);
 
     s.insert(id, Arrow);
     s.insert(id, EntityPhysics {
