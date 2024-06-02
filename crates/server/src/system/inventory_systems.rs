@@ -17,7 +17,7 @@ use valence_text::IntoText;
 
 use crate::{
     components::{InGameName, Player},
-    event::{ChatMessage, ClickEvent, ItemInteract, Command, UpdateEquipment},
+    event::{ChatMessage, ClickEvent, Command, ItemInteract, UpdateEquipment},
     inventory::PlayerInventory,
     net::{Compose, StreamId},
 };

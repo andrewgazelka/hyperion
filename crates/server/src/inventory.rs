@@ -1,4 +1,8 @@
-use std::{mem, ops::RangeInclusive, time::SystemTime, time::UNIX_EPOCH, time::Duration, time::SystemTimeError};
+use std::{
+    mem,
+    ops::RangeInclusive,
+    time::{Duration, SystemTime, SystemTimeError, UNIX_EPOCH},
+};
 
 use anyhow::ensure;
 use evenio::component::Component;
@@ -60,8 +64,6 @@ impl<const T: usize> Inventory<T> {
     pub const fn get_items(&self) -> &[ItemStack; T] {
         &self.slots
     }
-
-    
 }
 
 /// The player's inventory.
@@ -75,7 +77,7 @@ pub struct PlayerInventory {
     ///
     /// This item will be none when player closes inventory
     carried_item: ItemStack,
-    interact_time: SystemTime, 
+    interact_time: SystemTime,
 }
 
 #[derive(Debug, Error, Eq, PartialEq)]
@@ -434,7 +436,7 @@ impl PlayerInventory {
     }
 
     pub fn interact(&mut self) {
-        self.interact_time = SystemTime::now(); 
+        self.interact_time = SystemTime::now();
     }
 
     pub fn interact_duration(&self) -> Result<Duration, SystemTimeError> {

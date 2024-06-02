@@ -261,7 +261,7 @@ pub fn player_interact_item(
 
     let id = query.id;
 
-    sender.send_to(id, event::ItemInteract); 
+    sender.send_to(id, event::ItemInteract);
 
     Ok(())
 }

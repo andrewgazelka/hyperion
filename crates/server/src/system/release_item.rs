@@ -7,12 +7,11 @@ use valence_server::entity::EntityKind;
 
 use crate::{
     components::{Arrow, EntityPhysics, EntityPhysicsState, FullEntityPose, Uuid},
-    inventory::PlayerInventory,
     event::ReleaseItem,
+    inventory::PlayerInventory,
     net::Compose,
     system::sync_entity_position::PositionSyncMetadata,
 };
-
 
 #[derive(Query)]
 pub struct ReleaseItemQuery<'a> {
