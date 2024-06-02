@@ -845,40 +845,15 @@ dependencies = [
 [[package]]
 name = "evenio"
 version = "0.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ead7361e14542019e9f883d2022399ef419ac240085b29ed23715f7746094e78"
-dependencies = [
- "ahash",
- "bumpalo",
- "evenio_macros 0.6.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "hashbrown",
- "indexmap",
- "slab",
-]
-
-[[package]]
-name = "evenio"
-version = "0.6.0"
 source = "git+https://github.com/andrewgazelka/evenio?branch=feat-sender-state-public#dd2edc77d3be6f07d3f53a236b26d839684b1529"
 dependencies = [
  "ahash",
  "bumpalo",
- "evenio_macros 0.6.0 (git+https://github.com/andrewgazelka/evenio?branch=feat-sender-state-public)",
+ "evenio_macros",
  "hashbrown",
  "indexmap",
  "rayon",
  "slab",
-]
-
-[[package]]
-name = "evenio_macros"
-version = "0.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5aa8c1192efdb4d5734fbdb3cbab6f018807c335eb52b01b3d1b964467cf0097"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.66",
 ]
 
 [[package]]
@@ -1416,7 +1391,7 @@ dependencies = [
  "anyhow",
  "bvh",
  "clap",
- "evenio 0.6.0 (git+https://github.com/andrewgazelka/evenio?branch=feat-sender-state-public)",
+ "evenio",
  "fastrand 2.1.0",
  "glam",
  "serde_json",
@@ -2145,7 +2120,7 @@ name = "rayon-local"
 version = "0.1.0"
 dependencies = [
  "divan",
- "evenio 0.6.0 (git+https://github.com/andrewgazelka/evenio?branch=feat-sender-state-public)",
+ "evenio",
  "rayon",
 ]
 
@@ -2478,7 +2453,7 @@ dependencies = [
  "derive_more 0.99.17",
  "dirs-next",
  "divan",
- "evenio 0.6.0 (git+https://github.com/andrewgazelka/evenio?branch=feat-sender-state-public)",
+ "evenio",
  "fastrand 2.1.0",
  "flate2",
  "fxhash",
@@ -2756,9 +2731,8 @@ dependencies = [
 [[package]]
 name = "targeted-bulk"
 version = "0.1.0"
-source = "git+https://github.com/andrewgazelka/targeted-bulk#5267e7c53e7f0d34db1014feeff73a6bb10e47b1"
 dependencies = [
- "evenio 0.6.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "evenio",
  "rayon",
 ]
 

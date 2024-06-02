@@ -369,6 +369,7 @@ impl Hyperion {
         world.add_handler(system::kill_all);
 
         world.add_handler(system::get_inventory_actions);
+        world.add_handler(system::update_inventory);
         world.add_handler(system::update_main_hand);
         world.add_handler(system::update_equipment);
         world.add_handler(system::give_command);

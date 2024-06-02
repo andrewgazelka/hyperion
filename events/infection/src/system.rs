@@ -20,8 +20,11 @@ use server::{
     },
     event,
     event::{BulkShoved, Gametick, Shoved},
+    inventory::PlayerInventory,
     util::player_skin::PlayerSkin,
-    valence_server::{entity::EntityKind, protocol::status_effects::StatusEffect, BlockPos, Text},
+    valence_server::{
+        entity::EntityKind, protocol::status_effects::StatusEffect, BlockPos, ItemStack, Text,
+    },
 };
 use tracing::{instrument, warn};
 
@@ -76,10 +79,11 @@ impl<'a> Data for BvhHuman<'a> {
 
 #[instrument(skip_all)]
 pub fn block_finish_break(
-    r: Receiver<event::BlockFinishBreak, ()>,
+    r: Receiver<event::BlockFinishBreak, (EntityId, &mut PlayerInventory)>,
     chunks: Single<&Chunks>,
-    sender: Sender<event::UpdateBlock>,
+    sender: Sender<(event::UpdateBlock, event::UpdateInventory)>,
 ) {
+    let (id, inventory) = r.query;
     let position = r.event.position;
 
     let block = chunks.get_block(position);
@@ -90,11 +94,17 @@ pub fn block_finish_break(
         return;
     };
 
+    let kind = block.to_kind().to_item_kind();
+    let stack = ItemStack::new(kind, 1, None);
+    inventory.fit(stack);
+
     sender.send(event::UpdateBlock {
         position,
         id: block,
         sequence: r.event.sequence,
     });
+
+    sender.send_to(id, event::UpdateInventory);
 }
 
 #[instrument(skip_all)]
