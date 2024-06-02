@@ -1,4 +1,8 @@
-use std::{mem, ops::RangeInclusive};
+use std::{
+    mem,
+    ops::RangeInclusive,
+    time::{Duration, SystemTime, SystemTimeError, UNIX_EPOCH},
+};
 
 use anyhow::ensure;
 use evenio::component::Component;
@@ -131,6 +135,7 @@ pub struct PlayerInventory {
     ///
     /// This item will be none when player closes inventory
     carried_item: ItemStack,
+    interact_time: SystemTime,
 }
 
 #[derive(Debug, Error, Eq, PartialEq)]
@@ -168,6 +173,7 @@ impl PlayerInventory {
             items: Inventory::new(),
             main_hand: 36,
             carried_item: ItemStack::EMPTY,
+            interact_time: UNIX_EPOCH,
         }
     }
 
@@ -303,7 +309,6 @@ impl PlayerInventory {
 
     /// Set item at first available spot
     pub fn fit(&mut self, item: ItemStack) -> Either<(), ItemStack> {
-
         let item = match self.items.try_stack(36..=44, item) {
             Either::Left(()) => return Either::Left(()),
             Either::Right(item) => item,
@@ -314,7 +319,7 @@ impl PlayerInventory {
             Either::Left(()) => return Either::Left(()),
             Either::Right(item) => item,
         };
-        
+
         // try hotbar
         let item = match self.items.set_first_available(36..=44, item) {
             Either::Left(()) => return Either::Left(()),
@@ -497,6 +502,14 @@ impl PlayerInventory {
                 | ItemKind::NetheriteBoots
                 | ItemKind::Air
         )
+    }
+
+    pub fn interact(&mut self) {
+        self.interact_time = SystemTime::now();
+    }
+
+    pub fn interact_duration(&self) -> Result<Duration, SystemTimeError> {
+        self.interact_time.elapsed()
     }
 }
 

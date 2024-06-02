@@ -2731,6 +2731,7 @@ dependencies = [
 [[package]]
 name = "targeted-bulk"
 version = "0.1.0"
+source = "git+https://github.com/andrewgazelka/targeted-bulk#a1c02a3935eaf7fad84ebd70320027804efbecc6"
 dependencies = [
  "evenio",
  "rayon",

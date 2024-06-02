@@ -62,8 +62,7 @@ bitfield-struct = "0.6.1"
 bitvec = "1.0.1"
 hyperion-proto = { git = "https://github.com/andrewgazelka/hyperion-proto", version = "0.1.0" }
 prost = "0.12.6"
-#targeted-bulk = { git = "https://github.com/andrewgazelka/targeted-bulk", version = "0.1.0" }
-targeted-bulk = { path = "/Users/andrewgazelka/Projects/playground/targeted-bulk" }
+targeted-bulk = { git = "https://github.com/andrewgazelka/targeted-bulk", version = "0.1.0" }
 line_drawing = "1.0.0"
 slotmap = "1.0.7"
 

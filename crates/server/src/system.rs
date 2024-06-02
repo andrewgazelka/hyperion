@@ -54,7 +54,7 @@ pub use entity_physics::entity_physics;
 pub use generate_egress_packets::generate_egress_packets;
 pub use init_entity::init_entity;
 pub use init_player::init_player;
-pub use inventory_systems::{get_inventory_actions, give_command, update_inventory};
+pub use inventory_systems::{get_inventory_actions, give_command, item_interact, update_inventory};
 pub use keep_alive::keep_alive;
 pub use kill_all::kill_all;
 pub use pkt_attack::{check_immunity, pkt_attack_entity, pkt_attack_player};
