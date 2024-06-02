@@ -1,4 +1,8 @@
-use std::{mem, ops::RangeInclusive};
+use std::{
+    mem,
+    ops::RangeInclusive,
+    time::{Duration, SystemTime, SystemTimeError, UNIX_EPOCH},
+};
 
 use anyhow::ensure;
 use evenio::component::Component;
@@ -73,6 +77,7 @@ pub struct PlayerInventory {
     ///
     /// This item will be none when player closes inventory
     carried_item: ItemStack,
+    interact_time: SystemTime,
 }
 
 #[derive(Debug, Error, Eq, PartialEq)]
@@ -110,6 +115,7 @@ impl PlayerInventory {
             items: Inventory::new(),
             main_hand: 36,
             carried_item: ItemStack::EMPTY,
+            interact_time: UNIX_EPOCH,
         }
     }
 
@@ -427,6 +433,14 @@ impl PlayerInventory {
                 | ItemKind::NetheriteBoots
                 | ItemKind::Air
         )
+    }
+
+    pub fn interact(&mut self) {
+        self.interact_time = SystemTime::now();
+    }
+
+    pub fn interact_duration(&self) -> Result<Duration, SystemTimeError> {
+        self.interact_time.elapsed()
     }
 }
 
