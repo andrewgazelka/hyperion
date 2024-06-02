@@ -307,6 +307,9 @@ pub struct BlockFinishBreak {
     pub sequence: i32,
 }
 
+#[derive(TargetedEvent)]
+pub struct UpdateInventory;
+
 /// Sent when a player releases the "Use Item" button (usually right click) on an item which
 /// supports it.
 #[derive(TargetedEvent)]

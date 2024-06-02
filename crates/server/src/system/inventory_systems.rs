@@ -17,6 +17,7 @@ use valence_text::IntoText;
 
 use crate::{
     components::{InGameName, Player},
+    event,
     event::{ChatMessage, ClickEvent, Command, ItemInteract, UpdateEquipment},
     inventory::PlayerInventory,
     net::{Compose, StreamId},
@@ -76,6 +77,22 @@ fn send_inventory_update(inventory: &PlayerInventory, packet: &mut StreamId, com
     };
 
     compose.unicast(&pack_inv, packet).unwrap();
+}
+
+pub fn update_inventory(
+    r: Receiver<event::UpdateInventory, (&PlayerInventory, &mut StreamId)>,
+    compose: Compose,
+) {
+    let (inventory, stream) = r.query;
+
+    let pack_inv = play::InventoryS2c {
+        window_id: 0,
+        state_id: VarInt(0),
+        slots: Cow::Borrowed(inventory.items.get_items()),
+        carried_item: Cow::Borrowed(inventory.get_carried_item()),
+    };
+
+    compose.unicast(&pack_inv, stream).unwrap();
 }
 
 #[derive(Query)]
@@ -140,7 +157,7 @@ pub fn give_command(
 
         let item = ItemStack::new(item, amount, None);
 
-        inventory.set_first_available(item);
+        inventory.fit(item);
 
         send_inventory_update(inventory, packet, &compose);
         Ok(())

@@ -34,23 +34,81 @@ impl<const T: usize> Inventory<T> {
 
     /// Set item at first available spot
     /// Returns Left if the item was placed or the item if no spot was found
+    pub fn try_stack(
+        &mut self,
+        range: RangeInclusive<usize>,
+        mut stack: ItemStack,
+    ) -> Either<(), ItemStack> {
+        let max = stack.item.max_stack();
+
+        // todo: support taking elements
+        if stack.count <= 0 {
+            return Either::Right(stack);
+        }
+
+        let slots = &mut self.slots[range];
+
+        for slot_stack in slots {
+            let current = if slot_stack.item == stack.item {
+                slot_stack.count
+            } else {
+                // we cannot stack
+                continue;
+            };
+
+            let available = max - current;
+
+            if available >= stack.count {
+                slot_stack.count += stack.count;
+                return Either::Left(());
+            }
+
+            slot_stack.count += available;
+            stack.count -= available;
+        }
+
+        Either::Right(stack)
+    }
+
+    /// Set item at first available spot
+    /// Returns Left if the item was placed or the item if no spot was found
     pub fn set_first_available(
         &mut self,
         range: RangeInclusive<usize>,
-        item: ItemStack,
+        mut stack: ItemStack,
     ) -> Either<(), ItemStack> {
-        let hotbar = &mut self.slots[range];
-        if let Some(found_slot) = hotbar
-            .iter_mut()
-            .filter(|e| e.is_empty())
-            .enumerate()
-            .min_by_key(|(number, _)| *number)
-            .map(|(_, item)| item)
-        {
-            *found_slot = item;
-            return Either::Left(());
+        let max = stack.item.max_stack();
+
+        // todo: support taking elements
+        if stack.count <= 0 {
+            return Either::Right(stack);
         }
-        Either::Right(item)
+
+        let slots = &mut self.slots[range];
+
+        for slot_stack in slots {
+            let current = if slot_stack.is_empty() {
+                slot_stack.item = stack.item;
+                0
+            } else if slot_stack.item == stack.item {
+                slot_stack.count
+            } else {
+                // we cannot stack
+                continue;
+            };
+
+            let available = max - current;
+
+            if available >= stack.count {
+                slot_stack.count += stack.count;
+                return Either::Left(());
+            }
+
+            slot_stack.count += available;
+            stack.count -= available;
+        }
+
+        Either::Right(stack)
     }
 
     /// remove item at index
@@ -250,7 +308,18 @@ impl PlayerInventory {
     }
 
     /// Set item at first available spot
-    pub fn set_first_available(&mut self, item: ItemStack) -> Either<(), ItemStack> {
+    pub fn fit(&mut self, item: ItemStack) -> Either<(), ItemStack> {
+        let item = match self.items.try_stack(36..=44, item) {
+            Either::Left(()) => return Either::Left(()),
+            Either::Right(item) => item,
+        };
+
+        // try inventory
+        let item = match self.items.try_stack(9..=35, item) {
+            Either::Left(()) => return Either::Left(()),
+            Either::Right(item) => item,
+        };
+
         // try hotbar
         let item = match self.items.set_first_available(36..=44, item) {
             Either::Left(()) => return Either::Left(()),
