@@ -1,16 +1,13 @@
-use std::{
-    mem,
-    ops::RangeInclusive,
-    time::{Duration, SystemTime, SystemTimeError, UNIX_EPOCH},
-};
+use std::{mem, ops::RangeInclusive, time::SystemTime};
 
 use anyhow::ensure;
 use evenio::component::Component;
 use itertools::{Either, Itertools};
 use thiserror::Error;
 use tracing::warn;
-use valence_protocol::packets::play::{
-    click_slot_c2s::SlotChange, entity_equipment_update_s2c::EquipmentEntry,
+use valence_protocol::{
+    packets::play::{click_slot_c2s::SlotChange, entity_equipment_update_s2c::EquipmentEntry},
+    Hand,
 };
 use valence_server::{ItemKind, ItemStack};
 
@@ -124,6 +121,13 @@ impl<const T: usize> Inventory<T> {
     }
 }
 
+/// Describes when a player holds the Use Item key (usually right click).
+#[derive(Debug)]
+pub struct Interaction {
+    pub start: SystemTime,
+    pub hand: Hand,
+}
+
 /// The player's inventory.
 #[derive(Component, Debug)]
 pub struct PlayerInventory {
@@ -135,7 +139,7 @@ pub struct PlayerInventory {
     ///
     /// This item will be none when player closes inventory
     carried_item: ItemStack,
-    interact_time: SystemTime,
+    pub interaction: Option<Interaction>,
 }
 
 #[derive(Debug, Error, Eq, PartialEq)]
@@ -173,7 +177,7 @@ impl PlayerInventory {
             items: Inventory::new(),
             main_hand: 36,
             carried_item: ItemStack::EMPTY,
-            interact_time: UNIX_EPOCH,
+            interaction: None,
         }
     }
 
@@ -336,25 +340,51 @@ impl PlayerInventory {
         Either::Right(item)
     }
 
-    /// set item in the offhand
-    pub fn set_offhand(&mut self, item: ItemStack) {
+    /// get slot of hand
+    #[must_use]
+    pub fn get_hand_slot(&mut self, hand: Hand) -> usize {
+        match hand {
+            Hand::Main => self.main_hand as usize,
+            Hand::Off => 45,
+        }
+    }
+
+    /// set item in hand
+    pub fn set_hand(&mut self, hand: Hand, item: ItemStack) {
+        let slot = self.get_hand_slot(hand);
+        self.items.set(slot, item);
+    }
+
+    /// get item in hand
+    #[must_use]
+    pub fn get_hand(&mut self, hand: Hand) -> &ItemStack {
+        &self.items.slots[self.get_hand_slot(hand)]
+    }
+
+    /// set item in the off hand
+    pub fn set_off_hand(&mut self, item: ItemStack) {
         self.items.set(45, item);
     }
 
-    /// get item in the offhand
+    /// get item in the off hand
     #[must_use]
-    pub fn get_offhand(&self) -> Option<&ItemStack> {
-        self.items.slots.get(45)
+    pub fn get_off_hand(&self) -> &ItemStack {
+        &self.items.slots[45]
+    }
+
+    /// set item in the main hand
+    pub fn set_main_hand(&mut self, item: ItemStack) {
+        self.items.set(self.main_hand as usize, item);
     }
 
     /// get item in the main hand
     #[must_use]
-    pub fn get_main_hand(&self) -> Option<&ItemStack> {
-        self.items.slots.get(self.main_hand as usize)
+    pub fn get_main_hand(&self) -> &ItemStack {
+        &self.items.slots[self.main_hand as usize]
     }
 
     /// set main hand index to
-    pub fn set_main_hand(&mut self, index: u16) -> anyhow::Result<()> {
+    pub fn set_main_hand_slot(&mut self, index: u16) -> anyhow::Result<()> {
         ensure!(
             (36..=44).contains(&index),
             "main hand can only be in the hotbar"
@@ -371,8 +401,8 @@ impl PlayerInventory {
 
     /// get helmet slot 5
     #[must_use]
-    pub fn get_helmet(&self) -> Option<&ItemStack> {
-        self.items.slots.get(5)
+    pub fn get_helmet(&self) -> &ItemStack {
+        &self.items.slots[5]
     }
 
     /// set chestplate slot 6
@@ -383,8 +413,8 @@ impl PlayerInventory {
 
     /// get chestplate slot 6
     #[must_use]
-    pub fn get_chestplate(&self) -> Option<&ItemStack> {
-        self.items.slots.get(6)
+    pub fn get_chestplate(&self) -> &ItemStack {
+        &self.items.slots[6]
     }
 
     /// set leggings slot 7
@@ -395,8 +425,8 @@ impl PlayerInventory {
 
     /// get leggings slot 7
     #[must_use]
-    pub fn get_leggings(&self) -> Option<&ItemStack> {
-        self.items.slots.get(7)
+    pub fn get_leggings(&self) -> &ItemStack {
+        &self.items.slots[7]
     }
 
     /// set boots slot 8
@@ -407,39 +437,39 @@ impl PlayerInventory {
 
     /// get boots slot 8
     #[must_use]
-    pub fn get_boots(&self) -> Option<&ItemStack> {
-        self.items.slots.get(8)
+    pub fn get_boots(&self) -> &ItemStack {
+        &self.items.slots[8]
     }
 
     /// get Entity Equipment
     #[must_use]
     pub fn get_entity_equipment(&self) -> [EquipmentEntry; 6] {
-        let mainhand = EquipmentEntry {
+        let main_hand = EquipmentEntry {
             slot: 0,
-            item: self.get_main_hand().cloned().unwrap_or(ItemStack::EMPTY),
+            item: self.get_main_hand().clone(),
         };
-        let offhand = EquipmentEntry {
+        let off_hand = EquipmentEntry {
             slot: 1,
-            item: self.get_offhand().cloned().unwrap_or(ItemStack::EMPTY),
+            item: self.get_off_hand().clone(),
         };
         let boots = EquipmentEntry {
             slot: 2,
-            item: self.get_boots().cloned().unwrap_or(ItemStack::EMPTY),
+            item: self.get_boots().clone(),
         };
         let leggings = EquipmentEntry {
             slot: 3,
-            item: self.get_leggings().cloned().unwrap_or(ItemStack::EMPTY),
+            item: self.get_leggings().clone(),
         };
         let chestplate = EquipmentEntry {
             slot: 4,
-            item: self.get_chestplate().cloned().unwrap_or(ItemStack::EMPTY),
+            item: self.get_chestplate().clone(),
         };
         let helmet = EquipmentEntry {
             slot: 5,
-            item: self.get_helmet().cloned().unwrap_or(ItemStack::EMPTY),
+            item: self.get_helmet().clone(),
         };
 
-        [mainhand, offhand, boots, leggings, chestplate, helmet]
+        [main_hand, off_hand, boots, leggings, chestplate, helmet]
     }
 
     /// check if the item is a helmet
@@ -503,14 +533,6 @@ impl PlayerInventory {
                 | ItemKind::Air
         )
     }
-
-    pub fn interact(&mut self) {
-        self.interact_time = SystemTime::now();
-    }
-
-    pub fn interact_duration(&self) -> Result<Duration, SystemTimeError> {
-        self.interact_time.elapsed()
-    }
 }
 
 #[cfg(test)]
@@ -531,7 +553,7 @@ mod test {
     fn test_move_1_boat() {
         prepare_tracing();
         let mut inventory = prepare_inventory();
-        inventory.set_main_hand(36).unwrap();
+        inventory.set_main_hand_slot(36).unwrap();
 
         let slot_change = vec![
             SlotChange {
@@ -560,7 +582,7 @@ mod test {
     fn test_move_42_mossy_cobblestone() {
         prepare_tracing();
         let mut inventory = prepare_inventory();
-        inventory.set_main_hand(36).unwrap();
+        inventory.set_main_hand_slot(36).unwrap();
 
         let slot_change = vec![
             SlotChange {
@@ -589,7 +611,7 @@ mod test {
     fn test_split_stack_64_golden_apples() {
         prepare_tracing();
         let mut inventory = prepare_inventory();
-        inventory.set_main_hand(36).unwrap();
+        inventory.set_main_hand_slot(36).unwrap();
 
         let slot_change = vec![
             SlotChange {
@@ -625,7 +647,7 @@ mod test {
     fn test_split_to_many_items() {
         prepare_tracing();
         let mut inventory = prepare_inventory();
-        inventory.set_main_hand(36).unwrap();
+        inventory.set_main_hand_slot(36).unwrap();
 
         let slot_change = vec![
             SlotChange {
@@ -650,7 +672,7 @@ mod test {
     fn test_pick_up_cursor() {
         prepare_tracing();
         let mut inventory = prepare_inventory();
-        inventory.set_main_hand(36).unwrap();
+        inventory.set_main_hand_slot(36).unwrap();
 
         let slot_change = vec![SlotChange {
             idx: 20,
@@ -676,7 +698,7 @@ mod test {
     fn test_pick_up_to_many_items() {
         prepare_tracing();
         let mut inventory = prepare_inventory();
-        inventory.set_main_hand(36).unwrap();
+        inventory.set_main_hand_slot(36).unwrap();
 
         let slot_change = vec![SlotChange {
             idx: 20,
@@ -695,7 +717,7 @@ mod test {
     fn test_pick_up_half_of_stack() {
         prepare_tracing();
         let mut inventory = prepare_inventory();
-        inventory.set_main_hand(36).unwrap();
+        inventory.set_main_hand_slot(36).unwrap();
 
         let slot_change = vec![SlotChange {
             idx: 20,
@@ -724,7 +746,7 @@ mod test {
     fn test_pick_up_to_much_but_leave_some() {
         prepare_tracing();
         let mut inventory = prepare_inventory();
-        inventory.set_main_hand(36).unwrap();
+        inventory.set_main_hand_slot(36).unwrap();
 
         let slot_change = vec![SlotChange {
             idx: 20,
@@ -744,7 +766,7 @@ mod test {
     fn test_pick_up_other_item_with_cursor() {
         prepare_tracing();
         let mut inventory = prepare_inventory();
-        inventory.set_main_hand(36).unwrap();
+        inventory.set_main_hand_slot(36).unwrap();
 
         let slot_change = vec![SlotChange {
             idx: 20,
@@ -763,7 +785,7 @@ mod test {
     fn test_put_cursor_in_slot() {
         prepare_tracing();
         let mut inventory = prepare_inventory();
-        inventory.set_main_hand(36).unwrap();
+        inventory.set_main_hand_slot(36).unwrap();
         inventory.carried_item = ItemStack::new(ItemKind::NetheriteIngot, 64, None);
 
         let slot_change = vec![SlotChange {
@@ -786,7 +808,7 @@ mod test {
     fn test_put_cursor_in_slot_44_and_change_equipment() {
         prepare_tracing();
         let mut inventory: PlayerInventory = prepare_inventory();
-        inventory.set_main_hand(44).unwrap();
+        inventory.set_main_hand_slot(44).unwrap();
         inventory.carried_item = ItemStack::new(ItemKind::NetheriteIngot, 64, None);
 
         let slot_change = vec![SlotChange {
@@ -806,7 +828,7 @@ mod test {
     fn test_put_1_item_of_cursor_in_slot() {
         prepare_tracing();
         let mut inventory = prepare_inventory();
-        inventory.set_main_hand(36).unwrap();
+        inventory.set_main_hand_slot(36).unwrap();
         inventory.carried_item = ItemStack::new(ItemKind::NetheriteIngot, 64, None);
 
         let slot_change = vec![SlotChange {
@@ -836,7 +858,7 @@ mod test {
     fn test_put_1_item_of_cursor_in_slot_but_leave_it_in_cursor() {
         prepare_tracing();
         let mut inventory = prepare_inventory();
-        inventory.set_main_hand(36).unwrap();
+        inventory.set_main_hand_slot(36).unwrap();
         inventory.carried_item = ItemStack::new(ItemKind::NetheriteIngot, 64, None);
 
         let slot_change = vec![SlotChange {
@@ -857,7 +879,7 @@ mod test {
     fn test_split_cursor_with_4_items_in_multiple_slots_and_leave_some_in_cursor() {
         prepare_tracing();
         let mut inventory = prepare_inventory();
-        inventory.set_main_hand(36).unwrap();
+        inventory.set_main_hand_slot(36).unwrap();
         inventory.carried_item = ItemStack::new(ItemKind::NetheriteIngot, 5, None);
 
         let slot_change = vec![
@@ -913,7 +935,7 @@ mod test {
     fn test_split_cursor_with_4_items_in_multiple_slots_and_leave_to_much_in_cursor() {
         prepare_tracing();
         let mut inventory = prepare_inventory();
-        inventory.set_main_hand(36).unwrap();
+        inventory.set_main_hand_slot(36).unwrap();
         inventory.carried_item = ItemStack::new(ItemKind::NetheriteIngot, 5, None);
 
         let slot_change = vec![
@@ -947,7 +969,7 @@ mod test {
     fn test_split_cursor_with_47_items_in_3_slots_and_leave_the_rest_in_cursor() {
         prepare_tracing();
         let mut inventory = prepare_inventory();
-        inventory.set_main_hand(36).unwrap();
+        inventory.set_main_hand_slot(36).unwrap();
         inventory.carried_item = ItemStack::new(ItemKind::NetheriteIngot, 47, None);
 
         let slot_change = vec![
@@ -995,7 +1017,7 @@ mod test {
     fn test_put_the_right_armor_in_the_armor_slots() {
         prepare_tracing();
         let mut inventory = prepare_inventory();
-        inventory.set_main_hand(36).unwrap();
+        inventory.set_main_hand_slot(36).unwrap();
 
         let slot_change = vec![
             SlotChange {
@@ -1024,7 +1046,7 @@ mod test {
     fn test_put_helmet_to_helmet() {
         prepare_tracing();
         let mut inventory = prepare_inventory();
-        inventory.set_main_hand(36).unwrap();
+        inventory.set_main_hand_slot(36).unwrap();
         inventory.carried_item = ItemStack::new(ItemKind::ChainmailHelmet, 1, None);
 
         let slot_change = vec![SlotChange {
@@ -1048,7 +1070,7 @@ mod test {
     fn test_put_helmet_to_chestplate() {
         prepare_tracing();
         let mut inventory = prepare_inventory();
-        inventory.set_main_hand(36).unwrap();
+        inventory.set_main_hand_slot(36).unwrap();
         inventory.carried_item = ItemStack::new(ItemKind::ChainmailHelmet, 1, None);
 
         let slot_change = vec![SlotChange {
@@ -1064,7 +1086,7 @@ mod test {
     fn test_put_to_many_items_in_cursor_stack() {
         prepare_tracing();
         let mut inventory = prepare_inventory();
-        inventory.set_main_hand(36).unwrap();
+        inventory.set_main_hand_slot(36).unwrap();
         inventory
             .items
             .set(9, ItemStack::new(ItemKind::NetheriteIngot, 64, None));
@@ -1096,7 +1118,7 @@ mod test {
     fn test_put_to_many_items_in_slot() {
         prepare_tracing();
         let mut inventory = prepare_inventory();
-        inventory.set_main_hand(36).unwrap();
+        inventory.set_main_hand_slot(36).unwrap();
         inventory.carried_item = ItemStack::new(ItemKind::GoldenApple, 4, None);
 
         let slot_change = vec![SlotChange {
@@ -1112,7 +1134,7 @@ mod test {
     fn test_negative_number_in_cursor() {
         prepare_tracing();
         let mut inventory = prepare_inventory();
-        inventory.set_main_hand(36).unwrap();
+        inventory.set_main_hand_slot(36).unwrap();
 
         let slot_change = vec![SlotChange {
             idx: 38,
@@ -1131,7 +1153,7 @@ mod test {
     fn test_negative_number_in_slot() {
         prepare_tracing();
         let mut inventory = prepare_inventory();
-        inventory.set_main_hand(36).unwrap();
+        inventory.set_main_hand_slot(36).unwrap();
 
         let slot_change = vec![SlotChange {
             idx: 38,

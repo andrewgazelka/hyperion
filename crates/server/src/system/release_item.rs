@@ -1,13 +1,17 @@
+use std::{iter, mem};
+
 use bvh_region::aabb::Aabb;
 use evenio::prelude::*;
 use glam::Vec3;
-use tracing::instrument;
-use valence_protocol::{packets::play, ByteAngle, VarInt, Velocity};
+use tracing::{error, instrument};
+use valence_protocol::{
+    item::ItemStack, packets::play, ByteAngle, Hand, ItemKind, VarInt, Velocity,
+};
 use valence_server::entity::EntityKind;
 
 use crate::{
     components::{Arrow, EntityPhysics, EntityPhysicsState, FullEntityPose, Uuid},
-    event::ReleaseItem,
+    event::{ReleaseItem, UpdateInventory},
     inventory::PlayerInventory,
     net::Compose,
     system::sync_entity_position::PositionSyncMetadata,
@@ -15,6 +19,7 @@ use crate::{
 
 #[derive(Query)]
 pub struct ReleaseItemQuery<'a> {
+    id: EntityId,
     pose: &'a FullEntityPose,
     inventory: &'a mut PlayerInventory,
 }
@@ -30,12 +35,66 @@ pub fn release_item(
         Insert<PositionSyncMetadata>,
         Insert<Uuid>,
         Spawn,
+        UpdateInventory,
     )>,
 ) {
-    // TODO: Check that there is a bow and arrow
-    tracing::info!("shoot arrow");
+    let mut query = r.query;
+    let inventory = &mut query.inventory;
 
-    let query = r.query;
+    let Some(interaction) = mem::take(&mut inventory.interaction) else {
+        error!("client attempted to release item without using one first");
+        return;
+    };
+
+    // Check that the player is holding a bow
+    if inventory.get_hand(interaction.hand).item != ItemKind::Bow {
+        return;
+    }
+
+    // The tick when the bow is released doesn't count, so one tick is subtracted from the
+    // duration.
+    let duration = interaction.start.elapsed().unwrap().as_secs_f32() - 0.05;
+
+    if duration < 0.140175 {
+        // The arrow was not shot. Note that the bow draw and release packets are not tied to a specific
+        // tick when sent over the network, so the client may believe that the bow was drawn for
+        // enough time to shoot an arrow and remove an arrow from the inventory on the client side
+        // while the server believes that the bow wasn't drawn for enough time. To avoid desync, an
+        // update inventory packet is sent.
+        s.send_to(query.id, UpdateInventory);
+        return;
+    }
+
+    // Look for an arrow and remove it. The client doesn't need an update inventory packet because
+    // the client removes the arrow locally.
+    let opposite_hand = match interaction.hand {
+        Hand::Main => Hand::Off,
+        Hand::Off => Hand::Main,
+    };
+
+    let mut found_arrow = false;
+    for slot_index in iter::once(inventory.get_hand_slot(opposite_hand))
+        .chain(36..45)
+        .chain(0..36)
+    {
+        let slot = &mut inventory.items.slots[slot_index];
+        if slot.item == ItemKind::Arrow {
+            if slot.count > 1 {
+                slot.count -= 1;
+            } else {
+                *slot = ItemStack::EMPTY;
+            }
+            found_arrow = true;
+            break;
+        }
+    }
+
+    if !found_arrow {
+        error!("client attempted to use bow without having an arrow");
+        return;
+    }
+
+    let initial_speed = duration.mul_add(2.0, duration * duration).min(3.0);
 
     let id = s.spawn();
 
@@ -43,10 +102,6 @@ pub fn release_item(
     let entity_id = VarInt(id.index().0 as i32);
 
     let uuid = Uuid::from(uuid::Uuid::new_v4());
-
-    let duration = query.inventory.interact_duration().unwrap().as_secs_f32();
-    // TODO: Eyeballed this number, verify correctness
-    let initial_speed = f32::min(duration, 1.0) * 4.22;
 
     let (pitch_sin, pitch_cos) = query.pose.pitch.to_radians().sin_cos();
     let (yaw_sin, yaw_cos) = query.pose.yaw.to_radians().sin_cos();

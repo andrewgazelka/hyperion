@@ -1,4 +1,4 @@
-use std::borrow::Cow;
+use std::{borrow::Cow, time::SystemTime};
 
 use anyhow::{bail, Context};
 use evenio::{
@@ -19,7 +19,7 @@ use crate::{
     components::{InGameName, Player},
     event,
     event::{ChatMessage, ClickEvent, Command, ItemInteract, UpdateEquipment},
-    inventory::PlayerInventory,
+    inventory::{Interaction, PlayerInventory},
     net::{Compose, StreamId},
 };
 
@@ -29,7 +29,10 @@ pub fn item_interact(
     _compose: Compose,
     _sender: Sender<UpdateEquipment>,
 ) {
-    r.query.inventory.interact();
+    r.query.inventory.interaction = Some(Interaction {
+        start: SystemTime::now(),
+        hand: r.event.hand,
+    });
 }
 
 #[derive(Query)]

@@ -19,7 +19,7 @@ pub fn update_main_hand(
     sender: Sender<UpdateEquipment>,
 ) {
     let (entity_id, inventory) = r.query;
-    if inventory.set_main_hand(r.event.slot + 36).is_ok() {
+    if inventory.set_main_hand_slot(r.event.slot + 36).is_ok() {
         // send event
         sender.send_to(entity_id, UpdateEquipment);
     }

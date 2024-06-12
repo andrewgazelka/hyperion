@@ -257,11 +257,11 @@ pub fn player_interact_item(
     query: &PacketSwitchQuery,
     sender: &mut ThreadLocalIngressSender,
 ) -> anyhow::Result<()> {
-    let _packet = play::PlayerInteractItemC2s::decode(&mut data)?;
+    let packet = play::PlayerInteractItemC2s::decode(&mut data)?;
 
     let id = query.id;
 
-    sender.send_to(id, event::ItemInteract);
+    sender.send_to(id, event::ItemInteract { hand: packet.hand });
 
     Ok(())
 }

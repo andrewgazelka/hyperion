@@ -27,7 +27,9 @@ pub struct ClickEvent {
 
 /// An event that is sent when a player interacts with an item.
 #[derive(TargetedEvent, Debug)]
-pub struct ItemInteract;
+pub struct ItemInteract {
+    pub hand: Hand,
+}
 
 /// The type of click that the player performed.
 #[derive(Copy, Clone, Debug)]
