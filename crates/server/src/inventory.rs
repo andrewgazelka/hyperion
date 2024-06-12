@@ -342,7 +342,7 @@ impl PlayerInventory {
 
     /// get slot of hand
     #[must_use]
-    pub fn get_hand_slot(&mut self, hand: Hand) -> usize {
+    pub const fn get_hand_slot(&self, hand: Hand) -> usize {
         match hand {
             Hand::Main => self.main_hand as usize,
             Hand::Off => 45,
@@ -357,7 +357,7 @@ impl PlayerInventory {
 
     /// get item in hand
     #[must_use]
-    pub fn get_hand(&mut self, hand: Hand) -> &ItemStack {
+    pub const fn get_hand(&self, hand: Hand) -> &ItemStack {
         &self.items.slots[self.get_hand_slot(hand)]
     }
 
@@ -368,7 +368,7 @@ impl PlayerInventory {
 
     /// get item in the off hand
     #[must_use]
-    pub fn get_off_hand(&self) -> &ItemStack {
+    pub const fn get_off_hand(&self) -> &ItemStack {
         &self.items.slots[45]
     }
 
@@ -379,7 +379,7 @@ impl PlayerInventory {
 
     /// get item in the main hand
     #[must_use]
-    pub fn get_main_hand(&self) -> &ItemStack {
+    pub const fn get_main_hand(&self) -> &ItemStack {
         &self.items.slots[self.main_hand as usize]
     }
 
@@ -401,7 +401,7 @@ impl PlayerInventory {
 
     /// get helmet slot 5
     #[must_use]
-    pub fn get_helmet(&self) -> &ItemStack {
+    pub const fn get_helmet(&self) -> &ItemStack {
         &self.items.slots[5]
     }
 
@@ -413,7 +413,7 @@ impl PlayerInventory {
 
     /// get chestplate slot 6
     #[must_use]
-    pub fn get_chestplate(&self) -> &ItemStack {
+    pub const fn get_chestplate(&self) -> &ItemStack {
         &self.items.slots[6]
     }
 
@@ -425,7 +425,7 @@ impl PlayerInventory {
 
     /// get leggings slot 7
     #[must_use]
-    pub fn get_leggings(&self) -> &ItemStack {
+    pub const fn get_leggings(&self) -> &ItemStack {
         &self.items.slots[7]
     }
 
@@ -437,7 +437,7 @@ impl PlayerInventory {
 
     /// get boots slot 8
     #[must_use]
-    pub fn get_boots(&self) -> &ItemStack {
+    pub const fn get_boots(&self) -> &ItemStack {
         &self.items.slots[8]
     }
 

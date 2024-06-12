@@ -38,8 +38,8 @@ pub fn release_item(
         UpdateInventory,
     )>,
 ) {
-    let mut query = r.query;
-    let inventory = &mut query.inventory;
+    let query = r.query;
+    let inventory = query.inventory;
 
     let Some(interaction) = mem::take(&mut inventory.interaction) else {
         error!("client attempted to release item without using one first");
@@ -55,7 +55,7 @@ pub fn release_item(
     // duration.
     let duration = interaction.start.elapsed().unwrap().as_secs_f32() - 0.05;
 
-    if duration < 0.140175 {
+    if duration < 0.140_175 {
         // The arrow was not shot. Note that the bow draw and release packets are not tied to a specific
         // tick when sent over the network, so the client may believe that the bow was drawn for
         // enough time to shoot an arrow and remove an arrow from the inventory on the client side
