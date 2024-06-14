@@ -28,8 +28,8 @@ deny:
 debug:
     #!/usr/bin/env -S parallel --shebang --ungroup --jobs 3
     hyperion-proxy
-    cargo watch -x check -s 'touch {{project_root}}/.trigger'
-    cargo watch --no-vcs-ignores -w {{project_root}}/.trigger -x run
+    cargo watch -x build -s 'touch {{project_root}}/.trigger'
+    cargo watch --no-vcs-ignores -w {{project_root}}/.trigger -s './target/debug/infection'
 
 run:
     cargo run --release -- -t
