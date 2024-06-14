@@ -69,8 +69,12 @@ impl Aabb {
         Self { min, max }
     }
 
+    pub fn shrink(self, amount: f32) -> Self {
+        Self::expand(self, -amount)
+    }
+
     #[must_use]
-    pub fn move_to(&self, feet: Vec3) -> Self {
+    pub fn move_to_feet(&self, feet: Vec3) -> Self {
         let half_width = (self.max.x - self.min.x) / 2.0;
         let height = self.max.y - self.min.y;
 

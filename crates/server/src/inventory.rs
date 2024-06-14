@@ -5,7 +5,6 @@ use std::{
 };
 
 use anyhow::ensure;
-use evenio::component::Component;
 use itertools::{Either, Itertools};
 use thiserror::Error;
 use tracing::warn;

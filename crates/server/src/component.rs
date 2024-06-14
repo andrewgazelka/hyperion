@@ -1,14 +1,15 @@
-use std::time::Instant;
+use std::{fmt::Display, time::Instant};
 
 use bvh_region::aabb::Aabb;
 use derive_more::{Deref, DerefMut, Display, From};
-use evenio::component::Component;
+use flecs_ecs::macros::Component;
 use glam::{I16Vec2, Vec3};
+use itertools::Itertools;
 use valence_protocol::BlockPos;
 use valence_server::entity::EntityKind;
 
 use crate::{
-    components::vitals::{Absorption, Regeneration},
+    component::vitals::{Absorption, Regeneration},
     global::Global,
 };
 
@@ -51,6 +52,36 @@ pub enum LoginState {
     Terminate,
 }
 
+#[derive(Component, Debug, PartialEq)]
+pub struct Health {
+    pub normal: f32,
+}
+
+// use unicode hearts
+impl Display for Health {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let normal = usize::try_from(self.normal.ceil() as isize).unwrap_or(0);
+
+        let full_hearts = normal / 2;
+        for _ in 0..full_hearts {
+            write!(f, "\u{E001}")?;
+        }
+
+        if normal % 2 == 1 {
+            // half heart
+            write!(f, "\u{E002}")?;
+        }
+
+        Ok(())
+    }
+}
+
+impl Default for Health {
+    fn default() -> Self {
+        Self { normal: 20.0 }
+    }
+}
+
 #[derive(Copy, Clone, PartialEq, Debug, Component)]
 pub enum Vitals {
     /// If the player is alive
@@ -81,7 +112,7 @@ pub struct ImmuneStatus {
 }
 
 #[derive(Component, Debug, Eq, PartialEq, Default)]
-pub struct Display(pub EntityKind);
+pub struct DisplaySkin(pub EntityKind);
 
 impl ImmuneStatus {
     #[must_use]
@@ -146,7 +177,6 @@ impl Vitals {
 
 /// A UUID component. Generally speaking, this tends to be tied to entities with a [`Player`] component.
 #[derive(Component, Copy, Clone, Debug, Deref, From)]
-#[component(immutable)]
 pub struct Uuid(pub uuid::Uuid);
 
 #[derive(Component, Debug)]
@@ -194,7 +224,7 @@ pub struct AiTargetable;
 
 /// The full pose of an entity. This is used for both [`Player`] and [`Npc`].
 #[derive(Component, Copy, Clone, Debug)]
-pub struct FullEntityPose {
+pub struct Pose {
     /// The (x, y, z) position of the entity.
     /// Note we are using [`Vec3`] instead of [`glam::DVec3`] because *cache locality* is important.
     /// However, the Notchian server uses double precision floating point numbers for the position.
@@ -210,21 +240,32 @@ pub struct FullEntityPose {
     pub bounding: Aabb,
 }
 
+impl Display for Pose {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let position = self.position;
+        let yaw = self.yaw;
+        let pitch = self.pitch;
+        let bounding = self.bounding;
+
+        write!(f, "@{position}, {yaw}°, {pitch}°, ({bounding})")
+    }
+}
+
 #[derive(Component, Debug, Copy, Clone)]
-pub struct ChunkLocation(pub I16Vec2);
+pub struct ChunkPosition(pub I16Vec2);
 
 const SANE_MAX_RADIUS: i16 = 128;
 
-impl ChunkLocation {
-    pub const NULL: Self = Self(I16Vec2::new(
-        i16::MAX - SANE_MAX_RADIUS,
-        i16::MAX - SANE_MAX_RADIUS,
-    ));
+impl ChunkPosition {
+    #[must_use]
+    pub const fn null() -> Self {
+        Self(I16Vec2::new(SANE_MAX_RADIUS, SANE_MAX_RADIUS))
+    }
 }
 
 pub const PLAYER_SPAWN_POSITION: Vec3 = Vec3::new(-464.0, -16.0, -60.0);
 
-impl FullEntityPose {
+impl Pose {
     // todo: possible have separate field for head yaw
     #[must_use]
     pub const fn head_yaw(&self) -> f32 {
@@ -232,13 +273,27 @@ impl FullEntityPose {
     }
 
     #[must_use]
-    pub fn player() -> Self {
+    pub fn player(position: Vec3) -> Self {
         Self {
-            position: PLAYER_SPAWN_POSITION,
+            position,
             yaw: 0.0,
             pitch: 0.0,
-            bounding: Aabb::create(PLAYER_SPAWN_POSITION, 0.6, 1.8),
+            bounding: Aabb::create(position, 0.6, 1.8),
         }
+    }
+
+    pub fn block_pos_iterator(&self) -> impl Iterator<Item = BlockPos> {
+        let min = self.bounding.min.floor().as_ivec3();
+        let max = self.bounding.max.ceil().as_ivec3();
+
+        let x_range = min.x..=max.x;
+        let z_range = min.z..=max.z;
+        let y_range = min.y..=max.y;
+
+        x_range
+            .cartesian_product(z_range)
+            .cartesian_product(y_range)
+            .map(|((x, z), y)| BlockPos::new(x, y, z))
     }
 
     #[must_use]
@@ -250,7 +305,7 @@ impl FullEntityPose {
     }
 }
 
-impl FullEntityPose {
+impl Pose {
     /// Move the pose by the given vector.
     pub fn move_by(&mut self, vec: Vec3) {
         self.position += vec;
@@ -259,7 +314,7 @@ impl FullEntityPose {
 
     /// Teleport the pose to the given position.
     pub fn move_to(&mut self, pos: Vec3) {
-        self.bounding = self.bounding.move_to(pos);
+        self.bounding = self.bounding.move_to_feet(pos);
         self.position = pos;
     }
 }
@@ -273,7 +328,7 @@ impl FullEntityPose {
 ///   we need to be able to make sure the bounding boxes are immutable (unless we have something like a
 ///   [`std::sync::Arc`] or [`std::sync::RwLock`], but this is not efficient).
 /// - Therefore, we have an [`EntityReaction`] component which is used to store the reaction of an entity to collisions.
-/// - Later we can apply the reaction to the entity's [`FullEntityPose`] to move the entity.
+/// - Later we can apply the reaction to the entity's [`Pose`] to move the entity.
 #[derive(Component, Default, Debug)]
 pub struct EntityReaction {
     /// The velocity of the entity.

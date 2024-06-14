@@ -1,4 +1,4 @@
-//! All singletons that are used with [`evenio::fetch::Single`].
+//! All singletons that are used
 
 pub mod bounding_box;
 pub mod broadcast;

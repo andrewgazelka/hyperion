@@ -1,11 +1,13 @@
 use std::{borrow::Cow, collections::BTreeSet};
 
 use anyhow::{bail, Context};
-use evenio::prelude::*;
+use flecs_ecs::{
+    core::{Entity, IdOperations, IterAPI, Query},
+    prelude::{EntityView, WorldRef},
+};
 use glam::{I16Vec2, IVec3};
 use serde::Deserialize;
-use tracing::{debug, info, instrument, trace, warn};
-use valence_generated::item::ItemKind;
+use tracing::{debug, info};
 use valence_nbt::{value::ValueRef, Value};
 use valence_protocol::{
     game_mode::OptGameMode,
@@ -14,325 +16,449 @@ use valence_protocol::{
     packets::{
         play,
         play::{
-            player_list_s2c::PlayerListActions,
             player_position_look_s2c::PlayerPositionLookFlags,
             team_s2c::{CollisionRule, Mode, NameTagVisibility, TeamColor, TeamFlags},
             GameJoinS2c,
         },
     },
-    text::IntoText,
-    ByteAngle, GameMode, Ident, ItemStack, PacketEncoder, VarInt,
+    ByteAngle, GameMode, Ident, PacketEncoder, RawBytes, VarInt, Velocity,
 };
 use valence_registry::{
     biome::{Biome, BiomeEffects},
     BiomeRegistry, RegistryCodec,
 };
+use valence_server::entity::EntityKind;
+use valence_text::IntoText;
+
+pub mod list;
 
 use crate::{
-    components::{
-        chunks::{Chunks, Tasks},
-        Display, FullEntityPose, InGameName, Player, Uuid, PLAYER_SPAWN_POSITION,
-    },
+    component::{chunks::Blocks, InGameName, Pose, Uuid, PLAYER_SPAWN_POSITION},
     config::CONFIG,
-    event,
-    global::Global,
-    inventory::PlayerInventory,
-    net::{Compose, StreamId},
-    singleton::{player_id_lookup::EntityIdLookup, player_uuid_lookup::PlayerUuidLookup},
-    system::init_entity::spawn_entity_packet,
+    net::{Compose, IoRef},
+    system::player_join_world::list::{PlayerListActions, PlayerListEntry, PlayerListS2c},
+    tasks::Tasks,
 };
 
-#[derive(Query, Debug)]
-pub(crate) struct EntityQuery<'a> {
-    id: EntityId,
-    uuid: &'a Uuid,
-    pose: &'a FullEntityPose,
-    skin: &'a Display,
-}
+// #[derive(Query, Debug)]
+// pub(crate) struct EntityQuery<'a> {
+//     id: EntityId,
+//     uuid: &'a Uuid,
+//     pose: &'a FullEntityPose,
+//     skin: &'a Display,
+// }
+//
+// #[derive(Query)]
+// pub(crate) struct PlayerJoinWorldQuery<'a> {
+//     id: EntityId,
+//     inventory: &'a mut PlayerInventory,
+//     uuid: &'a Uuid,
+//     pose: &'a FullEntityPose,
+//     packets: &'a mut StreamId,
+//     name: &'a InGameName,
+//     _player: With<&'static Player>,
+// }
+//
+// #[derive(Query, Debug)]
+// pub(crate) struct PlayerJoinWorldQueryReduced<'a> {
+//     packets: &'a mut StreamId,
+//     _player: With<&'static Player>,
+// }
+//
+// #[derive(Query)]
+// pub(crate) struct PlayerInventoryQuery<'a> {
+//     id: EntityId,
+//     uuid: &'a Uuid,
+//     pose: &'a FullEntityPose,
+//     inventory: &'a PlayerInventory,
+//     _player: With<&'static Player>,
+//     _no_display: Not<&'static Display>,
+// }
+//
+// // This needs to be a separate system
+// // or else there are multiple (mut) references to inventory
+// pub fn send_player_info(
+//     r: Receiver<event::PlayerJoinWorld, PlayerJoinWorldQueryReduced>,
+//     players: Fetcher<PlayerInventoryQuery>,
+//     compose: Compose,
+// ) {
+//     // todo: cache
+//     for current_query in players {
+//         let id = current_query.id;
+//         let pose = current_query.pose;
+//         let uuid = current_query.uuid;
+//         let inv = current_query.inventory;
+//
+//         let entity_id = VarInt(id.index().0 as i32);
+//
+//         let pkt = play::PlayerSpawnS2c {
+//             entity_id,
+//             player_uuid: uuid.0,
+//             position: pose.position.as_dvec3(),
+//             yaw: ByteAngle::from_degrees(pose.yaw),
+//             pitch: ByteAngle::from_degrees(pose.pitch),
+//         };
+//
+//         compose.unicast(&pkt, r.query.packets).unwrap();
+//
+//         let equipment = inv.get_entity_equipment();
+//         let pkt = crate::packets::vanilla::EntityEquipmentUpdateS2c {
+//             entity_id,
+//             equipment: Cow::Borrowed(&equipment),
+//         };
+//         compose.unicast(&pkt, r.query.packets).unwrap();
+//     }
+// }
+//
+// // todo: clean up player_join_world; the file is super super super long and hard to understand
+// #[allow(clippy::too_many_arguments, reason = "todo")]
+// #[instrument(skip_all, level = "trace")]
+// pub fn player_join_world(
+//     r: Receiver<event::PlayerJoinWorld, PlayerJoinWorldQuery>,
+//     entities: Fetcher<EntityQuery>,
+//     global: Single<&Global>,
+//     player_list: Fetcher<(&InGameName, &Uuid)>,
+//     mut uuid_lookup: Single<&mut PlayerUuidLookup>,
+//     mut id_lookup: Single<&mut EntityIdLookup>,
+//     chunks: Single<&Chunks>,
+//     tasks: Single<&Tasks>,
+//     compose: Compose,
+//     sender: Sender<(event::PostPlayerJoinWorld, event::UpdateEquipment)>,
+// ) {
+//     static CACHED_DATA: once_cell::sync::OnceCell<bytes::Bytes> = once_cell::sync::OnceCell::new();
+//
+//     let compression_level = global.shared.compression_threshold;
+//
+//     let cached_data = CACHED_DATA
+//         .get_or_init(|| {
+//             let mut encoder = PacketEncoder::new();
+//             encoder.set_compression(compression_level);
+//
+//             info!("caching world data for new players");
+//             inner(&mut encoder, &chunks, &tasks).unwrap();
+//
+//             let bytes = encoder.take();
+//             bytes.freeze()
+//         })
+//         .clone();
+//
+//     trace!("got cached data");
+//
+//     let query = r.query;
+//
+//     let got_id = query.id;
+//
+//     uuid_lookup.insert(query.uuid.0, query.id);
+//     id_lookup.insert(query.id.index().0 as i32, query.id);
+//
+//     let entries = &[play::player_list_s2c::PlayerListEntry {
+//         player_uuid: query.uuid.0,
+//         username: query.name,
+//         properties: Cow::Borrowed(&[]),
+//         chat_data: None,
+//         listed: true,
+//         ping: 0,
+//         game_mode: GameMode::Survival,
+//         display_name: Some(query.name.to_string().into_cow_text()),
+//     }];
+//
+//     let current_entity_id = VarInt(query.id.index().0 as i32);
+//
+//     let text = play::GameMessageS2c {
+//         chat: format!("{} joined the world", query.name).into_cow_text(),
+//         overlay: false,
+//     };
+//
+//     compose.broadcast(&text).send().unwrap();
+//
+//     let local = query.packets;
+//     compose.io_buf().unicast_raw(cached_data, local);
+//
+//     trace!("appending cached data");
+//
+//     let inv = query.inventory;
+//
+//     // give players the items
+//     inv.fit(ItemStack::new(ItemKind::NetheriteSword, 1, None));
+//     inv.fit(ItemStack::new(ItemKind::Compass, 1, None));
+//     inv.fit(ItemStack::new(ItemKind::Book, 15, None));
+//     inv.fit(ItemStack::new(ItemKind::Bow, 1, None));
+//     inv.fit(ItemStack::new(ItemKind::Arrow, 32, None));
+//     inv.set_boots(ItemStack::new(ItemKind::NetheriteBoots, 1, None));
+//     inv.set_leggings(ItemStack::new(ItemKind::NetheriteLeggings, 1, None));
+//     inv.set_chestplate(ItemStack::new(ItemKind::NetheriteChestplate, 1, None));
+//     inv.set_helmet(ItemStack::new(ItemKind::NetheriteHelmet, 1, None));
+//
+//     let pack_inv = play::InventoryS2c {
+//         window_id: 0,
+//         state_id: VarInt(0),
+//         slots: Cow::Borrowed(inv.items.get_items()),
+//         carried_item: Cow::Borrowed(&ItemStack::EMPTY),
+//     };
+//
+//     compose.unicast(&pack_inv, local).unwrap();
+//
+//     sender.send_to(query.id, event::UpdateEquipment);
+//
+//     let actions = PlayerListActions::default()
+//         .with_add_player(true)
+//         .with_update_listed(true)
+//         .with_update_display_name(true);
+//
+//     let info = play::PlayerListS2c {
+//         actions,
+//         entries: Cow::Borrowed(entries),
+//     };
+//
+//     compose.broadcast(&info).send().unwrap();
+//
+//     for entity in entities {
+//         info!("spawning entity");
+//         let pkt = spawn_entity_packet(entity.id, entity.skin.0, *entity.uuid, entity.pose);
+//
+//         compose.unicast(&pkt, local).unwrap();
+//     }
+//
+//     // todo: cache
+//     let entries = player_list
+//         .iter()
+//         .map(|(name, uuid)| play::player_list_s2c::PlayerListEntry {
+//             player_uuid: uuid.0,
+//             username: name,
+//             properties: Cow::Borrowed(&[]),
+//             chat_data: None,
+//             listed: true,
+//             ping: 20,
+//             game_mode: GameMode::Survival,
+//             display_name: Some(name.to_string().into_cow_text()),
+//         })
+//         .collect::<Vec<_>>();
+//
+//     // let player_names: Vec<_> = player_list
+//     //     .iter()
+//     //     .map(|(name, _)| &***name) // todo: lol
+//     //     .collect();
+//
+//     // compose
+//     //     .broadcast(&play::TeamS2c {
+//     //         team_name: "no_tag",
+//     //         mode: Mode::AddEntities {
+//     //             entities: player_names,
+//     //         },
+//     //     })
+//     //     .send()
+//     //     .unwrap();
+//     //
+//     // let current_name = query.name;
+//     //
+//     //
+//     //
+//     //
+//     // // broadcast
+//     // //     .append(
+//     // //         &play::TeamS2c {
+//     // //             team_name: "no_tag",
+//     // //             mode: Mode::AddEntities {
+//     // //                 entities: vec![current_name],
+//     // //             },
+//     // //         },
+//     // //         &compose,
+//     // //     )
+//     // //     .unwrap();
+//     // compose.broadcast(&play::TeamS2c {
+//     //     team_name: "no_tag",
+//     //     mode: Mode::AddEntities {
+//     //         entities: vec![current_name],
+//     //     },
+//     // })
+//     // .send()
+//     // .unwrap();
+//
+//     compose
+//         .unicast(
+//             &play::PlayerListS2c {
+//                 actions,
+//                 entries: Cow::Owned(entries),
+//             },
+//             local,
+//         )
+//         .unwrap();
+//
+//     let tick = global.tick;
+//     let time_of_day = tick % 24000;
+//
+//     compose
+//         .unicast(
+//             &play::WorldTimeUpdateS2c {
+//                 world_age: tick,
+//                 time_of_day,
+//             },
+//             local,
+//         )
+//         .unwrap();
+//
+//     global
+//         .shared
+//         .player_count
+//         .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+//
+//     let spawn_player = play::PlayerSpawnS2c {
+//         entity_id: current_entity_id,
+//         player_uuid: query.uuid.0,
+//         position: query.pose.position.as_dvec3(),
+//         yaw: ByteAngle::from_degrees(query.pose.yaw),
+//         pitch: ByteAngle::from_degrees(query.pose.pitch),
+//     };
+//
+//     compose
+//         .unicast(
+//             &play::PlayerPositionLookS2c {
+//                 position: query.pose.position.as_dvec3(),
+//                 yaw: query.pose.yaw,
+//                 pitch: query.pose.pitch,
+//                 flags: PlayerPositionLookFlags::default(),
+//                 teleport_id: 1.into(),
+//             },
+//             local,
+//         )
+//         .unwrap();
+//
+//     compose.broadcast(&spawn_player).send().unwrap();
+//
+//     info!("{} joined the world", query.name);
+//
+//     sender.send_to(got_id, event::PostPlayerJoinWorld);
+// }
 
-#[derive(Query)]
-pub(crate) struct PlayerJoinWorldQuery<'a> {
-    id: EntityId,
-    inventory: &'a mut PlayerInventory,
-    uuid: &'a Uuid,
-    pose: &'a FullEntityPose,
-    packets: &'a mut StreamId,
-    name: &'a InGameName,
-    _player: With<&'static Player>,
-}
-
-#[derive(Query, Debug)]
-pub(crate) struct PlayerJoinWorldQueryReduced<'a> {
-    packets: &'a mut StreamId,
-    _player: With<&'static Player>,
-}
-
-#[derive(Query)]
-pub(crate) struct PlayerInventoryQuery<'a> {
-    id: EntityId,
-    uuid: &'a Uuid,
-    pose: &'a FullEntityPose,
-    inventory: &'a PlayerInventory,
-    _player: With<&'static Player>,
-    _no_display: Not<&'static Display>,
-}
-
-// This needs to be a separate system
-// or else there are multiple (mut) references to inventory
-pub fn send_player_info(
-    r: Receiver<event::PlayerJoinWorld, PlayerJoinWorldQueryReduced>,
-    players: Fetcher<PlayerInventoryQuery>,
-    compose: Compose,
-) {
-    // todo: cache
-    for current_query in players {
-        let id = current_query.id;
-        let pose = current_query.pose;
-        let uuid = current_query.uuid;
-        let inv = current_query.inventory;
-
-        let entity_id = VarInt(id.index().0 as i32);
-
-        let pkt = play::PlayerSpawnS2c {
-            entity_id,
-            player_uuid: uuid.0,
-            position: pose.position.as_dvec3(),
-            yaw: ByteAngle::from_degrees(pose.yaw),
-            pitch: ByteAngle::from_degrees(pose.pitch),
-        };
-
-        compose.unicast(&pkt, r.query.packets).unwrap();
-
-        let equipment = inv.get_entity_equipment();
-        let pkt = crate::packets::vanilla::EntityEquipmentUpdateS2c {
-            entity_id,
-            equipment: Cow::Borrowed(&equipment),
-        };
-        compose.unicast(&pkt, r.query.packets).unwrap();
-    }
-}
-
-// todo: clean up player_join_world; the file is super super super long and hard to understand
 #[allow(clippy::too_many_arguments, reason = "todo")]
-#[instrument(skip_all, level = "trace")]
 pub fn player_join_world(
-    r: Receiver<event::PlayerJoinWorld, PlayerJoinWorldQuery>,
-    entities: Fetcher<EntityQuery>,
-    global: Single<&Global>,
-    player_list: Fetcher<(&InGameName, &Uuid)>,
-    mut uuid_lookup: Single<&mut PlayerUuidLookup>,
-    mut id_lookup: Single<&mut EntityIdLookup>,
-    chunks: Single<&Chunks>,
-    tasks: Single<&Tasks>,
-    compose: Compose,
-    sender: Sender<(event::PostPlayerJoinWorld, event::UpdateEquipment)>,
+    entity: &EntityView,
+    tasks: &Tasks,
+    chunks: &Blocks,
+    compose: &Compose,
+    uuid: uuid::Uuid,
+    name: &str,
+    packets: &IoRef,
+    pose: &Pose,
+    world: &WorldRef,
+    query: &Query<(&Uuid, &InGameName, &Pose)>,
 ) {
     static CACHED_DATA: once_cell::sync::OnceCell<bytes::Bytes> = once_cell::sync::OnceCell::new();
 
-    let compression_level = global.shared.compression_threshold;
-
     let cached_data = CACHED_DATA
         .get_or_init(|| {
+            let compression_level = compose.global().shared.compression_threshold;
             let mut encoder = PacketEncoder::new();
             encoder.set_compression(compression_level);
 
-            info!("caching world data for new players");
-            inner(&mut encoder, &chunks, &tasks).unwrap();
+            info!(
+                "caching world data for new players with compression level {compression_level:?}"
+            );
+            inner(&mut encoder, chunks, tasks).unwrap();
 
             let bytes = encoder.take();
             bytes.freeze()
         })
         .clone();
 
-    trace!("got cached data");
-
-    let query = r.query;
-
-    let got_id = query.id;
-
-    uuid_lookup.insert(query.uuid.0, query.id);
-    id_lookup.insert(query.id.index().0 as i32, query.id);
-
-    let entries = &[play::player_list_s2c::PlayerListEntry {
-        player_uuid: query.uuid.0,
-        username: query.name,
-        properties: Cow::Borrowed(&[]),
-        chat_data: None,
-        listed: true,
-        ping: 0,
-        game_mode: GameMode::Survival,
-        display_name: Some(query.name.to_string().into_cow_text()),
-    }];
-
-    let current_entity_id = VarInt(query.id.index().0 as i32);
+    compose.io_buf().unicast_raw(cached_data, packets);
 
     let text = play::GameMessageS2c {
-        chat: format!("{} joined the world", query.name).into_cow_text(),
+        chat: format!("{name} joined the world").into_cow_text(),
         overlay: false,
     };
 
     compose.broadcast(&text).send().unwrap();
 
-    let local = query.packets;
-    compose.io_buf().unicast_raw(cached_data, local);
+    compose
+        .unicast(
+            &play::PlayerPositionLookS2c {
+                position: pose.position.as_dvec3(),
+                yaw: pose.yaw,
+                pitch: pose.pitch,
+                flags: PlayerPositionLookFlags::default(),
+                teleport_id: 1.into(),
+            },
+            packets,
+        )
+        .unwrap();
 
-    trace!("appending cached data");
+    let mut entries = Vec::new();
 
-    let inv = query.inventory;
-
-    // give players the items
-    inv.fit(ItemStack::new(ItemKind::NetheriteSword, 1, None));
-    inv.fit(ItemStack::new(ItemKind::Compass, 1, None));
-    inv.fit(ItemStack::new(ItemKind::Book, 15, None));
-    inv.fit(ItemStack::new(ItemKind::Bow, 1, None));
-    inv.fit(ItemStack::new(ItemKind::Arrow, 32, None));
-    inv.set_boots(ItemStack::new(ItemKind::NetheriteBoots, 1, None));
-    inv.set_leggings(ItemStack::new(ItemKind::NetheriteLeggings, 1, None));
-    inv.set_chestplate(ItemStack::new(ItemKind::NetheriteChestplate, 1, None));
-    inv.set_helmet(ItemStack::new(ItemKind::NetheriteHelmet, 1, None));
-
-    let pack_inv = play::InventoryS2c {
-        window_id: 0,
-        state_id: VarInt(0),
-        slots: Cow::Borrowed(inv.items.get_items()),
-        carried_item: Cow::Borrowed(&ItemStack::EMPTY),
-    };
-
-    compose.unicast(&pack_inv, local).unwrap();
-
-    sender.send_to(query.id, event::UpdateEquipment);
-
-    let actions = PlayerListActions::default()
-        .with_add_player(true)
-        .with_update_listed(true)
-        .with_update_display_name(true);
-
-    let info = play::PlayerListS2c {
-        actions,
-        entries: Cow::Borrowed(entries),
-    };
-
-    compose.broadcast(&info).send().unwrap();
-
-    for entity in entities {
-        info!("spawning entity");
-        let pkt = spawn_entity_packet(entity.id, entity.skin.0, *entity.uuid, entity.pose);
-
-        compose.unicast(&pkt, local).unwrap();
-    }
-
-    // todo: cache
-    let entries = player_list
-        .iter()
-        .map(|(name, uuid)| play::player_list_s2c::PlayerListEntry {
+    query.iter_stage(world).each(|(uuid, name, _)| {
+        let entry = PlayerListEntry {
             player_uuid: uuid.0,
-            username: name,
+            username: name.to_string().into(),
             properties: Cow::Borrowed(&[]),
             chat_data: None,
             listed: true,
             ping: 20,
             game_mode: GameMode::Survival,
             display_name: Some(name.to_string().into_cow_text()),
-        })
-        .collect::<Vec<_>>();
+        };
 
-    // let player_names: Vec<_> = player_list
-    //     .iter()
-    //     .map(|(name, _)| &***name) // todo: lol
-    //     .collect();
+        entries.push(entry);
+    });
 
-    // compose
-    //     .broadcast(&play::TeamS2c {
-    //         team_name: "no_tag",
-    //         mode: Mode::AddEntities {
-    //             entities: player_names,
-    //         },
-    //     })
-    //     .send()
-    //     .unwrap();
-    //
-    // let current_name = query.name;
-    //
-    //
-    //
-    //
-    // // broadcast
-    // //     .append(
-    // //         &play::TeamS2c {
-    // //             team_name: "no_tag",
-    // //             mode: Mode::AddEntities {
-    // //                 entities: vec![current_name],
-    // //             },
-    // //         },
-    // //         &compose,
-    // //     )
-    // //     .unwrap();
-    // compose.broadcast(&play::TeamS2c {
-    //     team_name: "no_tag",
-    //     mode: Mode::AddEntities {
-    //         entities: vec![current_name],
-    //     },
-    // })
-    // .send()
-    // .unwrap();
+    let actions = PlayerListActions::default()
+        .with_add_player(true)
+        .with_update_listed(true)
+        .with_update_display_name(true);
 
     compose
         .unicast(
-            &play::PlayerListS2c {
+            &PlayerListS2c {
                 actions,
                 entries: Cow::Owned(entries),
             },
-            local,
+            packets,
         )
         .unwrap();
 
-    let tick = global.tick;
-    let time_of_day = tick % 24000;
+    let singleton_entry = &[PlayerListEntry {
+        player_uuid: uuid,
+        username: Cow::Borrowed(name),
+        properties: Cow::Borrowed(&[]),
+        chat_data: None,
+        listed: true,
+        ping: 20,
+        game_mode: GameMode::Survival,
+        display_name: Some(name.to_string().into_cow_text()),
+    }];
 
-    compose
-        .unicast(
-            &play::WorldTimeUpdateS2c {
-                world_age: tick,
-                time_of_day,
-            },
-            local,
-        )
-        .unwrap();
+    let pkt = PlayerListS2c {
+        actions,
+        entries: Cow::Borrowed(singleton_entry),
+    };
 
-    global
-        .shared
-        .player_count
-        .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    compose.broadcast(&pkt).send().unwrap();
+
+    let current_entity_id = VarInt(entity.id().0 as i32);
 
     let spawn_player = play::PlayerSpawnS2c {
         entity_id: current_entity_id,
-        player_uuid: query.uuid.0,
-        position: query.pose.position.as_dvec3(),
-        yaw: ByteAngle::from_degrees(query.pose.yaw),
-        pitch: ByteAngle::from_degrees(query.pose.pitch),
+        player_uuid: uuid,
+        position: pose.position.as_dvec3(),
+        yaw: ByteAngle::from_degrees(pose.yaw),
+        pitch: ByteAngle::from_degrees(pose.pitch),
     };
-
     compose
-        .unicast(
-            &play::PlayerPositionLookS2c {
-                position: query.pose.position.as_dvec3(),
-                yaw: query.pose.yaw,
-                pitch: query.pose.pitch,
-                flags: PlayerPositionLookFlags::default(),
-                teleport_id: 1.into(),
-            },
-            local,
-        )
+        .broadcast(&spawn_player)
+        .exclude(packets)
+        .send()
         .unwrap();
 
-    compose.broadcast(&spawn_player).send().unwrap();
+    info!("{name} joined the world, entity {entity:?}");
 
-    info!("{} joined the world", query.name);
-
-    sender.send_to(got_id, event::PostPlayerJoinWorld);
+    compose
+        .global()
+        .shared
+        .player_count
+        .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 }
 
-pub fn send_keep_alive(packets: &mut StreamId, compose: &Compose) -> anyhow::Result<()> {
+#[allow(dead_code, reason = "will re-enable")]
+pub fn send_keep_alive(packets: &IoRef, compose: &Compose) -> anyhow::Result<()> {
     let pkt = play::KeepAliveS2c {
         // The ID can be set to zero because it doesn't matter
         id: 0,
@@ -478,130 +604,143 @@ pub fn send_game_join_packet(encoder: &mut PacketEncoder) -> anyhow::Result<()> 
     Ok(())
 }
 
-fn send_commands(encoder: &mut PacketEncoder) -> anyhow::Result<()> {
-    // https://wiki.vg/Command_Data
-    use valence_protocol::packets::play::command_tree_s2c::{
-        CommandTreeS2c, Node, NodeData, Parser,
-    };
+// tree must start at 0 and increment by 1 for each node
+// struct CommandInfo {
+//     name: &'static str,
+//     aliases: &'static [&'static str],
+//     tree: &'static [play::command_tree_s2c::Node],
+//     target: Entity,
+// }
 
-    // id 0
-    let root = Node {
-        data: NodeData::Root,
-        executable: false,
-        children: vec![VarInt(1), VarInt(3), VarInt(4)],
-        redirect_node: None,
-    };
-
-    // id 1
-    let spawn = Node {
-        data: NodeData::Literal {
-            name: "spawn".to_owned(),
-        },
-        executable: true,
-        children: vec![VarInt(2)],
-        redirect_node: None,
-    };
-
-    // id 2
-    let spawn_arg = Node {
-        data: NodeData::Argument {
-            name: "position".to_owned(),
-            parser: Parser::BlockPos,
-            suggestion: None,
-        },
-        executable: true,
-        children: vec![],
-        redirect_node: None,
-    };
-
-    // id 3 = "killall"
-    let clear = Node {
-        data: NodeData::Literal {
-            name: "ka".to_owned(),
-        },
-        executable: true,
-        children: vec![],
-        redirect_node: None,
-    };
-
-    // id 4 = give item
-    let give = Node {
-        data: NodeData::Literal {
-            name: "give".to_owned(),
-        },
-        executable: true,
-        children: vec![VarInt(5)],
-        redirect_node: None,
-    };
-
-    // id 5 = give {entity}
-    let give_player = Node {
-        data: NodeData::Argument {
-            name: "player".to_owned(),
-            parser: Parser::Entity {
-                single: true,
-                only_players: true,
-            },
-            suggestion: None,
-        },
-        executable: true,
-        children: vec![VarInt(6)],
-        redirect_node: None,
-    };
-
-    // id 6 = give {entity} {item}
-    let give_item = Node {
-        data: NodeData::Argument {
-            name: "item".to_owned(),
-            parser: Parser::ItemStack,
-            suggestion: None,
-        },
-        executable: true,
-        children: vec![VarInt(7)],
-        redirect_node: None,
-    };
-
-    // id 7 = give count
-    let give_count = Node {
-        data: NodeData::Argument {
-            name: "count".to_owned(),
-            parser: Parser::Integer {
-                min: Some(1),
-                max: Some(64),
-            },
-            suggestion: None,
-        },
-        executable: true,
-        children: vec![],
-        redirect_node: None,
-    };
-
-    // id 4 = "ka" replace with "killall"
-    // let ka = Node {
-    //     data: NodeData::Literal {
-    //         name: "ka".to_owned(),
-    //     },
-    //     executable: false,
-    //     children: vec![],
-    //     redirect_node: Some(VarInt(3)),
-    // };
-
-    encoder.append_packet(&CommandTreeS2c {
-        commands: vec![
-            root,
-            spawn,
-            spawn_arg,
-            clear,
-            give,
-            give_player,
-            give_item,
-            give_count,
-        ],
-        root_index: VarInt(0),
-    })?;
-
-    Ok(())
-}
+// fn send_commands(encoder: &mut PacketEncoder, world: &World, root_node: Entity) -> anyhow::Result<()> {
+//
+//     // https://wiki.vg/Command_Data
+//     use valence_protocol::packets::play::command_tree_s2c::{
+//         CommandTreeS2c, Node, NodeData, Parser,
+//     };
+//
+//
+//     let root_node: EntityView = world.entity_from_id(root_node);
+//     root_node
+//
+//     // id 0
+//     let root = Node {
+//         data: NodeData::Root,
+//         executable: false,
+//         children: vec![VarInt(1), VarInt(3), VarInt(4)],
+//         redirect_node: None,
+//     };
+//
+//     // id 1
+//     let spawn = Node {
+//         data: NodeData::Literal {
+//             name: "spawn".to_owned(),
+//         },
+//         executable: true,
+//         children: vec![VarInt(2)],
+//         redirect_node: None,
+//     };
+//
+//     // id 2
+//     let spawn_arg = Node {
+//         data: NodeData::Argument {
+//             name: "position".to_owned(),
+//             parser: Parser::BlockPos,
+//             suggestion: None,
+//         },
+//         executable: true,
+//         children: vec![],
+//         redirect_node: None,
+//     };
+//
+//     // id 3 = "killall"
+//     let clear = Node {
+//         data: NodeData::Literal {
+//             name: "ka".to_owned(),
+//         },
+//         executable: true,
+//         children: vec![],
+//         redirect_node: None,
+//     };
+//
+//     // id 4 = give item
+//     let give = Node {
+//         data: NodeData::Literal {
+//             name: "give".to_owned(),
+//         },
+//         executable: true,
+//         children: vec![VarInt(5)],
+//         redirect_node: None,
+//     };
+//
+//     // id 5 = give {entity}
+//     let give_player = Node {
+//         data: NodeData::Argument {
+//             name: "player".to_owned(),
+//             parser: Parser::Entity {
+//                 single: true,
+//                 only_players: true,
+//             },
+//             suggestion: None,
+//         },
+//         executable: true,
+//         children: vec![VarInt(6)],
+//         redirect_node: None,
+//     };
+//
+//     // id 6 = give {entity} {item}
+//     let give_item = Node {
+//         data: NodeData::Argument {
+//             name: "item".to_owned(),
+//             parser: Parser::ItemStack,
+//             suggestion: None,
+//         },
+//         executable: true,
+//         children: vec![VarInt(7)],
+//         redirect_node: None,
+//     };
+//
+//     // id 7 = give count
+//     let give_count = Node {
+//         data: NodeData::Argument {
+//             name: "count".to_owned(),
+//             parser: Parser::Integer {
+//                 min: Some(1),
+//                 max: Some(64),
+//             },
+//             suggestion: None,
+//         },
+//         executable: true,
+//         children: vec![],
+//         redirect_node: None,
+//     };
+//
+//     // id 4 = "ka" replace with "killall"
+//     // let ka = Node {
+//     //     data: NodeData::Literal {
+//     //         name: "ka".to_owned(),
+//     //     },
+//     //     executable: false,
+//     //     children: vec![],
+//     //     redirect_node: Some(VarInt(3)),
+//     // };
+//
+//     encoder.append_packet(&CommandTreeS2c {
+//         commands: vec![
+//             root,
+//             spawn,
+//             spawn_arg,
+//             clear,
+//             give,
+//             give_player,
+//             give_item,
+//             give_count,
+//         ],
+//         root_index: VarInt(0),
+//     })?;
+//
+//     Ok(())
+// }
 
 fn send_sync_tags(encoder: &mut PacketEncoder) -> anyhow::Result<()> {
     let bytes = include_bytes!("tags.json");
@@ -615,9 +754,23 @@ fn send_sync_tags(encoder: &mut PacketEncoder) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn inner(encoder: &mut PacketEncoder, chunks: &Chunks, tasks: &Tasks) -> anyhow::Result<()> {
+fn inner(encoder: &mut PacketEncoder, chunks: &Blocks, tasks: &Tasks) -> anyhow::Result<()> {
     send_game_join_packet(encoder)?;
     send_sync_tags(encoder)?;
+
+    let mut buf: heapless::Vec<u8, 32> = heapless::Vec::new();
+    let brand = b"discord: andrewgazelka";
+    buf.push(brand.len() as u8).unwrap();
+    buf.extend_from_slice(brand).unwrap();
+
+    let bytes = RawBytes::from(buf.as_slice());
+
+    let brand = valence_protocol::packets::play::CustomPayloadS2c {
+        channel: ident!("minecraft:brand").into(),
+        data: bytes.into(),
+    };
+
+    encoder.append_packet(&brand)?;
 
     let center_chunk: IVec3 = PLAYER_SPAWN_POSITION.as_ivec3() >> 4;
 
@@ -655,7 +808,7 @@ fn inner(encoder: &mut PacketEncoder, chunks: &Chunks, tasks: &Tasks) -> anyhow:
     //     encoder.append_bytes(&elem);
     // }
 
-    send_commands(encoder)?;
+    // send_commands(encoder)?;
 
     encoder.append_packet(&play::PlayerSpawnPositionS2c {
         position: PLAYER_SPAWN_POSITION.as_dvec3().into(),
@@ -699,4 +852,28 @@ fn inner(encoder: &mut PacketEncoder, chunks: &Chunks, tasks: &Tasks) -> anyhow:
     }
 
     Ok(())
+}
+
+#[tracing::instrument(skip_all)]
+pub fn spawn_entity_packet(
+    id: Entity,
+    kind: EntityKind,
+    uuid: Uuid,
+    pose: &Pose,
+) -> play::EntitySpawnS2c {
+    info!("spawning entity");
+
+    let entity_id = VarInt(id.0 as i32);
+
+    play::EntitySpawnS2c {
+        entity_id,
+        object_uuid: *uuid,
+        kind: VarInt(kind.get()),
+        position: pose.position.as_dvec3(),
+        pitch: ByteAngle::from_degrees(pose.pitch),
+        yaw: ByteAngle::from_degrees(pose.yaw),
+        head_yaw: ByteAngle::from_degrees(pose.head_yaw()),
+        data: VarInt::default(),
+        velocity: Velocity([0; 3]),
+    }
 }

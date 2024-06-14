@@ -1,14 +1,15 @@
 use anyhow::{bail, ensure, Context};
 use bytes::{Buf, BytesMut};
+use flecs_ecs::macros::Component;
 use more_asserts::debug_assert_ge;
 use valence_protocol::{
     decode::PacketFrame, var_int::VarIntDecodeError, CompressionThreshold, Decode, VarInt,
     MAX_PACKET_SIZE,
 };
 
-use crate::event::ScratchBuffer;
+use crate::ScratchBuffer;
 
-#[derive(Default)]
+#[derive(Default, Component)]
 pub struct PacketDecoder {
     buf: BytesMut,
     threshold: CompressionThreshold,
@@ -19,6 +20,16 @@ impl PacketDecoder {
     #[must_use]
     pub fn new() -> Self {
         Self::default()
+    }
+
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.buf.len()
+    }
+
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.buf.is_empty()
     }
 
     pub fn try_next_packet(
@@ -161,7 +172,7 @@ mod tests {
     };
 
     use super::*;
-    use crate::event::Scratch;
+    use crate::Scratch;
 
     fn compare_decoder(packet: &LoginHelloC2s, threshold: CompressionThreshold, msg: &str) {
         let mut valence_decoder = valence_protocol::PacketDecoder::new();

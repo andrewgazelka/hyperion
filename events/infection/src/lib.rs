@@ -3,44 +3,34 @@
 
 use std::net::ToSocketAddrs;
 
-use evenio::event::TargetedEvent;
 use server::{valence_server::protocol::anyhow, Hyperion};
 
-use crate::components::HumanLocations;
-
-mod components;
-mod system;
-
-#[derive(TargetedEvent)]
-struct ToZombie;
-
 pub fn init_game(address: impl ToSocketAddrs + Send + Sync + 'static) -> anyhow::Result<()> {
-    let mut game = Hyperion::init_with(address, |world| {
-        // join events
-        world.add_handler(system::scramble_player_name);
-        world.add_handler(system::assign_team_on_join);
-
-        world.add_handler(system::disable_attack_team);
-
-        world.add_handler(system::block_finish_break);
-
-        world.add_handler(system::respawn_on_death);
-
-        world.add_handler(system::bump_into_player);
-
-        // commands
-        world.add_handler(system::zombie_command);
-
-        world.add_handler(system::calculate_chunk_level_bvh);
-        world.add_handler(system::point_close_player);
-
-        world.add_handler(system::to_zombie);
-
-        let locations = world.spawn();
-        world.insert(locations, HumanLocations::default());
+    Hyperion::init_with(address, |_| {
+        // // join events
+        // world.add_handler(system::scramble_player_name);
+        // world.add_handler(system::assign_team_on_join);
+        //
+        // world.add_handler(system::disable_attack_team);
+        //
+        // world.add_handler(system::block_finish_break);
+        //
+        // world.add_handler(system::respawn_on_death);
+        //
+        // world.add_handler(system::bump_into_player);
+        //
+        // // commands
+        // world.add_handler(system::zombie_command);
+        //
+        // world.add_handler(system::calculate_chunk_level_bvh);
+        // world.add_handler(system::point_close_player);
+        //
+        // world.add_handler(system::to_zombie);
+        //
+        // let locations = world.spawn();
+        // world.insert(locations, HumanLocations::default());
     })?;
 
-    game.game_loop();
     Ok(())
 }
 

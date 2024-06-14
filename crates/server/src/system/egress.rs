@@ -1,12 +1,14 @@
-use evenio::{event::ReceiverMut, fetch::Single};
+use flecs_ecs::core::{
+    flecs::pipeline::OnUpdate, QueryBuilderImpl, ReactorAPI, TermBuilderImpl, World,
+};
 use hyperion_proto::Flush;
 use prost::Message;
 use tracing::instrument;
 
-use crate::{components::EgressComm, event::Egress, net::IoBuf};
+use crate::{component::EgressComm, net::Compose};
 
 #[instrument(skip_all, level = "trace")]
-pub fn egress(_: ReceiverMut<Egress>, mut io: Single<&mut IoBuf>, egress: Single<&EgressComm>) {
+pub fn egress(world: &World) {
     // ByteMut::with_capacity(1024);
     // ByteMut [----------------------------------------------------------------------] ALLOC [A]
     // we write 30 bytes to the buffer
@@ -31,12 +33,22 @@ pub fn egress(_: ReceiverMut<Egress>, mut io: Single<&mut IoBuf>, egress: Single
         bytes::Bytes::from_static(data)
     });
 
-    for bytes in io.split() {
-        if bytes.is_empty() {
-            continue;
-        }
-        egress.send(bytes.freeze()).unwrap();
-    }
+    world
+        .system_named::<(&mut Compose, &mut EgressComm)>("egress")
+        .kind::<OnUpdate>()
+        .term_at(0)
+        .singleton()
+        .term_at(1)
+        .singleton()
+        .each(|(compose, egress)| {
+            let io = compose.io_buf_mut();
+            for bytes in io.split() {
+                if bytes.is_empty() {
+                    continue;
+                }
+                egress.send(bytes.freeze()).unwrap();
+            }
 
-    egress.send(FLUSH.clone()).unwrap();
+            egress.send(FLUSH.clone()).unwrap();
+        });
 }

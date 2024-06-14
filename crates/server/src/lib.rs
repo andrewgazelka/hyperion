@@ -14,9 +14,7 @@
 #![feature(iter_array_chunks)]
 #![feature(io_slice_advance)]
 #![feature(assert_matches)]
-#![expect(clippy::type_complexity, reason = "evenio uses a lot of complex types")]
 
-pub use evenio;
 pub use uuid;
 
 mod blocks;
@@ -25,57 +23,52 @@ pub mod singleton;
 pub mod util;
 
 use std::{
-    collections::VecDeque,
+    alloc::Allocator,
+    cell::RefCell,
+    fmt::Debug,
     net::ToSocketAddrs,
     sync::{atomic::AtomicU32, Arc},
-    time::{Duration, Instant},
+    time::Duration,
 };
 
 use anyhow::Context;
-use derive_more::From;
-use evenio::prelude::*;
-use humansize::{SizeFormatter, BINARY};
+use bumpalo::Bump;
+use derive_more::{Deref, DerefMut, From};
+use flecs_ecs::core::World;
 use libc::{getrlimit, setrlimit, RLIMIT_NOFILE};
 use libdeflater::CompressionLvl;
-use signal_hook::iterator::Signals;
-use singleton::bounding_box;
 use spin::Lazy;
+use thread_local::ThreadLocal;
 use tracing::{error, info, instrument, warn};
 use valence_protocol::CompressionThreshold;
 pub use valence_server;
 
 use crate::{
-    components::{
-        chunks::{Chunks, Tasks},
-        Vitals,
-    },
-    event::{Egress, Gametick, Scratches, Stats},
+    component::chunks::Blocks,
     global::Global,
-    net::{
-        proxy::{init_proxy_comms, ReceiveState},
-        Compressors, IoBuf, S2C_BUFFER_SIZE,
-    },
-    singleton::{
-        fd_lookup::StreamLookup, player_aabb_lookup::PlayerBoundingBoxes,
-        player_id_lookup::EntityIdLookup, player_uuid_lookup::PlayerUuidLookup,
-    },
-    system::{generate_biome_registry, ingress::generate_ingress_events},
+    net::{proxy::init_proxy_comms, Compose, Compressors, IoBuf, MAX_PACKET_SIZE},
+    singleton::{fd_lookup::StreamLookup, player_id_lookup::EntityIdLookup},
+    system::{chunks::ChunkChanges, player_join_world::generate_biome_registry},
+    tasks::Tasks,
 };
 
-pub mod components;
+pub mod component;
+// pub mod event;
 pub mod event;
 
 pub mod global;
 pub mod net;
 
-pub mod inventory;
+// pub mod inventory;
 
 mod packets;
 mod system;
 
 mod bits;
 
-mod tracker;
+mod tasks;
+
+// mod tracker;
 
 mod config;
 
@@ -142,97 +135,34 @@ pub fn adjust_file_descriptor_limits(recommended_min: u64) -> std::io::Result<()
     Ok(())
 }
 
-#[instrument(skip_all)]
-fn set_memlock_limit(limit: u64) -> anyhow::Result<()> {
-    let mut rlim_current = libc::rlimit {
-        rlim_cur: 0,
-        rlim_max: 0,
-    };
-
-    let result = unsafe { getrlimit(libc::RLIMIT_MEMLOCK, &mut rlim_current) };
-
-    if result != 0 {
-        return Err(std::io::Error::last_os_error()).context("failed to get memlock limit");
-    }
-
-    if result == 0 {
-        let rlim_cur = SizeFormatter::new(rlim_current.rlim_cur, BINARY);
-        let rlim_max = SizeFormatter::new(rlim_current.rlim_max, BINARY);
-        info!("current soft limit: {rlim_cur}");
-        info!("current hard limit: {rlim_max}");
-        //
-    }
-
-    if limit < rlim_current.rlim_cur {
-        info!("current limit is already greater than requested limit");
-        return Ok(());
-    }
-
-    let rlim = libc::rlimit {
-        rlim_cur: limit,
-        rlim_max: limit,
-    };
-
-    let result = unsafe { setrlimit(libc::RLIMIT_MEMLOCK, &rlim) };
-    if result == 0 {
-        let limit_fmt = SizeFormatter::new(limit, BINARY);
-        info!("set limit to {limit_fmt}");
-
-        let count = rayon_local::count();
-        let expected = limit * count as u64;
-        let expected_fmt = SizeFormatter::new(expected, BINARY);
-        info!("expected to allocate {count}×{limit_fmt} = {expected_fmt} bytes of memory");
-
-        Ok(())
-    } else {
-        Err(std::io::Error::last_os_error()).context("failed to set memlock limit")
-    }
-}
-
 /// The central [`Hyperion`] struct which owns and manages the entire server.
-pub struct Hyperion {
-    /// The shared state between the ECS framework and the I/O thread.
-    shared: Arc<global::Shared>,
-    /// The manager of the ECS framework.
-    world: World,
-    /// Data for what time the last ticks occurred.
-    last_ticks: VecDeque<Instant>,
-    /// The tick of the game. This is incremented every 50 ms.
-    tick_on: u64,
+pub struct Hyperion;
 
-    receive_state: ReceiveState,
+pub fn register_components(world: &World) {
+    world.component::<component::Pose>();
+    world.component::<component::Player>();
+    world.component::<component::InGameName>();
+    world.component::<component::AiTargetable>();
+    world.component::<component::ImmuneStatus>();
+    world.component::<component::Uuid>();
+    world.component::<component::KeepAlive>();
+    world.component::<component::Health>();
+    world.component::<component::Vitals>();
+    world.component::<component::ChunkPosition>();
+    world.component::<ChunkChanges>();
+    world.component::<component::DisplaySkin>();
+    world.component::<component::EntityReaction>();
 }
 
 impl Hyperion {
-    /// Get the [`World`] which is the core part of the ECS framework.
-    pub const fn world(&self) -> &World {
-        &self.world
-    }
-
-    /// Get all shared data that is shared between the ECS framework and the IO thread.
-    pub const fn shared(&self) -> &Arc<global::Shared> {
-        &self.shared
-    }
-
-    /// See [`Hyperion::world`].
-    pub fn world_mut(&mut self) -> &mut World {
-        &mut self.world
-    }
-
-    /// # Panics
-    /// This function will panic if the game is already shutdown.
-    pub const fn shutdown(&self) {
-        // TODO
-    }
-
-    pub fn init(address: impl ToSocketAddrs + Send + Sync + 'static) -> anyhow::Result<Self> {
+    pub fn init(address: impl ToSocketAddrs + Send + Sync + 'static) -> anyhow::Result<()> {
         Self::init_with(address, |_| {})
     }
 
     pub fn init_with(
         address: impl ToSocketAddrs + Send + Sync + 'static,
-        handlers: impl FnOnce(&mut World) + Send + Sync + 'static,
-    ) -> anyhow::Result<Self> {
+        handlers: impl FnOnce(&World) + Send + Sync + 'static,
+    ) -> anyhow::Result<()> {
         // Denormals (numbers very close to 0) are flushed to zero because doing computations on them
         // is slow.
         rayon::ThreadPoolBuilder::new()
@@ -254,33 +184,13 @@ impl Hyperion {
     #[allow(clippy::too_many_lines, reason = "todo")]
     fn init_with_helper(
         address: impl ToSocketAddrs + Send + Sync + 'static,
-        handlers: impl FnOnce(&mut World) + Send + Sync + 'static,
-    ) -> anyhow::Result<Self> {
+        handlers: impl FnOnce(&World) + Send + Sync + 'static,
+    ) -> anyhow::Result<()> {
         // 10k players * 2 file handles / player  = 20,000. We can probably get away with 16,384 file handles
         adjust_file_descriptor_limits(32_768).context("failed to set file limits")?;
 
-        // we want at least S2C_BUFFER_SIZE memlock limit
-        set_memlock_limit(S2C_BUFFER_SIZE as u64).context("failed to set memlock limit.")?;
-
         info!("starting hyperion");
         Lazy::force(&config::CONFIG);
-
-        let current_threads = rayon::current_num_threads();
-        let max_threads = rayon::max_num_threads();
-
-        info!("rayon: current threads: {current_threads}, max threads: {max_threads}");
-
-        let mut signals = Signals::new([signal_hook::consts::SIGINT, signal_hook::consts::SIGTERM])
-            .context("failed to create signal handler")?;
-
-        std::thread::spawn({
-            move || {
-                for _ in signals.forever() {
-                    warn!("Shutting down...");
-                    SHUTDOWN.store(true, std::sync::atomic::Ordering::Relaxed);
-                }
-            }
-        });
 
         let shared = Arc::new(global::Shared {
             player_count: AtomicU32::new(0),
@@ -289,12 +199,13 @@ impl Hyperion {
                 .map_err(|_| anyhow::anyhow!("failed to create compression level"))?,
         });
 
-        let mut world = World::new();
+        let world = World::new();
+        let world = Box::new(world);
+        let world = Box::leak(world);
 
-        handlers(&mut world);
+        register_components(world);
 
-        let compressor_id = world.spawn();
-        world.insert(compressor_id, Compressors::new(shared.compression_level));
+        handlers(world);
 
         let address = address
             .to_socket_addrs()?
@@ -305,204 +216,124 @@ impl Hyperion {
 
         let (receive_state, egress_comm) = init_proxy_comms(&tasks, address);
 
-        let id = world.spawn();
-        world.insert(id, egress_comm);
+        let global = Global::new(shared.clone());
 
-        let tasks_id = world.spawn();
-        world.insert(tasks_id, tasks);
+        world.set(Compose::new(
+            Compressors::new(shared.compression_level),
+            Scratches::default(),
+            global,
+            IoBuf::default(),
+        ));
 
-        let broadcast = world.spawn();
-        world.insert(broadcast, IoBuf::default());
+        world.set(EntityIdLookup::default());
 
-        world.add_handler(system::ingress::add_player);
-        world.add_handler(system::ingress::remove_player);
-        world.add_handler(system::ingress::recv_data);
+        world.set(egress_comm);
+        world.set(tasks);
 
-        world.add_handler(system::chunks::generate_chunk_changes);
-        world.add_handler(system::chunks::send_updates);
+        system::chunks::generate_chunk_changes(world);
+        system::chunks::send_updates(world);
 
-        world.add_handler(system::init_player);
-        world.add_handler(system::despawn_player);
-        world.add_handler(system::player_join_world);
-
-        world.add_handler(system::send_player_info);
-        world.add_handler(system::player_kick);
-        world.add_handler(system::init_entity);
-        world.add_handler(system::entity_move_logic);
-        world.add_handler(system::entity_detect_collisions);
-        world.add_handler(system::entity_physics);
-        world.add_handler(system::sync_entity_position);
-        world.add_handler(system::sync_entity_velocity);
-        world.add_handler(system::recalculate_bounding_boxes);
-        world.add_handler(system::update_time);
-        world.add_handler(system::send_time);
-        world.add_handler(system::update_health);
-        world.add_handler(system::sync_players);
-        world.add_handler(system::rebuild_player_location);
-        world.add_handler(system::player_detect_mob_hits);
-
-        world.add_handler(system::check_immunity);
-        world.add_handler(system::pkt_attack_player);
-        world.add_handler(system::pkt_attack_entity);
-        world.add_handler(system::set_player_skin);
-        world.add_handler(system::compass);
-
-        world.add_handler(system::block_update);
-        world.add_handler(system::chat_message);
-        world.add_handler(system::disguise_player);
-        world.add_handler(system::teleport);
-        world.add_handler(system::shoved_reaction);
-        world.add_handler(system::pose_update);
-
-        world.add_handler(system::effect::display);
-        world.add_handler(system::effect::speed);
-
-        world.add_handler(system::pkt_hand_swing);
-        world.add_handler(system::release_item);
-
-        world.add_handler(system::generate_egress_packets);
-
-        world.add_handler(system::egress);
-
-        world.add_handler(system::keep_alive);
-        world.add_handler(system::stats_message);
-        world.add_handler(system::kill_all);
-
-        world.add_handler(system::get_inventory_actions);
-        world.add_handler(system::update_inventory);
-        world.add_handler(system::item_interact);
-        world.add_handler(system::update_main_hand);
-        world.add_handler(system::update_equipment);
-        world.add_handler(system::give_command);
-
-        let global = world.spawn();
-        world.insert(global, Global::new(shared.clone()));
-
-        let scratches = world.spawn();
-        world.insert(scratches, Scratches::default());
-
-        let bounding_boxes = world.spawn();
-        world.insert(bounding_boxes, bounding_box::EntityBoundingBoxes::default());
-
-        let uuid_lookup = world.spawn();
-        world.insert(uuid_lookup, PlayerUuidLookup::default());
-
-        let chunks = world.spawn();
+        system::stats_message::stats_message(world);
         let biome_registry =
             generate_biome_registry().context("failed to generate biome registry")?;
-        world.insert(chunks, Chunks::new(&biome_registry)?);
+        world.set(Blocks::new(&biome_registry)?);
 
-        let player_id_lookup = world.spawn();
-        world.insert(player_id_lookup, EntityIdLookup::default());
+        world.set(StreamLookup::default());
 
-        let player_location_lookup = world.spawn();
-        world.insert(player_location_lookup, PlayerBoundingBoxes::default());
+        system::ingress::player_connect_disconnect(world, receive_state.0.clone());
+        system::ingress::ingress_to_ecs(world, receive_state.0);
 
-        let fd_lookup = world.spawn();
-        world.insert(fd_lookup, StreamLookup::default());
+        system::ingress::remove_player(world);
 
-        let mut game = Self {
-            shared,
-            world,
-            last_ticks: VecDeque::default(),
-            tick_on: 0,
-            receive_state,
-        };
+        system::ingress::recv_data(world);
 
-        game.last_ticks.push_back(Instant::now());
-        Ok(game)
-    }
+        system::sync_entity_position::sync_entity_position(world);
 
-    /// The duration to wait between ticks.
-    #[instrument(skip_all, level = "trace")]
-    fn calculate_wait_duration(&self) -> Option<Duration> {
-        let &first_tick = self.last_ticks.front()?;
+        system::egress::egress(world);
 
-        let count = self.last_ticks.len();
+        system::pkt_attack::send_pkt_attack_player(world);
+        system::pkt_attack::pkt_attack_entity(world);
 
-        #[expect(clippy::cast_precision_loss, reason = "count is limited to 100")]
-        let time_for_20_tps = { first_tick + Duration::from_secs_f64(count as f64 / 20.0) };
+        world.set_threads(8);
 
-        // aim for 20 ticks per second
-        let now = Instant::now();
+        loop {
+            let tick_each_ms = 50.0;
 
-        if time_for_20_tps < now {
-            let off_by = now - time_for_20_tps;
-            let off_by = off_by.as_millis_f64();
-            warn!("off by {off_by:.2}ms → skipping sleep");
-            return None;
-        }
+            let start = std::time::Instant::now();
+            world.progress();
+            let elapsed = start.elapsed();
 
-        let duration = time_for_20_tps - now;
-        let duration = duration.mul_f64(0.8);
+            let ms_last_tick = elapsed.as_secs_f32() * 1000.0;
 
-        if duration.as_millis() > 47 {
-            return Some(Duration::from_millis(47));
-        }
-
-        // this is a bit of a hack to be conservative when sleeping
-        Some(duration)
-    }
-
-    /// Run the main game loop at 20 ticks per second.
-    pub fn game_loop(&mut self) {
-        while !SHUTDOWN.load(std::sync::atomic::Ordering::Relaxed) {
-            if let Some(wait_duration) = self.tick() {
-                spin_sleep::sleep(wait_duration);
-            }
-        }
-    }
-
-    /// Run one tick of the game loop.
-    #[instrument(skip(self), fields(on = self.tick_on))]
-    pub fn tick(&mut self) -> Option<Duration> {
-        /// The length of history to keep in the moving average.
-        const LAST_TICK_HISTORY_SIZE: usize = 100;
-
-        let now = Instant::now();
-
-        // let mut tps = None;
-        if self.last_ticks.len() > LAST_TICK_HISTORY_SIZE {
-            let last = self.last_ticks.back().unwrap();
-
-            let ms = last.elapsed().as_nanos() as f64 / 1_000_000.0;
-            if ms > 60.0 {
-                warn!("took too long: {ms:.2}ms");
+            if ms_last_tick < tick_each_ms {
+                let remaining = tick_each_ms - ms_last_tick;
+                let remaining = Duration::from_secs_f32(remaining / 1000.0);
+                std::thread::sleep(remaining);
             }
 
-            self.last_ticks.pop_front().unwrap();
+            world.get::<&mut Compose>(|compose| {
+                compose.global_mut().ms_last_tick = ms_last_tick;
+            });
         }
-
-        self.last_ticks.push_back(now);
-
-        generate_ingress_events(&mut self.world, &self.receive_state);
-
-        tracing::span!(tracing::Level::TRACE, "gametick").in_scope(|| {
-            self.world.send(Gametick);
-        });
-
-        tracing::span!(tracing::Level::TRACE, "egress-event").in_scope(|| {
-            self.world.send(Egress);
-        });
-
-        #[expect(
-            clippy::cast_precision_loss,
-            reason = "realistically, nanoseconds between last tick will not be greater than 2^52 \
-                      (~52 days)"
-        )]
-        let ms = now.elapsed().as_nanos() as f64 / 1_000_000.0;
-        self.update_tick_stats(ms);
-        self.calculate_wait_duration()
-    }
-
-    #[instrument(skip_all, level = "trace")]
-    fn update_tick_stats(&mut self, ms: f64) {
-        self.world.send(Stats { ms_per_tick: ms });
-
-        self.tick_on += 1;
     }
 }
 
-// todo: remove static and make this an `Arc` to prevent weird behavior with multiple `Game`s
-/// A shutdown atomic which is used to shut down the [`Hyperion`] gracefully.
-static SHUTDOWN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+// todo: naming? this seems bad
+#[derive(Debug)]
+pub struct Scratch<A: Allocator = std::alloc::Global> {
+    inner: Vec<u8, A>,
+}
+
+impl Scratch {
+    #[must_use]
+    pub fn new() -> Self {
+        let inner = Vec::with_capacity(MAX_PACKET_SIZE);
+        Self { inner }
+    }
+}
+
+impl Default for Scratch {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Nice for getting a buffer that can be used for intermediate work
+///
+/// # Safety
+/// - every single time [`ScratchBuffer::obtain`] is called, the buffer will be cleared before returning
+/// - the buffer has capacity of at least `MAX_PACKET_SIZE`
+pub unsafe trait ScratchBuffer: sealed::Sealed + Debug {
+    type Allocator: Allocator;
+    fn obtain(&mut self) -> &mut Vec<u8, Self::Allocator>;
+}
+
+mod sealed {
+    pub trait Sealed {}
+}
+
+impl<A: Allocator + Debug> sealed::Sealed for Scratch<A> {}
+
+unsafe impl<A: Allocator + Debug> ScratchBuffer for Scratch<A> {
+    type Allocator = A;
+
+    fn obtain(&mut self) -> &mut Vec<u8, Self::Allocator> {
+        self.inner.clear();
+        &mut self.inner
+    }
+}
+
+pub type BumpScratch<'a> = Scratch<&'a Bump>;
+
+impl<A: Allocator> From<A> for Scratch<A> {
+    fn from(allocator: A) -> Self {
+        Self {
+            inner: Vec::with_capacity_in(MAX_PACKET_SIZE, allocator),
+        }
+    }
+}
+
+#[derive(Debug, Deref, DerefMut, Default)]
+pub struct Scratches {
+    inner: ThreadLocal<RefCell<Scratch>>,
+}

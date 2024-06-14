@@ -42,7 +42,5 @@ fn main() {
 
     let address = format!("{ip}:{port}");
 
-    let mut game = Hyperion::init(address).unwrap();
-
-    game.game_loop();
+    Hyperion::init(address).unwrap();
 }

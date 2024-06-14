@@ -1,12 +1,12 @@
 //! A singleton designed for querying players based on their bounding boxes.
 use bvh_region::{aabb::Aabb, HasAabb};
-use evenio::{entity::EntityId, prelude::Component};
+use flecs_ecs::macros::Component;
 
 /// The data associated with a player
 #[derive(Debug, Copy, Clone)]
 pub struct LookupData {
     /// The entity id of the player
-    pub id: EntityId,
+    pub id: usize,
     /// The bounding box of the player
     pub aabb: Aabb,
 }

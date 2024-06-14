@@ -1,15 +1,15 @@
 //! Defines a singleton that is used to query given bounding boxes.
 //! This uses a [`bvh_region::Bvh`] to accelerate collision detection and querying.
 use bvh_region::{aabb::Aabb, HasAabb};
-use evenio::{component::Component, entity::EntityId};
+use flecs_ecs::{core::Entity, macros::Component};
 
-/// An [`Aabb`] that is tied to an [`EntityId`].
+/// An [`Aabb`] that is tied to an [`Entity`].
 #[derive(Copy, Clone, Debug)]
 pub struct Stored {
     /// The [`Aabb`] of the entity.
     pub aabb: Aabb,
-    /// The [`EntityId`] of the entity in the ECS framework.
-    pub id: EntityId,
+    /// The [`Entity`] of the entity in the ECS framework.
+    pub id: Entity,
 }
 
 impl HasAabb for Stored {

@@ -8,7 +8,7 @@ use anyhow::ensure;
 use tracing::trace;
 use valence_protocol::{CompressionThreshold, Encode, Packet, VarInt};
 
-use crate::{event::ScratchBuffer, net::MAX_PACKET_SIZE, singleton::ring::Buf};
+use crate::{net::MAX_PACKET_SIZE, singleton::ring::Buf, ScratchBuffer};
 
 mod util;
 

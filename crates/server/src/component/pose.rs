@@ -1,8 +1,8 @@
 use bvh_region::aabb::Aabb;
 
-use crate::components::{EntityReaction, FullEntityPose};
+use crate::component::{EntityReaction, Pose};
 
-impl FullEntityPose {
+impl Pose {
     /// # Safety
     /// This is only safe is this is not done in tandem with another `EntityReaction`
     // #[instrument(skip_all)]

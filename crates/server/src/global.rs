@@ -4,7 +4,7 @@ use std::{
     time::Duration,
 };
 
-use evenio::component::Component;
+use flecs_ecs::macros::Component;
 use libdeflater::CompressionLvl;
 use valence_protocol::CompressionThreshold;
 
@@ -42,6 +42,8 @@ pub struct Global {
     pub shared: Arc<Shared>,
 
     pub keep_alive_timeout: Duration,
+
+    pub ms_last_tick: f32,
 }
 
 impl Global {
@@ -51,6 +53,7 @@ impl Global {
             max_hurt_resistant_time: 20, // actually kinda like 10 vanilla mc is weird
             shared,
             keep_alive_timeout: Duration::from_secs(20),
+            ms_last_tick: 0.0,
         }
     }
 }

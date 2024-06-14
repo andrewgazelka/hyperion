@@ -1,10 +1,5 @@
 //! Utilities for working with bits.
 
-#![expect(
-    clippy::indexing_slicing,
-    dead_code,
-    reason = "This is azalea code and likely works"
-)]
 #![allow(
     clippy::missing_docs_in_private_items,
     reason = "this is azalea code and I do not want to document it as of now."

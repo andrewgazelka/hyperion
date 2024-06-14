@@ -1,366 +1,281 @@
-use std::{alloc::Layout, any, cell::RefCell, ptr, ptr::NonNull};
+use std::{borrow::Cow, sync::Arc};
 
-use bumpalo::Bump;
-use evenio::{
-    entity::EntityId,
-    event::{
-        Despawn, EventMut, EventSet, GlobalEvent, GlobalEventIdx, Insert, ReceiverMut, Sender,
-        Spawn, TargetedEvent, TargetedEventIdx,
+use anyhow::Context;
+use base64::{engine::general_purpose, Engine};
+use flecs_ecs::{
+    core::{
+        flecs,
+        flecs::pipeline::{OnUpdate, PreUpdate},
+        EntityView, IdOperations, IterAPI, Query, QueryBuilderImpl, ReactorAPI, TermBuilderImpl,
+        World,
     },
-    fetch::{Fetcher, Single},
-    world::World,
+    macros::Component,
+    prelude::WorldRef,
 };
 use parking_lot::Mutex;
-use rayon_local::RayonLocal;
 use serde_json::json;
-use tracing::{debug, info, instrument, trace, warn};
+use sha2::Digest;
+use tracing::{error, info, instrument, trace, trace_span, warn};
 use valence_protocol::{
     decode::PacketFrame,
     packets,
-    packets::{handshaking::handshake_c2s::HandshakeNextState, login, login::LoginCompressionS2c},
-    Packet, VarInt,
+    packets::{
+        handshaking::handshake_c2s::HandshakeNextState, login, login::LoginCompressionS2c, play,
+    },
+    Bounded, ByteAngle, Packet, VarInt,
 };
+use valence_server::entity::EntityKind;
 
 use crate::{
-    event::{self},
-    global::Global,
-    singleton::fd_lookup::StreamLookup,
-};
-
-mod player_packet_buffer;
-
-use crate::{
-    components::{FullEntityPose, LoginState},
-    net::{proxy::ReceiveStateInner, Compose, StreamId, MINECRAFT_VERSION, PROTOCOL_VERSION},
+    component,
+    component::{
+        chunks::Blocks, AiTargetable, ChunkPosition, DisplaySkin, EntityReaction, Health,
+        ImmuneStatus, InGameName, KeepAlive, LoginState, Pose, Uuid, Vitals, PLAYER_SPAWN_POSITION,
+    },
+    net::{
+        proxy::ReceiveStateInner, Compose, IoRef, PacketDecoder, MINECRAFT_VERSION,
+        PROTOCOL_VERSION,
+    },
     packets::PacketSwitchQuery,
-    singleton::player_id_lookup::EntityIdLookup,
-    system::ingress::player_packet_buffer::DecodeBuffer,
+    singleton::{fd_lookup::StreamLookup, player_id_lookup::EntityIdLookup},
+    system::{chunks::ChunkChanges, player_join_world::player_join_world},
+    tasks::Tasks,
 };
 
-pub type IngressEventSet = (
-    event::PlayerInit,
-    event::KickPlayer,
-    event::InitEntity,
-    event::SwingArm,
-    event::AttackEntity,
-    event::BlockStartBreak,
-    event::BlockAbortBreak,
-    event::BlockFinishBreak,
-    event::ReleaseItem,
-    event::Command,
-    event::PoseUpdate,
-    event::UpdateSelectedSlot,
-    event::ClickEvent,
-    event::ItemInteract,
-);
+// pub type ThreadLocalIngressSender<'a, 'b> = SenderLocal<'a, 'b, IngressEventSet>;
+// pub type IngressSender<'a> = Sender<'a, IngressEventSet>;
 
-pub type ThreadLocalIngressSender<'a, 'b> = SenderLocal<'a, 'b, IngressEventSet>;
-pub type IngressSender<'a> = Sender<'a, IngressEventSet>;
+#[derive(Component, Debug)]
+pub struct PendingRemove;
 
-#[derive(GlobalEvent)]
-pub struct AddPlayer {
-    stream: u64,
-}
-
-#[derive(GlobalEvent)]
-pub struct RemovePlayer {
-    stream: u64,
-}
-
-// todo: do we really need three different lifetimes here?
-#[derive(GlobalEvent)]
-pub struct RecvDataBulk<'a> {
-    events: &'a mut targeted_bulk::TargetedEvents<bytes::Bytes, u64>,
-    bumps: &'a RayonLocal<&'a Bump>,
-}
-
-#[instrument(skip_all, level = "trace")]
 #[allow(
     clippy::significant_drop_in_scrutinee,
     reason = "I think this is fine. However, let's double check in perf"
 )]
-pub fn generate_ingress_events(world: &mut World, shared: &Mutex<ReceiveStateInner>) {
-    // todo: should we just lock once?
+pub fn player_connect_disconnect(world: &World, shared: Arc<Mutex<ReceiveStateInner>>) {
+    world
+        .system_named::<(&mut StreamLookup, &Compose)>("generate_ingress_events")
+        .immediate(true)
+        .kind::<PreUpdate>()
+        .term_at(0)
+        .singleton()
+        .term_at(1)
+        .singleton()
+        // .multi_threaded(true)
+        .each_iter(move |it, _, (lookup, compose)| {
+            let world = it.world();
 
-    let mut recv = shared.lock();
+            let span = tracing::info_span!("generate_ingress_events");
+            let _enter = span.enter();
+            let mut recv = shared.lock();
 
-    for connect in recv.player_connect.drain(..) {
-        world.send(AddPlayer {
-            stream: connect.stream,
+            for connect in recv.player_connect.drain(..) {
+                let view = world
+                    .entity()
+                    .set(IoRef::new(connect.stream))
+                    .set(LoginState::Handshake)
+                    .set(PacketDecoder::default())
+                    .add::<component::Player>();
+
+                lookup.insert(connect.stream, view.id());
+            }
+
+            for disconnect in recv.player_disconnect.drain(..) {
+                // will initiate the removal of entity
+                let id = lookup.get(&disconnect.stream).as_deref().copied().unwrap();
+                world.entity_from_id(*id).add::<PendingRemove>();
+
+                let global = compose.global();
+
+                global
+                    .shared
+                    .player_count
+                    .fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
+            }
         });
-    }
+}
 
-    for disconnect in recv.player_disconnect.drain(..) {
-        world.send(RemovePlayer {
-            stream: disconnect.stream,
+pub fn ingress_to_ecs(world: &World, shared: Arc<Mutex<ReceiveStateInner>>) {
+    world
+        .system_named::<&mut StreamLookup>("player_packets")
+        .immediate(true)
+        .kind::<OnUpdate>()
+        .term_at(0)
+        .singleton()
+        // .multi_threaded(true)
+        .each_iter(move |it, _, lookup| {
+            let span = tracing::info_span!("player_packets");
+            let _enter = span.enter();
+
+            let mut recv = shared.lock();
+
+            let world = it.world();
+
+            for (entity_id, bytes) in recv.packets.drain() {
+                let Some(entity_id) = lookup.get(&entity_id) else {
+                    // this is not necessarily a bug; race conditions occur
+                    warn!("player_packets: entity for {entity_id:?}");
+                    continue;
+                };
+
+                let entity = world.entity_from_id(*entity_id);
+
+                entity.get::<&mut PacketDecoder>(|decoder| {
+                    decoder.queue_slice(bytes.as_ref());
+                });
+            }
         });
-    }
-
-    debug!("recv data bulk {}", recv.packets.len());
-
-    // todo: call .reset() instead
-    let bumps: RayonLocal<Bump> = RayonLocal::init_with_defaults();
-
-    // todo: Is there a better name for `MapRef`?
-    // Is there anything we can do to make this less complicated?
-    // I feel like this is really complicated right now.
-    let bumps_ref = bumps.map_ref(|bump| bump);
-
-    world.send(RecvDataBulk {
-        events: &mut recv.packets,
-        bumps: &bumps_ref,
-    });
-
-    recv.packets.clear();
 }
 
 // The `Receiver<Tick>` parameter tells our handler to listen for the `Tick` event.
 #[instrument(skip_all, level = "trace")]
 #[allow(clippy::too_many_arguments, reason = "todo")]
-pub fn add_player(
-    r: ReceiverMut<AddPlayer>,
-    mut lookup: Single<&mut StreamLookup>,
-    sender: Sender<(
-        Spawn,
-        Insert<LoginState>,
-        Insert<DecodeBuffer>,
-        Insert<StreamId>,
-    )>,
-) {
-    let event = r.event;
+pub fn remove_player(world: &World) {
+    world
+        .observer::<flecs::OnAdd, (&PendingRemove, &Uuid, &Compose)>()
+        .term_at(1)
+        .filter()
+        .term_at(2)
+        .singleton()
+        .each_entity(|entity, (_, uuid, compose)| {
+            let uuids = &[uuid.0];
+            let entity_ids = [VarInt(entity.id().0 as i32)];
 
-    let new_player = sender.spawn();
-    sender.insert(new_player, LoginState::Handshake);
-    sender.insert(new_player, DecodeBuffer::default());
+            // destroy
+            let pkt = play::EntitiesDestroyS2c {
+                entity_ids: Cow::Borrowed(&entity_ids),
+            };
 
-    sender.insert(new_player, StreamId::new(event.stream));
+            compose.broadcast(&pkt).send().unwrap();
 
-    lookup.insert(event.stream, new_player);
-}
+            let pkt = play::PlayerRemoveS2c {
+                uuids: Cow::Borrowed(uuids),
+            };
 
-// The `Receiver<Tick>` parameter tells our handler to listen for the `Tick` event.
-#[instrument(skip_all, level = "trace")]
-#[allow(clippy::too_many_arguments, reason = "todo")]
-pub fn remove_player(
-    r: ReceiverMut<RemovePlayer>,
-    mut lookup: Single<&mut StreamLookup>,
-    sender: Sender<Despawn>,
-) {
-    let event = r.event;
-
-    let stream = event.stream;
-
-    let Some(id) = lookup.remove(&stream) else {
-        warn!("tried to remove player with stream {stream:?} but it seemed to already be removed",);
-        return;
-    };
-
-    sender.despawn(id);
-
-    info!("removed a player with stream {stream}");
-}
-
-// todo: I'd love to see if we actually need the two lifetimes or not.
-// We might be able to just use one for both of them, but I never really figure out when I need one versus two.
-pub struct SenderLocal<'a, 'b, ES: EventSet> {
-    state: &'b ES::Indices,
-    bump: &'a Bump,
-    pending_global: Vec<(NonNull<u8>, GlobalEventIdx)>,
-    pending_targeted: Vec<(EntityId, NonNull<u8>, TargetedEventIdx)>,
-}
-
-impl<'a, 'b, ES: EventSet> SenderLocal<'a, 'b, ES> {
-    pub fn new(state: &'b ES::Indices, bump: &'a Bump) -> Self {
-        Self {
-            state,
-            bump,
-
-            // todo: Potentially, this should be under bump allocator, but let's profile before trying to do that.
-            pending_global: Vec::new(),
-            pending_targeted: Vec::new(),
-        }
-    }
-
-    // todo: what does track caller do?
-    #[track_caller]
-    #[expect(dead_code, reason = "will be used in the future probably")]
-    pub fn send<E: GlobalEvent + 'static>(&mut self, event: E) {
-        // The event type and event set are all compile time known, so the compiler
-        // should be able to optimize this away.
-        let event_idx = ES::find_index::<E>(self.state).unwrap_or_else(|| {
-            panic!(
-                "global event `{}` is not in the `EventSet` of this `Sender`",
-                any::type_name::<E>()
-            )
+            compose.broadcast(&pkt).send().unwrap();
+            entity.destruct();
         });
-
-        // let ptr = self.alloc_layout(Layout::new::<E>());
-        let ptr = self.bump.alloc_layout(Layout::new::<E>());
-
-        unsafe { ptr::write::<E>(ptr.as_ptr().cast(), event) };
-
-        // This will be saved until the end of the system, where we will be sending the events in one thread synchronously.
-        // unsafe { self.world.queue_global(ptr, GlobalEventIdx(event_idx)) };
-        self.pending_global.push((ptr, GlobalEventIdx(event_idx)));
-    }
-
-    /// Add a [`TargetedEvent`] to the queue of events to send.
-    ///
-    /// The queue is flushed once all handlers for the current event have run.
-    #[track_caller]
-    pub fn send_to<E: TargetedEvent + 'static>(&mut self, target: EntityId, event: E) {
-        // The event type and event set are all compile time known, so the compiler
-        // should be able to optimize this away.
-        let event_idx = ES::find_index::<E>(self.state).unwrap_or_else(|| {
-            panic!(
-                "targeted event `{}` is not in the `EventSet` of this `Sender`",
-                any::type_name::<E>()
-            )
-        });
-
-        let ptr = self.bump.alloc_layout(Layout::new::<E>());
-
-        unsafe { ptr::write::<E>(ptr.as_ptr().cast(), event) };
-
-        // unsafe {
-        //     self.world
-        //         .queue_targeted(target, ptr, TargetedEventIdx(event_idx))
-        // };
-        self.pending_targeted
-            .push((target, ptr, TargetedEventIdx(event_idx)));
-    }
 }
 
-#[instrument(skip_all, level = "trace")]
 #[allow(clippy::too_many_arguments, reason = "todo")]
-pub fn recv_data(
-    r: ReceiverMut<RecvDataBulk>,
-    stream_lookup: Single<&mut StreamLookup>,
-    global: Single<&Global>,
-    players: Fetcher<(
-        &mut LoginState,
-        &mut DecodeBuffer,
-        &mut StreamId,
-        Option<&mut FullEntityPose>,
-    )>,
-    id_lookup: Single<&EntityIdLookup>,
-    compose: Compose,
-    sender: IngressSender,
-) {
-    let recv_data = EventMut::take(r.event);
+pub fn recv_data(world: &World) {
+    let query = world.new_query::<(&Uuid, &InGameName, &Pose)>();
 
-    let bumps = recv_data.bumps;
+    world
+        .system_named::<(
+            &Compose,
+            &EntityIdLookup,
+            &Blocks,
+            &Tasks,
+            &mut PacketDecoder,
+            &mut LoginState,
+            &IoRef,
+            Option<&mut Pose>,
+            Option<&InGameName>,
+        )>("recv_data")
+        .kind::<OnUpdate>()
+        .multi_threaded(true)
+        .term_at(0)
+        .singleton()
+        .term_at(1)
+        .singleton()
+        .term_at(2)
+        .singleton()
+        .term_at(3)
+        .singleton()
+        .each_iter(
+            move |iter,
+                  idx,
+                  (
+                compose,
+                lookup,
+                blocks,
+                tasks,
+                decoder,
+                login_state,
+                io_ref,
+                mut pose,
+                name,
+            )| {
+                let span = trace_span!("recv_data");
+                let _enter = span.enter();
 
-    let send_events = bumps
-        .map_ref(|bump| SenderLocal::new(sender.state(), bump))
-        .map(RefCell::new);
+                let mut entity = iter.entity(idx);
 
-    recv_data.events.drain_par(|stream_id, data| {
-        let stream_id = stream_id.inner();
+                let world = iter.world();
+                let world = &world;
 
-        let Some(&entity_id) = stream_lookup.get(stream_id) else {
-            warn!("recv data for stream id that does not exist: {stream_id}");
-            return;
-        };
+                loop {
+                    let Some(frame) = decoder
+                        .try_next_packet(&mut *compose.scratch().borrow_mut())
+                        .unwrap()
+                    else {
+                        break;
+                    };
 
-        // We need to do this because it is technically unsafe to use `sendEvents`
-        // since we can get multiple mutable references per thread.
-        // However, as long as we do it once at the beginning of the scope and don't try to get it multiple times,
-        // it should be fine.
-        let send_events = send_events.get_local();
-        let send_events = &mut *send_events.borrow_mut();
+                    match *login_state {
+                        LoginState::Handshake => process_handshake(login_state, &frame).unwrap(),
+                        LoginState::Status => {
+                            process_status(login_state, &frame, io_ref, compose).unwrap();
+                        }
+                        LoginState::Login => process_login(
+                            world,
+                            lookup,
+                            tasks,
+                            blocks,
+                            login_state,
+                            decoder,
+                            &frame,
+                            io_ref,
+                            compose,
+                            &mut entity,
+                            &query,
+                        )
+                        .unwrap(),
+                        LoginState::TransitioningPlay { .. } | LoginState::Play => {
+                            if let LoginState::TransitioningPlay {
+                                packets_to_transition,
+                            } = login_state
+                            {
+                                if *packets_to_transition == 0 {
+                                    *login_state = LoginState::Play;
 
-        // The reason we are using `get_unchecked`
-        // is because there are mutable accesses which require exclusive access to players.
-        // If we have two threads that are trying to access the same entity ID,
-        // you have two mutable accesses and this is bad.
-        // This is not supposed to happen with Rust's borrowing rules.
-        // But we know that we only have one entity ID per thread because the mapping of stream IDs to entity IDs is one-to-one.
-        // And the way that the targeted events work is that they only have certain data on certain threads,
-        // so we would never have one ID on one thread and also on other threads.
-        // todo: Is there a way to double-check that we are never aliasing incorrectly in debug?
-        let (login_state, decoder, packets, mut pose) =
-            unsafe { players.get_unchecked(entity_id) }.unwrap();
+                                    compose.io_buf().set_receive_broadcasts(io_ref);
+                                } else {
+                                    *packets_to_transition -= 1;
+                                }
+                            }
 
-        decoder.queue_slice(data.as_ref());
+                            // We call this code when you're in play.
+                            // Transitioning to play is just a way to make sure that the player is officially in play before we start sending them play packets.
+                            // We have a certain duration that we wait before doing this.
+                            // todo: better way?
+                            if let Some(pose) = &mut pose {
+                                let mut query = PacketSwitchQuery {
+                                    id: entity.id(),
+                                    compose,
+                                    io_ref,
+                                    pose,
+                                };
 
-        let scratch = compose.scratch();
-        let mut scratch = scratch.borrow_mut();
-        let scratch = &mut *scratch;
+                                let name = name.map_or("unknown", |name| &***name);
 
-        while let Some(frame) = decoder.try_next_packet(scratch).unwrap() {
-            match *login_state {
-                LoginState::Handshake => process_handshake(login_state, &frame).unwrap(),
-                LoginState::Status => {
-                    process_status(login_state, &frame, packets, &compose).unwrap();
-                }
-                LoginState::Terminate => {
-                    // // todo: does this properly terminate the connection? I don't think so probably
-                    // let Some(id) = fd_lookup.remove(&fd) else {
-                    //     return;
-                    // };
-                    //
-                    // sender.despawn(id);
-                }
-                LoginState::Login => {
-                    process_login(
-                        entity_id,
-                        login_state,
-                        &frame,
-                        packets,
-                        decoder,
-                        &global,
-                        send_events,
-                        &compose,
-                    )
-                    .unwrap();
-                }
-                LoginState::TransitioningPlay { .. } | LoginState::Play => {
-                    if let LoginState::TransitioningPlay {
-                        packets_to_transition,
-                    } = login_state
-                    {
-                        if *packets_to_transition == 0 {
-                            *login_state = LoginState::Play;
-
-                            compose.io_buf().set_receive_broadcasts(*packets);
-                        } else {
-                            *packets_to_transition -= 1;
+                                tracing::info_span!("ingress", ign = name).in_scope(|| {
+                                    if let Err(err) = crate::packets::packet_switch(
+                                        &frame, world, lookup, &mut query, blocks,
+                                    ) {
+                                        error!("failed to process packet {:?}: {err}", frame);
+                                    }
+                                });
+                            }
+                        }
+                        LoginState::Terminate => {
+                            // todo
                         }
                     }
-
-                    // We call this code when you're in play.
-                    // Transitioning to play is just a way to make sure that the player is officially in play before we start sending them play packets.
-                    // We have a certain duration that we wait before doing this.
-                    if let Some(pose) = pose.as_mut() {
-                        let mut query = PacketSwitchQuery {
-                            id: entity_id,
-                            pose,
-                        };
-
-                        crate::packets::switch(&frame, send_events, &id_lookup, &mut query)
-                            .unwrap();
-                    }
                 }
-            }
-        }
-    });
-
-    // send the events
-
-    for local in send_events {
-        let local = local.into_inner();
-        let world = sender.world();
-        for (id, ptr, idx) in local.pending_targeted {
-            unsafe { world.queue_targeted(id, ptr, idx) };
-        }
-
-        for (ptr, idx) in local.pending_global {
-            unsafe { world.queue_global(ptr, idx) };
-        }
-
-        // todo: should we flush event queue? I don't think we need to.
-    }
+            },
+        );
 }
 
 fn process_handshake(login_state: &mut LoginState, packet: &PacketFrame) -> anyhow::Result<()> {
@@ -368,7 +283,7 @@ fn process_handshake(login_state: &mut LoginState, packet: &PacketFrame) -> anyh
 
     let handshake: packets::handshaking::HandshakeC2s = packet.decode()?;
 
-    trace!("received handshake: {:?}", handshake);
+    info!("received handshake: {:?}", handshake);
 
     // todo: check version is correct
 
@@ -386,22 +301,27 @@ fn process_handshake(login_state: &mut LoginState, packet: &PacketFrame) -> anyh
 
 #[allow(clippy::too_many_arguments, reason = "todo del")]
 fn process_login(
-    id: EntityId,
+    world: &WorldRef,
+    lookup: &EntityIdLookup,
+    tasks: &Tasks,
+    blocks: &Blocks,
     login_state: &mut LoginState,
+    decoder: &mut PacketDecoder,
     packet: &PacketFrame,
-    stream_id: &mut StreamId,
-    decoder: &mut DecodeBuffer,
-    global: &Global,
-    sender: &mut ThreadLocalIngressSender,
+    stream_id: &IoRef,
     compose: &Compose,
+    entity: &mut EntityView,
+    query: &Query<(&Uuid, &InGameName, &Pose)>,
 ) -> anyhow::Result<()> {
     debug_assert!(*login_state == LoginState::Login);
 
     let login::LoginHelloC2s { username, .. } = packet.decode()?;
 
-    trace!("received LoginHello for {username}");
+    info!("received LoginHello for {username}");
 
     let username = username.0;
+
+    let global = compose.global();
 
     let pkt = LoginCompressionS2c {
         threshold: VarInt(global.shared.compression_threshold.0),
@@ -411,34 +331,109 @@ fn process_login(
 
     decoder.set_compression(global.shared.compression_threshold);
 
+    let pose = Pose::player(PLAYER_SPAWN_POSITION);
     let username = Box::from(username);
 
-    let elem = event::PlayerInit {
-        username,
-        pose: FullEntityPose::player(),
+    let uuid = offline_uuid(&username).unwrap();
+
+    let pkt = login::LoginSuccessS2c {
+        uuid,
+        username: Bounded(&username),
+        properties: Cow::default(),
     };
 
-    sender.send_to(id, elem);
+    compose.unicast(&pkt, stream_id).unwrap();
 
     // todo: impl rest
     *login_state = LoginState::TransitioningPlay {
         packets_to_transition: 5,
     };
 
+    info!("enqueuing player join world");
+
+    player_join_world(
+        entity, tasks, blocks, compose, uuid, &username, stream_id, &pose, world, query,
+    );
+
+    // todo: this is jank and might break in certain cases
+    lookup.insert(entity.id().0 as i32, entity.id());
+
+    query
+        .iter_stage(world)
+        .each_iter(|it, idx, (uuid, _, pose)| {
+            let query_entity = it.entity(idx);
+
+            if entity.id() == query_entity.id() {
+                return;
+            }
+
+            let pkt = play::PlayerSpawnS2c {
+                entity_id: VarInt(query_entity.id().0 as i32),
+                player_uuid: uuid.0,
+                position: pose.position.as_dvec3(),
+                yaw: ByteAngle::from_degrees(pose.yaw),
+                pitch: ByteAngle::from_degrees(pose.pitch),
+            };
+
+            compose.unicast(&pkt, stream_id).unwrap();
+        });
+
+    entity
+        .set(pose)
+        .set(InGameName::from(username))
+        .add::<AiTargetable>()
+        .set(ImmuneStatus::default())
+        .set(Uuid::from(uuid))
+        // .set(PositionSyncMetadata::default())
+        .set(KeepAlive::default())
+        // .set(Prev::from(Vitals::ALIVE))
+        .set(Vitals::ALIVE)
+        // .set(PlayerInventory::new())
+        .set(DisplaySkin(EntityKind::PLAYER))
+        .set(Health::default())
+        .set(Pose::player(PLAYER_SPAWN_POSITION))
+        .set(ChunkChanges::default())
+        .set(ChunkPosition::null())
+        .set(EntityReaction::default());
+
+    // world
+    //     .event()
+    //     .add::<flecs::Any>()
+    //     .target(entity)
+    //     .enqueue(&PlayerJoinWorld);
+
     Ok(())
+}
+
+/// Get a [`uuid::Uuid`] based on the given user's name.
+fn offline_uuid(username: &str) -> anyhow::Result<uuid::Uuid> {
+    let digest = sha2::Sha256::digest(username);
+
+    #[expect(clippy::indexing_slicing, reason = "sha256 is always 32 bytes")]
+    let slice = &digest[..16];
+
+    uuid::Uuid::from_slice(slice).context("failed to create uuid")
 }
 
 fn process_status(
     login_state: &mut LoginState,
     packet: &PacketFrame,
-    packets: &mut StreamId,
+    packets: &IoRef,
     compose: &Compose,
 ) -> anyhow::Result<()> {
     debug_assert!(*login_state == LoginState::Status);
 
+    info!("process status");
+
     match packet.id {
         packets::status::QueryRequestC2s::ID => {
             let query_request: packets::status::QueryRequestC2s = packet.decode()?;
+
+            let img_bytes = include_bytes!("hyperion.png");
+            // to base74
+
+            let favicon = general_purpose::STANDARD.encode(img_bytes);
+            let favicon = format!("data:image/png;base64,{favicon}");
 
             // https://wiki.vg/Server_List_Ping#Response
             let json = json!({
@@ -448,10 +443,11 @@ fn process_status(
                 },
                 "players": {
                     "online": 1,
-                    "max": 32,
+                    "max": 12_000,
                     "sample": [],
                 },
-                "description": "something"
+                "description": "Getting 10k Players to PvP at Once on a Minecraft Server to Break the Guinness World Record",
+                "favicon": favicon,
             });
 
             let json = serde_json::to_string_pretty(&json)?;

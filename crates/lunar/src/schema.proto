@@ -1,0 +1,34 @@
+syntax = "proto3";
+
+package schema;
+
+message OverrideServerRichPresenceMessage {
+  // The name of the game the player is playing on.
+  // ex: BedWars
+  string game_name = 1;
+  // The variant of the game the player is playing on.
+  // ex: Solo
+  string game_variant_name = 2;
+  // The state of the current game.
+  // ex: In Game
+  string game_state = 3;
+  // What the player is currently doing in the game. This could be different than game_state because, for example,
+  // in a UHC game there can be an eliminated, spectating player, in an ongoing game.
+  // ex: Spectating, Playing, Crafting
+  string player_state = 4;
+  // The name of the map the player is playing on.
+  // ex: Winter
+  string map_name = 5;
+  // The location _inside_ the Minecraft server IP this player is playing on. This typically will be a BungeeCord
+  // server name, but can vary as some networks like Hypixel dynamically rename servers.
+  // ex: BW02
+  string sub_server = 6;
+  // The current size of the player's team. For example in a 4 player UHC, this might be 3 to represent one player
+  // who has died, and three who are still alive.
+  // ex: 3
+  int32 team_current_size = 7;
+  // The max size of the player's team. For example in a 4 player UHC, this would be 4 to represent the "largest"
+  // team size possible, even if some of those 4 players are no longer alive / online.
+  // ex: 4
+  int32 team_max_size = 8;
+}

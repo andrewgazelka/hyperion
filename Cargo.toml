@@ -7,8 +7,9 @@ resolver = "2"
 
 members = [
     "crates/bvh",
-    "crates/rayon-local",
+    "crates/lunar",
     "crates/server",
+    "crates/persist",
     "events/infection",
     "examples",
 ]
@@ -26,6 +27,13 @@ strip = true
 
 [profile.release]
 #debug = true
+#lto = "fat"
+#codegen-units = 1
+#panic = "abort"
+
+[profile.release-full]
+inherits = "release"
+debug = false
 lto = "fat"
 codegen-units = 1
 panic = "abort"
@@ -45,7 +53,8 @@ codegen-units = 1
 bvh-region = { path = "crates/bvh" }
 glam = "0.26.0"
 server = { path = "crates/server" }
+lunar-proto = { path = "crates/lunar" }
 
 # todo: re-enable rayon
-evenio = { git = "https://github.com/andrewgazelka/evenio", features = ["rayon"], branch = "feat-sender-state-public"}
+#evenio = { git = "https://github.com/andrewgazelka/evenio", features = ["rayon"], branch = "feat-sender-state-public"}
 

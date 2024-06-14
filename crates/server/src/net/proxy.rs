@@ -1,26 +1,21 @@
-use std::{io::Cursor, net::SocketAddr, sync::Arc};
+use std::{collections::HashMap, io::Cursor, net::SocketAddr, sync::Arc};
 
 use anyhow::{bail, Context};
-use bytes::{Bytes, BytesMut};
-use derive_more::{Deref, DerefMut};
-use evenio::component::Component;
+use bytes::BytesMut;
 use hyperion_proto::{PlayerConnect, PlayerDisconnect, ProxyToServer, ProxyToServerMessage};
 use parking_lot::Mutex;
 use prost::{encoding::decode_varint, Message};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tracing::{error, info, instrument, warn};
+use tracing::{error, info, warn};
 
-use crate::components::{chunks::Tasks, EgressComm};
+use crate::{component::EgressComm, tasks::Tasks};
 
 #[derive(Default)]
 pub struct ReceiveStateInner {
     pub player_connect: Vec<PlayerConnect>,
     pub player_disconnect: Vec<PlayerDisconnect>,
-    pub packets: targeted_bulk::TargetedEvents<Bytes, u64>,
+    pub packets: HashMap<u64, BytesMut>,
 }
-
-#[derive(Component, Deref, DerefMut)]
-pub struct ReceiveState(Arc<Mutex<ReceiveStateInner>>);
 
 async fn inner(
     socket: SocketAddr,
@@ -29,62 +24,69 @@ async fn inner(
 ) {
     let listener = tokio::net::TcpListener::bind(socket).await.unwrap();
 
-    tokio::spawn(async move {
-        loop {
-            let (socket, _) = listener.accept().await.unwrap();
+    tokio::spawn(
+        async move {
+            loop {
+                let (socket, _) = listener.accept().await.unwrap();
 
-            let addr = socket.peer_addr().unwrap();
+                let addr = socket.peer_addr().unwrap();
 
-            info!("Proxy connection established on {addr}");
+                info!("Proxy connection established on {addr}");
 
-            let shared = shared.clone();
+                let shared = shared.clone();
 
-            let (read, mut write) = socket.into_split();
-            let read = tokio::io::BufReader::new(read);
+                let (read, mut write) = socket.into_split();
+                let read = tokio::io::BufReader::new(read);
 
-            let fst = tokio::spawn(async move {
-                while let Some(bytes) = server_to_proxy.recv().await {
-                    if write.write_all(&bytes).await.is_err() {
-                        error!("error writing to proxy");
-                        return server_to_proxy;
-                    }
-                }
-
-                warn!("proxy shut down");
-
-                server_to_proxy
-            });
-
-            tokio::spawn(async move {
-                let mut reader = ProxyReader::new(read);
-
-                while let Ok(message) = reader.next().await {
-                    match message {
-                        ProxyToServerMessage::PlayerConnect(message) => {
-                            shared.lock().player_connect.push(message);
-                        }
-                        ProxyToServerMessage::PlayerDisconnect(message) => {
-                            shared.lock().player_disconnect.push(message);
-                        }
-                        ProxyToServerMessage::PlayerPackets(message) => {
-                            shared
-                                .lock()
-                                .packets
-                                .push_exclusive(message.stream, message.data);
+                let fst = tokio::spawn(async move {
+                    while let Some(bytes) = server_to_proxy.recv().await {
+                        if write.write_all(&bytes).await.is_err() {
+                            error!("error writing to proxy");
+                            return server_to_proxy;
                         }
                     }
-                }
-                error!("error reading from proxy");
-            });
 
-            // todo: handle player disconnects on proxy shut down
-            // Ideally, we should design for there being multiple proxies,
-            // and all proxies should store all the players on them.
-            // Then we can disconnect all those players related to that proxy.
-            server_to_proxy = fst.await.unwrap();
-        }
-    });
+                    warn!("proxy shut down");
+
+                    server_to_proxy
+                });
+
+                tokio::spawn(async move {
+                    let mut reader = ProxyReader::new(read);
+
+                    while let Ok(message) = reader.next().await {
+                        match message {
+                            ProxyToServerMessage::PlayerConnect(message) => {
+                                shared.lock().player_connect.push(message);
+                            }
+                            ProxyToServerMessage::PlayerDisconnect(message) => {
+                                shared.lock().player_disconnect.push(message);
+                            }
+                            ProxyToServerMessage::PlayerPackets(message) => {
+                                shared
+                                    .lock()
+                                    .packets
+                                    .entry(message.stream)
+                                    .or_default()
+                                    // todo: remove extra allocations
+                                    .extend_from_slice(&message.data);
+                            }
+                        }
+                    }
+                    error!("error reading from proxy");
+                });
+
+                // todo: handle player disconnects on proxy shut down
+                // Ideally, we should design for there being multiple proxies,
+                // and all proxies should store all the players on them.
+                // Then we can disconnect all those players related to that proxy.
+                server_to_proxy = fst.await.unwrap();
+            }
+        }, // .instrument(info_span!("proxy reader")),
+    );
 }
+
+pub struct ReceiveState(pub Arc<Mutex<ReceiveStateInner>>);
 
 pub fn init_proxy_comms(tasks: &Tasks, socket: SocketAddr) -> (ReceiveState, EgressComm) {
     let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
@@ -111,14 +113,14 @@ impl ProxyReader {
         }
     }
 
-    #[instrument]
+    // #[instrument]
     pub async fn next(&mut self) -> anyhow::Result<ProxyToServerMessage> {
         let len = self.read_len().await?;
         let message = self.next_server_packet(len).await?;
         Ok(message)
     }
 
-    #[instrument]
+    // #[instrument]
     async fn read_len(&mut self) -> anyhow::Result<usize> {
         let mut vint = [0u8; 4];
         let mut i = 0;
@@ -137,7 +139,7 @@ impl ProxyReader {
         Ok(usize::try_from(len).expect("Failed to convert varint to usize"))
     }
 
-    #[instrument]
+    // #[instrument]
     async fn next_server_packet(&mut self, len: usize) -> anyhow::Result<ProxyToServerMessage> {
         // todo: this needed?
         if self.buffer.len() < len {

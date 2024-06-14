@@ -95,7 +95,7 @@ allow = [
     "Unicode-DFS-2016",
     "BSD-3-Clause",
     "Zlib",
-    #"Apache-2.0 WITH LLVM-exception",
+    "Unicode-3.0",
 ]
 # The confidence threshold for detecting a license from license text.
 # The higher the value, the more closely the license text must be to the
@@ -109,6 +109,7 @@ exceptions = [
     # list
     #{ allow = ["Zlib"], crate = "adler32" },
     # TODO: this is an OR clause I am confused I think we are taking the MPL verion
+    { allow = ["ISC"], crate = "libloading" },
 ]
 
 # Some crates don't have (easily) machine readable licensing information,
@@ -222,7 +223,6 @@ skip = [
     "regex-syntax",
     "regex-automata",
     "bitflags",
-#    "glam",
     "toml_edit",
     "parking_lot_core",
     "parking_lot",
@@ -233,8 +233,6 @@ skip = [
     "derive_more",
     "redox_syscall",
     "bitfield-struct",
-    "evenio", # todo: fix it is because targeted bulk
-    "evenio_macros", # todo: fix... it is because targeted bulk
 
     #{ crate = "ansi_term@0.11.0", reason = "you can specify a reason why it can't be updated/removed" },
 ]
@@ -262,12 +260,10 @@ unknown-git = "warn"
 allow-registry = ["https://github.com/rust-lang/crates.io-index"]
 # List of URLs for allowed Git repositories
 allow-git = [
-    "https://github.com/andrewgazelka/evenio?branch=feat-sender-state-public",
-    "https://github.com/andrewgazelka/io-uring",
     "https://github.com/andrewgazelka/valence",
     "https://github.com/andrewgazelka/bvh-data",
     "https://github.com/andrewgazelka/hyperion-proto",
-    "https://github.com/andrewgazelka/targeted-bulk",
+    "https://github.com/Indra-db/flecs-ecs-rs",
 ]
 
 [sources.allow-org]

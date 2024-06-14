@@ -1,4 +1,3 @@
-use evenio::event::Receiver;
 use valence_protocol::{packets::play, VarInt};
 
 use crate::{event, net::Compose};

@@ -3,14 +3,13 @@ use std::{borrow::Cow, cell::RefCell, collections::BTreeMap, io::Write, sync::Ar
 use anyhow::Context;
 use bytes::{Bytes, BytesMut};
 use dashmap::{DashMap, DashSet};
-use derive_more::{Deref, DerefMut};
-use evenio::component::Component;
+use flecs_ecs::macros::Component;
 use fxhash::FxBuildHasher;
 use glam::{I16Vec2, IVec2};
 use itertools::Itertools;
 use libdeflater::{CompressionLvl, Compressor};
-use tokio::{runtime::Runtime, task::JoinHandle};
-use tracing::{error, instrument};
+use tokio::task::JoinHandle;
+use tracing::error;
 use valence_anvil::parsing::parse_chunk;
 use valence_generated::block::BlockState;
 use valence_nbt::{compound, List};
@@ -23,41 +22,26 @@ use valence_server::layer::chunk::{
 };
 
 use crate::{
-    bits::BitStorage, chunk::heightmap, components::chunks::loader::Regions, default,
-    event::Scratch, net::encoder::PacketEncoder,
+    bits::BitStorage, chunk::heightmap, component::chunks::loader::Regions, default,
+    net::encoder::PacketEncoder, tasks::Tasks, Scratch,
 };
+
 mod loader;
 mod region;
 
 pub struct TasksState {
     bytes: BytesMut,
-    scratch: Scratch,
     compressor: Compressor,
+    scratch: Scratch,
 }
 
 impl Default for TasksState {
     fn default() -> Self {
         Self {
             bytes: BytesMut::new(),
-            scratch: Scratch::default(),
             compressor: Compressor::new(CompressionLvl::new(6).unwrap()),
+            scratch: Scratch::default(),
         }
-    }
-}
-
-#[derive(Component, Deref, DerefMut)]
-pub struct Tasks {
-    runtime: Runtime,
-}
-
-impl Default for Tasks {
-    fn default() -> Self {
-        let runtime = tokio::runtime::Builder::new_multi_thread()
-            .enable_all()
-            .build()
-            .unwrap();
-
-        Self { runtime }
     }
 }
 
@@ -70,7 +54,7 @@ pub struct LoadedChunk {
 }
 
 #[derive(Component)]
-pub struct Chunks {
+pub struct Blocks {
     inner: Arc<ChunksInner>,
 }
 
@@ -111,7 +95,7 @@ pub enum ChunkData {
     Task(JoinHandle<()>),
 }
 
-impl Chunks {
+impl Blocks {
     pub fn new(registry: &BiomeRegistry) -> anyhow::Result<Self> {
         let inner = ChunksInner::new(registry)?;
         Ok(Self {
@@ -190,7 +174,7 @@ impl Chunks {
     // If you want to implement this, I also recommend waiting until that's done.
     // That should be done in a couple of days, probably.
 
-    #[instrument(skip_all, level = "trace")]
+    // #[instrument(skip_all, level = "trace")]
     pub fn get_cached_or_load(
         &self,
         position: I16Vec2,
@@ -268,7 +252,7 @@ impl Chunks {
     }
 }
 
-#[instrument(skip_all, level = "trace", fields(location = ?location))]
+// #[instrument(skip_all, level = "trace", fields(location = ?location))]
 fn encode_chunk_packet(
     chunk: &UnloadedChunk,
     location: I16Vec2,
