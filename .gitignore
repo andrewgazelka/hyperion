@@ -11,3 +11,4 @@ hyperion
 perf.data
 **/*.zip
 .DS_Store
+.trigger
