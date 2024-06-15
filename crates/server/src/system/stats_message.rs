@@ -9,13 +9,16 @@ use crate::net::Compose;
 
 #[rustfmt::skip]
 pub fn stats_message(world: &World) {
+    let mode = std::env::var("RUN_MODE").unwrap_or_else(|_| "Unknown".to_string());
+    
+    
     world
         .system_named::<&Compose>("stats_message")
         .term_at(0).singleton()
         .each(move |compose| {
             let ms_per_tick = compose.global().ms_last_tick;
             
-            let title = format!("{ms_per_tick:05.2} ms/tick");
+            let title = format!("{ms_per_tick:05.2} ms/tick, {mode}");
             let title = title.into_cow_text();
             let health = (ms_per_tick / 50.0).min(1.0);
             

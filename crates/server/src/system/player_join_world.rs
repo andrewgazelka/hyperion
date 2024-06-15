@@ -384,6 +384,7 @@ pub fn player_join_world(
         .unwrap();
 
     let mut entries = Vec::new();
+    let mut all_player_names = Vec::new();
 
     query.iter_stage(world).each(|(uuid, name, _)| {
         let entry = PlayerListEntry {
@@ -398,7 +399,10 @@ pub fn player_join_world(
         };
 
         entries.push(entry);
+        all_player_names.push(name.to_string());
     });
+
+    let all_player_names = all_player_names.iter().map(String::as_str).collect();
 
     let actions = PlayerListActions::default()
         .with_add_player(true)
@@ -432,6 +436,31 @@ pub fn player_join_world(
     };
 
     compose.broadcast(&pkt).send().unwrap();
+
+    let player_name = vec![name];
+
+    compose
+        .broadcast(&play::TeamS2c {
+            team_name: "no_tag",
+            mode: Mode::AddEntities {
+                entities: player_name,
+            },
+        })
+        .exclude(packets)
+        .send()
+        .unwrap();
+
+    compose
+        .unicast(
+            &play::TeamS2c {
+                team_name: "no_tag",
+                mode: Mode::AddEntities {
+                    entities: all_player_names,
+                },
+            },
+            packets,
+        )
+        .unwrap();
 
     let current_entity_id = VarInt(entity.id().0 as i32);
 

@@ -2,6 +2,7 @@
 default: fmt lint unused-deps deny test
 
 project_root := `git rev-parse --show-toplevel`
+arch := `uname -m`
 
 # builds in release mode
 build:
@@ -37,18 +38,18 @@ debug:
     #!/usr/bin/env -S parallel --shebang --ungroup --jobs 3
     hyperion-proxy
     cargo watch -x build -s 'touch {{project_root}}/.trigger'
-    cargo watch --postpone --no-vcs-ignores -w {{project_root}}/.trigger -s './target/debug/infection'
+    RUN_MODE=debug-{{arch}} cargo watch --postpone --no-vcs-ignores -w {{project_root}}/.trigger -s './target/debug/infection'
 
 # run in release mode with tracy; auto-restarts on changes
 release:
     #!/usr/bin/env -S parallel --shebang --ungroup --jobs 3
     ulimit -Sn 1024 && hyperion-proxy
     cargo watch -x 'build --release' -s 'touch {{project_root}}/.trigger'
-    cargo watch --postpone --no-vcs-ignores -w {{project_root}}/.trigger -s './target/release/infection -t'
+    RUN_MODE=release-{{arch}} cargo watch --postpone --no-vcs-ignores -w {{project_root}}/.trigger -s './target/release/infection -t'
 
 # run a given number of bots to connect to hyperion
 bots count='1000':
-    cargo install --git https://github.com/andrewgazelka/rust-mc-bot --branch optimize
+    cargo install -q --git https://github.com/andrewgazelka/rust-mc-bot --branch optimize
     ulimit -Sn 1024 && rust-mc-bot 127.0.0.1:25566 {{count}}
 
 # run in release mode with tracy
