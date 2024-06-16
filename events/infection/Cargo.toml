@@ -10,7 +10,7 @@ publish = false
 anyhow = "1.0.82"
 fastrand = "2.0.2"
 serde_json = "1.0.116"
-server.workspace = true
+hyperion.workspace = true
 tracing = "0.1.40"
 tracing-subscriber = { version = "0.3.18", features = ["chrono", "env-filter"] }
 clap = { version = "4.5.4", features = ["derive"] }

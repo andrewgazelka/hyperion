@@ -1,3 +1,5 @@
+//! Communication to a proxy which forwards packets to the players.
+
 use std::{collections::HashMap, io::Cursor, net::SocketAddr, sync::Arc};
 
 use anyhow::{bail, Context};
@@ -8,12 +10,16 @@ use prost::{encoding::decode_varint, Message};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tracing::{error, info, warn};
 
-use crate::{component::EgressComm, tasks::Tasks};
+use crate::{component::EgressComm, runtime::AsyncRuntime};
 
+/// This is used
 #[derive(Default)]
 pub struct ReceiveStateInner {
+    /// All players who have recently connected to the server.
     pub player_connect: Vec<PlayerConnect>,
+    /// All players who have recently disconnected from the server.
     pub player_disconnect: Vec<PlayerDisconnect>,
+    /// A map of stream ids to the corresponding [`BytesMut`] buffers. This represents data from the client to the server.
     pub packets: HashMap<u64, BytesMut>,
 }
 
@@ -86,9 +92,11 @@ async fn inner(
     );
 }
 
+/// A wrapper around [`ReceiveStateInner`]
 pub struct ReceiveState(pub Arc<Mutex<ReceiveStateInner>>);
 
-pub fn init_proxy_comms(tasks: &Tasks, socket: SocketAddr) -> (ReceiveState, EgressComm) {
+/// Initializes proxy communications.
+pub fn init_proxy_comms(tasks: &AsyncRuntime, socket: SocketAddr) -> (ReceiveState, EgressComm) {
     let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
     let shared = Arc::new(Mutex::new(ReceiveStateInner::default()));
 
@@ -113,14 +121,12 @@ impl ProxyReader {
         }
     }
 
-    // #[instrument]
     pub async fn next(&mut self) -> anyhow::Result<ProxyToServerMessage> {
         let len = self.read_len().await?;
         let message = self.next_server_packet(len).await?;
         Ok(message)
     }
 
-    // #[instrument]
     async fn read_len(&mut self) -> anyhow::Result<usize> {
         let mut vint = [0u8; 4];
         let mut i = 0;

@@ -1,10 +1,11 @@
 use std::fmt::Display;
 
 use glam::Vec3;
+use serde::{Deserialize, Serialize};
 
 use crate::HasAabb;
 
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Aabb {
     pub min: Vec3,
     pub max: Vec3,

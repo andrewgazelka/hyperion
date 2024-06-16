@@ -1,4 +1,9 @@
-use std::{borrow::Cow, sync::Arc};
+use std::{
+    borrow::Cow,
+    fs::File,
+    io::{BufRead, BufReader},
+    sync::Arc,
+};
 
 use anyhow::Context;
 use base64::{engine::general_purpose, Engine};
@@ -15,7 +20,7 @@ use flecs_ecs::{
 use parking_lot::Mutex;
 use serde_json::json;
 use sha2::Digest;
-use tracing::{error, info, instrument, trace, trace_span, warn};
+use tracing::{error, instrument, trace, trace_span, warn};
 use valence_protocol::{
     decode::PacketFrame,
     packets,
@@ -24,22 +29,22 @@ use valence_protocol::{
     },
     Bounded, ByteAngle, Packet, VarInt,
 };
-use valence_server::entity::EntityKind;
 
 use crate::{
     component,
     component::{
-        chunks::Blocks, AiTargetable, ChunkPosition, DisplaySkin, EntityReaction, Health,
-        ImmuneStatus, InGameName, KeepAlive, LoginState, Pose, Uuid, Vitals, PLAYER_SPAWN_POSITION,
+        blocks::Blocks, AiTargetable, ChunkPosition, Comms, EntityReaction, Health, ImmuneStatus,
+        InGameName, PacketState, Pose, Uuid, PLAYER_SPAWN_POSITION,
     },
     net::{
-        proxy::ReceiveStateInner, Compose, IoRef, PacketDecoder, MINECRAFT_VERSION,
+        proxy::ReceiveStateInner, Compose, NetworkStreamRef, PacketDecoder, MINECRAFT_VERSION,
         PROTOCOL_VERSION,
     },
     packets::PacketSwitchQuery,
+    runtime::AsyncRuntime,
     singleton::{fd_lookup::StreamLookup, player_id_lookup::EntityIdLookup},
-    system::{chunks::ChunkChanges, player_join_world::player_join_world},
-    tasks::Tasks,
+    system::chunks::ChunkChanges,
+    util::{db::SkinCollection, mojang::MojangClient, player_skin::PlayerSkin},
 };
 
 // pub type ThreadLocalIngressSender<'a, 'b> = SenderLocal<'a, 'b, IngressEventSet>;
@@ -54,15 +59,13 @@ pub struct PendingRemove;
 )]
 pub fn player_connect_disconnect(world: &World, shared: Arc<Mutex<ReceiveStateInner>>) {
     world
-        .system_named::<(&mut StreamLookup, &Compose)>("generate_ingress_events")
+        .system_named::<&mut StreamLookup>("generate_ingress_events")
         .immediate(true)
         .kind::<PreUpdate>()
         .term_at(0)
         .singleton()
-        .term_at(1)
-        .singleton()
         // .multi_threaded(true)
-        .each_iter(move |it, _, (lookup, compose)| {
+        .each_iter(move |it, _, lookup| {
             let world = it.world();
 
             let span = tracing::info_span!("generate_ingress_events");
@@ -72,8 +75,8 @@ pub fn player_connect_disconnect(world: &World, shared: Arc<Mutex<ReceiveStateIn
             for connect in recv.player_connect.drain(..) {
                 let view = world
                     .entity()
-                    .set(IoRef::new(connect.stream))
-                    .set(LoginState::Handshake)
+                    .set(NetworkStreamRef::new(connect.stream))
+                    .set(PacketState::Handshake)
                     .set(PacketDecoder::default())
                     .add::<component::Player>();
 
@@ -84,13 +87,6 @@ pub fn player_connect_disconnect(world: &World, shared: Arc<Mutex<ReceiveStateIn
                 // will initiate the removal of entity
                 let id = lookup.get(&disconnect.stream).as_deref().copied().unwrap();
                 world.entity_from_id(*id).add::<PendingRemove>();
-
-                let global = compose.global();
-
-                global
-                    .shared
-                    .player_count
-                    .fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
             }
         });
 }
@@ -117,6 +113,10 @@ pub fn ingress_to_ecs(world: &World, shared: Arc<Mutex<ReceiveStateInner>>) {
                     warn!("player_packets: entity for {entity_id:?}");
                     continue;
                 };
+
+                if !world.is_alive(*entity_id) {
+                    continue;
+                }
 
                 let entity = world.entity_from_id(*entity_id);
 
@@ -163,18 +163,20 @@ pub fn recv_data(world: &World) {
 
     world
         .system_named::<(
-            &Compose,
-            &EntityIdLookup,
-            &Blocks,
-            &Tasks,
+            &Compose,        // 0
+            &EntityIdLookup, // 1
+            &Blocks,         // 2
+            &AsyncRuntime,   // 3
+            &Comms,          // 4
+            &SkinCollection, // 5
             &mut PacketDecoder,
-            &mut LoginState,
-            &IoRef,
+            &mut PacketState,
+            &NetworkStreamRef,
             Option<&mut Pose>,
             Option<&InGameName>,
         )>("recv_data")
         .kind::<OnUpdate>()
-        .multi_threaded(true)
+        .multi_threaded()
         .term_at(0)
         .singleton()
         .term_at(1)
@@ -182,6 +184,10 @@ pub fn recv_data(world: &World) {
         .term_at(2)
         .singleton()
         .term_at(3)
+        .singleton()
+        .term_at(4)
+        .singleton()
+        .term_at(5)
         .singleton()
         .each_iter(
             move |iter,
@@ -191,6 +197,8 @@ pub fn recv_data(world: &World) {
                 lookup,
                 blocks,
                 tasks,
+                comms,
+                skins_collection,
                 decoder,
                 login_state,
                 io_ref,
@@ -214,17 +222,26 @@ pub fn recv_data(world: &World) {
                     };
 
                     match *login_state {
-                        LoginState::Handshake => process_handshake(login_state, &frame).unwrap(),
-                        LoginState::Status => {
+                        PacketState::Handshake => {
+                            if process_handshake(login_state, &frame).is_err() {
+                                error!("failed to process handshake");
+
+                                entity.destruct();
+
+                                break;
+                            }
+                        }
+                        PacketState::Status => {
                             process_status(login_state, &frame, io_ref, compose).unwrap();
                         }
-                        LoginState::Login => process_login(
+                        PacketState::Login => process_login(
                             world,
                             lookup,
                             tasks,
-                            blocks,
                             login_state,
                             decoder,
+                            comms,
+                            skins_collection.clone(),
                             &frame,
                             io_ref,
                             compose,
@@ -232,20 +249,7 @@ pub fn recv_data(world: &World) {
                             &query,
                         )
                         .unwrap(),
-                        LoginState::TransitioningPlay { .. } | LoginState::Play => {
-                            if let LoginState::TransitioningPlay {
-                                packets_to_transition,
-                            } = login_state
-                            {
-                                if *packets_to_transition == 0 {
-                                    *login_state = LoginState::Play;
-
-                                    compose.io_buf().set_receive_broadcasts(io_ref);
-                                } else {
-                                    *packets_to_transition -= 1;
-                                }
-                            }
-
+                        PacketState::Play => {
                             // We call this code when you're in play.
                             // Transitioning to play is just a way to make sure that the player is officially in play before we start sending them play packets.
                             // We have a certain duration that we wait before doing this.
@@ -253,6 +257,7 @@ pub fn recv_data(world: &World) {
                             if let Some(pose) = &mut pose {
                                 let mut query = PacketSwitchQuery {
                                     id: entity.id(),
+                                    view: entity,
                                     compose,
                                     io_ref,
                                     pose,
@@ -269,7 +274,7 @@ pub fn recv_data(world: &World) {
                                 });
                             }
                         }
-                        LoginState::Terminate => {
+                        PacketState::Terminate => {
                             // todo
                         }
                     }
@@ -278,21 +283,21 @@ pub fn recv_data(world: &World) {
         );
 }
 
-fn process_handshake(login_state: &mut LoginState, packet: &PacketFrame) -> anyhow::Result<()> {
-    debug_assert!(*login_state == LoginState::Handshake);
+fn process_handshake(login_state: &mut PacketState, packet: &PacketFrame) -> anyhow::Result<()> {
+    debug_assert!(*login_state == PacketState::Handshake);
 
     let handshake: packets::handshaking::HandshakeC2s = packet.decode()?;
 
-    info!("received handshake: {:?}", handshake);
+    // info!("received handshake: {:?}", handshake);
 
     // todo: check version is correct
 
     match handshake.next_state {
         HandshakeNextState::Status => {
-            *login_state = LoginState::Status;
+            *login_state = PacketState::Status;
         }
         HandshakeNextState::Login => {
-            *login_state = LoginState::Login;
+            *login_state = PacketState::Login;
         }
     }
 
@@ -303,21 +308,33 @@ fn process_handshake(login_state: &mut LoginState, packet: &PacketFrame) -> anyh
 fn process_login(
     world: &WorldRef,
     lookup: &EntityIdLookup,
-    tasks: &Tasks,
-    blocks: &Blocks,
-    login_state: &mut LoginState,
+    tasks: &AsyncRuntime,
+    login_state: &mut PacketState,
     decoder: &mut PacketDecoder,
+    comms: &Comms,
+    skins_collection: SkinCollection,
     packet: &PacketFrame,
-    stream_id: &IoRef,
+    stream_id: &NetworkStreamRef,
     compose: &Compose,
     entity: &mut EntityView,
     query: &Query<(&Uuid, &InGameName, &Pose)>,
 ) -> anyhow::Result<()> {
-    debug_assert!(*login_state == LoginState::Login);
+    static UUIDS: once_cell::sync::Lazy<Mutex<Vec<uuid::Uuid>>> =
+        once_cell::sync::Lazy::new(|| {
+            let uuids = File::open("10000uuids.txt").unwrap();
+            let uuids = BufReader::new(uuids);
+
+            let uuids = uuids
+                .lines()
+                .map(|line| line.unwrap())
+                .map(|line| uuid::Uuid::parse_str(&line).unwrap())
+                .collect::<Vec<_>>();
+            Mutex::new(uuids)
+        });
+
+    debug_assert!(*login_state == PacketState::Login);
 
     let login::LoginHelloC2s { username, .. } = packet.decode()?;
-
-    info!("received LoginHello for {username}");
 
     let username = username.0;
 
@@ -334,7 +351,21 @@ fn process_login(
     let pose = Pose::player(PLAYER_SPAWN_POSITION);
     let username = Box::from(username);
 
-    let uuid = offline_uuid(&username).unwrap();
+    let uuid = UUIDS
+        .lock()
+        .pop()
+        .unwrap_or_else(|| offline_uuid(&username).unwrap());
+
+    let skins = comms.skins_tx.clone();
+    let id = entity.id();
+    tasks.spawn(async move {
+        let mojang = MojangClient::default();
+        let skin = PlayerSkin::from_uuid(uuid, &mojang, &skins_collection)
+            .await
+            .unwrap()
+            .unwrap();
+        skins.send((id, skin)).unwrap();
+    });
 
     let pkt = login::LoginSuccessS2c {
         uuid,
@@ -345,15 +376,7 @@ fn process_login(
     compose.unicast(&pkt, stream_id).unwrap();
 
     // todo: impl rest
-    *login_state = LoginState::TransitioningPlay {
-        packets_to_transition: 5,
-    };
-
-    info!("enqueuing player join world");
-
-    player_join_world(
-        entity, tasks, blocks, compose, uuid, &username, stream_id, &pose, world, query,
-    );
+    *login_state = PacketState::Play;
 
     // todo: this is jank and might break in certain cases
     lookup.insert(entity.id().0 as i32, entity.id());
@@ -384,23 +407,13 @@ fn process_login(
         .add::<AiTargetable>()
         .set(ImmuneStatus::default())
         .set(Uuid::from(uuid))
-        // .set(PositionSyncMetadata::default())
-        .set(KeepAlive::default())
-        // .set(Prev::from(Vitals::ALIVE))
-        .set(Vitals::ALIVE)
-        // .set(PlayerInventory::new())
-        .set(DisplaySkin(EntityKind::PLAYER))
         .set(Health::default())
         .set(Pose::player(PLAYER_SPAWN_POSITION))
         .set(ChunkChanges::default())
         .set(ChunkPosition::null())
         .set(EntityReaction::default());
 
-    // world
-    //     .event()
-    //     .add::<flecs::Any>()
-    //     .target(entity)
-    //     .enqueue(&PlayerJoinWorld);
+    compose.io_buf().set_receive_broadcasts(stream_id);
 
     Ok(())
 }
@@ -416,14 +429,12 @@ fn offline_uuid(username: &str) -> anyhow::Result<uuid::Uuid> {
 }
 
 fn process_status(
-    login_state: &mut LoginState,
+    login_state: &mut PacketState,
     packet: &PacketFrame,
-    packets: &IoRef,
+    packets: &NetworkStreamRef,
     compose: &Compose,
 ) -> anyhow::Result<()> {
-    debug_assert!(*login_state == LoginState::Status);
-
-    info!("process status");
+    debug_assert!(*login_state == PacketState::Status);
 
     match packet.id {
         packets::status::QueryRequestC2s::ID => {
@@ -468,7 +479,7 @@ fn process_status(
             compose.unicast_no_compression(&send, packets).unwrap();
 
             trace!("sent query pong: {query_ping:?}");
-            *login_state = LoginState::Terminate;
+            *login_state = PacketState::Terminate;
         }
 
         _ => panic!("unexpected packet id: {}", packet.id),

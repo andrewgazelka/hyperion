@@ -19,8 +19,6 @@ use crate::{
 
 pub mod proxy;
 
-pub const RING_SIZE: usize = MAX_PACKET_SIZE * 2;
-
 /// The Minecraft protocol version this library currently targets.
 pub const PROTOCOL_VERSION: i32 = 763;
 
@@ -36,6 +34,7 @@ pub const MINECRAFT_VERSION: &str = "1.20.1";
 mod decoder;
 pub mod encoder;
 
+/// Thread-local [`libdeflater::Compressor`] for encoding packets.
 #[derive(Component)]
 pub struct Compressors {
     compressors: ThreadLocal<RefCell<libdeflater::Compressor>>,
@@ -44,7 +43,7 @@ pub struct Compressors {
 
 impl Compressors {
     #[must_use]
-    pub const fn new(level: CompressionLvl) -> Self {
+    pub(crate) const fn new(level: CompressionLvl) -> Self {
         Self {
             compressors: ThreadLocal::new(),
             level,
@@ -67,8 +66,13 @@ impl Default for Compressors {
     }
 }
 
+/// A reference to a network stream, identified by a stream ID and used to ensure packet order during transmission.
+///
+/// This struct contains a stream ID that serves as a unique identifier for the network stream and a packet order counter
+/// that helps in maintaining the correct sequence of packets being sent through the proxy.
 #[derive(Component)]
-pub struct IoRef {
+pub struct NetworkStreamRef {
+    /// Unique identifier for the network stream.
     stream_id: u64,
 
     /// This starts at 0. Every single packet we encode, we increment this by 1,
@@ -78,7 +82,7 @@ pub struct IoRef {
     packet_order: AtomicU64,
 }
 
-impl Debug for IoRef {
+impl Debug for NetworkStreamRef {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let stream_id = KeyData::from_ffi(self.stream_id);
 
@@ -89,24 +93,19 @@ impl Debug for IoRef {
     }
 }
 
-impl IoRef {
+impl NetworkStreamRef {
     #[must_use]
-    pub const fn new(stream_id: u64) -> Self {
+    pub(crate) const fn new(stream_id: u64) -> Self {
         Self {
             stream_id,
             packet_order: AtomicU64::new(0),
         }
     }
-
-    #[must_use]
-    pub const fn stream(&self) -> u64 {
-        self.stream_id
-    }
 }
 
+/// A singleton that can be used to compose and encode packets.
 #[derive(Component)]
 pub struct Compose {
-    // todo: make these other things private for safety
     compressor: Compressors,
     scratch: Scratches,
     global: Global,
@@ -115,7 +114,7 @@ pub struct Compose {
 
 impl Compose {
     #[must_use]
-    pub const fn new(
+    pub(crate) const fn new(
         compressor: Compressors,
         scratch: Scratches,
         global: Global,
@@ -130,10 +129,12 @@ impl Compose {
     }
 
     #[must_use]
+    #[allow(missing_docs)]
     pub const fn global(&self) -> &Global {
         &self.global
     }
 
+    #[allow(missing_docs)]
     pub fn global_mut(&mut self) -> &mut Global {
         &mut self.global
     }
@@ -154,14 +155,19 @@ impl Compose {
     }
 
     #[must_use]
+    #[allow(missing_docs)]
     pub const fn io_buf(&self) -> &IoBuf {
         &self.io_buf
     }
 
+    #[allow(missing_docs)]
     pub fn io_buf_mut(&mut self) -> &mut IoBuf {
         &mut self.io_buf
     }
 
+    /// Broadcast a packet within a certain region.
+    ///
+    /// See <https://github.com/andrewgazelka/hyperion-proto/blob/main/src/server_to_proxy.proto#L17-L22>
     pub const fn broadcast_local<'a, 'b, P>(
         &'a self,
         packet: &'b P,
@@ -180,7 +186,8 @@ impl Compose {
         }
     }
 
-    pub fn unicast<P>(&self, packet: &P, stream_id: &IoRef) -> anyhow::Result<()>
+    /// Send a packet to a single player.
+    pub fn unicast<P>(&self, packet: &P, stream_id: &NetworkStreamRef) -> anyhow::Result<()>
     where
         P: valence_protocol::Packet + valence_protocol::Encode,
     {
@@ -196,7 +203,12 @@ impl Compose {
         .send()
     }
 
-    pub fn unicast_no_compression<P>(&self, packet: &P, stream_id: &IoRef) -> anyhow::Result<()>
+    /// Send a packet to a single player without compression.
+    pub fn unicast_no_compression<P>(
+        &self,
+        packet: &P,
+        stream_id: &NetworkStreamRef,
+    ) -> anyhow::Result<()>
     where
         P: valence_protocol::Packet + valence_protocol::Encode,
     {
@@ -209,7 +221,8 @@ impl Compose {
         .send()
     }
 
-    pub fn multicast<P>(&self, packet: &P, ids: &[IoRef]) -> anyhow::Result<()>
+    /// Send a packet to multiple players.
+    pub fn multicast<P>(&self, packet: &P, ids: &[NetworkStreamRef]) -> anyhow::Result<()>
     where
         P: valence_protocol::Packet + valence_protocol::Encode,
     {
@@ -222,16 +235,18 @@ impl Compose {
     }
 
     #[must_use]
-    pub fn encoder(&self) -> PacketEncoder {
+    pub(crate) fn encoder(&self) -> PacketEncoder {
         let threshold = self.global.shared.compression_threshold;
         PacketEncoder::new(threshold)
     }
 
+    /// Obtain a thread-local scratch buffer.
     #[must_use]
     pub fn scratch(&self) -> &RefCell<Scratch> {
         self.scratch.get_or_default()
     }
 
+    /// Obtain a thread-local [`libdeflater::Compressor`]
     #[must_use]
     pub fn compressor(&self) -> &RefCell<libdeflater::Compressor> {
         &self.compressor
@@ -245,7 +260,7 @@ pub struct IoBuf {
     temp_buffer: ThreadLocal<RefCell<BytesMut>>,
 }
 
-// todo: do we need this many lifetimes? we definitely need 'a and 'b I think
+/// A broadcast builder
 #[must_use]
 pub struct Broadcast<'a, 'b, P> {
     packet: &'b P,
@@ -254,10 +269,11 @@ pub struct Broadcast<'a, 'b, P> {
     exclude: u64,
 }
 
+/// A unicast builder
 #[must_use]
 struct Unicast<'a, 'b, 'c, P> {
     packet: &'b P,
-    stream_id: &'c IoRef,
+    stream_id: &'c NetworkStreamRef,
     compose: &'a Compose,
     compress: bool,
 }
@@ -294,11 +310,13 @@ where
 }
 
 impl<'a, 'b, P> Broadcast<'a, 'b, P> {
+    /// If the packet is optional and can be dropped. An example is movement packets.
     pub const fn optional(mut self) -> Self {
         self.optional = true;
         self
     }
 
+    /// Send the packet to all players.
     pub fn send(self) -> anyhow::Result<()>
     where
         P: valence_protocol::Packet + valence_protocol::Encode,
@@ -315,7 +333,8 @@ impl<'a, 'b, P> Broadcast<'a, 'b, P> {
         Ok(())
     }
 
-    pub const fn exclude(self, exclude: &IoRef) -> Self {
+    /// Exclude a certain player from the broadcast. This can only be called once.
+    pub const fn exclude(self, exclude: &NetworkStreamRef) -> Self {
         Broadcast {
             packet: self.packet,
             optional: self.optional,
@@ -326,6 +345,7 @@ impl<'a, 'b, P> Broadcast<'a, 'b, P> {
 }
 
 #[must_use]
+#[allow(missing_docs)]
 pub struct BroadcastLocal<'a, 'b, P> {
     packet: &'b P,
     compose: &'a Compose,
@@ -336,16 +356,19 @@ pub struct BroadcastLocal<'a, 'b, P> {
 }
 
 impl<'a, 'b, P> BroadcastLocal<'a, 'b, P> {
+    /// The radius of the broadcast. The radius is measured by Chebyshev distance
     pub const fn radius(mut self, radius: u32) -> Self {
         self.radius = radius;
         self
     }
 
+    /// If the packet is optional and can be dropped. An example is movement packets.
     pub const fn optional(mut self) -> Self {
         self.optional = true;
         self
     }
 
+    /// Send the packet
     pub fn send(self) -> anyhow::Result<()>
     where
         P: valence_protocol::Packet + valence_protocol::Encode,
@@ -366,7 +389,8 @@ impl<'a, 'b, P> BroadcastLocal<'a, 'b, P> {
         Ok(())
     }
 
-    pub const fn exclude(self, exclude: &IoRef) -> Self {
+    /// Exclude a certain player from the broadcast. This can only be called once.
+    pub const fn exclude(self, exclude: &NetworkStreamRef) -> Self {
         BroadcastLocal {
             packet: self.packet,
             compose: self.compose,
@@ -379,6 +403,7 @@ impl<'a, 'b, P> BroadcastLocal<'a, 'b, P> {
 }
 
 impl IoBuf {
+    /// Returns an iterator over the result of splitting the buffer into packets with [`BytesMut::split`].
     pub fn split(&mut self) -> impl Iterator<Item = BytesMut> + '_ {
         self.buffer
             .iter_mut()
@@ -422,7 +447,7 @@ impl IoBuf {
     fn unicast_private<P>(
         &self,
         packet: &P,
-        id: &IoRef,
+        id: &NetworkStreamRef,
         compose: &Compose,
         compress: bool,
     ) -> anyhow::Result<()>
@@ -448,11 +473,7 @@ impl IoBuf {
         Ok(())
     }
 
-    #[allow(
-        clippy::needless_pass_by_value,
-        reason = "todo should have something that impl copy/clone"
-    )]
-    pub fn broadcast_local_raw(
+    fn broadcast_local_raw(
         &self,
         data: bytes::Bytes,
         center: ChunkPosition,
@@ -476,7 +497,7 @@ impl IoBuf {
             .unwrap();
     }
 
-    pub fn broadcast_raw(&self, data: bytes::Bytes, optional: bool, exclude: u64) {
+    pub(crate) fn broadcast_raw(&self, data: bytes::Bytes, optional: bool, exclude: u64) {
         let buffer = self.buffer.get_or_default();
         let buffer = &mut *buffer.borrow_mut();
 
@@ -494,7 +515,7 @@ impl IoBuf {
             .unwrap();
     }
 
-    pub fn unicast_raw(&self, data: bytes::Bytes, stream: &IoRef) {
+    pub(crate) fn unicast_raw(&self, data: bytes::Bytes, stream: &NetworkStreamRef) {
         let buffer = self.buffer.get_or_default();
         let buffer = &mut *buffer.borrow_mut();
 
@@ -510,7 +531,7 @@ impl IoBuf {
         to_send.encode_length_delimited(buffer).unwrap();
     }
 
-    pub fn multicast_raw(&self, data: bytes::Bytes, streams: &[u64]) {
+    pub(crate) fn multicast_raw(&self, data: bytes::Bytes, streams: &[u64]) {
         let buffer = self.buffer.get_or_default();
         let buffer = &mut *buffer.borrow_mut();
 
@@ -524,7 +545,7 @@ impl IoBuf {
             .unwrap();
     }
 
-    pub fn set_receive_broadcasts(&self, stream: &IoRef) {
+    pub(crate) fn set_receive_broadcasts(&self, stream: &NetworkStreamRef) {
         let buffer = self.buffer.get_or_default();
         let buffer = &mut *buffer.borrow_mut();
 

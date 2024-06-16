@@ -1,8 +1,5 @@
 //! Defined the [`Global`] struct which is used to store global data which defines a [`crate::Hyperion`]
-use std::{
-    sync::{atomic::AtomicU32, Arc},
-    time::Duration,
-};
+use std::{sync::Arc, time::Duration};
 
 use flecs_ecs::macros::Component;
 use libdeflater::CompressionLvl;
@@ -10,17 +7,16 @@ use valence_protocol::CompressionThreshold;
 
 /// Shared data that is shared between the ECS framework and the IO thread.
 pub struct Shared {
-    /// realistically, we will never have more than 2^32 = 4,294,967,296 players
-    pub player_count: AtomicU32,
-    /// The compression level to use for the server.
+    /// The compression level to use for the server. This is how long a packet needs to be before it is compressed.
     pub compression_threshold: CompressionThreshold,
+
+    /// The compression level to use for the server. This is the [`libdeflater`] compression level.
     pub compression_level: CompressionLvl,
 }
 
 impl Default for Shared {
     fn default() -> Self {
         Self {
-            player_count: AtomicU32::new(0),
             compression_threshold: CompressionThreshold(256),
             compression_level: CompressionLvl::default(),
         }
@@ -41,13 +37,17 @@ pub struct Global {
     /// Data shared between the IO thread and the ECS framework.
     pub shared: Arc<Shared>,
 
+    /// The amount of time from the last packet a player has sent before the server will kick them.
     pub keep_alive_timeout: Duration,
 
+    /// The amount of time the last tick took in milliseconds.
     pub ms_last_tick: f32,
 }
 
 impl Global {
-    pub fn new(shared: Arc<Shared>) -> Self {
+    /// Creates a new [`Global`] with the given shared data.
+    #[must_use]
+    pub const fn new(shared: Arc<Shared>) -> Self {
         Self {
             tick: 0,
             max_hurt_resistant_time: 20, // actually kinda like 10 vanilla mc is weird

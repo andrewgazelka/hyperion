@@ -1,6 +1,7 @@
 use std::{borrow::Cow, collections::BTreeSet};
 
 use anyhow::{bail, Context};
+use base64::Engine;
 use flecs_ecs::{
     core::{Entity, IdOperations, IterAPI, Query},
     prelude::{EntityView, WorldRef},
@@ -33,11 +34,12 @@ use valence_text::IntoText;
 pub mod list;
 
 use crate::{
-    component::{chunks::Blocks, InGameName, Pose, Uuid, PLAYER_SPAWN_POSITION},
+    component::{blocks::Blocks, InGameName, Pose, Uuid, PLAYER_SPAWN_POSITION},
     config::CONFIG,
-    net::{Compose, IoRef},
+    net::{Compose, NetworkStreamRef},
+    runtime::AsyncRuntime,
     system::player_join_world::list::{PlayerListActions, PlayerListEntry, PlayerListS2c},
-    tasks::Tasks,
+    util::player_skin::PlayerSkin,
 };
 
 // #[derive(Query, Debug)]
@@ -333,15 +335,16 @@ use crate::{
 #[allow(clippy::too_many_arguments, reason = "todo")]
 pub fn player_join_world(
     entity: &EntityView,
-    tasks: &Tasks,
+    tasks: &AsyncRuntime,
     chunks: &Blocks,
     compose: &Compose,
     uuid: uuid::Uuid,
     name: &str,
-    packets: &IoRef,
+    packets: &NetworkStreamRef,
     pose: &Pose,
     world: &WorldRef,
-    query: &Query<(&Uuid, &InGameName, &Pose)>,
+    skin: &PlayerSkin,
+    query: &Query<(&Uuid, &InGameName, &Pose, &PlayerSkin)>,
 ) {
     static CACHED_DATA: once_cell::sync::OnceCell<bytes::Bytes> = once_cell::sync::OnceCell::new();
 
@@ -383,14 +386,47 @@ pub fn player_join_world(
         )
         .unwrap();
 
+    query
+        .iter_stage(world)
+        .each_iter(|it, idx, (uuid, _, pose, _)| {
+            let query_entity = it.entity(idx);
+
+            if entity.id() == query_entity.id() {
+                return;
+            }
+
+            let pkt = play::PlayerSpawnS2c {
+                entity_id: VarInt(query_entity.id().0 as i32),
+                player_uuid: uuid.0,
+                position: pose.position.as_dvec3(),
+                yaw: ByteAngle::from_degrees(pose.yaw),
+                pitch: ByteAngle::from_degrees(pose.pitch),
+            };
+
+            compose.unicast(&pkt, packets).unwrap();
+        });
+
     let mut entries = Vec::new();
     let mut all_player_names = Vec::new();
 
-    query.iter_stage(world).each(|(uuid, name, _)| {
+    query.iter_stage(world).each(|(uuid, name, _, skin)| {
+        // todo: in future, do not clone
+
+        let value = base64::engine::general_purpose::STANDARD.encode(&skin.textures.bytes);
+
+        let signature = base64::engine::general_purpose::STANDARD.encode(&skin.signature.bytes);
+
+        let property = valence_protocol::profile::Property {
+            name: "textures".to_string(),
+            value,
+            signature: Some(signature),
+        };
+
         let entry = PlayerListEntry {
             player_uuid: uuid.0,
             username: name.to_string().into(),
-            properties: Cow::Borrowed(&[]),
+            // todo: eliminate alloc
+            properties: Cow::Owned(vec![property]),
             chat_data: None,
             listed: true,
             ping: 20,
@@ -419,10 +455,22 @@ pub fn player_join_world(
         )
         .unwrap();
 
+    let textures = base64::engine::general_purpose::STANDARD.encode(&skin.textures.bytes);
+    let signature = base64::engine::general_purpose::STANDARD.encode(&skin.signature.bytes);
+
+    // todo: in future, do not clone
+    let property = valence_protocol::profile::Property {
+        name: "textures".to_string(),
+        value: textures,
+        signature: Some(signature),
+    };
+
+    let property = &[property];
+
     let singleton_entry = &[PlayerListEntry {
         player_uuid: uuid,
         username: Cow::Borrowed(name),
-        properties: Cow::Borrowed(&[]),
+        properties: Cow::Borrowed(property),
         chat_data: None,
         listed: true,
         ping: 20,
@@ -477,17 +525,11 @@ pub fn player_join_world(
         .send()
         .unwrap();
 
-    info!("{name} joined the world, entity {entity:?}");
-
-    compose
-        .global()
-        .shared
-        .player_count
-        .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    info!("{name} joined the world");
 }
 
 #[allow(dead_code, reason = "will re-enable")]
-pub fn send_keep_alive(packets: &IoRef, compose: &Compose) -> anyhow::Result<()> {
+pub fn send_keep_alive(packets: &NetworkStreamRef, compose: &Compose) -> anyhow::Result<()> {
     let pkt = play::KeepAliveS2c {
         // The ID can be set to zero because it doesn't matter
         id: 0,
@@ -783,7 +825,7 @@ fn send_sync_tags(encoder: &mut PacketEncoder) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn inner(encoder: &mut PacketEncoder, chunks: &Blocks, tasks: &Tasks) -> anyhow::Result<()> {
+fn inner(encoder: &mut PacketEncoder, chunks: &Blocks, tasks: &AsyncRuntime) -> anyhow::Result<()> {
     send_game_join_packet(encoder)?;
     send_sync_tags(encoder)?;
 

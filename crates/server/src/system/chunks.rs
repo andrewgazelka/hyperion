@@ -11,12 +11,12 @@ use valence_protocol::packets::play;
 
 use crate::{
     component::{
-        chunks::{Blocks, ChunkData},
-        ChunkPosition, Pose,
+        blocks::{Blocks, ChunkData},
+        ChunkPosition, Play, Pose,
     },
     config::CONFIG,
-    net::{Compose, IoRef},
-    tasks::Tasks,
+    net::{Compose, NetworkStreamRef},
+    runtime::AsyncRuntime,
 };
 
 #[derive(Component, Deref, DerefMut, Default)]
@@ -33,12 +33,12 @@ pub fn generate_chunk_changes(world: &World) {
             &Compose,
             &mut ChunkPosition,
             &mut Pose,
-            &IoRef,
+            &NetworkStreamRef,
             &mut ChunkChanges,
         )>("generate_chunk_changes")
         .kind::<OnUpdate>()
         .term_at(0)
-        .multi_threaded(true)
+        .multi_threaded()
         .singleton()
         .each(
             move |(compose, last_sent, pose, stream_id, chunk_changes)| {
@@ -83,9 +83,16 @@ pub fn generate_chunk_changes(world: &World) {
 
 pub fn send_updates(world: &World) {
     world
-        .system_named::<(&Blocks, &Tasks, &Compose, &IoRef, &mut ChunkChanges)>("send_updates")
+        .system_named::<(
+            &Blocks,
+            &AsyncRuntime,
+            &Compose,
+            &NetworkStreamRef,
+            &mut ChunkChanges,
+        )>("send_updates")
+        .with::<&Play>()
         .kind::<OnUpdate>()
-        .multi_threaded(true)
+        .multi_threaded()
         .term_at(0)
         .singleton()
         .term_at(1)

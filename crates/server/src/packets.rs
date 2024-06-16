@@ -1,13 +1,15 @@
 //! <https://wiki.vg/index.php?title=Protocol&oldid=18375>
 
+use std::ops::ControlFlow;
+
 use bvh_region::aabb::Aabb;
-use flecs_ecs::core::{Entity, World};
+use flecs_ecs::core::{Entity, EntityView, World};
 use glam::Vec3;
 use tracing::{error, info, instrument, trace, warn};
 use valence_protocol::{
     decode::PacketFrame,
     packets::play::{
-        self, player_interact_entity_c2s::EntityInteraction,
+        self, client_command_c2s::ClientCommand, player_interact_entity_c2s::EntityInteraction,
         player_position_look_s2c::PlayerPositionLookFlags,
     },
     Decode, Packet, VarInt,
@@ -15,9 +17,10 @@ use valence_protocol::{
 
 use crate::{
     component,
-    component::{chunks::Blocks, Pose},
+    component::{blocks::Blocks, Pose},
     event,
-    net::{Compose, IoRef},
+    event::Posture,
+    net::{Compose, NetworkStreamRef},
     singleton::player_id_lookup::EntityIdLookup,
 };
 
@@ -89,27 +92,29 @@ fn try_change_position(proposed: Vec3, pose: &mut Pose, blocks: &Blocks) -> bool
     let mut proposed_pose = *pose;
     proposed_pose.move_to(proposed);
 
-    let positions = proposed_pose.block_pos_iterator();
+    let (min, max) = proposed_pose.block_pose_range();
 
     // so no improper collisions
     let shrunk = proposed_pose.bounding.shrink(0.01);
 
-    for position in positions {
-        let Some(block) = blocks.get_block(position) else {
-            continue;
-        };
-
-        let origin_pos = Vec3::new(position.x as f32, position.y as f32, position.z as f32);
+    let res = blocks.get_blocks(min, max, |pos, block| {
+        let pos = Vec3::new(pos.x as f32, pos.y as f32, pos.z as f32);
 
         for aabb in block.collision_shapes() {
             // convert to our aabb
             let aabb = Aabb::new(aabb.min().as_vec3(), aabb.max().as_vec3());
-            let aabb = aabb.move_by(origin_pos);
+            let aabb = aabb.move_by(pos);
 
             if shrunk.collides(&aabb) {
-                return false; // we cannot move
+                return ControlFlow::Break(false);
             }
         }
+
+        ControlFlow::Continue(())
+    });
+
+    if res.is_break() {
+        return false;
     }
 
     *pose = proposed_pose;
@@ -237,8 +242,9 @@ fn player_interact_entity(
 //
 pub struct PacketSwitchQuery<'a> {
     pub id: Entity,
+    pub view: EntityView<'a>,
     pub compose: &'a Compose,
-    pub io_ref: &'a IoRef,
+    pub io_ref: &'a NetworkStreamRef,
     pub pose: &'a mut Pose,
 }
 // // i.e., shooting a bow
@@ -280,41 +286,34 @@ pub struct PacketSwitchQuery<'a> {
 //     Ok(())
 // }
 
-// // for sneaking
-// fn client_command(
-//     mut data: &[u8],
-//     world: &'static World,
-//     query: &PacketSwitchQuery,
-// ) -> anyhow::Result<()> {
-//     let packet = play::ClientCommandC2s::decode(&mut data)?;
-//
-//     let id = query.id;
-//
-//     match packet.action {
-//         ClientCommand::StartSneaking => {
-//             // let elem = SendElem::new(id, event::PoseUpdate {
-//             //     state: Pose::Sneaking,
-//             // });
-//             // world.push(elem);
-//             world.send_to(id, event::PoseUpdate {
-//                 state: Pose::Sneaking,
-//             });
-//         }
-//         ClientCommand::StopSneaking => {
-//             // let elem = SendElem::new(id, event::PoseUpdate {
-//             //     state: Pose::Standing,
-//             // });
-//             // world.push(elem);
-//             world.send_to(id, event::PoseUpdate {
-//                 state: Pose::Standing,
-//             });
-//         }
-//         _ => {}
-//     }
-//
-//     Ok(())
-// }
-//
+// for sneaking
+fn client_command(mut data: &[u8], world: &World, query: &PacketSwitchQuery) -> anyhow::Result<()> {
+    let packet = play::ClientCommandC2s::decode(&mut data)?;
+
+    match packet.action {
+        ClientCommand::StartSneaking => {
+            world
+                .event()
+                .add::<NetworkStreamRef>()
+                .target(query.view)
+                .enqueue(event::PostureUpdate {
+                    state: Posture::Sneaking,
+                });
+        }
+        ClientCommand::StopSneaking => {
+            world
+                .event()
+                .add::<NetworkStreamRef>()
+                .target(query.view)
+                .enqueue(event::PostureUpdate {
+                    state: Posture::Standing,
+                });
+        }
+        _ => {}
+    }
+
+    Ok(())
+}
 // // starting to wind up bow
 // pub fn player_interact_item(
 //     mut data: &[u8],
@@ -344,7 +343,7 @@ pub fn packet_switch(
         // play::HandSwingC2s::ID => hand_swing(data, query, world)?,
         // play::TeleportConfirmC2s::ID => confirm_teleport(data),
         // play::PlayerInteractBlockC2s::ID => player_interact_block(data)?,
-        // play::ClientCommandC2s::ID => client_command(data, world, query)?,
+        play::ClientCommandC2s::ID => client_command(data, world, query)?,
         // play::ClientSettingsC2s::ID => client_settings(data, player)?,
         // play::CustomPayloadC2s::ID => custom_payload(data),
         play::FullC2s::ID => full(query, data, blocks)?,

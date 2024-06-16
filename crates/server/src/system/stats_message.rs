@@ -1,17 +1,19 @@
-use flecs_ecs::core::{QueryBuilderImpl, ReactorAPI, TermBuilderImpl, World};
+use flecs_ecs::core::{IterAPI, QueryBuilderImpl, ReactorAPI, TermBuilderImpl, World};
 use uuid::Uuid;
 use valence_protocol::{
     packets::play::boss_bar_s2c::{BossBarAction, BossBarColor, BossBarDivision, BossBarFlags},
     text::IntoText,
 };
 
-use crate::net::Compose;
+use crate::{component::Player, net::Compose};
 
 #[rustfmt::skip]
 pub fn stats_message(world: &World) {
     let mode = std::env::var("RUN_MODE").unwrap_or_else(|_| "Unknown".to_string());
-    
-    
+
+
+    let mut players = world.new_query::<&Player>();
+
     world
         .system_named::<&Compose>("stats_message")
         .term_at(0).singleton()
@@ -42,7 +44,8 @@ pub fn stats_message(world: &World) {
             
             compose.broadcast(&pkt).send().unwrap();
             
-            let player_count = compose.global().shared.player_count.load(std::sync::atomic::Ordering::Relaxed);
+            // let player_count = compose.global().shared.player_count.load(std::sync::atomic::Ordering::Relaxed);
+            let player_count = players.count();
             
             let title = format!("{player_count} player online");
             let title = title.into_cow_text();

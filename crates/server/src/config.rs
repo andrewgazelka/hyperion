@@ -2,8 +2,8 @@
 
 use std::{fmt::Debug, fs::File, io::Read, path::Path};
 
+use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
-use spin::lazy::Lazy;
 use tracing::{info, instrument, warn};
 
 /// The configuration for the server.

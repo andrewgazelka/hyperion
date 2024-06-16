@@ -14,6 +14,7 @@
 #![feature(iter_array_chunks)]
 #![feature(io_slice_advance)]
 #![feature(assert_matches)]
+#![feature(try_trait_v2)]
 
 pub use uuid;
 
@@ -23,33 +24,29 @@ pub mod singleton;
 pub mod util;
 
 use std::{
-    alloc::Allocator,
-    cell::RefCell,
-    fmt::Debug,
-    net::ToSocketAddrs,
-    sync::{atomic::AtomicU32, Arc},
-    time::Duration,
+    alloc::Allocator, cell::RefCell, fmt::Debug, net::ToSocketAddrs, sync::Arc, time::Duration,
 };
 
 use anyhow::Context;
 use bumpalo::Bump;
-use derive_more::{Deref, DerefMut, From};
+use derive_more::{Deref, DerefMut};
 use flecs_ecs::core::World;
 use libc::{getrlimit, setrlimit, RLIMIT_NOFILE};
 use libdeflater::CompressionLvl;
-use spin::Lazy;
+use once_cell::sync::Lazy;
 use thread_local::ThreadLocal;
 use tracing::{error, info, instrument, warn};
 use valence_protocol::CompressionThreshold;
 pub use valence_server;
 
 use crate::{
-    component::chunks::Blocks,
+    component::{blocks::Blocks, Comms},
     global::Global,
     net::{proxy::init_proxy_comms, Compose, Compressors, IoBuf, MAX_PACKET_SIZE},
+    runtime::AsyncRuntime,
     singleton::{fd_lookup::StreamLookup, player_id_lookup::EntityIdLookup},
     system::{chunks::ChunkChanges, player_join_world::generate_biome_registry},
-    tasks::Tasks,
+    util::{db, db::Db},
 };
 
 pub mod component;
@@ -66,31 +63,11 @@ mod system;
 
 mod bits;
 
-mod tasks;
+pub mod runtime;
 
 // mod tracker;
 
 mod config;
-
-#[must_use]
-pub fn default<T: Default>() -> T {
-    T::default()
-}
-
-#[derive(From, Debug)]
-pub enum CowBytes<'a> {
-    Owned(bytes::Bytes),
-    Borrowed(&'a [u8]),
-}
-
-impl<'a> AsRef<[u8]> for CowBytes<'a> {
-    fn as_ref(&self) -> &[u8] {
-        match self {
-            CowBytes::Owned(bytes) => bytes.as_ref(),
-            CowBytes::Borrowed(bytes) => bytes,
-        }
-    }
-}
 
 /// on macOS, the soft limit for the number of open file descriptors is often 256. This is far too low
 /// to test 10k players with.
@@ -138,6 +115,10 @@ pub fn adjust_file_descriptor_limits(recommended_min: u64) -> std::io::Result<()
 /// The central [`Hyperion`] struct which owns and manages the entire server.
 pub struct Hyperion;
 
+/// Register all components with the ECS framework.
+///
+/// In flecs components are often registered lazily.
+/// However, they need to be registered before they are used in a multithreaded environment.
 pub fn register_components(world: &World) {
     world.component::<component::Pose>();
     world.component::<component::Player>();
@@ -145,20 +126,26 @@ pub fn register_components(world: &World) {
     world.component::<component::AiTargetable>();
     world.component::<component::ImmuneStatus>();
     world.component::<component::Uuid>();
-    world.component::<component::KeepAlive>();
     world.component::<component::Health>();
-    world.component::<component::Vitals>();
     world.component::<component::ChunkPosition>();
     world.component::<ChunkChanges>();
-    world.component::<component::DisplaySkin>();
     world.component::<component::EntityReaction>();
+    world.component::<component::Play>();
+
+    world.component::<Db>();
+    world.component::<db::SkinCollection>();
+
+    world.component::<event::PostureUpdate>();
+    world.component::<event::AttackEntity>();
 }
 
 impl Hyperion {
+    /// Initializes the server.
     pub fn init(address: impl ToSocketAddrs + Send + Sync + 'static) -> anyhow::Result<()> {
         Self::init_with(address, |_| {})
     }
 
+    /// Initializes the server with a custom handler.
     pub fn init_with(
         address: impl ToSocketAddrs + Send + Sync + 'static,
         handlers: impl FnOnce(&World) + Send + Sync + 'static,
@@ -193,7 +180,6 @@ impl Hyperion {
         Lazy::force(&config::CONFIG);
 
         let shared = Arc::new(global::Shared {
-            player_count: AtomicU32::new(0),
             compression_threshold: CompressionThreshold(256),
             compression_level: CompressionLvl::new(6)
                 .map_err(|_| anyhow::anyhow!("failed to create compression level"))?,
@@ -212,7 +198,16 @@ impl Hyperion {
             .next()
             .context("could not get first address")?;
 
-        let tasks = Tasks::default();
+        let tasks = AsyncRuntime::default();
+
+        let db = tasks
+            .block_on(Db::new("mongodb://localhost:27017"))
+            .unwrap();
+
+        let skins = tasks.block_on(db::SkinCollection::new(&db)).unwrap();
+
+        world.set(db);
+        world.set(skins);
 
         let (receive_state, egress_comm) = init_proxy_comms(&tasks, address);
 
@@ -225,10 +220,14 @@ impl Hyperion {
             IoBuf::default(),
         ));
 
+        world.set(Comms::default());
+
         world.set(EntityIdLookup::default());
 
         world.set(egress_comm);
         world.set(tasks);
+
+        system::pose_update::pose_update(world);
 
         system::chunks::generate_chunk_changes(world);
         system::chunks::send_updates(world);
@@ -251,10 +250,14 @@ impl Hyperion {
 
         system::egress::egress(world);
 
-        system::pkt_attack::send_pkt_attack_player(world);
+        // system::pkt_attack::send_pkt_attack_player(world);
         system::pkt_attack::pkt_attack_entity(world);
 
-        world.set_threads(8);
+        let threads = rayon::current_num_threads();
+
+        world.set_threads(threads as i32);
+
+        system::joins::joins(world);
 
         loop {
             let tick_each_ms = 50.0;
@@ -278,23 +281,16 @@ impl Hyperion {
     }
 }
 
-// todo: naming? this seems bad
+/// A scratch buffer for intermediate operations. This will return an empty [`Vec`] when calling [`Scratch::obtain`].
 #[derive(Debug)]
 pub struct Scratch<A: Allocator = std::alloc::Global> {
     inner: Vec<u8, A>,
 }
 
-impl Scratch {
-    #[must_use]
-    pub fn new() -> Self {
+impl Default for Scratch<std::alloc::Global> {
+    fn default() -> Self {
         let inner = Vec::with_capacity(MAX_PACKET_SIZE);
         Self { inner }
-    }
-}
-
-impl Default for Scratch {
-    fn default() -> Self {
-        Self::new()
     }
 }
 
@@ -304,7 +300,9 @@ impl Default for Scratch {
 /// - every single time [`ScratchBuffer::obtain`] is called, the buffer will be cleared before returning
 /// - the buffer has capacity of at least `MAX_PACKET_SIZE`
 pub unsafe trait ScratchBuffer: sealed::Sealed + Debug {
+    /// The type of the allocator the [`Vec`] uses.
     type Allocator: Allocator;
+    /// Obtains a buffer that can be used for intermediate work.
     fn obtain(&mut self) -> &mut Vec<u8, Self::Allocator>;
 }
 
@@ -323,6 +321,7 @@ unsafe impl<A: Allocator + Debug> ScratchBuffer for Scratch<A> {
     }
 }
 
+/// A scratch which uses a bump allocator.
 pub type BumpScratch<'a> = Scratch<&'a Bump>;
 
 impl<A: Allocator> From<A> for Scratch<A> {
@@ -333,6 +332,7 @@ impl<A: Allocator> From<A> for Scratch<A> {
     }
 }
 
+/// Thread local scratches
 #[derive(Debug, Deref, DerefMut, Default)]
 pub struct Scratches {
     inner: ThreadLocal<RefCell<Scratch>>,

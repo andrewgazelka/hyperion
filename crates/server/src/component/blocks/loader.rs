@@ -10,7 +10,7 @@ use tokio::{
     sync::{Notify, RwLock},
 };
 
-use crate::{blocks::get_nyc_save, component::chunks::region::Region};
+use crate::{blocks::get_nyc_save, component::blocks::region::Region};
 
 enum RegionState {
     Pending(Weak<Notify>),

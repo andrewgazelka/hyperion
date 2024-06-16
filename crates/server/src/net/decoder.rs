@@ -9,6 +9,7 @@ use valence_protocol::{
 
 use crate::ScratchBuffer;
 
+/// A buffer for saving bytes that are not yet decoded.
 #[derive(Default, Component)]
 pub struct PacketDecoder {
     buf: BytesMut,
@@ -16,22 +17,20 @@ pub struct PacketDecoder {
 }
 
 impl PacketDecoder {
-    #[allow(dead_code, reason = "this might be used in the future")]
-    #[must_use]
-    pub fn new() -> Self {
-        Self::default()
-    }
-
+    /// The current length of the buffer.
     #[must_use]
     pub fn len(&self) -> usize {
         self.buf.len()
     }
 
+    /// Returns `true` if the buffer is empty.
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.buf.is_empty()
     }
 
+    /// Tries to get the next packet from the buffer.
+    /// If a new packet is found, the buffer will be truncated by the length of the packet.
     pub fn try_next_packet(
         &mut self,
         scratch: &mut impl ScratchBuffer,
@@ -138,27 +137,33 @@ impl PacketDecoder {
         }))
     }
 
+    /// Get the compression threshold.
     #[must_use]
     pub const fn compression(&self) -> CompressionThreshold {
         self.threshold
     }
 
+    /// Sets the compression threshold.
     pub fn set_compression(&mut self, threshold: CompressionThreshold) {
         self.threshold = threshold;
     }
 
+    /// Queues a [`BytesMut`] slice into the buffer.
     pub fn queue_bytes(&mut self, bytes: BytesMut) {
         self.buf.unsplit(bytes);
     }
 
+    /// Queues a slice of bytes into the buffer.
     pub fn queue_slice(&mut self, bytes: &[u8]) {
         self.buf.extend_from_slice(bytes);
     }
 
+    /// Takes the contents of the buffer and returns it.
     pub fn take_capacity(&mut self) -> BytesMut {
         self.buf.split_off(self.buf.len())
     }
 
+    /// Reserves capacity for the buffer.
     pub fn reserve(&mut self, additional: usize) {
         self.buf.reserve(additional);
     }
@@ -178,7 +183,7 @@ mod tests {
         let mut valence_decoder = valence_protocol::PacketDecoder::new();
         valence_decoder.set_compression(threshold);
 
-        let mut custom_decoder = PacketDecoder::new();
+        let mut custom_decoder = PacketDecoder::default();
         custom_decoder.set_compression(threshold);
 
         let mut encoder = valence_protocol::PacketEncoder::new();
@@ -190,7 +195,7 @@ mod tests {
         valence_decoder.queue_slice(&encoded_bytes);
         custom_decoder.queue_slice(&encoded_bytes);
 
-        let mut scratch = Scratch::new();
+        let mut scratch = Scratch::default();
 
         let valence_result = valence_decoder.try_next_packet().unwrap();
         let custom_result = custom_decoder.try_next_packet(&mut scratch).unwrap();

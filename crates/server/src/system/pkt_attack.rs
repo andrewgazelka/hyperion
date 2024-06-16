@@ -25,7 +25,7 @@
 // }
 
 use flecs_ecs::{
-    core::{flecs, Entity, IdOperations, QueryBuilderImpl, ReactorAPI, TermBuilderImpl, World},
+    core::{Entity, IdOperations, QueryBuilderImpl, ReactorAPI, TermBuilderImpl, World},
     macros::observer,
 };
 use tracing::instrument;
@@ -35,7 +35,7 @@ use valence_text::IntoText;
 use crate::{
     component::{Health, InGameName, Player},
     event::AttackEntity,
-    net::{Compose, IoRef},
+    net::Compose,
 };
 
 // #[instrument(skip_all, level = "trace")]
@@ -49,24 +49,25 @@ use crate::{
 //     }
 // }
 
-/// send Packet to player encoder
-#[instrument(skip_all, level = "trace")]
-pub fn send_pkt_attack_player(world: &World) {
-    world
-        .observer_named::<AttackEntity, (&IoRef, &Compose, &flecs::Any)>("send_pkt_attack_player")
-        .term_at(0)
-        .filter()
-        .term_at(1)
-        .singleton()
-        .each_iter(|iter, _, (stream, compose, _)| {
-            let event = iter.param();
+// /// send Packet to player encoder
+// #[instrument(skip_all, level = "trace")]
+// pub fn send_pkt_attack_player(world: &World) {
+//     world
+//         .observer_named::<AttackEntity, (&IoRef, &Compose, &flecs::Any)>("send_pkt_attack_player")
+//         .term_at(0)
+//         .filter()
+//         .term_at(1)
+//         .singleton()
+//         .each_iter(|iter, _, (stream, compose, _)| {
+//             let event = iter.param();
+//
+//             let mut damage_broadcast = get_red_hit_packet(event.from);
+//             damage_broadcast.entity_id = VarInt(0);
+//
+//             compose.unicast(&damage_broadcast, stream).unwrap();
+//         });
+// }
 
-            let mut damage_broadcast = get_red_hit_packet(event.from);
-            damage_broadcast.entity_id = VarInt(0);
-
-            compose.unicast(&damage_broadcast, stream).unwrap();
-        });
-}
 // pub fn packet_attack_entity(world: &'static World) {
 //     world
 //         .observer_named::<AttackEntity, (&mut StreamId, &Compose, &flecs::Any)>(
@@ -162,7 +163,7 @@ pub fn pkt_attack_entity(world: &World) {
         let mut bytes = Vec::new();
         bytes.push(9_u8);
         VarInt(3).encode(&mut bytes).unwrap();
-        (health.normal).encode(&mut bytes).unwrap();
+        health.normal.encode(&mut bytes).unwrap();
 
         // end with 0xff
         bytes.push(0xff);

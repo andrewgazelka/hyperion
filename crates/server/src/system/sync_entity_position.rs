@@ -33,14 +33,14 @@ use valence_protocol::{packets::play, ByteAngle, VarInt};
 
 use crate::{
     component::Pose,
-    net::{Compose, IoRef},
+    net::{Compose, NetworkStreamRef},
 };
 
 pub fn sync_entity_position(world: &World) {
     world
-        .system_named::<(&Compose, &Pose, &IoRef)>("sync_entity_position")
+        .system_named::<(&Compose, &Pose, &NetworkStreamRef)>("sync_entity_position")
         .term_at(0)
-        .multi_threaded(true)
+        .multi_threaded()
         .singleton()
         .each_iter(|iter, idx, (compose, pose, io)| {
             let entity = iter.entity(idx);

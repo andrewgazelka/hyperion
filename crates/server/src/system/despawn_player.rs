@@ -38,9 +38,4 @@ pub fn despawn_player(
     compose.broadcast(&pkt).send().unwrap();
 
     info!("{name} disconnected");
-
-    global
-        .shared
-        .player_count
-        .fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
 }

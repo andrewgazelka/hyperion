@@ -1,8 +1,11 @@
-use std::{borrow::Cow, cell::RefCell, collections::BTreeMap, io::Write, sync::Arc};
+//! Constructs for working with blocks.
+
+use std::{borrow::Cow, cell::RefCell, collections::BTreeMap, io::Write, ops::Try, sync::Arc};
 
 use anyhow::Context;
 use bytes::{Bytes, BytesMut};
 use dashmap::{DashMap, DashSet};
+use derive_more::Deref;
 use flecs_ecs::macros::Component;
 use fxhash::FxBuildHasher;
 use glam::{I16Vec2, IVec2};
@@ -22,14 +25,15 @@ use valence_server::layer::chunk::{
 };
 
 use crate::{
-    bits::BitStorage, chunk::heightmap, component::chunks::loader::Regions, default,
-    net::encoder::PacketEncoder, tasks::Tasks, Scratch,
+    bits::BitStorage, chunk::heightmap, component::blocks::loader::Regions,
+    net::encoder::PacketEncoder, runtime::AsyncRuntime, Scratch,
 };
 
 mod loader;
 mod region;
 
-pub struct TasksState {
+/// Thread-local state for encoding chunks.
+struct TasksState {
     bytes: BytesMut,
     compressor: Compressor,
     scratch: Scratch,
@@ -45,20 +49,25 @@ impl Default for TasksState {
     }
 }
 
+/// A chunk which has been loaded into memory.
 #[derive(Debug)]
 pub struct LoadedChunk {
     /// The raw (usually compressed) bytes of the chunk that are sent to the client via the Minecraft protocol.
     pub packet_bytes: Bytes,
 
+    /// The actual chunk data that is "uncompressed". It uses a palette to store the actual data. This is usually used
+    /// for obtaining the actual data from the chunk such as getting the block state of a block at a given position.
     pub chunk: Option<UnloadedChunk>,
 }
 
-#[derive(Component)]
+/// Accessor of blocks.
+#[derive(Component, Clone, Deref)]
 pub struct Blocks {
-    inner: Arc<ChunksInner>,
+    inner: Arc<BlocksInner>,
 }
 
-pub struct ChunksInner {
+/// Inner state of the [`Blocks`] component.
+pub struct BlocksInner {
     // todo: impl more efficient (probably lru) cache
     cache: DashMap<I16Vec2, LoadedChunk, FxBuildHasher>,
     loading: DashSet<I16Vec2, FxBuildHasher>,
@@ -66,10 +75,8 @@ pub struct ChunksInner {
     biome_to_id: BTreeMap<Ident<String>, BiomeId>,
 }
 
-impl ChunksInner {}
-
-impl ChunksInner {
-    pub fn new(biomes: &BiomeRegistry) -> anyhow::Result<Self> {
+impl BlocksInner {
+    pub(crate) fn new(biomes: &BiomeRegistry) -> anyhow::Result<Self> {
         let regions = Regions::new().context("failed to get anvil data")?;
 
         let biome_to_id = biomes
@@ -78,8 +85,8 @@ impl ChunksInner {
             .collect();
 
         Ok(Self {
-            cache: default(),
-            loading: default(),
+            cache: DashMap::default(),
+            loading: DashSet::default(),
             regions,
             biome_to_id,
         })
@@ -90,14 +97,17 @@ thread_local! {
   static STATE: RefCell<TasksState> = RefCell::new(TasksState::default());
 }
 
+/// The current data of a chunk.
 pub enum ChunkData {
+    /// The chunk has been loaded into memory and is cached.
     Cached(Bytes),
+    /// The chunks is currently being processed and loaded into memory.
     Task(JoinHandle<()>),
 }
 
 impl Blocks {
-    pub fn new(registry: &BiomeRegistry) -> anyhow::Result<Self> {
-        let inner = ChunksInner::new(registry)?;
+    pub(crate) fn new(registry: &BiomeRegistry) -> anyhow::Result<Self> {
+        let inner = BlocksInner::new(registry)?;
         Ok(Self {
             inner: Arc::new(inner),
         })
@@ -105,7 +115,11 @@ impl Blocks {
 
     /// todo: doesn't work in loading state
     #[allow(clippy::missing_panics_doc, reason = "todo use unwrap unchecked")]
-    pub fn get_and_wait(&self, position: I16Vec2, tasks: &Tasks) -> anyhow::Result<Option<Bytes>> {
+    pub fn get_and_wait(
+        &self,
+        position: I16Vec2,
+        tasks: &AsyncRuntime,
+    ) -> anyhow::Result<Option<Bytes>> {
         let result = match self.get_cached_or_load(position, tasks)? {
             None => None,
             Some(ChunkData::Cached(data)) => Some(data),
@@ -142,6 +156,93 @@ impl Blocks {
         loaded_ref.try_map(|loaded| loaded.chunk.as_ref()).ok()
     }
 
+    /// Returns all loaded blocks within the range from `start` to `end` (inclusive).
+    pub fn get_blocks<F, R>(&self, start: BlockPos, end: BlockPos, mut f: F) -> R
+    where
+        F: FnMut(BlockPos, BlockState) -> R,
+        R: Try<Output = ()>,
+    {
+        const START_Y: i32 = -64;
+
+        let start_xz = IVec2::new(start.x, start.z);
+        let end_xz = IVec2::new(end.x, end.z);
+
+        let start_chunk_pos: IVec2 = start_xz >> 4;
+        let end_chunk_pos: IVec2 = end_xz >> 4;
+
+        // let start_chunk_pos = start_chunk_pos.as_i16vec2();
+        // let end_chunk_pos = end_chunk_pos.as_i16vec2();
+
+        #[allow(clippy::cast_sign_loss)]
+        let y_start = (start.y - START_Y).max(0) as u32;
+
+        #[allow(clippy::cast_sign_loss)]
+        let y_end = (end.y - START_Y).max(0) as u32;
+
+        for cx in start_chunk_pos.x..=end_chunk_pos.x {
+            for cz in start_chunk_pos.y..=end_chunk_pos.y {
+                let chunk_start = IVec2::new(cx, cz) << 4;
+                let chunk_end = chunk_start + IVec2::splat(15);
+
+                let start = start_xz.clamp(chunk_start, chunk_end);
+                let end = end_xz.clamp(chunk_start, chunk_end);
+
+                debug_assert!(start.x >= start_xz.x);
+                debug_assert!(start.y >= start_xz.y);
+                debug_assert!(end.x <= end_xz.x);
+                debug_assert!(end.y <= end_xz.y);
+
+                let start = start & 0b1111;
+                let end = end & 0b1111;
+
+                debug_assert!(start.x >= 0, "start = {start}");
+                debug_assert!(start.y >= 0, "start = {start}");
+                debug_assert!(start.x <= 15, "start = {start}");
+                debug_assert!(start.y <= 15, "start = {start}");
+
+                debug_assert!(end.x >= 0);
+                debug_assert!(end.y >= 0);
+                debug_assert!(end.x <= 15);
+                debug_assert!(end.y <= 15);
+
+                debug_assert!(start.x <= end.x);
+                debug_assert!(start.y <= end.y);
+
+                let start = start.as_uvec2();
+                let end = end.as_uvec2();
+
+                let chunk_pos = IVec2::new(cx, cz).as_i16vec2();
+
+                let Some(chunk) = self.get_loaded_chunk(chunk_pos) else {
+                    continue;
+                };
+
+                for x in start.x..end.x {
+                    for z in start.y..end.y {
+                        for y in y_start..y_end {
+                            debug_assert!(x <= 15);
+                            debug_assert!(z <= 15);
+
+                            let block = chunk.block_state(x, y, z);
+
+                            let y = y as i32 + START_Y;
+                            let pos = BlockPos::new(
+                                x as i32 + chunk_start.x,
+                                y,
+                                z as i32 + chunk_start.y,
+                            );
+
+                            f(pos, block)?;
+                        }
+                    }
+                }
+            }
+        }
+
+        R::from_output(())
+    }
+
+    /// Get a block
     #[must_use]
     pub fn get_block(&self, position: BlockPos) -> Option<BlockState> {
         const START_Y: i32 = -64;
@@ -175,16 +276,18 @@ impl Blocks {
     // That should be done in a couple of days, probably.
 
     // #[instrument(skip_all, level = "trace")]
+    /// get the cached chunk for the given position or load it if it is not cached.
     pub fn get_cached_or_load(
         &self,
         position: I16Vec2,
-        tasks: &Tasks,
+        tasks: &AsyncRuntime,
     ) -> anyhow::Result<Option<ChunkData>> {
         if let Some(result) = self.inner.cache.get(&position) {
             return Ok(Some(ChunkData::Cached(result.packet_bytes.clone())));
         }
 
         if !self.inner.loading.insert(position) {
+            // we are currently loading this chunk
             return Ok(None);
         }
 

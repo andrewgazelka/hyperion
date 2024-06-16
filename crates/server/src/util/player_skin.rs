@@ -1,17 +1,24 @@
+//! Constructs for obtaining a player's skin.
+
 use anyhow::Context;
+use flecs_ecs::macros::Component;
 use serde::{Deserialize, Serialize};
 
-use crate::util::mojang::MojangClient;
+use crate::util::{db::SkinCollection, mojang::MojangClient};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// A signed player skin.
+#[derive(Debug, Clone, Serialize, Deserialize, Component)]
 pub struct PlayerSkin {
-    pub textures: String,
-    pub signature: String,
+    /// The textures of the player skin, usually obtained from the [`MojangClient`] as a base64 string.
+    pub textures: bson::Binary,
+    /// The signature of the player skin, usually obtained from the [`MojangClient`] as a base64 string.
+    pub signature: bson::Binary,
 }
 
 impl PlayerSkin {
+    /// Creates a new [`PlayerSkin`]
     #[must_use]
-    pub const fn new(textures: String, signature: String) -> Self {
+    pub const fn new(textures: bson::Binary, signature: bson::Binary) -> Self {
         Self {
             textures,
             signature,
@@ -28,45 +35,63 @@ impl PlayerSkin {
     pub async fn from_uuid(
         uuid: uuid::Uuid,
         mojang: &MojangClient,
+        skins: &SkinCollection,
     ) -> anyhow::Result<Option<Self>> {
-        let json_object = mojang.response_from_uuid(&uuid).await?;
+        if let Some(skin) = skins.find(uuid).await? {
+            return Ok(Some(skin));
+        }
+
+        let json_object = mojang.data_from_uuid(&uuid).await?;
         let properties_array = json_object["properties"]
             .as_array()
-            .context("no properties")?;
+            .with_context(|| format!("no properties on {json_object:?}"))?;
 
         for property_object in properties_array {
-            let name = property_object["name"].as_str().context("no name")?;
+            let name = property_object["name"]
+                .as_str()
+                .with_context(|| format!("no name on {property_object:?}"))?;
             if name != "textures" {
                 continue;
             }
-            let texture_value = property_object["value"].as_str().context("no value")?;
+            let textures = property_object["value"]
+                .as_str()
+                .with_context(|| format!("no value on {property_object:?}"))?;
             let signature_value = property_object["signature"]
                 .as_str()
-                .context("no signature")?;
+                .with_context(|| format!("no signature on {property_object:?}"))?;
 
-            return Ok(Some(Self {
-                textures: texture_value.to_string(),
-                signature: signature_value.to_string(),
-            }));
+            let textures =
+                bson::Binary::from_base64(textures, None).context("invalid texture value")?;
+            let signature = bson::Binary::from_base64(signature_value, None)
+                .context("invalid signature value")?;
+
+            let res = Self {
+                textures,
+                signature,
+            };
+
+            skins.insert(uuid, res.clone()).await?;
+
+            return Ok(Some(res));
         }
 
         Ok(None)
     }
 
-    /// Gets a skin from a Minecraft username.
-    ///
-    /// # Arguments
-    /// * `username` - The Minecraft username.
-    ///
-    /// # Returns
-    /// A `PlayerSkin` based on a Minecraft username, or `None` if not found.
-    pub async fn from_username(
-        username: &str,
-        mojang: &MojangClient,
-    ) -> anyhow::Result<Option<Self>> {
-        let json_object = mojang.response_from_username(username).await?;
-        let uuid = json_object["id"].as_str().context("no id")?;
-        let uuid = uuid::Uuid::parse_str(uuid).context("invalid uuid")?;
-        Self::from_uuid(uuid, mojang).await
-    }
+    // /// Gets a skin from a Minecraft username.
+    // ///
+    // /// # Arguments
+    // /// * `username` - The Minecraft username.
+    // ///
+    // /// # Returns
+    // /// A `PlayerSkin` based on a Minecraft username, or `None` if not found.
+    // pub async fn from_username(
+    //     username: &str,
+    //     mojang: &MojangClient,
+    // ) -> anyhow::Result<Option<Self>> {
+    //     let json_object = mojang.response_from_username(username).await?;
+    //     let uuid = json_object["id"].as_str().context("no id")?;
+    //     let uuid = uuid::Uuid::parse_str(uuid).context("invalid uuid")?;
+    //     Self::from_uuid(uuid, mojang).await
+    // }
 }

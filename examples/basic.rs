@@ -1,5 +1,5 @@
 use clap::Parser;
-use server::Hyperion;
+use hyperion::Hyperion;
 use tracing_subscriber::{layer::SubscriberExt, EnvFilter};
 
 /// The arguments to run the server

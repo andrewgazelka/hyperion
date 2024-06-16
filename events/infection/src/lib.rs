@@ -3,7 +3,7 @@
 
 use std::net::ToSocketAddrs;
 
-use server::{valence_server::protocol::anyhow, Hyperion};
+use hyperion::{valence_server::protocol::anyhow, Hyperion};
 
 pub fn init_game(address: impl ToSocketAddrs + Send + Sync + 'static) -> anyhow::Result<()> {
     Hyperion::init_with(address, |_| {

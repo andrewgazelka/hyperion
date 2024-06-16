@@ -1,3 +1,5 @@
+//! Encoding of packets.
+
 use std::{
     fmt::Debug,
     io::{Cursor, Write},
@@ -8,10 +10,11 @@ use anyhow::ensure;
 use tracing::trace;
 use valence_protocol::{CompressionThreshold, Encode, Packet, VarInt};
 
-use crate::{net::MAX_PACKET_SIZE, singleton::ring::Buf, ScratchBuffer};
+use crate::{net::MAX_PACKET_SIZE, singleton::buf::Buf, ScratchBuffer};
 
 mod util;
 
+/// A struct which represents a particular encoding method.
 #[derive(Default)]
 pub struct PacketEncoder {
     threshold: CompressionThreshold,
@@ -25,45 +28,7 @@ impl Debug for PacketEncoder {
     }
 }
 
-// todo:
-// technically needs lifetimes to be write
-// but ehhhh not doing this now we are referncing data which lives the duration of the program
-// todo: bench if repr packed worth it (on old processors often slows down.
-// Modern processors packed can actually be faster because cache locality)
-#[allow(unused, reason = "this is used in linux")]
-#[derive(Debug, Copy, Clone)]
-#[repr(packed)]
-pub struct DataWriteInfo {
-    pub start_ptr: *const u8,
-    pub len: u32,
-}
-
-unsafe impl Send for DataWriteInfo {}
-unsafe impl Sync for DataWriteInfo {}
-
-impl DataWriteInfo {
-    pub const NULL: Self = Self {
-        start_ptr: std::ptr::null(),
-        len: 0,
-    };
-
-    /// # Safety
-    /// todo
-    #[allow(dead_code, reason = "nice for unit tests")]
-    #[must_use]
-    pub const unsafe fn as_slice(&self) -> &[u8] {
-        std::slice::from_raw_parts(self.start_ptr, self.len as usize)
-    }
-
-    /// # Safety
-    /// todo
-    #[allow(dead_code, reason = "nice for unit tests")]
-    #[must_use]
-    pub const unsafe fn as_static_slice(&self) -> &'static [u8] {
-        std::slice::from_raw_parts(self.start_ptr, self.len as usize)
-    }
-}
-
+/// Append a packet to the buffer without compression.
 pub fn append_packet_without_compression<P, B: Buf>(
     pkt: &P,
     buf: &mut B,
@@ -110,16 +75,19 @@ where
 }
 
 impl PacketEncoder {
+    /// Creates a new [`PacketEncoder`] with the given compression threshold.
     #[must_use]
     pub const fn new(threshold: CompressionThreshold) -> Self {
         Self { threshold }
     }
 
+    /// Obtains the compression threshold.
     #[must_use]
     pub const fn compression_threshold(&self) -> CompressionThreshold {
         self.threshold
     }
 
+    /// Appends a packet to the buffer with compression.
     pub fn append_packet_with_compression<P, B: Buf>(
         &self,
         pkt: &P,
@@ -203,6 +171,7 @@ impl PacketEncoder {
         Ok(buf.advance(len as usize))
     }
 
+    /// Appends a packet to the buffer which may or may not be compressed.
     pub fn append_packet<P, B: Buf>(
         &self,
         pkt: &P,
@@ -222,6 +191,7 @@ impl PacketEncoder {
         }
     }
 
+    /// Sets the compression threshold.
     pub fn set_compression(&mut self, threshold: CompressionThreshold) {
         self.threshold = threshold;
     }
