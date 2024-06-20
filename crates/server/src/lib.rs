@@ -253,6 +253,8 @@ impl Hyperion {
         // system::pkt_attack::send_pkt_attack_player(world);
         system::pkt_attack::pkt_attack_entity(world);
 
+        system::sound::sound(world);
+
         let threads = rayon::current_num_threads();
 
         world.set_threads(threads as i32);

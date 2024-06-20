@@ -1,5 +1,5 @@
-use hyperion_proto::ProxyToServerMessage;
-use prost::encoding::encode_varint;
+use hyperion_proto::{ProxyToServer, ProxyToServerMessage};
+use prost::Message;
 use tokio::io::AsyncWriteExt;
 use tracing::{info_span, Instrument};
 
@@ -14,9 +14,9 @@ pub fn launch_server_writer(mut write: tokio::net::tcp::OwnedWriteHalf) -> Serve
 
     tokio::spawn(
         async move {
-            let mut bytes = Vec::with_capacity(1024);
+            let mut bytes = Vec::with_capacity(8 * 1024);
             while let Some(message) = rx.recv().await {
-                write_message(&mut bytes, &message);
+                write_message(&mut bytes, message);
 
                 loop {
                     if bytes.len() >= THRESHOLD_SEND {
@@ -27,7 +27,7 @@ pub fn launch_server_writer(mut write: tokio::net::tcp::OwnedWriteHalf) -> Serve
                         break;
                     };
 
-                    write_message(&mut bytes, &message);
+                    write_message(&mut bytes, message);
                 }
 
                 write.write_all(&bytes).await.unwrap();
@@ -40,10 +40,10 @@ pub fn launch_server_writer(mut write: tokio::net::tcp::OwnedWriteHalf) -> Serve
     tx
 }
 
-fn write_message(write: &mut Vec<u8>, message: &ProxyToServerMessage) {
-    let len = message.encoded_len();
+fn write_message(write: &mut Vec<u8>, message: ProxyToServerMessage) {
+    let message = ProxyToServer {
+        proxy_to_server_message: Some(message),
+    };
 
-    encode_varint(len as u64, write);
-
-    message.encode(write);
+    message.encode_length_delimited(write).unwrap();
 }

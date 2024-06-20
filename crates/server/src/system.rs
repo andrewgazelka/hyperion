@@ -49,3 +49,5 @@ pub mod pose_update;
 // pub mod voice_chat;
 
 pub mod joins;
+
+pub mod sound;

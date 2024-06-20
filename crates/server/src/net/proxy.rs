@@ -2,8 +2,8 @@
 
 use std::{collections::HashMap, io::Cursor, net::SocketAddr, sync::Arc};
 
-use anyhow::{bail, Context};
-use bytes::BytesMut;
+use anyhow::bail;
+use bytes::{Buf, BytesMut};
 use hyperion_proto::{PlayerConnect, PlayerDisconnect, ProxyToServer, ProxyToServerMessage};
 use parking_lot::Mutex;
 use prost::{encoding::decode_varint, Message};
@@ -42,7 +42,6 @@ async fn inner(
                 let shared = shared.clone();
 
                 let (read, mut write) = socket.into_split();
-                let read = tokio::io::BufReader::new(read);
 
                 let fst = tokio::spawn(async move {
                     while let Some(bytes) = server_to_proxy.recv().await {
@@ -116,55 +115,53 @@ pub fn init_proxy_comms(tasks: &AsyncRuntime, socket: SocketAddr) -> (ReceiveSta
 
 #[derive(Debug)]
 struct ProxyReader {
-    server_read: tokio::io::BufReader<tokio::net::tcp::OwnedReadHalf>,
+    server_read: tokio::net::tcp::OwnedReadHalf,
     buffer: BytesMut,
 }
 
 impl ProxyReader {
-    pub fn new(server_read: tokio::io::BufReader<tokio::net::tcp::OwnedReadHalf>) -> Self {
+    pub fn new(server_read: tokio::net::tcp::OwnedReadHalf) -> Self {
         Self {
             server_read,
-            buffer: BytesMut::with_capacity(1024),
+            buffer: BytesMut::with_capacity(1024 * 1024),
         }
     }
 
     pub async fn next(&mut self) -> anyhow::Result<ProxyToServerMessage> {
-        let len = self.read_len().await?;
-        let message = self.next_server_packet(len).await?;
+        let message = self.next_server_packet().await?;
         Ok(message)
     }
 
-    async fn read_len(&mut self) -> anyhow::Result<usize> {
-        let mut vint = [0u8; 4];
-        let mut i = 0;
-        let len = loop {
-            let byte = self.server_read.read_u8().await?;
-            let to_set = vint
-                .get_mut(i)
-                .context("Failed to get mutable reference to byte in vint")?;
-            *to_set = byte;
-            let mut cursor = Cursor::new(vint.as_slice());
-            if let Ok(len) = decode_varint(&mut cursor) {
-                break len;
-            }
-            i += 1;
-        };
-        Ok(usize::try_from(len).expect("Failed to convert varint to usize"))
-    }
-
     // #[instrument]
-    async fn next_server_packet(&mut self, len: usize) -> anyhow::Result<ProxyToServerMessage> {
+    async fn next_server_packet(&mut self) -> anyhow::Result<ProxyToServerMessage> {
+        let len = loop {
+            if !self.buffer.is_empty() {
+                let mut cursor = Cursor::new(&self.buffer);
+
+                // tood: handle invalid varint
+                if let Ok(len) = decode_varint(&mut cursor) {
+                    self.buffer.advance(cursor.position() as usize);
+                    break len as usize;
+                }
+            }
+
+            self.server_read.read_buf(&mut self.buffer).await?;
+        };
+
         // todo: this needed?
-        if self.buffer.len() < len {
-            self.buffer.resize(len, 0);
+        self.buffer.reserve(len);
+
+        while self.buffer.len() < len {
+            self.server_read.read_buf(&mut self.buffer).await?;
         }
 
-        let slice = &mut self.buffer[..len];
-        self.server_read.read_exact(slice).await?;
+        let mut buffer = self.buffer.split_to(len);
 
-        let Ok(message) = ProxyToServer::decode(&mut self.buffer) else {
-            bail!("Failed to decode ServerToProxy message");
+        let Ok(message) = ProxyToServer::decode(&mut buffer) else {
+            bail!("Failed to decode ProxyToServerMessage from {:?}", buffer);
         };
+
+        assert!(buffer.is_empty());
 
         let Some(message) = message.proxy_to_server_message else {
             bail!("No message in ServerToProxy message");
