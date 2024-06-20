@@ -39,7 +39,7 @@ use crate::{
     net::{Compose, NetworkStreamRef},
     runtime::AsyncRuntime,
     system::player_join_world::list::{PlayerListActions, PlayerListEntry, PlayerListS2c},
-    util::player_skin::PlayerSkin,
+    util::{metadata::show_all, player_skin::PlayerSkin},
 };
 
 // #[derive(Query, Debug)]
@@ -525,6 +525,13 @@ pub fn player_join_world(
         .send()
         .unwrap();
 
+    let show_all = show_all(entity.id().0 as i32);
+    compose
+        .broadcast(show_all.borrow_packet())
+        .exclude(packets)
+        .send()
+        .unwrap();
+
     info!("{name} joined the world");
 }
 
@@ -921,6 +928,9 @@ fn inner(encoder: &mut PacketEncoder, chunks: &Blocks, tasks: &AsyncRuntime) -> 
             z_pos: f64::from(PLAYER_SPAWN_POSITION.z),
         })?;
     }
+
+    let show_all = show_all(0);
+    encoder.append_packet(show_all.borrow_packet())?;
 
     Ok(())
 }

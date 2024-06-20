@@ -40,6 +40,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "aliasable"
+version = "0.1.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "250f629c0161ad8107cf89319e990051fae62832fd343083bea452d93e2205fd"
+
+[[package]]
 name = "alloca"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -132,6 +138,12 @@ checksum = "b3d1d046238990b9cf5bcde22a3fb3584ee5cf65fb2765f454ed428c7a0063da"
 dependencies = [
  "backtrace",
 ]
+
+[[package]]
+name = "arc-swap"
+version = "1.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "69f7f8c3906b62b754cd5326047894316021dcfe5a194c8ea52bdd94934a3457"
 
 [[package]]
 name = "arrayvec"
@@ -1107,7 +1119,7 @@ dependencies = [
 [[package]]
 name = "flecs_ecs"
 version = "0.0.2"
-source = "git+https://github.com/Indra-db/flecs-ecs-rs#1261f9393cbb2f0ecd7afb8959c463f637374e74"
+source = "git+https://github.com/Indra-db/flecs-ecs-rs#52abe5b2375ac7b5bf3d051f5bbbfb86dd42b50a"
 dependencies = [
  "compact_str",
  "flecs_ecs_derive",
@@ -1118,7 +1130,7 @@ dependencies = [
 [[package]]
 name = "flecs_ecs_derive"
 version = "0.1.0"
-source = "git+https://github.com/Indra-db/flecs-ecs-rs#1261f9393cbb2f0ecd7afb8959c463f637374e74"
+source = "git+https://github.com/Indra-db/flecs-ecs-rs#52abe5b2375ac7b5bf3d051f5bbbfb86dd42b50a"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1128,7 +1140,7 @@ dependencies = [
 [[package]]
 name = "flecs_ecs_sys"
 version = "0.1.0"
-source = "git+https://github.com/Indra-db/flecs-ecs-rs#1261f9393cbb2f0ecd7afb8959c463f637374e74"
+source = "git+https://github.com/Indra-db/flecs-ecs-rs#52abe5b2375ac7b5bf3d051f5bbbfb86dd42b50a"
 dependencies = [
  "bindgen",
  "cc",
@@ -1609,6 +1621,7 @@ dependencies = [
  "more-asserts",
  "no_denormals",
  "once_cell",
+ "ouroboros",
  "parking_lot",
  "prost",
  "rand",
@@ -1641,10 +1654,27 @@ dependencies = [
 [[package]]
 name = "hyperion-proto"
 version = "0.1.0"
-source = "git+https://github.com/andrewgazelka/hyperion-proto#e3bc1ba0250a96abf2f577eddbdf1c2d2076adc6"
 dependencies = [
  "prost",
  "prost-build",
+]
+
+[[package]]
+name = "hyperion-proxy"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "arc-swap",
+ "bvh",
+ "bytes",
+ "glam",
+ "heapless",
+ "hyperion-proto",
+ "prost",
+ "slotmap",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
@@ -2395,6 +2425,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "ouroboros"
+version = "0.18.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "944fa20996a25aded6b4795c6d63f10014a7a83f8be9828a11860b08c5fc4a67"
+dependencies = [
+ "aliasable",
+ "ouroboros_macro",
+ "static_assertions",
+]
+
+[[package]]
+name = "ouroboros_macro"
+version = "0.18.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "39b0deead1528fd0e5947a8546a9642a9777c25f6e1e26f34c97b204bbb465bd"
+dependencies = [
+ "heck 0.4.1",
+ "itertools 0.12.1",
+ "proc-macro2",
+ "proc-macro2-diagnostics",
+ "quote",
+ "syn 2.0.66",
+]
+
+[[package]]
 name = "overload"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2591,6 +2646,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "22244ce15aa966053a896d1accb3a6e68469b97c7f33f284b99f0d576879fc23"
 dependencies = [
  "unicode-ident",
+]
+
+[[package]]
+name = "proc-macro2-diagnostics"
+version = "0.10.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "af066a9c399a26e020ada66a034357a868728e72cd426f3adcd35f80d88d88c8"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.66",
+ "version_check",
+ "yansi",
 ]
 
 [[package]]
@@ -4594,6 +4662,12 @@ dependencies = [
  "linux-raw-sys",
  "rustix",
 ]
+
+[[package]]
+name = "yansi"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cfe53a6657fd280eaa890a3bc59152892ffa3e30101319d168b781ed6529b049"
 
 [[package]]
 name = "yoke"

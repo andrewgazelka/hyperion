@@ -10,6 +10,8 @@ members = [
     "crates/lunar",
     "crates/server",
     "crates/persist",
+    "crates/proxy",
+    "crates/protocol",
     "events/infection",
     "examples",
 ]
@@ -33,9 +35,12 @@ lto = "fat"
 codegen-units = 1
 
 [workspace.dependencies]
+
 bvh-region = { path = "crates/bvh" }
 glam = "0.26.0"
 hyperion = { path = "crates/server" }
+hyperion-proxy = { path = "crates/proxy" }
+hyperion-proto = { path = "crates/protocol" }
 
 # todo: re-enable rayon
 #evenio = { git = "https://github.com/andrewgazelka/evenio", features = ["rayon"], branch = "feat-sender-state-public"}

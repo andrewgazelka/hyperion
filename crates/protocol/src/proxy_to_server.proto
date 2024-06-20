@@ -1,0 +1,25 @@
+syntax = "proto3";
+import "shared.proto";
+
+package proxy_to_server;
+
+message PlayerPackets {
+  bytes data = 1;
+  uint64 stream = 2;
+}
+
+message PlayerConnect {
+  uint64 stream = 1;
+}
+
+message PlayerDisconnect {
+  uint64 stream = 1;
+}
+
+message ProxyToServer {
+  oneof proxy_to_server_message {
+    PlayerConnect player_connect = 1;
+    PlayerDisconnect player_disconnect = 2;
+    PlayerPackets player_packets = 3;
+  }
+}

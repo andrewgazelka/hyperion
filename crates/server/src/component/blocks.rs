@@ -217,9 +217,9 @@ impl Blocks {
                     continue;
                 };
 
-                for x in start.x..end.x {
-                    for z in start.y..end.y {
-                        for y in y_start..y_end {
+                for x in start.x..=end.x {
+                    for z in start.y..=end.y {
+                        for y in y_start..=y_end {
                             debug_assert!(x <= 15);
                             debug_assert!(z <= 15);
 

@@ -141,15 +141,11 @@ pub fn pkt_attack_entity(world: &World) {
         "pkt_attack_entity",
         world,
         AttackEntity,
-        &Compose,
-        &InGameName,
+        &Compose($),
+        [filter] &InGameName,
         &mut Health,
         &Player
     )
-    .term_at(0)
-    .singleton()
-    .term_at(1)
-    .filter()
     .each_entity(|attacked, (compose, ign, health, _)| {
         let damage_broadcast = get_red_hit_packet(attacked.id());
         compose.broadcast(&damage_broadcast).send().unwrap();
@@ -174,31 +170,6 @@ pub fn pkt_attack_entity(world: &World) {
         };
 
         compose.broadcast(&tracker).send().unwrap();
-
-        // let display_name = format!("{ign} {health}");
-        // let display_name_tab = display_name.clone().into_cow_text();
-
-        // let entry = crate::system::player_join_world::list::PlayerListEntry {
-        //     player_uuid: uuid.0,
-        //     username: Cow::Borrowed(&display_name),
-        //     properties: Cow::Borrowed(&[]),
-        //     chat_data: None,
-        //     listed: true,
-        //     ping: 20,
-        //     game_mode: GameMode::Survival,
-        //     display_name: Some(display_name_tab.clone()),
-        // };
-
-        // compose
-        //     .broadcast(&crate::system::player_join_world::list::PlayerListS2c {
-        //         actions: crate::system::player_join_world::list::PlayerListActions::default()
-        //             .with_add_player(true)
-        //             .with_update_listed(true)
-        //             .with_update_display_name(true),
-        //         entries: Cow::Owned(vec![entry]),
-        //     })
-        //     .send()
-        //     .unwrap();
 
         // send chat message
         let msg = format!("{ign} -> health: {health}");

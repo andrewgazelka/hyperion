@@ -290,24 +290,20 @@ pub struct PacketSwitchQuery<'a> {
 fn client_command(mut data: &[u8], world: &World, query: &PacketSwitchQuery) -> anyhow::Result<()> {
     let packet = play::ClientCommandC2s::decode(&mut data)?;
 
+    let mut event = world.event();
+
+    event.add::<NetworkStreamRef>().target(query.view);
+
     match packet.action {
         ClientCommand::StartSneaking => {
-            world
-                .event()
-                .add::<NetworkStreamRef>()
-                .target(query.view)
-                .enqueue(event::PostureUpdate {
-                    state: Posture::Sneaking,
-                });
+            event.emit(&event::PostureUpdate {
+                state: Posture::Sneaking,
+            });
         }
         ClientCommand::StopSneaking => {
-            world
-                .event()
-                .add::<NetworkStreamRef>()
-                .target(query.view)
-                .enqueue(event::PostureUpdate {
-                    state: Posture::Standing,
-                });
+            event.emit(&event::PostureUpdate {
+                state: Posture::Standing,
+            });
         }
         _ => {}
     }

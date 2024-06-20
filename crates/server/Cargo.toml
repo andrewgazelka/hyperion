@@ -55,11 +55,12 @@ thiserror = "1.0.59"
 dashmap = "5.5.3"
 bitfield-struct = "0.6.1"
 bitvec = "1.0.1"
-hyperion-proto = { git = "https://github.com/andrewgazelka/hyperion-proto", version = "0.1.0" }
+hyperion-proto.workspace = true
 prost = "0.12.6"
 line_drawing = "1.0.0"
 slotmap = "1.0.7"
 flecs_ecs = { git = "https://github.com/Indra-db/flecs-ecs-rs" }
+
 
 heapless = "0.8.0"
 thread_local = { version = "1.1.8", features = ["nightly"] }
@@ -68,6 +69,7 @@ kanal = "0.1.0-pre8"
 mongodb = "2.8.2"
 bson = { version = "2.11.0", features = ["uuid-1"] }
 chrono = { version = "0.4.38", features = ["serde"] }
+ouroboros = "0.18.4"
 
 [dev-dependencies]
 divan = "0.1.14"

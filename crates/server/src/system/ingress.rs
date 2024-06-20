@@ -176,7 +176,7 @@ pub fn recv_data(world: &World) {
             Option<&InGameName>,
         )>("recv_data")
         .kind::<OnUpdate>()
-        .multi_threaded()
+        // .multi_threaded()
         .term_at(0)
         .singleton()
         .term_at(1)
@@ -211,7 +211,6 @@ pub fn recv_data(world: &World) {
                 let mut entity = iter.entity(idx);
 
                 let world = iter.world();
-                let world = &world;
 
                 loop {
                     let Some(frame) = decoder
@@ -235,7 +234,7 @@ pub fn recv_data(world: &World) {
                             process_status(login_state, &frame, io_ref, compose).unwrap();
                         }
                         PacketState::Login => process_login(
-                            world,
+                            &world,
                             lookup,
                             tasks,
                             login_state,
@@ -267,7 +266,7 @@ pub fn recv_data(world: &World) {
 
                                 tracing::info_span!("ingress", ign = name).in_scope(|| {
                                     if let Err(err) = crate::packets::packet_switch(
-                                        &frame, world, lookup, &mut query, blocks,
+                                        &frame, &world, lookup, &mut query, blocks,
                                     ) {
                                         error!("failed to process packet {:?}: {err}", frame);
                                     }
@@ -355,6 +354,8 @@ fn process_login(
         .lock()
         .pop()
         .unwrap_or_else(|| offline_uuid(&username).unwrap());
+
+    println!("{username} spawning with uuid {uuid:?}");
 
     let skins = comms.skins_tx.clone();
     let id = entity.id();

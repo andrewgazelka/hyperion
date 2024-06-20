@@ -38,16 +38,16 @@ deny:
 # run in debug mode with tracy; auto-restarts on changes
 debug:
     #!/usr/bin/env -S parallel --shebang --ungroup --jobs 3
-    ulimit -Sn 8192 && hyperion-proxy
-    cargo watch -x 'build -q' -s 'touch {{project_root}}/.trigger'
     RUST_BACKTRACE=full RUN_MODE=debug-{{arch}} cargo watch --postpone --no-vcs-ignores -w {{project_root}}/.trigger -s './target/debug/infection'
+    RUST_BACKTRACE=full RUN_MODE=debug-{{arch}} cargo watch --postpone --no-vcs-ignores -w {{project_root}}/.trigger -s 'ulimit -Sn 8192 && ./target/debug/hyperion-proxy'
+    cargo watch -x 'build -q' -s 'touch {{project_root}}/.trigger'
 
 # run in release mode with tracy; auto-restarts on changes
 release:
     #!/usr/bin/env -S parallel --shebang --ungroup --jobs 3
-    ulimit -Sn 8192 && hyperion-proxy
+    RUST_BACKTRACE=full RUN_MODE=release-{{arch}} cargo watch --postpone --no-vcs-ignores -w {{project_root}}/.trigger -s './target/release/infection'
+    RUST_BACKTRACE=full RUN_MODE=release-{{arch}} cargo watch --postpone --no-vcs-ignores -w {{project_root}}/.trigger -s 'ulimit -Sn 8192 && ./target/release/hyperion-proxy'
     cargo watch -x 'build -q --release' -s 'touch {{project_root}}/.trigger'
-    RUN_MODE=release-{{arch}} cargo watch --postpone --no-vcs-ignores -w {{project_root}}/.trigger -s './target/release/infection'
 
 # run a given number of bots to connect to hyperion
 bots count='1000':

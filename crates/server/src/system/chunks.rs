@@ -32,7 +32,7 @@ pub fn generate_chunk_changes(world: &World) {
         .system_named::<(
             &Compose,
             &mut ChunkPosition,
-            &mut Pose,
+            &Pose,
             &NetworkStreamRef,
             &mut ChunkChanges,
         )>("generate_chunk_changes")

@@ -60,7 +60,15 @@ async fn inner(
                 tokio::spawn(async move {
                     let mut reader = ProxyReader::new(read);
 
-                    while let Ok(message) = reader.next().await {
+                    loop {
+                        let message = match reader.next().await {
+                            Ok(message) => message,
+                            Err(err) => {
+                                error!("failed to process packet {err:?}");
+                                return;
+                            }
+                        };
+
                         match message {
                             ProxyToServerMessage::PlayerConnect(message) => {
                                 shared.lock().player_connect.push(message);
@@ -79,7 +87,6 @@ async fn inner(
                             }
                         }
                     }
-                    error!("error reading from proxy");
                 });
 
                 // todo: handle player disconnects on proxy shut down
