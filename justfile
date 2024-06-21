@@ -63,3 +63,10 @@ doc-once:
 
 doc:
     cargo watch -x 'doc --workspace --no-deps --all-features'
+
+# Run the data extractor and save generated data to `/extracted`.
+extract:
+    mkdir -p extractor/run
+    echo 'eula=true' > extractor/run/eula.txt
+    cd extractor && sh gradlew runServer
+    cp extractor/run/extractor_output/* extracted/

@@ -1,3 +1,4 @@
+/.vscode
 /target
 *.webm
 *.jar
@@ -11,3 +12,9 @@ perf.data
 **/*.zip
 .DS_Store
 .trigger
+.gradle
+/extractor/build
+/extractor/out
+/extractor/classes
+/extractor/run
+/extractor/bin

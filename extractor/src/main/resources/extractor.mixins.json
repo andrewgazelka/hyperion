@@ -1,0 +1,9 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "dev._00a.extractor.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "mixins": [
+    "ExposeWallBlock"
+  ]
+}

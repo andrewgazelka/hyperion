@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "id": "mc_extractor",
+  "version": "${version}",
+  "name": "MC Extractor",
+  "description": "Extracts Minecraft data",
+  "authors": [],
+  "contact": {},
+  "environment": "*",
+  "entrypoints": {
+    "main": [
+      "dev._00a.extractor.Main"
+    ]
+  },
+  "mixins": [
+    "extractor.mixins.json"
+  ],
+  "depends": {
+    "fabricloader": ">=0.14.6",
+    "minecraft": "~1.21",
+    "java": ">=17"
+  },
+  "suggests": {
+    "another-mod": "*"
+  }
+}
