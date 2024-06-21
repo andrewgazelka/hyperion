@@ -1,6 +1,17 @@
 #![feature(maybe_uninit_slice)]
 #![feature(allocator_api)]
 #![feature(io_slice_advance)]
+#![allow(
+    clippy::redundant_pub_crate,
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::cast_precision_loss,
+    clippy::missing_errors_doc,
+    clippy::module_name_repetitions,
+    clippy::missing_panics_doc,
+    clippy::module_inception,
+    clippy::future_not_send
+)]
 
 use std::{
     fmt::Debug,

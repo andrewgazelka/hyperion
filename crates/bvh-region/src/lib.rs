@@ -1,5 +1,6 @@
 #![feature(lint_reasons)]
 #![feature(portable_simd)]
+#![allow(clippy::redundant_pub_crate, clippy::pedantic)]
 
 // https://www.haroldserrano.com/blog/visualizing-the-boundary-volume-hierarchy-collision-algorithm
 

@@ -15,6 +15,17 @@
 #![feature(io_slice_advance)]
 #![feature(assert_matches)]
 #![feature(try_trait_v2)]
+#![allow(
+    clippy::redundant_pub_crate,
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::cast_precision_loss,
+    clippy::missing_errors_doc,
+    clippy::module_name_repetitions,
+    clippy::missing_panics_doc,
+    clippy::needless_pass_by_value,
+    clippy::future_not_send
+)]
 
 pub use uuid;
 

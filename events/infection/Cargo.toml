@@ -7,19 +7,19 @@ readme = "README.md"
 publish = false
 
 [dependencies]
-anyhow = "1.0.82"
-fastrand = "2.0.2"
-serde_json = "1.0.116"
+anyhow.workspace = true
+fastrand.workspace = true
+serde_json.workspace = true
 hyperion.workspace = true
-tracing = "0.1.40"
-tracing-subscriber = { version = "0.3.18", features = ["chrono", "env-filter"] }
-clap = { version = "4.5.4", features = ["derive"] }
-tracing-tracy = "0.11.0"
-bvh = { git = "https://github.com/andrewgazelka/bvh-data" }
+tracing.workspace = true
+tracing-subscriber = { workspace = true, features = ["chrono", "env-filter"] }
+clap = { workspace = true, features = ["derive"] }
+tracing-tracy.workspace = true
+bvh.workspace = true
 glam = { workspace = true, features = ["core-simd", "fast-math"] }
 
 [dev-dependencies]
-tokio = { version = "1.37.0", features = ["full"] }
+tokio = { workspace = true, features = ["full"] }
 
 [lints.clippy]
 complexity = "deny"

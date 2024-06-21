@@ -1,3 +1,5 @@
+#![allow(clippy::doc_markdown)]
+
 use prost::{bytes::BufMut, Message};
 use prost_types::Any;
 include!(concat!(env!("OUT_DIR"), "/schema.rs"));

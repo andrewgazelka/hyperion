@@ -1,0 +1,24 @@
+[package]
+name = "hyperion-proxy"
+version = "0.1.0"
+edition = "2021"
+authors = ["Andrew Gazelka <andrew.gazelka@gmail.com>"]
+readme = "README.md"
+publish = false
+
+[dependencies]
+anyhow.workspace = true
+prost.workspace = true
+tokio = { workspace = true, features = ["full"] }
+bvh.workspace = true
+glam.workspace = true
+arc-swap.workspace = true
+slotmap.workspace = true
+tracing.workspace = true
+bytes.workspace = true
+tracing-subscriber.workspace = true
+hyperion-proto.workspace = true
+heapless.workspace = true
+
+[lints]
+workspace = true

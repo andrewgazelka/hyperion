@@ -1,0 +1,46 @@
+[package]
+name = "bvh-region"
+version = "0.1.0"
+edition = "2021"
+authors = ["Andrew Gazelka <andrew.gazelka@gmail.com>"]
+readme = "README.md"
+publish = false
+
+[features]
+plot = ["dep:plotters", "dep:plotters-bitmap"]
+default = []
+
+[dependencies]
+fastrand.workspace = true
+glam = { workspace = true, features = ["serde"] }
+rayon.workspace = true
+arrayvec.workspace = true
+ordered-float.workspace = true
+itertools.workspace = true
+plotters = { workspace = true, features = ["plotters-bitmap", "image"], optional = true}
+plotters-bitmap = { workspace = true, optional = true }
+tracing.workspace = true
+serde = { workspace = true, features = ["derive"] }
+
+[dev-dependencies]
+divan.workspace = true
+criterion.workspace = true
+rand.workspace = true
+tango-bench.workspace = true
+tracing-subscriber.workspace = true
+# criterion = { version = "0.5.1", features = ["html_reports"] }
+
+[[bench]]
+name = "sort"
+harness = false
+
+[[bench]]
+name = "bvh"
+harness = false
+
+[[bench]]
+name = "side_by_side"
+harness = false
+
+[lints]
+workspace = true

@@ -49,13 +49,13 @@ fn build_benchmarks() -> impl IntoBenchmarks {
 
     [
         benchmark_fn("build_sparse_bvh", move || {
-            benchmark_build_4_cores(sparse_build_elements.clone())
+            benchmark_build_4_cores(sparse_build_elements.clone());
         }),
         benchmark_fn("build_dense_bvh", move || {
-            benchmark_build_4_cores(dense_build_elements.clone())
+            benchmark_build_4_cores(dense_build_elements.clone());
         }),
         benchmark_fn("build_very_dense_bvh", move || {
-            benchmark_build_4_cores(very_dense_build_elements.clone())
+            benchmark_build_4_cores(very_dense_build_elements.clone());
         }),
         benchmark_fn("collisions_sparse_bvh", move || {
             (0..COUNT).into_par_iter().for_each(|i| {

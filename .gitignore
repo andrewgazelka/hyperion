@@ -1,12 +1,11 @@
 /target
 *.webm
 *.jar
-profiling
+/profiling
 *.svg
 *.zip
 .idea
-run
-hyperion
+/run
 .cargo
 perf.data
 **/*.zip

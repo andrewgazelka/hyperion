@@ -1,0 +1,86 @@
+[package]
+name = "hyperion"
+version = "0.1.0"
+edition = "2021"
+authors = ["Andrew Gazelka <andrew.gazelka@gmail.com>"]
+readme = "README.md"
+publish = false
+
+[dependencies]
+anyhow.workspace = true
+tracing.workspace = true
+serde_json.workspace = true
+bytes.workspace = true
+
+valence_text.workspace = true
+valence_protocol.workspace = true
+valence_registry.workspace = true
+valence_anvil.workspace = true
+valence_server.workspace = true
+valence_nbt.workspace = true
+valence_generated.workspace = true
+
+#chunk.workspace = true
+
+# no secure alloc
+sha2.workspace = true
+itertools.workspace = true
+rand.workspace = true
+
+# todo: how much will adding "sync" wakers hurt performance?
+uuid = { workspace = true, features = ["v3"] }
+rand_distr.workspace = true
+rayon.workspace = true
+libc.workspace = true
+serde = { workspace = true, features = ["derive"] }
+toml.workspace = true
+bvh-region.workspace = true
+glam = { workspace = true, features = ["serde"] }
+once_cell.workspace = true
+no_denormals.workspace = true
+flate2 = { workspace = true, features = ["zlib-ng"] }
+fxhash.workspace = true
+derive_more.workspace = true
+bumpalo = { workspace = true, features = ["allocator_api"] }
+libdeflater.workspace = true
+more-asserts.workspace = true
+#rayon-local = { version = "0.1.0", path = "../rayon-local" }
+dirs-next.workspace = true
+fastrand.workspace = true
+reqwest = { workspace = true, features = ["blocking"] }
+tokio = { workspace = true, features = ["full"] }
+parking_lot.workspace = true
+tar.workspace = true
+thiserror.workspace = true
+dashmap.workspace = true
+bitfield-struct.workspace = true
+bitvec.workspace = true
+hyperion-proto.workspace = true
+prost.workspace = true
+line_drawing.workspace = true
+slotmap.workspace = true
+flecs_ecs.workspace = true
+heapless.workspace = true
+thread_local = { workspace = true, features = ["nightly"] }
+base64.workspace = true
+kanal.workspace = true
+mongodb.workspace = true
+bson = { workspace = true, features = ["uuid-1"] }
+chrono = { workspace = true, features = ["serde"] }
+ouroboros.workspace = true
+
+[dev-dependencies]
+divan.workspace = true
+fastrand.workspace = true
+hex.workspace = true
+#rust-mc-bot.workspace = true
+rustc_version.workspace = true
+tango-bench = "0.5.0" # TODO:  use workspace version.
+tracing-subscriber.workspace = true
+
+[lints]
+workspace = true
+
+[build-dependencies]
+rustc_version.workspace = true
+

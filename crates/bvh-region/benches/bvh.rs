@@ -62,7 +62,7 @@ fn query_par_sparse<T: Heuristic>(b: Bencher, count: usize) {
                 black_box(elem);
                 true
             });
-        })
+        });
     });
 }
 
@@ -83,7 +83,7 @@ fn query_par_compact<T: Heuristic>(b: Bencher, count: usize) {
                 black_box(elem);
                 true
             });
-        })
+        });
     });
 }
 
