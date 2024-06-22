@@ -1,5 +1,5 @@
 use flecs_ecs::{
-    core::{QueryBuilderImpl, ReactorAPI, TermBuilderImpl, World},
+    core::{QueryBuilderImpl, SystemAPI, TermBuilderImpl, World},
     macros::system,
 };
 use valence_protocol::{

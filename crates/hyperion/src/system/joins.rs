@@ -1,5 +1,5 @@
 use flecs_ecs::core::{
-    flecs::pipeline::OnUpdate, Iterable, Query, QueryBuilderImpl, ReactorAPI, TermBuilderImpl,
+    flecs::pipeline::OnUpdate, Query, QueryBuilderImpl, QueryTuple, SystemAPI, TermBuilderImpl,
     World, WorldRef,
 };
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
@@ -20,11 +20,11 @@ unsafe impl<'a> Sync for SendableRef<'a> {}
 
 struct SendableQuery<T>(Query<T>)
 where
-    T: Iterable;
+    T: QueryTuple;
 
 #[allow(clippy::non_send_fields_in_send_ty)]
-unsafe impl<T: Iterable + Send> Send for SendableQuery<T> {}
-unsafe impl<T: Iterable> Sync for SendableQuery<T> {}
+unsafe impl<T: QueryTuple + Send> Send for SendableQuery<T> {}
+unsafe impl<T: QueryTuple> Sync for SendableQuery<T> {}
 
 pub fn joins(world: &'static World) {
     let query = world.new_query::<(&Uuid, &InGameName, &Pose, &PlayerSkin)>();

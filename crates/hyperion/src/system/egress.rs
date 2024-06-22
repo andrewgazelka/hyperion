@@ -1,5 +1,5 @@
 use flecs_ecs::core::{
-    flecs::pipeline::OnUpdate, QueryBuilderImpl, ReactorAPI, TermBuilderImpl, World,
+    flecs::pipeline::OnUpdate, QueryBuilderImpl, SystemAPI, TermBuilderImpl, World,
 };
 use hyperion_proto::Flush;
 use prost::Message;

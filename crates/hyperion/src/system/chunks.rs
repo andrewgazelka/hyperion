@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 use derive_more::{Deref, DerefMut};
 use flecs_ecs::{
-    core::{flecs::pipeline::OnUpdate, QueryBuilderImpl, ReactorAPI, TermBuilderImpl, World},
+    core::{flecs::pipeline::OnUpdate, QueryBuilderImpl, SystemAPI, TermBuilderImpl, World},
     macros::Component,
 };
 use glam::I16Vec2;

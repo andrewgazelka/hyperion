@@ -1108,7 +1108,7 @@ dependencies = [
 [[package]]
 name = "flecs_ecs"
 version = "0.0.2"
-source = "git+https://github.com/Indra-db/flecs-ecs-rs#3a857325950791a34802235ee1674aa21267f54c"
+source = "git+https://github.com/Indra-db/flecs-ecs-rs#51142ac010c6e1afef0046eb39c6688fbc8d96a0"
 dependencies = [
  "compact_str",
  "flecs_ecs_derive",
@@ -1119,7 +1119,7 @@ dependencies = [
 [[package]]
 name = "flecs_ecs_derive"
 version = "0.1.0"
-source = "git+https://github.com/Indra-db/flecs-ecs-rs#3a857325950791a34802235ee1674aa21267f54c"
+source = "git+https://github.com/Indra-db/flecs-ecs-rs#51142ac010c6e1afef0046eb39c6688fbc8d96a0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1129,7 +1129,7 @@ dependencies = [
 [[package]]
 name = "flecs_ecs_sys"
 version = "0.1.0"
-source = "git+https://github.com/Indra-db/flecs-ecs-rs#3a857325950791a34802235ee1674aa21267f54c"
+source = "git+https://github.com/Indra-db/flecs-ecs-rs#51142ac010c6e1afef0046eb39c6688fbc8d96a0"
 dependencies = [
  "bindgen",
  "cc",
@@ -1879,9 +1879,9 @@ dependencies = [
 
 [[package]]
 name = "lazy_static"
-version = "1.4.0"
+version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e2abad23fbc42b3700f2f279844dc832adb2b2eb069b2df918f455c4e18cc646"
+checksum = "bbd2bcb4c963f2ddae06a2efc7e9f3591312473c50c6685e1f298068316e66fe"
 
 [[package]]
 name = "lazycell"

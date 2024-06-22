@@ -1,5 +1,5 @@
 use flecs_ecs::{
-    core::{IdOperations, QueryBuilderImpl, ReactorAPI, TermBuilderImpl, World},
+    core::{IdOperations, QueryBuilderImpl, SystemAPI, TermBuilderImpl, World},
     macros::observer,
 };
 use tracing::instrument;

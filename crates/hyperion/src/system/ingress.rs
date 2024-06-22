@@ -11,7 +11,7 @@ use flecs_ecs::{
     core::{
         flecs,
         flecs::pipeline::{OnUpdate, PreUpdate},
-        EntityView, IdOperations, IterAPI, Query, QueryBuilderImpl, ReactorAPI, TermBuilderImpl,
+        EntityView, IdOperations, Query, QueryAPI, QueryBuilderImpl, SystemAPI, TermBuilderImpl,
         World,
     },
     macros::Component,

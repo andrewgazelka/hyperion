@@ -25,7 +25,7 @@
 // }
 
 use flecs_ecs::{
-    core::{Entity, IdOperations, QueryBuilderImpl, ReactorAPI, TermBuilderImpl, World},
+    core::{Entity, IdOperations, QueryBuilderImpl, SystemAPI, TermBuilderImpl, World},
     macros::observer,
 };
 use tracing::instrument;

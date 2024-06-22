@@ -28,7 +28,7 @@
 //     pub needs_resync: bool,
 // }
 
-use flecs_ecs::core::{IdOperations, QueryBuilderImpl, ReactorAPI, TermBuilderImpl, World};
+use flecs_ecs::core::{IdOperations, QueryBuilderImpl, SystemAPI, TermBuilderImpl, World};
 use valence_protocol::{packets::play, ByteAngle, VarInt};
 
 use crate::{

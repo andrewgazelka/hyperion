@@ -3,7 +3,7 @@ use std::{borrow::Cow, collections::BTreeSet};
 use anyhow::{bail, Context};
 use base64::Engine;
 use flecs_ecs::{
-    core::{Entity, IdOperations, IterAPI, Query},
+    core::{Entity, IdOperations, Query, QueryAPI},
     prelude::{EntityView, WorldRef},
 };
 use glam::{I16Vec2, IVec3};
@@ -843,7 +843,7 @@ fn inner(encoder: &mut PacketEncoder, chunks: &Blocks, tasks: &AsyncRuntime) -> 
 
     let bytes = RawBytes::from(buf.as_slice());
 
-    let brand = valence_protocol::packets::play::CustomPayloadS2c {
+    let brand = play::CustomPayloadS2c {
         channel: ident!("minecraft:brand").into(),
         data: bytes.into(),
     };
