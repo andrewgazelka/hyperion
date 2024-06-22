@@ -34,12 +34,9 @@ mod chunk;
 pub mod singleton;
 pub mod util;
 
-use std::{
-    alloc::Allocator, cell::RefCell, fmt::Debug, net::ToSocketAddrs, sync::Arc, time::Duration,
-};
+use std::{alloc::Allocator, cell::RefCell, fmt::Debug, net::ToSocketAddrs, sync::Arc};
 
-use anyhow::Context;
-use bumpalo::Bump;
+use anyhow::{bail, Context};
 use derive_more::{Deref, DerefMut};
 use flecs_ecs::core::World;
 use libc::{getrlimit, setrlimit, RLIMIT_NOFILE};
@@ -145,9 +142,6 @@ pub fn register_components(world: &World) {
 
     world.component::<Db>();
     world.component::<db::SkinCollection>();
-
-    world.component::<event::PostureUpdate>();
-    world.component::<event::AttackEntity>();
 }
 
 impl Hyperion {
@@ -164,6 +158,7 @@ impl Hyperion {
         // Denormals (numbers very close to 0) are flushed to zero because doing computations on them
         // is slow.
         rayon::ThreadPoolBuilder::new()
+            .num_threads(8)
             .spawn_handler(|thread| {
                 std::thread::spawn(|| {
                     no_denormals::no_denormals(|| {
@@ -204,6 +199,15 @@ impl Hyperion {
 
         handlers(world);
 
+        let mut app = world.app();
+
+        app.enable_rest(0)
+            .enable_stats(true)
+            .set_threads(rayon::current_num_threads() as i32)
+            .set_target_fps(20.0);
+
+        world.set_threads(rayon::current_num_threads() as i32);
+
         let address = address
             .to_socket_addrs()?
             .next()
@@ -219,6 +223,8 @@ impl Hyperion {
 
         world.set(db);
         world.set(skins);
+
+        world.set(event::Allocator::default());
 
         let (receive_state, egress_comm) = init_proxy_comms(&tasks, address);
 
@@ -238,12 +244,11 @@ impl Hyperion {
         world.set(egress_comm);
         world.set(tasks);
 
-        system::pose_update::pose_update(world);
-
+        system::chunks::load_pending(world);
         system::chunks::generate_chunk_changes(world);
         system::chunks::send_updates(world);
 
-        system::stats_message::stats_message(world);
+        system::stats::stats(world);
         let biome_registry =
             generate_biome_registry().context("failed to generate biome registry")?;
         world.set(Blocks::new(&biome_registry)?);
@@ -253,44 +258,49 @@ impl Hyperion {
         system::ingress::player_connect_disconnect(world, receive_state.0.clone());
         system::ingress::ingress_to_ecs(world, receive_state.0);
 
+        system::ingress::remove_player_from_visibility(world);
         system::ingress::remove_player(world);
 
         system::ingress::recv_data(world);
 
         system::sync_entity_position::sync_entity_position(world);
 
-        system::egress::egress(world);
-
         // system::pkt_attack::send_pkt_attack_player(world);
-        system::pkt_attack::pkt_attack_entity(world);
-
-        system::sound::sound(world);
-
-        let threads = rayon::current_num_threads();
-
-        world.set_threads(threads as i32);
+        system::event_handler::handle_events(world);
+        system::event_handler::reset_event_queue(world);
+        system::event_handler::reset_allocators(world);
 
         system::joins::joins(world);
 
-        loop {
-            let tick_each_ms = 50.0;
+        system::egress::egress(world);
 
-            let start = std::time::Instant::now();
-            world.progress();
-            let elapsed = start.elapsed();
+        app.run();
 
-            let ms_last_tick = elapsed.as_secs_f32() * 1000.0;
+        bail!("app exited");
 
-            if ms_last_tick < tick_each_ms {
-                let remaining = tick_each_ms - ms_last_tick;
-                let remaining = Duration::from_secs_f32(remaining / 1000.0);
-                std::thread::sleep(remaining);
-            }
-
-            world.get::<&mut Compose>(|compose| {
-                compose.global_mut().ms_last_tick = ms_last_tick;
-            });
-        }
+        // loop {
+        //     let tick_each_ms = 50.0;
+        //
+        //     let start = std::time::Instant::now();
+        //
+        //     tracing::info_span!("tick").in_scope(|| {
+        //         world.progress();
+        //     });
+        //
+        //     let elapsed = start.elapsed();
+        //
+        //     let ms_last_tick = elapsed.as_secs_f32() * 1000.0;
+        //
+        //     if ms_last_tick < tick_each_ms {
+        //         let remaining = tick_each_ms - ms_last_tick;
+        //         let remaining = Duration::from_secs_f32(remaining / 1000.0);
+        //         std::thread::sleep(remaining);
+        //     }
+        //
+        //     world.get::<&mut Compose>(|compose| {
+        //         compose.global_mut().ms_last_tick = ms_last_tick;
+        //     });
+        // }
     }
 }
 
@@ -333,9 +343,6 @@ unsafe impl<A: Allocator + Debug> ScratchBuffer for Scratch<A> {
         &mut self.inner
     }
 }
-
-/// A scratch which uses a bump allocator.
-pub type BumpScratch<'a> = Scratch<&'a Bump>;
 
 impl<A: Allocator> From<A> for Scratch<A> {
     fn from(allocator: A) -> Self {

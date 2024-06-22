@@ -1,11 +1,17 @@
 //! Constructs for working with blocks.
 
-use std::{borrow::Cow, cell::RefCell, collections::BTreeMap, io::Write, ops::Try, sync::Arc};
+use std::{
+    borrow::Cow,
+    cell::RefCell,
+    collections::{BTreeMap, HashMap},
+    io::Write,
+    ops::Try,
+    sync::Arc,
+};
 
 use anyhow::Context;
 use bytes::{Bytes, BytesMut};
 use dashmap::{DashMap, DashSet};
-use derive_more::Deref;
 use flecs_ecs::macros::Component;
 use fxhash::FxBuildHasher;
 use glam::{I16Vec2, IVec2};
@@ -61,15 +67,16 @@ pub struct LoadedChunk {
 }
 
 /// Accessor of blocks.
-#[derive(Component, Clone, Deref)]
+#[derive(Component)]
 pub struct Blocks {
-    inner: Arc<BlocksInner>,
+    threaded: Arc<BlocksInner>,
+    cache: HashMap<I16Vec2, LoadedChunk, FxBuildHasher>,
 }
 
 /// Inner state of the [`Blocks`] component.
 pub struct BlocksInner {
     // todo: impl more efficient (probably lru) cache
-    cache: DashMap<I16Vec2, LoadedChunk, FxBuildHasher>,
+    pending_cache: DashMap<I16Vec2, LoadedChunk, FxBuildHasher>,
     loading: DashSet<I16Vec2, FxBuildHasher>,
     regions: Regions,
     biome_to_id: BTreeMap<Ident<String>, BiomeId>,
@@ -85,7 +92,7 @@ impl BlocksInner {
             .collect();
 
         Ok(Self {
-            cache: DashMap::default(),
+            pending_cache: DashMap::default(),
             loading: DashSet::default(),
             regions,
             biome_to_id,
@@ -109,7 +116,8 @@ impl Blocks {
     pub(crate) fn new(registry: &BiomeRegistry) -> anyhow::Result<Self> {
         let inner = BlocksInner::new(registry)?;
         Ok(Self {
-            inner: Arc::new(inner),
+            threaded: Arc::new(inner),
+            cache: HashMap::default(),
         })
     }
 
@@ -126,8 +134,8 @@ impl Blocks {
             Some(ChunkData::Task(handle)) => {
                 tasks.block_on(handle)?;
                 let res = self
-                    .inner
-                    .cache
+                    .threaded
+                    .pending_cache
                     .get(&position)
                     .unwrap()
                     .packet_bytes
@@ -139,6 +147,20 @@ impl Blocks {
         Ok(result)
     }
 
+    pub fn load_pending(&mut self) {
+        let keys: Vec<_> = self
+            .threaded
+            .pending_cache
+            .iter()
+            .map(|x| *x.key())
+            .collect();
+
+        for key in keys {
+            let (_, v) = self.threaded.pending_cache.remove(&key).unwrap();
+            self.cache.insert(key, v);
+        }
+    }
+
     /// Returns the unloaded chunk if it is loaded, otherwise `None`.
     // todo: return type: what do you think about the type right here?
     // This seems really complicated.
@@ -146,14 +168,10 @@ impl Blocks {
     // and see if this would make more sense or not.
     #[must_use]
 
-    pub fn get_loaded_chunk(
-        &self,
-        chunk_position: I16Vec2,
-    ) -> Option<dashmap::mapref::one::MappedRef<I16Vec2, LoadedChunk, UnloadedChunk, FxBuildHasher>>
-    {
-        let loaded_ref = self.inner.cache.get(&chunk_position)?;
-
-        loaded_ref.try_map(|loaded| loaded.chunk.as_ref()).ok()
+    pub fn get_loaded_chunk(&self, chunk_position: I16Vec2) -> Option<&UnloadedChunk> {
+        self.cache
+            .get(&chunk_position)
+            .and_then(|x| x.chunk.as_ref())
     }
 
     /// Returns all loaded blocks within the range from `start` to `end` (inclusive).
@@ -282,16 +300,16 @@ impl Blocks {
         position: I16Vec2,
         tasks: &AsyncRuntime,
     ) -> anyhow::Result<Option<ChunkData>> {
-        if let Some(result) = self.inner.cache.get(&position) {
+        if let Some(result) = self.cache.get(&position) {
             return Ok(Some(ChunkData::Cached(result.packet_bytes.clone())));
         }
 
-        if !self.inner.loading.insert(position) {
+        if !self.threaded.loading.insert(position) {
             // we are currently loading this chunk
             return Ok(None);
         }
 
-        let inner = self.inner.clone();
+        let inner = self.threaded.clone();
 
         let handle = tasks.spawn(async move {
             let mut decompress_buf = vec![0; 1024 * 1024];
@@ -319,7 +337,7 @@ impl Blocks {
 
             let Ok(chunk) = parse_chunk(raw_chunk.data, &inner.biome_to_id) else {
                 error!("failed to parse chunk {position:?}");
-                inner.cache.insert(position, LoadedChunk {
+                inner.pending_cache.insert(position, LoadedChunk {
                     packet_bytes: Bytes::new(),
                     chunk: None,
                 });
@@ -331,7 +349,7 @@ impl Blocks {
 
             STATE.with_borrow_mut(|state| {
                 let Ok(Some(bytes)) = encode_chunk_packet(&chunk, position, state) else {
-                    inner.cache.insert(position, LoadedChunk {
+                    inner.pending_cache.insert(position, LoadedChunk {
                         packet_bytes: Bytes::new(),
                         chunk: None,
                     });
@@ -340,7 +358,7 @@ impl Blocks {
                     return;
                 };
 
-                inner.cache.insert(position, LoadedChunk {
+                inner.pending_cache.insert(position, LoadedChunk {
                     packet_bytes: bytes.freeze(),
                     chunk: Some(chunk),
                 });

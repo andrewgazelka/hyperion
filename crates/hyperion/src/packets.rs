@@ -5,7 +5,7 @@ use std::ops::ControlFlow;
 use bvh_region::aabb::Aabb;
 use flecs_ecs::core::{Entity, EntityView, World};
 use glam::Vec3;
-use tracing::{error, info, instrument, trace, warn};
+use tracing::{info, instrument, trace, warn};
 use valence_protocol::{
     decode::PacketFrame,
     packets::play::{
@@ -16,10 +16,9 @@ use valence_protocol::{
 };
 
 use crate::{
-    component,
     component::{blocks::Blocks, Pose},
     event,
-    event::Posture,
+    event::{Allocator, EventQueue, Posture},
     net::{Compose, NetworkStreamRef},
     singleton::player_id_lookup::EntityIdLookup,
 };
@@ -80,12 +79,12 @@ fn change_position_or_correct_client(
 /// Returns true if the position was changed, false if it was not.
 fn try_change_position(proposed: Vec3, pose: &mut Pose, blocks: &Blocks) -> bool {
     /// 100.0 m/tick; this is the same as the vanilla server
-    const MAX_SPEED_PER_TICK: f32 = 100.0;
+    const MAX_BLOCKS_PER_TICK: f32 = 5.0;
     let current = pose.position;
     let delta = proposed - current;
 
-    if delta.length_squared() > MAX_SPEED_PER_TICK.powi(2) {
-        error!("Player is moving too fast max speed: {MAX_SPEED_PER_TICK}");
+    if delta.length_squared() > MAX_BLOCKS_PER_TICK.powi(2) {
+        // error!("Player is moving too fast max speed: {MAX_SPEED_PER_TICK}");
         return false;
     }
 
@@ -226,26 +225,31 @@ fn player_interact_entity(
     info!("enqueue attack");
     let target = world.entity_from_id(target);
 
-    // todo: enqueue or emit? I think enqueue will have a one-tick delay, but I am not sure
-    world
-        .event()
-        .target(target)
-        .add::<component::Player>()
-        .emit(&event::AttackEntity {
-            from_pos,
-            from: query.id,
-            damage: 0.0,
-        });
+    target.get::<&EventQueue>(|event_queue| {
+        event_queue
+            .push(
+                event::AttackEntity {
+                    from_pos,
+                    from: query.id,
+                    damage: 0.0,
+                },
+                query.allocator,
+            )
+            .unwrap();
+    });
 
     Ok(())
 }
 //
 pub struct PacketSwitchQuery<'a> {
     pub id: Entity,
+    #[allow(unused)]
     pub view: EntityView<'a>,
     pub compose: &'a Compose,
     pub io_ref: &'a NetworkStreamRef,
     pub pose: &'a mut Pose,
+    pub allocator: &'a Allocator,
+    pub event_queue: &'a EventQueue,
 }
 // // i.e., shooting a bow
 // fn player_action(
@@ -287,23 +291,31 @@ pub struct PacketSwitchQuery<'a> {
 // }
 
 // for sneaking
-fn client_command(mut data: &[u8], world: &World, query: &PacketSwitchQuery) -> anyhow::Result<()> {
+fn client_command(mut data: &[u8], query: &PacketSwitchQuery) -> anyhow::Result<()> {
     let packet = play::ClientCommandC2s::decode(&mut data)?;
-
-    let mut event = world.event();
-
-    event.add::<NetworkStreamRef>().target(query.view);
 
     match packet.action {
         ClientCommand::StartSneaking => {
-            event.emit(&event::PostureUpdate {
-                state: Posture::Sneaking,
-            });
+            query
+                .event_queue
+                .push(
+                    event::PostureUpdate {
+                        state: Posture::Sneaking,
+                    },
+                    query.allocator,
+                )
+                .unwrap();
         }
         ClientCommand::StopSneaking => {
-            event.emit(&event::PostureUpdate {
-                state: Posture::Standing,
-            });
+            query
+                .event_queue
+                .push(
+                    event::PostureUpdate {
+                        state: Posture::Standing,
+                    },
+                    query.allocator,
+                )
+                .unwrap();
         }
         _ => {}
     }
@@ -339,7 +351,7 @@ pub fn packet_switch(
         // play::HandSwingC2s::ID => hand_swing(data, query, world)?,
         // play::TeleportConfirmC2s::ID => confirm_teleport(data),
         // play::PlayerInteractBlockC2s::ID => player_interact_block(data)?,
-        play::ClientCommandC2s::ID => client_command(data, world, query)?,
+        play::ClientCommandC2s::ID => client_command(data, query)?,
         // play::ClientSettingsC2s::ID => client_settings(data, player)?,
         // play::CustomPayloadC2s::ID => custom_payload(data),
         play::FullC2s::ID => full(query, data, blocks)?,

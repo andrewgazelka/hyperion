@@ -1,6 +1,6 @@
 default: debug
 
-# runs all CI checks
+# runs all CI checks.
 ci: fmt unused-deps deny lint test doc-once
 
 project_root := `git rev-parse --show-toplevel`
@@ -13,6 +13,9 @@ build:
 # cargo clippy
 lint:
     cargo clippy --all-targets --all-features -- -D warnings
+
+lint-fix:
+    cargo clippy --fix --all-targets --all-features --allow-dirty --allow-staged -- -D warnings
 
 # cargo nextest
 test:
@@ -27,6 +30,12 @@ miri:
 fmt:
     cargo fmt
 
+proxy:
+    ulimit -Sn 8192 && cargo run --bin hyperion-proxy --release
+
+infection:
+    cargo run --bin infection --release -- -t
+
 # cargo machete
 unused-deps:
     cargo machete
@@ -39,13 +48,13 @@ deny:
 debug:
     #!/usr/bin/env -S parallel --shebang --ungroup --jobs 3
     RUST_BACKTRACE=full RUN_MODE=debug-{{arch}} cargo watch --postpone --no-vcs-ignores -w {{project_root}}/.trigger -s './target/debug/infection'
-    RUST_BACKTRACE=full RUN_MODE=debug-{{arch}} cargo watch --postpone --no-vcs-ignores -w {{project_root}}/.trigger -s 'ulimit -Sn 8192 && ./target/debug/hyperion-proxy'
-    cargo watch -s 'cargo clippy && cargo build -q' -s 'touch {{project_root}}/.trigger'
+    RUST_BACKTRACE=full ulimit -Sn 8192 && ./target/debug/hyperion-proxy
+    cargo watch -s 'cargo build -p infection' -s 'touch {{project_root}}/.trigger'
 
 # run in release mode with tracy; auto-restarts on changes
 release:
     #!/usr/bin/env -S parallel --shebang --ungroup --jobs 3
-    RUST_BACKTRACE=full RUN_MODE=release-{{arch}} cargo watch --postpone --no-vcs-ignores -w {{project_root}}/.trigger -s './target/release/infection'
+    RUST_BACKTRACE=full RUN_MODE=release-{{arch}} cargo watch --postpone --no-vcs-ignores -w {{project_root}}/.trigger -s './target/release/infection -t'
     RUST_BACKTRACE=full RUN_MODE=release-{{arch}} cargo watch --postpone --no-vcs-ignores -w {{project_root}}/.trigger -s 'ulimit -Sn 8192 && ./target/release/hyperion-proxy'
     cargo watch -s 'cargo clippy && cargo build -q --release' -s 'touch {{project_root}}/.trigger'
 

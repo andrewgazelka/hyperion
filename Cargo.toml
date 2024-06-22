@@ -95,10 +95,9 @@ tracing-tracy = "0.11.0"
 uuid = "1.8.0"
 
 bvh = { git = "https://github.com/andrewgazelka/bvh-data" }
-flecs_ecs = { git = "https://github.com/Indra-db/flecs-ecs-rs" }
+flecs_ecs = { git = "https://github.com/andrewgazelka/flecs-ecs-rs", branch = "feat/16-elems"}
 hyperion = { path = "crates/hyperion" }
 hyperion-proto = { path = "crates/hyperion-proto" }
-hyperion-proxy = { path = "crates/hyperion-proxy" }
 valence_text = { git = "https://github.com/andrewgazelka/valence", branch = "feat-open" }
 valence_protocol = { git = "https://github.com/andrewgazelka/valence", features = ["compression"], branch = "feat-open" }
 valence_registry = { git = "https://github.com/andrewgazelka/valence", branch = "feat-open" }

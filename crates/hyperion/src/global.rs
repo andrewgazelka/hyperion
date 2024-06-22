@@ -1,5 +1,8 @@
 //! Defined the [`Global`] struct which is used to store global data which defines a [`crate::Hyperion`]
-use std::{sync::Arc, time::Duration};
+use std::{
+    sync::{atomic::AtomicUsize, Arc},
+    time::Duration,
+};
 
 use flecs_ecs::macros::Component;
 use libdeflater::CompressionLvl;
@@ -42,6 +45,8 @@ pub struct Global {
 
     /// The amount of time the last tick took in milliseconds.
     pub ms_last_tick: f32,
+
+    pub player_count: AtomicUsize,
 }
 
 impl Global {
@@ -54,6 +59,7 @@ impl Global {
             shared,
             keep_alive_timeout: Duration::from_secs(20),
             ms_last_tick: 0.0,
+            player_count: AtomicUsize::new(0),
         }
     }
 }

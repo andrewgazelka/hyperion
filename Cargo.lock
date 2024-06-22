@@ -1108,7 +1108,7 @@ dependencies = [
 [[package]]
 name = "flecs_ecs"
 version = "0.0.2"
-source = "git+https://github.com/Indra-db/flecs-ecs-rs#51142ac010c6e1afef0046eb39c6688fbc8d96a0"
+source = "git+https://github.com/andrewgazelka/flecs-ecs-rs?branch=feat/16-elems#2ba0d4777c865e049189081ba6c6ade7ecdbca95"
 dependencies = [
  "compact_str",
  "flecs_ecs_derive",
@@ -1119,7 +1119,7 @@ dependencies = [
 [[package]]
 name = "flecs_ecs_derive"
 version = "0.1.0"
-source = "git+https://github.com/Indra-db/flecs-ecs-rs#51142ac010c6e1afef0046eb39c6688fbc8d96a0"
+source = "git+https://github.com/andrewgazelka/flecs-ecs-rs?branch=feat/16-elems#2ba0d4777c865e049189081ba6c6ade7ecdbca95"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1129,7 +1129,7 @@ dependencies = [
 [[package]]
 name = "flecs_ecs_sys"
 version = "0.1.0"
-source = "git+https://github.com/Indra-db/flecs-ecs-rs#51142ac010c6e1afef0046eb39c6688fbc8d96a0"
+source = "git+https://github.com/andrewgazelka/flecs-ecs-rs?branch=feat/16-elems#2ba0d4777c865e049189081ba6c6ade7ecdbca95"
 dependencies = [
  "bindgen",
  "cc",

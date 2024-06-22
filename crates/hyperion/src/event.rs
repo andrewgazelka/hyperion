@@ -1,10 +1,13 @@
 //! Flecs components which are used for events.
 
-use flecs_ecs::{core::Entity, macros::Component};
+use flecs_ecs::core::Entity;
 use glam::Vec3;
 
+mod event_queue;
+pub use event_queue::*;
+
 /// Represents an attack action by an entity in the game.
-#[derive(Component, Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub struct AttackEntity {
     /// The location of the player that is attacking.
     pub from_pos: Vec3,
@@ -36,7 +39,7 @@ pub enum Posture {
 }
 
 /// <https://wiki.vg/index.php?title=Protocol&oldid=18375#Set_Entity_Metadata>
-#[derive(Component, Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct PostureUpdate {
     /// The new posture of the entity.
     pub state: Posture,

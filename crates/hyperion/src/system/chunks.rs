@@ -3,7 +3,7 @@ use std::collections::HashSet;
 use derive_more::{Deref, DerefMut};
 use flecs_ecs::{
     core::{flecs::pipeline::OnUpdate, QueryBuilderImpl, SystemAPI, TermBuilderImpl, World},
-    macros::Component,
+    macros::{system, Component},
 };
 use glam::I16Vec2;
 use tracing::{debug, error, instrument};
@@ -22,6 +22,19 @@ use crate::{
 #[derive(Component, Deref, DerefMut, Default)]
 pub struct ChunkChanges {
     changes: HashSet<I16Vec2>,
+}
+
+pub fn load_pending(world: &World) {
+    system!(
+        "load_pending",
+        world,
+        &mut Blocks($),
+    )
+    .each(|blocks| {
+        let span = tracing::info_span!("load_pending");
+        let _enter = span.enter();
+        blocks.load_pending();
+    });
 }
 
 #[instrument(skip_all, level = "trace")]

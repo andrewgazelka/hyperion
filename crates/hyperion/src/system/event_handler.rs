@@ -25,17 +25,20 @@
 // }
 
 use flecs_ecs::{
-    core::{Entity, IdOperations, QueryBuilderImpl, SystemAPI, TermBuilderImpl, World},
-    macros::observer,
+    core::{
+        flecs::pipeline::OnUpdate, Entity, IdOperations, QueryBuilderImpl, SystemAPI,
+        TermBuilderImpl, World,
+    },
+    macros::system,
 };
 use tracing::instrument;
 use valence_protocol::{packets::play, Encode, RawBytes, VarInt};
 use valence_text::IntoText;
 
 use crate::{
-    component::{Health, InGameName, Player},
-    event::AttackEntity,
-    net::Compose,
+    component::{Health, InGameName},
+    event::{Allocator, AttackEntity, EventQueue, EventQueueIterator, PostureUpdate},
+    net::{Compose, NetworkStreamRef},
 };
 
 // #[instrument(skip_all, level = "trace")]
@@ -136,52 +139,122 @@ use crate::{
 //     vitals.hurt(&global, event.damage, immunity);
 // }
 
-pub fn pkt_attack_entity(world: &World) {
-    observer!(
-        "pkt_attack_entity",
+pub fn handle_events(world: &World) {
+    system!(
+        "handle_events",
         world,
-        AttackEntity,
         &Compose($),
-        [filter] &InGameName,
+        &mut EventQueue,
+        &NetworkStreamRef,
+        &InGameName,
         &mut Health,
-        &Player
     )
-    .each_entity(|attacked, (compose, ign, health, _)| {
-        let damage_broadcast = get_red_hit_packet(attacked.id());
-        compose.broadcast(&damage_broadcast).send().unwrap();
+    .multi_threaded()
+    .each_entity(|view, (compose, event_queue, stream, ign, health)| {
+        let span = tracing::info_span!("handle_events");
+        let _enter = span.enter();
+        let mut iter = EventQueueIterator::default();
 
-        health.normal -= 1.0;
+        let entity_id = view.id();
+        let entity_id = VarInt(entity_id.0 as i32);
 
-        let entity_id = VarInt(attacked.id().0 as i32);
+        // attack
+        iter.register::<AttackEntity>(move |_| {
+            let damage_broadcast = get_red_hit_packet(view.id());
+            compose.broadcast(&damage_broadcast).send().unwrap();
 
-        // https://wiki.vg/Entity_metadata#Entity_Metadata_Format
-        // 9 = Health, type = float
-        let mut bytes = Vec::new();
-        bytes.push(9_u8);
-        VarInt(3).encode(&mut bytes).unwrap();
-        health.normal.encode(&mut bytes).unwrap();
+            health.normal -= 1.0;
 
-        // end with 0xff
-        bytes.push(0xff);
+            // https://wiki.vg/Entity_metadata#Entity_Metadata_Format
+            // 9 = Health, type = float
+            let mut bytes = Vec::new();
+            bytes.push(9_u8);
+            VarInt(3).encode(&mut bytes).unwrap();
+            health.normal.encode(&mut bytes).unwrap();
 
-        let tracker = play::EntityTrackerUpdateS2c {
-            entity_id,
-            tracked_values: RawBytes(&bytes),
-        };
+            // end with 0xff
+            bytes.push(0xff);
 
-        compose.broadcast(&tracker).send().unwrap();
+            let tracker = play::EntityTrackerUpdateS2c {
+                entity_id,
+                tracked_values: RawBytes(&bytes),
+            };
 
-        // send chat message
-        let msg = format!("{ign} -> health: {health}");
+            compose.broadcast(&tracker).send().unwrap();
 
-        compose
-            .broadcast(&play::GameMessageS2c {
-                chat: msg.into_cow_text(),
-                overlay: false,
-            })
-            .send()
-            .unwrap();
+            // send chat message
+            let msg = format!("{ign} -> health: {health}");
+
+            compose
+                .broadcast(&play::GameMessageS2c {
+                    chat: msg.into_cow_text(),
+                    overlay: false,
+                })
+                .send()
+                .unwrap();
+        })
+        .unwrap();
+
+        iter.register::<PostureUpdate>(move |posture| {
+            // Server to Client (S2C):
+            // Entity Metadata packet (0x52).
+
+            // https://wiki.vg/Entity_metadata#Entity_Metadata_Format
+
+            // Index	Unsigned Byte
+            // Type	VarInt Enum	 (Only if Index is not 0xff; the type of the index, see the table below)
+            // Value	Varies	Only if Index is not 0xff: the value of the metadata field, see the table below
+
+            // for entity index=6 is pose
+            // pose had id of 20
+
+            // 6
+            // 20
+            // varint
+
+            let mut bytes = Vec::new();
+            bytes.push(6_u8);
+            VarInt(20).encode(&mut bytes).unwrap();
+
+            VarInt(posture.state as i32).encode(&mut bytes).unwrap();
+
+            // end with 0xff
+            bytes.push(0xff);
+
+            let tracker = play::EntityTrackerUpdateS2c {
+                entity_id,
+                tracked_values: RawBytes(&bytes),
+            };
+
+            compose.broadcast(&tracker).exclude(stream).send().unwrap();
+        })
+        .unwrap();
+
+        iter.run(event_queue);
     });
+}
+
+pub fn reset_event_queue(world: &World) {
+    system!("reset_event_queue", world, &mut EventQueue,)
+        .kind::<OnUpdate>()
+        .multi_threaded()
+        .each(|event_queue| {
+            let span = tracing::info_span!("reset_event_queue");
+            let _enter = span.enter();
+            event_queue.reset();
+        });
+}
+
+pub fn reset_allocators(world: &World) {
+    system!("reset_allocators", world, &mut Allocator)
+        .kind::<OnUpdate>()
+        .each(|allocator| {
+            let span = tracing::info_span!("reset_allocators");
+            let _enter = span.enter();
+            allocator.iter_mut().for_each(|allocator| {
+                allocator.reset();
+            });
+        });
 }
 
 #[instrument(skip_all, level = "trace")]

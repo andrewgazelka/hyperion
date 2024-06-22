@@ -49,6 +49,9 @@ pub fn joins(world: &'static World) {
         .term_at(3)
         .singleton()
         .each(move |(tasks, comms, blocks, compose)| {
+            let span = tracing::info_span!("joins");
+            let _enter = span.enter();
+
             let mut skins = Vec::new();
 
             while let Ok(Some((entity, skin))) = comms.skins_rx.try_recv() {
