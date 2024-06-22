@@ -9,7 +9,7 @@ use tokio::{
     net::TcpStream,
     task::JoinHandle,
 };
-use tracing::{error, info, info_span, instrument, warn, Instrument};
+use tracing::{debug, info, info_span, instrument, warn, Instrument};
 
 use crate::{
     cache::GlobalExclusions,
@@ -50,13 +50,13 @@ pub fn launch_player(
                 let n = match read.read_buf(&mut buffer).await {
                     Ok(n) => n,
                     Err(e) => {
-                        error!("error reading from player: {e:?}");
+                        debug!("error reading from player: {e:?}");
                         return server_sender;
                     }
                 };
 
                 if n == 0 {
-                    error!("EOF reached from player");
+                    debug!("EOF reached from player");
                     return server_sender;
                 }
                 // Split the buffer and send the data
@@ -65,7 +65,7 @@ pub fn launch_player(
                 let msg = ProxyToServerMessage::PlayerPackets(PlayerPackets { data, stream });
 
                 if let Err(e) = server_sender.send(msg).await {
-                    error!("error sending to server: {e:?}");
+                    debug!("error sending to server: {e:?}");
                     return server_sender;
                 }
             }
@@ -86,7 +86,7 @@ pub fn launch_player(
                 }
 
                 if let Err(e) = writer.flush_tcp_writer().await {
-                    error!("error flushing to player: {e:?}");
+                    debug!("error flushing to player: {e:?}");
                     return;
                 }
             }

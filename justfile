@@ -5,6 +5,7 @@ ci: fmt unused-deps deny lint test doc-once
 
 project_root := `git rev-parse --show-toplevel`
 arch := `uname -m`
+fds := "8192"
 
 # builds in release mode
 build:
@@ -31,7 +32,7 @@ fmt:
     cargo fmt
 
 proxy:
-    ulimit -Sn 8192 && cargo run --bin hyperion-proxy --release
+    ulimit -Sn {{fds}} && cargo run --bin hyperion-proxy --release
 
 infection:
     cargo run --bin infection --release -- -t
@@ -48,20 +49,20 @@ deny:
 debug:
     #!/usr/bin/env -S parallel --shebang --ungroup --jobs 3
     RUST_BACKTRACE=full RUN_MODE=debug-{{arch}} cargo watch --postpone --no-vcs-ignores -w {{project_root}}/.trigger -s './target/debug/infection'
-    RUST_BACKTRACE=full ulimit -Sn 8192 && ./target/debug/hyperion-proxy
-    cargo watch -s 'cargo build -p infection' -s 'touch {{project_root}}/.trigger'
+    RUST_BACKTRACE=full ulimit -Sn {{fds}} && cargo run --bin hyperion-proxy --release
+    cargo watch --why -w '{{project_root}}/crates/hyperion' -w '{{project_root}}/events/infection' -s 'cargo build -p infection' -s 'touch {{project_root}}/.trigger'
 
 # run in release mode with tracy; auto-restarts on changes
 release:
     #!/usr/bin/env -S parallel --shebang --ungroup --jobs 3
-    RUST_BACKTRACE=full RUN_MODE=release-{{arch}} cargo watch --postpone --no-vcs-ignores -w {{project_root}}/.trigger -s './target/release/infection -t'
-    RUST_BACKTRACE=full RUN_MODE=release-{{arch}} cargo watch --postpone --no-vcs-ignores -w {{project_root}}/.trigger -s 'ulimit -Sn 8192 && ./target/release/hyperion-proxy'
-    cargo watch -s 'cargo clippy && cargo build -q --release' -s 'touch {{project_root}}/.trigger'
+    RUN_MODE=release-{{arch}} cargo watch --postpone --no-vcs-ignores -w {{project_root}}/.trigger -s './target/release/infection -t'
+    ulimit -Sn {{fds}} && cargo run --bin hyperion-proxy --release
+    cargo watch --why -w '{{project_root}}/crates/hyperion' -w '{{project_root}}/events/infection' -s 'cargo build --release -p infection' -s 'touch {{project_root}}/.trigger'
 
 # run a given number of bots to connect to hyperion
 bots count='1000':
     cargo install -q --git https://github.com/andrewgazelka/rust-mc-bot --branch optimize
-    ulimit -Sn 8192 && rust-mc-bot 127.0.0.1:25566 {{count}}
+    ulimit -Sn {{fds}} && rust-mc-bot 127.0.0.1:25566 {{count}}
 
 # run in release mode with tracy
 run:
