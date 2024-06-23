@@ -37,7 +37,7 @@ use valence_text::IntoText;
 
 use crate::{
     component::{Health, InGameName},
-    event::{Allocator, AttackEntity, EventQueue, EventQueueIterator, PostureUpdate},
+    event::{Allocator, AttackEntity, EventQueue, EventQueueIterator, PostureUpdate, SwingArm},
     net::{Compose, NetworkStreamRef},
 };
 
@@ -227,6 +227,27 @@ pub fn handle_events(world: &World) {
             };
 
             compose.broadcast(&tracker).exclude(stream).send().unwrap();
+        })
+        .unwrap();
+
+        iter.register::<SwingArm>(move |event| {
+            use valence_protocol::Hand;
+
+            // Server to Client (S2C):
+
+            let hand = event.hand;
+
+            let animation = match hand {
+                Hand::Main => 0,
+                Hand::Off => 3,
+            };
+
+            let pkt = play::EntityAnimationS2c {
+                entity_id,
+                animation,
+            };
+
+            compose.broadcast(&pkt).send().unwrap();
         })
         .unwrap();
 

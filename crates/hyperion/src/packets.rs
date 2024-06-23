@@ -180,21 +180,17 @@ fn position_and_on_ground(
 //     Ok(())
 // }
 
-// fn hand_swing(
-//     mut data: &[u8],
-//     query: &PacketSwitchQuery,
-//     world: &'static World,
-// ) -> anyhow::Result<()> {
-//     let packet = play::HandSwingC2s::decode(&mut data)?;
-//
-//     let packet = packet.hand;
-//
-//     let event = SwingArm { hand: packet };
-//
-//     world.send_to(query.id, event);
-//
-//     Ok(())
-// }
+fn hand_swing(mut data: &[u8], query: &PacketSwitchQuery) -> anyhow::Result<()> {
+    let packet = play::HandSwingC2s::decode(&mut data)?;
+
+    let packet = packet.hand;
+
+    let event = event::SwingArm { hand: packet };
+
+    query.event_queue.push(event, query.allocator).unwrap();
+
+    Ok(())
+}
 
 #[instrument(skip_all)]
 fn player_interact_entity(
@@ -348,12 +344,9 @@ pub fn packet_switch(
     let data = raw.body.as_ref();
 
     match packet_id {
-        // play::HandSwingC2s::ID => hand_swing(data, query, world)?,
-        // play::TeleportConfirmC2s::ID => confirm_teleport(data),
+        play::HandSwingC2s::ID => hand_swing(data, query)?,
         // play::PlayerInteractBlockC2s::ID => player_interact_block(data)?,
         play::ClientCommandC2s::ID => client_command(data, query)?,
-        // play::ClientSettingsC2s::ID => client_settings(data, player)?,
-        // play::CustomPayloadC2s::ID => custom_payload(data),
         play::FullC2s::ID => full(query, data, blocks)?,
         // play::PlayerActionC2s::ID => player_action(data, world, query)?,
         play::PositionAndOnGroundC2s::ID => position_and_on_ground(query, data, blocks)?,

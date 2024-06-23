@@ -2,6 +2,7 @@
 
 use flecs_ecs::core::Entity;
 use glam::Vec3;
+use valence_protocol::Hand;
 
 mod event_queue;
 pub use event_queue::*;
@@ -15,6 +16,11 @@ pub struct AttackEntity {
     pub from: Entity,
     /// The damage dealt by the attack. This corresponds to the same unit as [`crate::component::Health`].
     pub damage: f32,
+}
+
+#[derive(Copy, Clone, Debug)]
+pub struct SwingArm {
+    pub hand: Hand,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]

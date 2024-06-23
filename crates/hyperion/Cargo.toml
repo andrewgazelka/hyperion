@@ -8,7 +8,7 @@ publish = false
 
 [dependencies]
 anyhow.workspace = true
-tracing = { workspace = true, features = ["release_max_level_info"] }
+tracing = { workspace = true }
 serde_json.workspace = true
 bytes.workspace = true
 
