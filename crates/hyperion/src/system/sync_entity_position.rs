@@ -43,7 +43,7 @@ pub fn sync_entity_position(world: &World) {
         .multi_threaded()
         .singleton()
         .each_iter(|iter, idx, (compose, pose, io)| {
-            let span = tracing::info_span!("sync_entity_position");
+            let span = tracing::trace_span!("sync_entity_position");
             let _enter = span.enter();
             let entity = iter.entity(idx);
             let entity_id = VarInt(entity.id().0 as i32);

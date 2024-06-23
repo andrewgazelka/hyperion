@@ -23,7 +23,7 @@ pub fn stats(world: &'static World) {
         &Compose($),
     )
     .each(move |compose| {
-        let span = tracing::info_span!("stats_message");
+        let span = tracing::trace_span!("stats_message");
         let _enter = span.enter();
         let info = world.get_info();
 

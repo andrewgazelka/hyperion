@@ -41,7 +41,7 @@ pub fn egress(world: &World) {
         .term_at(1)
         .singleton()
         .each(|(compose, egress)| {
-            let span = tracing::info_span!("egress");
+            let span = tracing::trace_span!("egress");
             let _enter = span.enter();
             let io = compose.io_buf_mut();
             for bytes in io.split() {

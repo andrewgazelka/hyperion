@@ -9,7 +9,7 @@ use tokio::{
     net::TcpStream,
     task::JoinHandle,
 };
-use tracing::{debug, info, info_span, instrument, warn, Instrument};
+use tracing::{debug, info, instrument, trace_span, warn, Instrument};
 
 use crate::{
     cache::GlobalExclusions,
@@ -70,7 +70,7 @@ pub fn launch_player(
                 }
             }
         }
-        .instrument(info_span!("player_read_loop")),
+        .instrument(trace_span!("player_read_loop")),
     );
 
     // writing ::: proxy -> player
@@ -91,7 +91,7 @@ pub fn launch_player(
                 }
             }
         }
-        .instrument(info_span!("player_write_loop")),
+        .instrument(trace_span!("player_write_loop")),
     );
 
     tokio::spawn(async move {

@@ -20,6 +20,7 @@ glam = { workspace = true, features = ["core-simd", "fast-math"] }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["full"] }
+tracing = { workspace = true, features = ["release_max_level_info"] }
 
 [lints.clippy]
 complexity = "deny"

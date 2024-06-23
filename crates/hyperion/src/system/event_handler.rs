@@ -151,7 +151,7 @@ pub fn handle_events(world: &World) {
     )
     .multi_threaded()
     .each_entity(|view, (compose, event_queue, stream, ign, health)| {
-        let span = tracing::info_span!("handle_events");
+        let span = tracing::trace_span!("handle_events");
         let _enter = span.enter();
         let mut iter = EventQueueIterator::default();
 
@@ -239,7 +239,7 @@ pub fn reset_event_queue(world: &World) {
         .kind::<OnUpdate>()
         .multi_threaded()
         .each(|event_queue| {
-            let span = tracing::info_span!("reset_event_queue");
+            let span = tracing::trace_span!("reset_event_queue");
             let _enter = span.enter();
             event_queue.reset();
         });
@@ -249,7 +249,7 @@ pub fn reset_allocators(world: &World) {
     system!("reset_allocators", world, &mut Allocator)
         .kind::<OnUpdate>()
         .each(|allocator| {
-            let span = tracing::info_span!("reset_allocators");
+            let span = tracing::trace_span!("reset_allocators");
             let _enter = span.enter();
             allocator.iter_mut().for_each(|allocator| {
                 allocator.reset();

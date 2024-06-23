@@ -49,7 +49,7 @@ pub fn joins(world: &'static World) {
         .term_at(3)
         .singleton()
         .each(move |(tasks, comms, blocks, compose)| {
-            let span = tracing::info_span!("joins");
+            let span = tracing::trace_span!("joins");
             let _enter = span.enter();
 
             let mut skins = Vec::new();

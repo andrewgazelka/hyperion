@@ -1,7 +1,7 @@
 use hyperion_proto::{ProxyToServer, ProxyToServerMessage};
 use prost::Message;
 use tokio::io::AsyncWriteExt;
-use tracing::{info_span, Instrument};
+use tracing::{trace_span, Instrument};
 
 const THRESHOLD_SEND: usize = 4 * 1024;
 
@@ -34,7 +34,7 @@ pub fn launch_server_writer(mut write: tokio::net::tcp::OwnedWriteHalf) -> Serve
                 bytes.clear();
             }
         }
-        .instrument(info_span!("server_writer_loop")),
+        .instrument(trace_span!("server_writer_loop")),
     );
 
     tx

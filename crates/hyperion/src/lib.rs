@@ -284,6 +284,7 @@ impl Hyperion {
         //     let start = std::time::Instant::now();
         //
         //     tracing::info_span!("tick").in_scope(|| {
+
         //         world.progress();
         //     });
         //

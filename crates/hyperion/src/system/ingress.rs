@@ -19,7 +19,7 @@ use flecs_ecs::{
 use parking_lot::Mutex;
 use serde_json::json;
 use sha2::Digest;
-use tracing::{error, info, instrument, trace, trace_span, warn};
+use tracing::{error, info, instrument, trace, warn};
 use valence_protocol::{
     decode::PacketFrame,
     packets,
@@ -65,7 +65,7 @@ pub fn player_connect_disconnect(world: &World, shared: Arc<Mutex<ReceiveStateIn
         .term_at(0)
         .singleton()
         .each_iter(move |it, _, lookup| {
-            let span = tracing::info_span!("generate_ingress_events");
+            let span = tracing::trace_span!("generate_ingress_events");
             let _enter = span.enter();
 
             let world = it.world();
@@ -106,7 +106,7 @@ pub fn ingress_to_ecs(world: &World, shared: Arc<Mutex<ReceiveStateInner>>) {
     .term_at(0)
     .singleton()
     .each_iter(move |it, _, lookup| {
-        let span = tracing::info_span!("ingress_to_ecs");
+        let span = tracing::trace_span!("ingress_to_ecs");
         let _enter = span.enter();
 
         let mut recv = shared.lock();
@@ -145,7 +145,7 @@ pub fn remove_player_from_visibility(world: &World) {
     )
     .with::<&PendingRemove>()
     .each_entity(|entity, (uuid, compose)| {
-        let span = tracing::info_span!("remove_player");
+        let span = tracing::trace_span!("remove_player");
         let _enter = span.enter();
         let uuids = &[uuid.0];
         let entity_ids = [VarInt(entity.id().0 as i32)];
@@ -217,7 +217,7 @@ pub fn recv_data(world: &World) {
             mut pose,
             name,
         )| {
-            let span = trace_span!("recv_data");
+            let span = tracing::trace_span!("recv_data");
             let _enter = span.enter();
 
             let mut entity = iter.entity(idx);
@@ -278,7 +278,7 @@ pub fn recv_data(world: &World) {
 
                             let name = name.map_or("unknown", |name| &***name);
 
-                            tracing::info_span!("ingress", ign = name).in_scope(|| {
+                            tracing::trace_span!("ingress", ign = name).in_scope(|| {
                                 if let Err(err) = crate::packets::packet_switch(
                                     &frame, &world, lookup, &mut query, blocks,
                                 ) {

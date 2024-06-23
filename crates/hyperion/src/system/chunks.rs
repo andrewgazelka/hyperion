@@ -31,7 +31,7 @@ pub fn load_pending(world: &World) {
         &mut Blocks($),
     )
     .each(|blocks| {
-        let span = tracing::info_span!("load_pending");
+        let span = tracing::trace_span!("load_pending");
         let _enter = span.enter();
         blocks.load_pending();
     });
