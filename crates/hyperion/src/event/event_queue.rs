@@ -1,12 +1,13 @@
-use std::{any::TypeId, ptr::NonNull};
+use std::{any::TypeId, marker::PhantomData, ptr::NonNull};
 
 use anyhow::bail;
 use bumpalo::Bump;
 use derive_more::{Deref, DerefMut};
 use flecs_ecs::macros::Component;
+use fxhash::FxHashMap;
 use thread_local::ThreadLocal;
 
-use crate::event::event_queue::raw::{BumpPtr, RawQueue};
+use crate::event::event_queue::raw::{RawQueue, TypedBumpPtr};
 
 mod raw;
 
@@ -16,7 +17,7 @@ pub struct EventQueue {
     /// For instance, if we are iterating over player A who has a packet to send to player B, we want to be able to
     /// append to Player B's queue from Player A's thread.
     ///
-    /// We are not using a `crossbeam_queue::ArrayQueue` because it requrires consuming the queue to iterate over it.
+    /// We are not using a `crossbeam_queue::ArrayQueue` because it requires consuming the queue to iterate over it.
     inner: RawQueue,
 }
 
@@ -43,7 +44,7 @@ impl EventQueue {
         let ptr = NonNull::from(ptr);
         let ptr = ptr.cast();
 
-        let ptr = BumpPtr::new(id, ptr);
+        let ptr = TypedBumpPtr::new(id, ptr);
 
         if self.inner.push(ptr).is_err() {
             bail!("Event queue is full");
@@ -64,54 +65,59 @@ pub struct Allocator {
     locals: ThreadLocal<Bump>,
 }
 
-#[derive(Default)]
-pub struct EventQueueIterator<'a> {
-    registered_ids: heapless::Vec<TypeId, 16>,
-    /// [`TypeId`]s are sufficiently hashed
-    registered: heapless::Vec<Box<dyn FnMut(*mut ()) + 'a>, 16>,
+// todo: improve code.
+/// 🚨 There is basically a 0% chance this is safe and not slightly UB depending on how it is used.
+pub struct EventQueueIterator<T> {
+    registered: FxHashMap<TypeId, fn(*mut (), *mut ())>,
+    _phantom: PhantomData<T>,
 }
 
-impl<'a> EventQueueIterator<'a> {
+impl<T> Default for EventQueueIterator<T> {
+    fn default() -> Self {
+        Self {
+            registered: FxHashMap::default(),
+            _phantom: PhantomData,
+        }
+    }
+}
+
+impl<T> EventQueueIterator<T> {
     #[must_use]
     pub fn new() -> Self {
         Self {
-            registered_ids: heapless::Vec::default(),
-            registered: heapless::Vec::new(),
+            registered: FxHashMap::default(),
+            _phantom: PhantomData,
         }
     }
 
-    pub fn register<T: 'static>(&mut self, mut f: impl FnMut(&mut T) + 'a) -> anyhow::Result<()> {
-        let id = TypeId::of::<T>();
-        if self.registered_ids.push(id).is_err() {
-            bail!("map is full");
-        }
+    pub fn register<E: 'static>(&mut self, f: fn(&mut E, &mut T)) {
+        let id = TypeId::of::<E>();
 
-        let f = move |x: *mut ()| {
-            let x = unsafe { &mut *x.cast::<T>() };
-            f(x);
-        };
+        // todo: is this safe
+        let g = unsafe { core::mem::transmute::<fn(&mut E, &mut T), fn(*mut (), *mut ())>(f) };
 
-        // box
-        let f = Box::new(f);
+        let previous = self.registered.insert(id, g);
 
-        let _ = self.registered.push(f);
-        Ok(())
+        assert!(
+            previous.is_none(),
+            "there is already a handler for this type"
+        );
     }
 
-    fn get_fn(&mut self, id: TypeId) -> Option<&mut dyn FnMut(*mut ())> {
-        let position = self.registered_ids.iter().position(|x| *x == id)?;
-        let f = self.registered.get_mut(position).unwrap();
-        let f = &mut **f;
-        Some(f)
+    fn get_fn(&self, id: TypeId) -> Option<fn(*mut (), &mut T)> {
+        let res = self.registered.get(&id)?;
+        let res = *res;
+        let res = unsafe { core::mem::transmute::<fn(*mut (), *mut ()), fn(*mut (), &mut T)>(res) };
+        Some(res)
     }
 
-    pub fn run(&mut self, queue: &mut EventQueue) {
-        for ptr in queue.inner.iter_mut() {
+    pub fn run(&self, queue: &EventQueue, t: &mut T) {
+        for ptr in queue.inner.iter() {
             let Some(f) = self.get_fn(ptr.id()) else {
                 continue;
             };
 
-            f(ptr.elem().as_ptr());
+            f(ptr.elem().as_ptr(), t);
         }
     }
 }
@@ -124,7 +130,7 @@ mod tests {
 
     #[test]
     fn test_event_queue() {
-        let mut queue = EventQueue::new();
+        let queue = EventQueue::new();
         let allocator = Allocator::default();
 
         (0..8).into_par_iter().for_each(|i| {
@@ -135,11 +141,10 @@ mod tests {
 
         let mut iter = EventQueueIterator::default();
 
-        iter.register::<i32>(|x| {
+        iter.register::<i32>(|x, ()| {
             println!("{x}");
-        })
-        .unwrap();
+        });
 
-        iter.run(&mut queue);
+        iter.run(&queue, &mut ());
     }
 }

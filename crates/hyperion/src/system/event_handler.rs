@@ -26,7 +26,7 @@
 
 use flecs_ecs::{
     core::{
-        flecs::pipeline::OnUpdate, Entity, IdOperations, QueryBuilderImpl, SystemAPI,
+        flecs::pipeline::OnUpdate, Entity, EntityView, IdOperations, QueryBuilderImpl, SystemAPI,
         TermBuilderImpl, World,
     },
     macros::system,
@@ -139,7 +139,126 @@ use crate::{
 //     vitals.hurt(&global, event.damage, immunity);
 // }
 
+struct Data<'a> {
+    view: &'a EntityView<'a>,
+    entity_id: VarInt,
+    compose: &'a Compose,
+    stream: &'a NetworkStreamRef,
+    ign: &'a InGameName,
+    health: &'a mut Health,
+}
+
 pub fn handle_events(world: &World) {
+    // iterator here
+
+    let mut iter: EventQueueIterator<Data> = EventQueueIterator::default();
+
+    // attack
+    iter.register::<AttackEntity>(|_, query| {
+        let view = query.view;
+        let compose = query.compose;
+        let health = &mut *query.health;
+        let entity_id = query.entity_id;
+
+        let damage_broadcast = get_red_hit_packet(view.id());
+        compose.broadcast(&damage_broadcast).send().unwrap();
+
+        health.normal -= 1.0;
+
+        // https://wiki.vg/Entity_metadata#Entity_Metadata_Format
+        // 9 = Health, type = float
+        let mut bytes = Vec::new();
+        bytes.push(9_u8);
+        VarInt(3).encode(&mut bytes).unwrap();
+        health.normal.encode(&mut bytes).unwrap();
+
+        // end with 0xff
+        bytes.push(0xff);
+
+        let tracker = play::EntityTrackerUpdateS2c {
+            entity_id,
+            tracked_values: RawBytes(&bytes),
+        };
+
+        compose.broadcast(&tracker).send().unwrap();
+
+        let ign = query.ign;
+
+        // send chat message
+        let msg = format!("{ign} -> health: {health}");
+
+        compose
+            .broadcast(&play::GameMessageS2c {
+                chat: msg.into_cow_text(),
+                overlay: false,
+            })
+            .send()
+            .unwrap();
+    });
+
+    iter.register::<PostureUpdate>(|posture, query| {
+        // Server to Client (S2C):
+        // Entity Metadata packet (0x52).
+
+        // https://wiki.vg/Entity_metadata#Entity_Metadata_Format
+
+        // Index	Unsigned Byte
+        // Type	VarInt Enum	 (Only if Index is not 0xff; the type of the index, see the table below)
+        // Value	Varies	Only if Index is not 0xff: the value of the metadata field, see the table below
+
+        // for entity index=6 is pose
+        // pose had id of 20
+
+        // 6
+        // 20
+        // varint
+
+        let mut bytes = Vec::new();
+        bytes.push(6_u8);
+        VarInt(20).encode(&mut bytes).unwrap();
+
+        VarInt(posture.state as i32).encode(&mut bytes).unwrap();
+
+        // end with 0xff
+        bytes.push(0xff);
+
+        let entity_id = query.entity_id;
+
+        let tracker = play::EntityTrackerUpdateS2c {
+            entity_id,
+            tracked_values: RawBytes(&bytes),
+        };
+
+        let compose = query.compose;
+        let stream = query.stream;
+
+        compose.broadcast(&tracker).exclude(stream).send().unwrap();
+    });
+
+    iter.register::<SwingArm>(|event, query| {
+        use valence_protocol::Hand;
+
+        // Server to Client (S2C):
+
+        let hand = event.hand;
+
+        let animation = match hand {
+            Hand::Main => 0,
+            Hand::Off => 3,
+        };
+
+        let entity_id = query.entity_id;
+
+        let pkt = play::EntityAnimationS2c {
+            entity_id,
+            animation,
+        };
+
+        let compose = query.compose;
+
+        compose.broadcast(&pkt).send().unwrap();
+    });
+
     system!(
         "handle_events",
         world,
@@ -150,108 +269,20 @@ pub fn handle_events(world: &World) {
         &mut Health,
     )
     .multi_threaded()
-    .each_entity(|view, (compose, event_queue, stream, ign, health)| {
+    .each_entity(move |view, (compose, event_queue, stream, ign, health)| {
         let span = tracing::trace_span!("handle_events");
         let _enter = span.enter();
-        let mut iter = EventQueueIterator::default();
 
-        let entity_id = view.id();
-        let entity_id = VarInt(entity_id.0 as i32);
+        let mut data = Data {
+            view: &view,
+            entity_id: VarInt(view.id().0 as i32),
+            compose,
+            stream,
+            ign,
+            health,
+        };
 
-        // attack
-        iter.register::<AttackEntity>(move |_| {
-            let damage_broadcast = get_red_hit_packet(view.id());
-            compose.broadcast(&damage_broadcast).send().unwrap();
-
-            health.normal -= 1.0;
-
-            // https://wiki.vg/Entity_metadata#Entity_Metadata_Format
-            // 9 = Health, type = float
-            let mut bytes = Vec::new();
-            bytes.push(9_u8);
-            VarInt(3).encode(&mut bytes).unwrap();
-            health.normal.encode(&mut bytes).unwrap();
-
-            // end with 0xff
-            bytes.push(0xff);
-
-            let tracker = play::EntityTrackerUpdateS2c {
-                entity_id,
-                tracked_values: RawBytes(&bytes),
-            };
-
-            compose.broadcast(&tracker).send().unwrap();
-
-            // send chat message
-            let msg = format!("{ign} -> health: {health}");
-
-            compose
-                .broadcast(&play::GameMessageS2c {
-                    chat: msg.into_cow_text(),
-                    overlay: false,
-                })
-                .send()
-                .unwrap();
-        })
-        .unwrap();
-
-        iter.register::<PostureUpdate>(move |posture| {
-            // Server to Client (S2C):
-            // Entity Metadata packet (0x52).
-
-            // https://wiki.vg/Entity_metadata#Entity_Metadata_Format
-
-            // Index	Unsigned Byte
-            // Type	VarInt Enum	 (Only if Index is not 0xff; the type of the index, see the table below)
-            // Value	Varies	Only if Index is not 0xff: the value of the metadata field, see the table below
-
-            // for entity index=6 is pose
-            // pose had id of 20
-
-            // 6
-            // 20
-            // varint
-
-            let mut bytes = Vec::new();
-            bytes.push(6_u8);
-            VarInt(20).encode(&mut bytes).unwrap();
-
-            VarInt(posture.state as i32).encode(&mut bytes).unwrap();
-
-            // end with 0xff
-            bytes.push(0xff);
-
-            let tracker = play::EntityTrackerUpdateS2c {
-                entity_id,
-                tracked_values: RawBytes(&bytes),
-            };
-
-            compose.broadcast(&tracker).exclude(stream).send().unwrap();
-        })
-        .unwrap();
-
-        iter.register::<SwingArm>(move |event| {
-            use valence_protocol::Hand;
-
-            // Server to Client (S2C):
-
-            let hand = event.hand;
-
-            let animation = match hand {
-                Hand::Main => 0,
-                Hand::Off => 3,
-            };
-
-            let pkt = play::EntityAnimationS2c {
-                entity_id,
-                animation,
-            };
-
-            compose.broadcast(&pkt).send().unwrap();
-        })
-        .unwrap();
-
-        iter.run(event_queue);
+        iter.run(event_queue, &mut data);
     });
 }
 

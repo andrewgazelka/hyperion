@@ -25,7 +25,7 @@ pub fn stats(world: &'static World) {
     .each(move |compose| {
         let span = tracing::trace_span!("stats_message");
         let _enter = span.enter();
-        let info = world.get_info();
+        let info = world.info();
 
         let current_frame_time_total = info.frame_time_total;
         let ms_per_tick = (current_frame_time_total - last_frame_time_total) * 1000.0;
