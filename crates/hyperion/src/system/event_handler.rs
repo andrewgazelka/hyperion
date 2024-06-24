@@ -23,7 +23,6 @@
 //     immunity: &'a mut ImmuneStatus,
 //     vitals: &'a mut Vitals,
 // }
-
 use flecs_ecs::{
     core::{
         flecs::pipeline::OnUpdate, Entity, EntityView, IdOperations, QueryBuilderImpl, SystemAPI,
@@ -31,13 +30,16 @@ use flecs_ecs::{
     },
     macros::system,
 };
+use rayon::iter::ParallelIterator;
 use tracing::instrument;
 use valence_protocol::{packets::play, Encode, RawBytes, VarInt};
 use valence_text::IntoText;
 
 use crate::{
     component::{Health, InGameName},
-    event::{Allocator, AttackEntity, EventQueue, EventQueueIterator, PostureUpdate, SwingArm},
+    event::{
+        AttackEntity, EventQueue, EventQueueIterator, PostureUpdate, SwingArm, ThreadLocalBump,
+    },
     net::{Compose, NetworkStreamRef},
 };
 
@@ -298,12 +300,12 @@ pub fn reset_event_queue(world: &World) {
 }
 
 pub fn reset_allocators(world: &World) {
-    system!("reset_allocators", world, &mut Allocator)
+    system!("reset_allocators", world, &mut ThreadLocalBump)
         .kind::<OnUpdate>()
         .each(|allocator| {
             let span = tracing::trace_span!("reset_allocators");
             let _enter = span.enter();
-            allocator.iter_mut().for_each(|allocator| {
+            allocator.par_iter_mut().for_each(|allocator| {
                 allocator.reset();
             });
         });

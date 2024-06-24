@@ -18,7 +18,7 @@ use valence_protocol::{
 use crate::{
     component::{blocks::Blocks, Pose},
     event,
-    event::{Allocator, EventQueue, Posture},
+    event::{EventQueue, Posture, ThreadLocalBump},
     net::{Compose, NetworkStreamRef},
     singleton::player_id_lookup::EntityIdLookup,
 };
@@ -187,7 +187,10 @@ fn hand_swing(mut data: &[u8], query: &PacketSwitchQuery) -> anyhow::Result<()> 
 
     let event = event::SwingArm { hand: packet };
 
-    query.event_queue.push(event, query.allocator).unwrap();
+    query
+        .event_queue
+        .push(event, query.allocator, query.world)
+        .unwrap();
 
     Ok(())
 }
@@ -197,10 +200,10 @@ fn player_interact_entity(
     mut data: &[u8],
     query: &PacketSwitchQuery,
     id_lookup: &EntityIdLookup,
-    from_pos: Vec3,
-    world: &World,
 ) -> anyhow::Result<()> {
     let packet = play::PlayerInteractEntityC2s::decode(&mut data)?;
+
+    let from_pos = query.pose.position;
 
     // attack
     if packet.interact != EntityInteraction::Attack {
@@ -219,7 +222,7 @@ fn player_interact_entity(
     };
 
     info!("enqueue attack");
-    let target = world.entity_from_id(target);
+    let target = query.world.entity_from_id(target);
 
     target.get::<&EventQueue>(|event_queue| {
         event_queue
@@ -230,6 +233,7 @@ fn player_interact_entity(
                     damage: 0.0,
                 },
                 query.allocator,
+                query.world,
             )
             .unwrap();
     });
@@ -244,8 +248,9 @@ pub struct PacketSwitchQuery<'a> {
     pub compose: &'a Compose,
     pub io_ref: &'a NetworkStreamRef,
     pub pose: &'a mut Pose,
-    pub allocator: &'a Allocator,
+    pub allocator: &'a ThreadLocalBump,
     pub event_queue: &'a EventQueue,
+    pub world: &'a World,
 }
 // // i.e., shooting a bow
 // fn player_action(
@@ -299,6 +304,7 @@ fn client_command(mut data: &[u8], query: &PacketSwitchQuery) -> anyhow::Result<
                         state: Posture::Sneaking,
                     },
                     query.allocator,
+                    query.world,
                 )
                 .unwrap();
         }
@@ -310,6 +316,7 @@ fn client_command(mut data: &[u8], query: &PacketSwitchQuery) -> anyhow::Result<
                         state: Posture::Standing,
                     },
                     query.allocator,
+                    query.world,
                 )
                 .unwrap();
         }
@@ -335,7 +342,6 @@ fn client_command(mut data: &[u8], query: &PacketSwitchQuery) -> anyhow::Result<
 
 pub fn packet_switch(
     raw: &PacketFrame,
-    world: &World,
     id_lookup: &EntityIdLookup,
     query: &mut PacketSwitchQuery,
     blocks: &Blocks,
@@ -355,7 +361,7 @@ pub fn packet_switch(
         // play::UpdatePlayerAbilitiesC2s::ID => update_player_abilities(data)?,
         // play::UpdateSelectedSlotC2s::ID => update_selected_slot(data, world, query.id)?,
         play::PlayerInteractEntityC2s::ID => {
-            player_interact_entity(data, query, id_lookup, query.pose.position, world)?;
+            player_interact_entity(data, query, id_lookup)?;
         }
         // play::PlayerInteractItemC2s::ID => player_interact_item(data, query, world)?,
         // play::KeepAliveC2s::ID => keep_alive(query.keep_alive)?,

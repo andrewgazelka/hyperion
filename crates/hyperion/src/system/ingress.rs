@@ -35,7 +35,7 @@ use crate::{
         blocks::Blocks, AiTargetable, ChunkPosition, Comms, EntityReaction, Health, ImmuneStatus,
         InGameName, PacketState, Pose, Uuid, PLAYER_SPAWN_POSITION,
     },
-    event::{Allocator, EventQueue},
+    event::{EventQueue, ThreadLocalBump},
     net::{
         proxy::ReceiveStateInner, Compose, NetworkStreamRef, PacketDecoder, MINECRAFT_VERSION,
         PROTOCOL_VERSION,
@@ -190,7 +190,7 @@ pub fn recv_data(world: &World) {
         &AsyncRuntime($),
         &Comms($),
         &SkinCollection($),
-        &Allocator($),
+        &ThreadLocalBump($),
         &mut PacketDecoder,
         &mut PacketState,
         &NetworkStreamRef,
@@ -266,6 +266,8 @@ pub fn recv_data(world: &World) {
                         // We have a certain duration that we wait before doing this.
                         // todo: better way?
                         if let Some(pose) = &mut pose {
+                            let world = &world;
+
                             let mut query = PacketSwitchQuery {
                                 id: entity.id(),
                                 view: entity,
@@ -274,13 +276,14 @@ pub fn recv_data(world: &World) {
                                 pose,
                                 allocator,
                                 event_queue,
+                                world,
                             };
 
                             let name = name.map_or("unknown", |name| &***name);
 
                             tracing::trace_span!("ingress", ign = name).in_scope(|| {
                                 if let Err(err) = crate::packets::packet_switch(
-                                    &frame, &world, lookup, &mut query, blocks,
+                                    &frame, lookup, &mut query, blocks,
                                 ) {
                                     error!("failed to process packet {:?}: {err}", frame);
                                 }

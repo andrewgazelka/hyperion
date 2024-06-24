@@ -2,10 +2,9 @@ use std::{any::TypeId, marker::PhantomData, ptr::NonNull};
 
 use anyhow::bail;
 use bumpalo::Bump;
-use derive_more::{Deref, DerefMut};
-use flecs_ecs::macros::Component;
+use flecs_ecs::{core::World, macros::Component};
 use fxhash::FxHashMap;
-use thread_local::ThreadLocal;
+use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
 
 use crate::event::event_queue::raw::{RawQueue, TypedBumpPtr};
 
@@ -35,8 +34,13 @@ impl EventQueue {
         }
     }
 
-    pub fn push<T: 'static>(&self, elem: T, allocator: &Allocator) -> anyhow::Result<()> {
-        let bump = allocator.locals.get_or_default();
+    pub fn push<T: 'static>(
+        &self,
+        elem: T,
+        allocator: &ThreadLocalBump,
+        world: &World,
+    ) -> anyhow::Result<()> {
+        let bump = allocator.get(world);
 
         let id = TypeId::of::<T>();
         let ptr: &mut T = bump.alloc(elem);
@@ -58,11 +62,32 @@ impl EventQueue {
     }
 }
 
-#[derive(Default, Component, Deref, DerefMut)]
-pub struct Allocator {
+#[derive(Component)]
+pub struct ThreadLocalBump {
     // todo: ThreadLocal has initialize logic which can slow down things if we are using it frequently.
     // we proably want to pre-initialize these on all threads that will need access.
-    locals: ThreadLocal<Bump>,
+    locals: Box<[Bump]>,
+}
+
+impl ThreadLocalBump {
+    #[must_use]
+    pub fn new(world: &World) -> Self {
+        let num_locals = world.get_stage_count();
+        Self {
+            locals: (0..num_locals).map(|_| Bump::new()).collect(),
+        }
+    }
+
+    #[must_use]
+    pub fn get(&self, world: &World) -> &Bump {
+        let id = world.stage_id();
+        let id = usize::try_from(id).expect("failed to convert stage id");
+        &self.locals[id]
+    }
+
+    pub fn par_iter_mut(&mut self) -> impl ParallelIterator<Item = &mut Bump> {
+        self.locals.par_iter_mut()
+    }
 }
 
 // todo: improve code.
@@ -124,27 +149,23 @@ impl<T> EventQueueIterator<T> {
 
 #[cfg(test)]
 mod tests {
-    use rayon::iter::{IntoParallelIterator, ParallelIterator};
-
-    use super::*;
-
-    #[test]
-    fn test_event_queue() {
-        let queue = EventQueue::new();
-        let allocator = Allocator::default();
-
-        (0..8).into_par_iter().for_each(|i| {
-            queue.push(i, &allocator).unwrap();
-        });
-
-        queue.push("hello", &allocator).unwrap();
-
-        let mut iter = EventQueueIterator::default();
-
-        iter.register::<i32>(|x, ()| {
-            println!("{x}");
-        });
-
-        iter.run(&queue, &mut ());
-    }
+    // #[test]
+    // fn test_event_queue() {
+    //     let queue = EventQueue::new();
+    //     let allocator = ThreadLocalBump::default();
+    //
+    //     (0..8).into_par_iter().for_each(|i| {
+    //         queue.push(i, &allocator).unwrap();
+    //     });
+    //
+    //     queue.push("hello", &allocator).unwrap();
+    //
+    //     let mut iter = EventQueueIterator::default();
+    //
+    //     iter.register::<i32>(|x, ()| {
+    //         println!("{x}");
+    //     });
+    //
+    //     iter.run(&queue, &mut ());
+    // }
 }

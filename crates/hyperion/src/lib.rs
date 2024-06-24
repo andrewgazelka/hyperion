@@ -49,6 +49,7 @@ pub use valence_server;
 
 use crate::{
     component::{blocks::Blocks, Comms},
+    event::ThreadLocalBump,
     global::Global,
     net::{proxy::init_proxy_comms, Compose, Compressors, IoBuf, MAX_PACKET_SIZE},
     runtime::AsyncRuntime,
@@ -224,7 +225,8 @@ impl Hyperion {
         world.set(db);
         world.set(skins);
 
-        world.set(event::Allocator::default());
+        let thread_local_bump = ThreadLocalBump::new(world);
+        world.set(thread_local_bump);
 
         let (receive_state, egress_comm) = init_proxy_comms(&tasks, address);
 
