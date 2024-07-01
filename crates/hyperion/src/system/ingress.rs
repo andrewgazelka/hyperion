@@ -19,7 +19,7 @@ use flecs_ecs::{
 use parking_lot::Mutex;
 use serde_json::json;
 use sha2::Digest;
-use tracing::{error, info, instrument, trace, warn};
+use tracing::{error, info, instrument, trace, trace_span, warn};
 use valence_protocol::{
     decode::PacketFrame,
     packets,
@@ -43,8 +43,9 @@ use crate::{
     },
     packets::PacketSwitchQuery,
     runtime::AsyncRuntime,
-    singleton::{fd_lookup::StreamLookup, player_id_lookup::EntityIdLookup},
-    system::chunks::ChunkChanges,
+    singleton::fd_lookup::StreamLookup,
+    system::{chunks::ChunkChanges, joins::SendableRef},
+    tracing_ext::TracingExt,
     util::{db::SkinCollection, mojang::MojangClient, player_skin::PlayerSkin},
 };
 // pub type ThreadLocalIngressSender<'a, 'b> = SenderLocal<'a, 'b, IngressEventSet>;
@@ -58,45 +59,52 @@ pub struct PendingRemove;
     reason = "I think this is fine. However, let's double check in perf"
 )]
 pub fn player_connect_disconnect(world: &World, shared: Arc<Mutex<ReceiveStateInner>>) {
-    world
-        .system_named::<&mut StreamLookup>("generate_ingress_events")
-        .immediate(true)
-        .kind::<PreUpdate>()
-        .term_at(0)
-        .singleton()
-        .each_iter(move |it, _, lookup| {
-            let span = tracing::trace_span!("generate_ingress_events");
-            let _enter = span.enter();
+    system!(
+        "generate_ingress_events",
+        world,
+        &mut StreamLookup($),
+    )
+    .immediate(true)
+    .kind::<PreUpdate>()
+    .term_at(0)
+    .each_iter(move |it, _, lookup| {
+        let span = trace_span!("generate_ingress_events");
+        let _enter = span.enter();
 
-            let world = it.world();
+        let world = it.world();
 
-            let mut recv = shared.lock();
+        let mut recv = shared.lock();
 
-            for connect in recv.player_connect.drain(..) {
-                info!("player_connect");
-                let view = world
-                    .entity()
-                    .set(NetworkStreamRef::new(connect.stream))
-                    .set(ConfirmBlockSequences::default())
-                    .set(EventQueue::default())
-                    .set(PacketState::Handshake)
-                    .set(PacketDecoder::default())
-                    .add::<component::Player>();
+        for connect in recv.player_connect.drain(..) {
+            info!("player_connect");
+            let view = world
+                .entity()
+                .set(NetworkStreamRef::new(connect.stream))
+                .set(ConfirmBlockSequences::default())
+                .set(EventQueue::default())
+                .set(PacketState::Handshake)
+                .set(PacketDecoder::default())
+                .add::<component::Player>();
 
-                lookup.insert(connect.stream, view.id());
-            }
+            lookup.insert(connect.stream, view.id());
+        }
 
-            for disconnect in recv.player_disconnect.drain(..) {
-                // will initiate the removal of entity
-                info!("queue pending remove");
-                let id = lookup.get(&disconnect.stream).as_deref().copied().unwrap();
-                world.entity_from_id(*id).add::<PendingRemove>();
-            }
-        });
+        for disconnect in recv.player_disconnect.drain(..) {
+            // will initiate the removal of entity
+            info!("queue pending remove");
+            let id = lookup.get(&disconnect.stream).copied().unwrap();
+            world.entity_from_id(*id).add::<PendingRemove>();
+        }
+    });
 }
 
 // todo: make multi-threaded
-pub fn ingress_to_ecs(world: &World, shared: Arc<Mutex<ReceiveStateInner>>) {
+pub fn ingress_to_ecs(world: &'static World, shared: Arc<Mutex<ReceiveStateInner>>) {
+    let worlds = (0..rayon::current_num_threads() as i32)
+        .map(|i| world.stage(i))
+        .map(SendableRef)
+        .collect::<Vec<_>>();
+
     system!(
         "ingress_to_ecs",
         world,
@@ -104,25 +112,28 @@ pub fn ingress_to_ecs(world: &World, shared: Arc<Mutex<ReceiveStateInner>>) {
     )
     .immediate(true)
     .kind::<OnUpdate>()
-    .term_at(0)
-    .singleton()
-    .each_iter(move |it, _, lookup| {
-        let span = tracing::trace_span!("ingress_to_ecs");
+    .each(move |lookup| {
+        use rayon::prelude::*;
+
+        // 134µs with par_iter
+        // 150-208µs with regular drain
+        let span = trace_span!("ingress_to_ecs");
         let _enter = span.enter();
 
         let mut recv = shared.lock();
 
-        let world = it.world();
+        recv.packets.par_drain().for_each(|(entity_id, bytes)| {
+            let world = &worlds[rayon::current_thread_index().unwrap_or_default()];
+            let world = &world.0;
 
-        for (entity_id, bytes) in recv.packets.drain() {
             let Some(entity_id) = lookup.get(&entity_id) else {
                 // this is not necessarily a bug; race conditions occur
                 warn!("player_packets: entity for {entity_id:?}");
-                continue;
+                return;
             };
 
             if !world.is_alive(*entity_id) {
-                continue;
+                return;
             }
 
             let entity = world.entity_from_id(*entity_id);
@@ -130,7 +141,7 @@ pub fn ingress_to_ecs(world: &World, shared: Arc<Mutex<ReceiveStateInner>>) {
             entity.get::<&mut PacketDecoder>(|decoder| {
                 decoder.queue_slice(bytes.as_ref());
             });
-        }
+        });
     });
 }
 
@@ -145,9 +156,7 @@ pub fn remove_player_from_visibility(world: &World) {
         &Compose($),
     )
     .with::<&PendingRemove>()
-    .each_entity(|entity, (uuid, compose)| {
-        let span = tracing::trace_span!("remove_player");
-        let _enter = span.enter();
+    .tracing_each_entity(trace_span!("remove_player"), |entity, (uuid, compose)| {
         let uuids = &[uuid.0];
         let entity_ids = [VarInt(entity.id().0 as i32)];
 
@@ -175,7 +184,7 @@ pub fn remove_player(world: &World) {
     world
         .system_named::<()>("remove_player")
         .with::<&PendingRemove>()
-        .each_entity(|entity, ()| {
+        .tracing_each_entity(trace_span!("remove_player"), |entity, ()| {
             entity.destruct();
         });
 }
@@ -188,7 +197,6 @@ pub fn recv_data(world: &World) {
         "recv_data",
         world,
         &Compose($),
-        &EntityIdLookup($),
         &MinecraftWorld($),
         &AsyncRuntime($),
         &Comms($),
@@ -199,16 +207,14 @@ pub fn recv_data(world: &World) {
         &NetworkStreamRef,
         &EventQueue,
         ?&mut Pose,
-        ?&InGameName,
         &mut ConfirmBlockSequences,
     )
     .multi_threaded()
-    .each_iter(
-        move |iter,
-              idx,
+    .tracing_each_entity(
+        trace_span!("recv_data"),
+        move |mut entity,
               (
             compose,
-            lookup,
             blocks,
             tasks,
             comms,
@@ -219,15 +225,9 @@ pub fn recv_data(world: &World) {
             io_ref,
             event_queue,
             mut pose,
-            name,
             confirm_block_sequences,
         )| {
-            let span = tracing::trace_span!("recv_data");
-            let _enter = span.enter();
-
-            let mut entity = iter.entity(idx);
-
-            let world = iter.world();
+            let world = entity.world();
 
             loop {
                 let Some(frame) = decoder
@@ -252,7 +252,6 @@ pub fn recv_data(world: &World) {
                     }
                     PacketState::Login => process_login(
                         &world,
-                        lookup,
                         tasks,
                         login_state,
                         decoder,
@@ -286,15 +285,11 @@ pub fn recv_data(world: &World) {
                                 confirm_block_sequences,
                             };
 
-                            let name = name.map_or("unknown", |name| &***name);
-
-                            tracing::trace_span!("ingress", ign = name).in_scope(|| {
-                                if let Err(err) =
-                                    crate::packets::packet_switch(&frame, lookup, &mut query)
-                                {
-                                    error!("failed to process packet {:?}: {err}", frame);
-                                }
-                            });
+                            // trace_span!("ingress", ign = name).in_scope(|| {
+                            if let Err(err) = crate::packets::packet_switch(&frame, &mut query) {
+                                error!("failed to process packet {:?}: {err}", frame);
+                            }
+                            // });
                         }
                     }
                     PacketState::Terminate => {
@@ -330,7 +325,6 @@ fn process_handshake(login_state: &mut PacketState, packet: &PacketFrame) -> any
 #[allow(clippy::too_many_arguments, reason = "todo del")]
 fn process_login(
     world: &WorldRef,
-    lookup: &EntityIdLookup,
     tasks: &AsyncRuntime,
     login_state: &mut PacketState,
     decoder: &mut PacketDecoder,
@@ -404,9 +398,6 @@ fn process_login(
 
     // todo: impl rest
     *login_state = PacketState::Play;
-
-    // todo: this is jank and might break in certain cases
-    lookup.insert(entity.id().0 as i32, entity.id());
 
     query
         .iter_stage(world)

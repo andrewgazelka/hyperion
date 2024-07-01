@@ -31,7 +31,7 @@ use flecs_ecs::{
 };
 use glam::IVec3;
 use rayon::iter::ParallelIterator;
-use tracing::{info, instrument};
+use tracing::{info, info_span, instrument, trace_span};
 use valence_generated::block::BlockState;
 use valence_protocol::{
     ident,
@@ -50,6 +50,7 @@ use crate::{
     },
     event::{BlockBreak, EventQueue, EventQueueIterator, ThreadLocalBump},
     net::{Compose, NetworkStreamRef},
+    tracing_ext::TracingExt,
 };
 // #[instrument(skip_all, level = "trace")]
 // // Check immunity of the entity being attacked
@@ -280,85 +281,85 @@ pub fn handle_events(world: &World) {
     )
     .kind::<pipeline::PostUpdate>()
     .multi_threaded()
-    .each_entity(move |entity, (compose, event_queue, pending)| {
-        let span = tracing::info_span!("handle_events_block");
-        let _enter = span.enter();
+    .tracing_each_entity(
+        info_span!("handle_events_block"),
+        move |entity, (compose, event_queue, pending)| {
+            let world = entity.world();
+            let world = &world;
 
-        let world = entity.world();
-        let world = &world;
+            let len = event_queue.len();
+            let count = event_queue.count.load(std::sync::atomic::Ordering::Relaxed);
+            assert_eq!(len, count);
 
-        let len = event_queue.len();
-        let count = event_queue.count.load(std::sync::atomic::Ordering::Relaxed);
-        assert_eq!(len, count);
+            // let state = chunk.chunk.block_state(u32::from(position.x), u32::from(position.y), u32::from(position.z));
 
-        // let state = chunk.chunk.block_state(u32::from(position.x), u32::from(position.y), u32::from(position.z));
+            // let value = state.get(PropName::Facing);
 
-        // let value = state.get(PropName::Facing);
+            let mut iter = EventQueueIterator::default();
 
-        let mut iter = EventQueueIterator::default();
+            iter.register::<BlockBreak>(|block| {
+                assert_ne!(len, 0, "event queue is empty");
 
-        iter.register::<BlockBreak>(|block| {
-            assert_ne!(len, 0, "event queue is empty");
+                let position = block.position;
 
-            let position = block.position;
+                let delta = Delta::new(
+                    position.x as u8,
+                    position.y,
+                    position.z as u8,
+                    BlockState::AIR,
+                );
 
-            let delta = Delta::new(
-                position.x as u8,
-                position.y,
-                position.z as u8,
-                BlockState::AIR,
-            );
+                pending.push(delta, world);
 
-            pending.push(delta, world);
+                info!("block break: {block:?}");
 
-            info!("block break: {block:?}");
+                let entity = world.entity_from_id(block.by);
 
-            let entity = world.entity_from_id(block.by);
+                // get NetRef
+                entity.get::<&NetworkStreamRef>(|stream| {
+                    // confirm
+                    // compose
+                    //     .unicast(
+                    //         &play::PlayerActionResponseS2c { sequence: block.id },
+                    //         stream,
+                    //         world,
+                    //     )
+                    //     .unwrap();
 
-            // get NetRef
-            entity.get::<&NetworkStreamRef>(|stream| {
-                // confirm
-                // compose
-                //     .unicast(
-                //         &play::PlayerActionResponseS2c { sequence: block.id },
-                //         stream,
-                //         world,
-                //     )
-                //     .unwrap();
+                    // compose
+                    //     .unicast(
+                    //         &play::BlockUpdateS2c {
+                    //             position: block.position,
+                    //             block_id: BlockState::CYAN_CARPET,
+                    //         },
+                    //         stream,
+                    //         world,
+                    //     )
+                    //     .unwrap();
 
-                // compose
-                //     .unicast(
-                //         &play::BlockUpdateS2c {
-                //             position: block.position,
-                //             block_id: BlockState::CYAN_CARPET,
-                //         },
-                //         stream,
-                //         world,
-                //     )
-                //     .unwrap();
+                    let id = ident!("minecraft:block.note_block.harp");
 
-                let id = ident!("minecraft:block.note_block.harp");
+                    let id = SoundId::Direct {
+                        id: id.into(),
+                        range: None,
+                    };
 
-                let id = SoundId::Direct {
-                    id: id.into(),
-                    range: None,
-                };
+                    let sound = play::PlaySoundS2c {
+                        id,
+                        category: SoundCategory::Ambient,
+                        position: IVec3::new(-3720, -120, -352),
+                        volume: 1.0,
+                        pitch: 1.0,
+                        seed: 0,
+                    };
 
-                let sound = play::PlaySoundS2c {
-                    id,
-                    category: SoundCategory::Ambient,
-                    position: IVec3::new(-3720, -120, -352),
-                    volume: 1.0,
-                    pitch: 1.0,
-                    seed: 0,
-                };
-
-                compose.unicast(&sound, stream, world).unwrap();
+                    compose.unicast(&sound, stream, world).unwrap();
+                });
             });
-        });
 
-        iter.run(event_queue);
-    });
+            iter.run(event_queue);
+        },
+    );
 
     system!(
         "handle_chunk_neighbor_notify",
@@ -369,12 +370,13 @@ pub fn handle_events(world: &World) {
     )
     .kind::<pipeline::PostUpdate>()
     .multi_threaded()
-    .each_entity(|entity, (chunk, mc, notify)| {
-        let world = entity.world();
-        let span = tracing::info_span!("handle_chunk_neighbor_notify");
-        let _enter = span.enter();
-        chunk.process_neighbor_changes(notify, mc, &world);
-    });
+    .tracing_each_entity(
+        info_span!("handle_chunk_neighbor_notify"),
+        |entity, (chunk, mc, notify)| {
+            let world = entity.world();
+            chunk.process_neighbor_changes(notify, mc, &world);
+        },
+    );
 
     system!(
         "handle_chunk_pending_changes",
@@ -387,12 +389,13 @@ pub fn handle_events(world: &World) {
     )
     .kind::<pipeline::PostUpdate>()
     .multi_threaded()
-    .each_entity(|entity, (chunk, compose, mc, pending, notify)| {
-        let world = entity.world();
-        let span = tracing::info_span!("handle_chunk_pending_changes");
-        let _enter = span.enter();
-        chunk.process_pending_changes(pending, compose, notify, mc, &world);
-    });
+    .tracing_each_entity(
+        info_span!("handle_chunk_pending_changes"),
+        |entity, (chunk, compose, mc, pending, notify)| {
+            let world = entity.world();
+            chunk.process_pending_changes(pending, compose, notify, mc, &world);
+        },
+    );
 
     system!(
         "confirm_block_sequences",
@@ -403,16 +406,17 @@ pub fn handle_events(world: &World) {
     )
     .kind::<pipeline::PostUpdate>()
     .multi_threaded()
-    .each_entity(|entity, (compose, stream, confirm_block_sequences)| {
-        let world = entity.world();
-        let span = tracing::info_span!("confirm_block_sequences");
-        let _enter = span.enter();
-        for sequence in confirm_block_sequences.drain(..) {
-            let sequence = VarInt(sequence);
-            let ack = play::PlayerActionResponseS2c { sequence };
-            compose.unicast(&ack, stream, &world).unwrap();
-        }
-    });
+    .tracing_each_entity(
+        info_span!("confirm_block_sequences"),
+        |entity, (compose, stream, confirm_block_sequences)| {
+            let world = entity.world();
+            for sequence in confirm_block_sequences.drain(..) {
+                let sequence = VarInt(sequence);
+                let ack = play::PlayerActionResponseS2c { sequence };
+                compose.unicast(&ack, stream, &world).unwrap();
+            }
+        },
+    );
 
     // system!(
     //     "handle_events_player",
@@ -448,9 +452,7 @@ pub fn reset_event_queue(world: &World) {
     system!("reset_event_queue", world, &mut EventQueue)
         .kind::<pipeline::PostUpdate>()
         .multi_threaded()
-        .each(|event_queue| {
-            let span = tracing::info_span!("reset_event_queue");
-            let _enter = span.enter();
+        .tracing_each(trace_span!("reset_event_queue"), |event_queue| {
             event_queue.reset();
         });
 }

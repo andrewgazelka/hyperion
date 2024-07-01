@@ -2,11 +2,11 @@ use std::collections::HashSet;
 
 use derive_more::{Deref, DerefMut};
 use flecs_ecs::{
-    core::{QueryBuilderImpl, SystemAPI, TermBuilderImpl, World},
+    core::{IntoWorld, QueryBuilderImpl, SystemAPI, TermBuilderImpl, World},
     macros::{system, Component},
 };
 use glam::I16Vec2;
-use tracing::{debug, error, info_span, instrument};
+use tracing::{debug, error, instrument, trace_span};
 use valence_protocol::packets::play;
 
 use crate::{
@@ -17,6 +17,7 @@ use crate::{
     config::CONFIG,
     net::{Compose, NetworkStreamRef},
     runtime::AsyncRuntime,
+    tracing_ext::TracingExt,
 };
 
 #[derive(Component, Deref, DerefMut, Default)]
@@ -31,7 +32,7 @@ pub fn load_pending(world: &World) {
         &mut MinecraftWorld($),
     )
     .each_iter(|iter, _, blocks| {
-        let span = tracing::trace_span!("load_pending");
+        let span = trace_span!("load_pending");
         let _enter = span.enter();
         blocks.load_pending(&iter.world());
     });
@@ -51,9 +52,10 @@ pub fn generate_chunk_changes(world: &World) {
         &mut ChunkChanges,
     )
     .multi_threaded()
-    .each_iter(
-        move |it, _, (compose, last_sent, pose, stream_id, chunk_changes)| {
-            let world = it.world();
+    .tracing_each_entity(
+        trace_span!("generate_chunk_changes"),
+        move |entity, (compose, last_sent, pose, stream_id, chunk_changes)| {
+            let world = entity.world();
 
             let last_sent_chunk = last_sent.0;
 
@@ -105,14 +107,13 @@ pub fn send_updates(world: &World) {
         &mut ChunkChanges,
     )
     .with::<&Play>()
-    .each_iter(
-        |iter, _, (chunks, tasks, compose, stream_id, chunk_changes)| {
-            let span = info_span!("send_updates");
-            let _enter = span.enter();
-
+    .multi_threaded()
+    .tracing_each_entity(
+        trace_span!("send_updates"),
+        |entity, (chunks, tasks, compose, stream_id, chunk_changes)| {
             let mut left_over = Vec::new();
 
-            let world = iter.world();
+            let world = entity.world();
 
             for &elem in &chunk_changes.changes {
                 match chunks.get_cached_or_load(elem, tasks, &world) {

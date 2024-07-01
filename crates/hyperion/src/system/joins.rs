@@ -12,7 +12,7 @@ use crate::{
     util::player_skin::PlayerSkin,
 };
 
-struct SendableRef<'a>(WorldRef<'a>);
+pub struct SendableRef<'a>(pub WorldRef<'a>);
 
 unsafe impl<'a> Send for SendableRef<'a> {}
 unsafe impl<'a> Sync for SendableRef<'a> {}

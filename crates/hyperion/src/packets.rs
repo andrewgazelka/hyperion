@@ -30,7 +30,6 @@ use crate::{
     event,
     event::{EventQueue, Posture, ThreadLocalBump},
     net::{Compose, NetworkStreamRef},
-    singleton::player_id_lookup::EntityIdLookup,
 };
 
 pub mod vanilla;
@@ -62,7 +61,7 @@ fn full(query: &mut PacketSwitchQuery, mut data: &[u8]) -> anyhow::Result<()> {
     Ok(())
 }
 
-#[instrument(skip_all)]
+// #[instrument(skip_all)]
 fn change_position_or_correct_client(query: &mut PacketSwitchQuery, proposed: Vec3) {
     let pose = &mut *query.pose;
 
@@ -206,11 +205,7 @@ fn hand_swing(mut data: &[u8], query: &PacketSwitchQuery) -> anyhow::Result<()> 
 }
 
 #[instrument(skip_all)]
-fn player_interact_entity(
-    mut data: &[u8],
-    query: &PacketSwitchQuery,
-    id_lookup: &EntityIdLookup,
-) -> anyhow::Result<()> {
+fn player_interact_entity(mut data: &[u8], query: &PacketSwitchQuery) -> anyhow::Result<()> {
     let packet = play::PlayerInteractEntityC2s::decode(&mut data)?;
 
     let from_pos = query.pose.position;
@@ -221,15 +216,7 @@ fn player_interact_entity(
     }
 
     let target = packet.entity_id.0;
-
-    let Some(target) = id_lookup.get(&target).as_deref().copied() else {
-        // no target
-        warn!(
-            "no target for {target}.. id_lookup haas {} entries",
-            id_lookup.len()
-        );
-        return Ok(());
-    };
+    let target = u64::try_from(target).unwrap();
 
     info!("enqueue attack");
     let target = query.world.entity_from_id(target);
@@ -481,11 +468,7 @@ pub fn player_interact_block(mut data: &[u8], query: &mut PacketSwitchQuery) -> 
     Ok(())
 }
 
-pub fn packet_switch(
-    raw: &PacketFrame,
-    id_lookup: &EntityIdLookup,
-    query: &mut PacketSwitchQuery,
-) -> anyhow::Result<()> {
+pub fn packet_switch(raw: &PacketFrame, query: &mut PacketSwitchQuery) -> anyhow::Result<()> {
     let packet_id = raw.id;
     let data = raw.body.as_ref();
 
@@ -502,7 +485,7 @@ pub fn packet_switch(
         // play::UpdatePlayerAbilitiesC2s::ID => update_player_abilities(data)?,
         // play::UpdateSelectedSlotC2s::ID => update_selected_slot(data, world, query.id)?,
         play::PlayerInteractEntityC2s::ID => {
-            player_interact_entity(data, query, id_lookup)?;
+            player_interact_entity(data, query)?;
         }
         // play::PlayerInteractItemC2s::ID => player_interact_item(data, query, world)?,
         // play::KeepAliveC2s::ID => keep_alive(query.keep_alive)?,

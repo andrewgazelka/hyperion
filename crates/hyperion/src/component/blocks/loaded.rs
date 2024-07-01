@@ -91,11 +91,24 @@ impl OnChange {
 const _: () = assert!(size_of::<OnChange>() == 3);
 
 #[derive(Debug)]
-pub struct ThreadList<T> {
+pub struct ThreadHeaplessVec<T> {
     inner: ThreadLocal<SyncUnsafeCell<heapless::Vec<T, 32>>>,
 }
 
-impl<T> Default for ThreadList<T> {
+#[derive(Debug)]
+pub struct ThreadLocalVec<T> {
+    inner: ThreadLocal<SyncUnsafeCell<Vec<T>>>,
+}
+
+impl<T> Default for ThreadHeaplessVec<T> {
+    fn default() -> Self {
+        Self {
+            inner: ThreadLocal::new_defaults(),
+        }
+    }
+}
+
+impl<T> Default for ThreadLocalVec<T> {
     fn default() -> Self {
         Self {
             inner: ThreadLocal::new_defaults(),
@@ -104,16 +117,24 @@ impl<T> Default for ThreadList<T> {
 }
 
 #[derive(Debug, Default, Deref, DerefMut, Component)]
-pub struct PendingChanges(ThreadList<Delta>);
+pub struct PendingChanges(ThreadHeaplessVec<Delta>);
 
 #[derive(Debug, Default, Deref, DerefMut, Component)]
-pub struct NeighborNotify(ThreadList<OnChange>);
+pub struct NeighborNotify(ThreadHeaplessVec<OnChange>);
 
-impl<T: Debug> ThreadList<T> {
+impl<T: Debug> ThreadHeaplessVec<T> {
     pub fn push(&self, element: T, world: &World) {
         let inner = self.inner.get(world);
         let inner = unsafe { &mut *inner.get() };
         assert!(inner.push(element).is_ok(), "ThreadList {inner:?} is full");
+    }
+}
+
+impl<T: Debug> ThreadLocalVec<T> {
+    pub fn push(&self, element: T, world: &World) {
+        let inner = self.inner.get(world);
+        let inner = unsafe { &mut *inner.get() };
+        inner.push(element);
     }
 }
 
@@ -151,7 +172,7 @@ impl<'a, T, const N: usize> Drain<'a, T, N> {
     }
 }
 
-impl<T> ThreadList<T> {
+impl<T> ThreadHeaplessVec<T> {
     pub fn drain(&mut self) -> impl Iterator<Item = T> + '_ {
         self.inner
             .iter_mut()

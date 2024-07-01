@@ -51,7 +51,7 @@ use crate::{
     global::Global,
     net::{proxy::init_proxy_comms, Compose, Compressors, IoBuf, MAX_PACKET_SIZE},
     runtime::AsyncRuntime,
-    singleton::{fd_lookup::StreamLookup, player_id_lookup::EntityIdLookup},
+    singleton::fd_lookup::StreamLookup,
     system::{chunks::ChunkChanges, player_join_world::generate_biome_registry},
     thread_local::ThreadLocal,
     util::{db, db::Db},
@@ -70,6 +70,7 @@ pub mod net;
 
 mod packets;
 mod system;
+mod tracing_ext;
 
 mod bits;
 
@@ -247,27 +248,26 @@ impl Hyperion {
 
         world.set(Comms::default());
 
-        world.set(EntityIdLookup::default());
-
         world.set(egress_comm);
         world.set(tasks);
+
+        system::ingress::player_connect_disconnect(world, receive_state.0.clone());
+        system::ingress::ingress_to_ecs(world, receive_state.0);
+        system::ingress::remove_player(world);
+        system::stats::stats(world);
+        system::joins::joins(world);
 
         system::chunks::load_pending(world);
         system::chunks::generate_chunk_changes(world);
         system::chunks::send_updates(world);
 
-        system::stats::stats(world);
         let biome_registry =
             generate_biome_registry().context("failed to generate biome registry")?;
         world.set(MinecraftWorld::new(&biome_registry)?);
 
         world.set(StreamLookup::default());
 
-        system::ingress::player_connect_disconnect(world, receive_state.0.clone());
-        system::ingress::ingress_to_ecs(world, receive_state.0);
-
         system::ingress::remove_player_from_visibility(world);
-        system::ingress::remove_player(world);
 
         system::ingress::recv_data(world);
 
@@ -277,8 +277,6 @@ impl Hyperion {
         system::event_handler::handle_events(world);
         system::event_handler::reset_event_queue(world);
         system::event_handler::reset_allocators(world);
-
-        system::joins::joins(world);
 
         system::egress::egress(world);
 

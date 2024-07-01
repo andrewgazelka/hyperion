@@ -29,35 +29,37 @@
 // }
 
 use flecs_ecs::{
-    core::{IdOperations, IntoWorld, QueryBuilderImpl, SystemAPI, TermBuilderImpl, World},
+    core::{IdOperations, IntoWorld, QueryBuilderImpl, TermBuilderImpl, World},
     macros::system,
 };
+use tracing::trace_span;
 use valence_protocol::{packets::play, ByteAngle, VarInt};
 
 use crate::{
     component::Pose,
     net::{Compose, NetworkStreamRef},
+    tracing_ext::TracingExt,
 };
 
 pub fn sync_entity_position(world: &World) {
     system!("sync_entity_position", world, &Compose($), &Pose, &NetworkStreamRef)
         .multi_threaded()
-        .each_iter(|iter, idx, (compose, pose, io)| {
-            let span = tracing::trace_span!("sync_entity_position");
-            let _enter = span.enter();
-            let entity = iter.entity(idx);
-            let entity_id = VarInt(entity.id().0 as i32);
+        .tracing_each_entity(
+            trace_span!("sync_entity_position"),
+            |entity, (compose, pose, io)| {
+                let entity_id = VarInt(entity.id().0 as i32);
 
-            let world = entity.world();
+                let world = entity.world();
 
-            let pkt = play::EntityPositionS2c {
-                entity_id,
-                position: pose.position.as_dvec3(),
-                yaw: ByteAngle::from_degrees(pose.yaw),
-                pitch: ByteAngle::from_degrees(pose.pitch),
-                on_ground: false,
-            };
+                let pkt = play::EntityPositionS2c {
+                    entity_id,
+                    position: pose.position.as_dvec3(),
+                    yaw: ByteAngle::from_degrees(pose.yaw),
+                    pitch: ByteAngle::from_degrees(pose.pitch),
+                    on_ground: false,
+                };
 
-            compose.broadcast(&pkt).exclude(io).send(&world).unwrap();
-        });
+                compose.broadcast(&pkt).exclude(io).send(&world).unwrap();
+            },
+        );
 }

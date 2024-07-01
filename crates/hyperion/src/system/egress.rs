@@ -1,5 +1,6 @@
-use flecs_ecs::core::{
-    flecs::pipeline::OnUpdate, QueryBuilderImpl, SystemAPI, TermBuilderImpl, World,
+use flecs_ecs::{
+    core::{flecs::pipeline, QueryBuilderImpl, SystemAPI, TermBuilderImpl, World},
+    macros::system,
 };
 use hyperion_proto::Flush;
 use prost::Message;
@@ -33,24 +34,24 @@ pub fn egress(world: &World) {
         bytes::Bytes::from_static(data)
     });
 
-    world
-        .system_named::<(&mut Compose, &mut EgressComm)>("egress")
-        .kind::<OnUpdate>()
-        .term_at(0)
-        .singleton()
-        .term_at(1)
-        .singleton()
-        .each(|(compose, egress)| {
-            let span = tracing::trace_span!("egress");
-            let _enter = span.enter();
-            let io = compose.io_buf_mut();
-            for bytes in io.split() {
-                if bytes.is_empty() {
-                    continue;
-                }
-                egress.send(bytes.freeze()).unwrap();
+    system!(
+        "egress",
+        world,
+        &mut Compose($),
+        &mut EgressComm($),
+    )
+    .kind::<pipeline::PostUpdate>()
+    .each(|(compose, egress)| {
+        let span = tracing::trace_span!("egress");
+        let _enter = span.enter();
+        let io = compose.io_buf_mut();
+        for bytes in io.split() {
+            if bytes.is_empty() {
+                continue;
             }
+            egress.send(bytes.freeze()).unwrap();
+        }
 
-            egress.send(FLUSH.clone()).unwrap();
-        });
+        egress.send(FLUSH.clone()).unwrap();
+    });
 }
