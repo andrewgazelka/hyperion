@@ -12,18 +12,21 @@ use std::{
 use anyhow::Context;
 use bytes::{Bytes, BytesMut};
 use dashmap::{DashMap, DashSet};
-use flecs_ecs::macros::Component;
-use fxhash::FxBuildHasher;
+use flecs_ecs::{
+    core::{Entity, EntityView, IdOperations, World},
+    macros::Component,
+};
+use fxhash::{FxBuildHasher, FxHashMap};
 use glam::{I16Vec2, IVec2};
 use itertools::Itertools;
 use libdeflater::{CompressionLvl, Compressor};
 use tokio::task::JoinHandle;
-use tracing::error;
+use tracing::{error, info, instrument};
 use valence_anvil::parsing::parse_chunk;
-use valence_generated::block::BlockState;
+use valence_generated::block::{BlockKind, BlockState, PropName, PropValue};
 use valence_nbt::{compound, List};
 use valence_protocol::{
-    packets::play, BlockPos, ChunkPos, CompressionThreshold, Encode, FixedArray, Ident,
+    packets::play, BlockPos, ChunkPos, CompressionThreshold, Direction, Encode, FixedArray, Ident,
 };
 use valence_registry::{biome::BiomeId, BiomeRegistry, RegistryIdx};
 use valence_server::layer::chunk::{
@@ -31,10 +34,20 @@ use valence_server::layer::chunk::{
 };
 
 use crate::{
-    bits::BitStorage, chunk::heightmap, component::blocks::loader::Regions,
-    net::encoder::PacketEncoder, runtime::AsyncRuntime, Scratch,
+    bits::BitStorage,
+    chunk::heightmap,
+    component::blocks::{
+        loaded::{Delta, NeighborNotify, PendingChanges},
+        loader::Regions,
+    },
+    event::EventQueue,
+    net::encoder::PacketEncoder,
+    runtime::AsyncRuntime,
+    Scratch,
 };
 
+pub mod interact;
+pub mod loaded;
 mod loader;
 mod region;
 
@@ -55,28 +68,19 @@ impl Default for TasksState {
     }
 }
 
-/// A chunk which has been loaded into memory.
-#[derive(Debug)]
-pub struct LoadedChunk {
-    /// The raw (usually compressed) bytes of the chunk that are sent to the client via the Minecraft protocol.
-    pub packet_bytes: Bytes,
-
-    /// The actual chunk data that is "uncompressed". It uses a palette to store the actual data. This is usually used
-    /// for obtaining the actual data from the chunk such as getting the block state of a block at a given position.
-    pub chunk: Option<UnloadedChunk>,
-}
-
 /// Accessor of blocks.
 #[derive(Component)]
-pub struct Blocks {
+pub struct MinecraftWorld {
     threaded: Arc<BlocksInner>,
-    cache: HashMap<I16Vec2, LoadedChunk, FxBuildHasher>,
+
+    /// Map to a Chunk by Entity ID
+    cache: FxHashMap<I16Vec2, Entity>,
 }
 
-/// Inner state of the [`Blocks`] component.
+/// Inner state of the [`MinecraftWorld`] component.
 pub struct BlocksInner {
     // todo: impl more efficient (probably lru) cache
-    pending_cache: DashMap<I16Vec2, LoadedChunk, FxBuildHasher>,
+    pending_cache: DashMap<I16Vec2, loaded::LoadedChunk, FxBuildHasher>,
     loading: DashSet<I16Vec2, FxBuildHasher>,
     regions: Regions,
     biome_to_id: BTreeMap<Ident<String>, BiomeId>,
@@ -112,7 +116,7 @@ pub enum ChunkData {
     Task(JoinHandle<()>),
 }
 
-impl Blocks {
+impl MinecraftWorld {
     pub(crate) fn new(registry: &BiomeRegistry) -> anyhow::Result<Self> {
         let inner = BlocksInner::new(registry)?;
         Ok(Self {
@@ -123,22 +127,28 @@ impl Blocks {
 
     /// todo: doesn't work in loading state
     #[allow(clippy::missing_panics_doc, reason = "todo use unwrap unchecked")]
+    #[instrument(skip_all)]
     pub fn get_and_wait(
         &self,
         position: I16Vec2,
         tasks: &AsyncRuntime,
+        world: &World,
     ) -> anyhow::Result<Option<Bytes>> {
-        let result = match self.get_cached_or_load(position, tasks)? {
-            None => None,
+        let result = match self.get_cached_or_load(position, tasks, world)? {
+            None => {
+                info!("chunk {position:?} not found");
+                None
+            }
             Some(ChunkData::Cached(data)) => Some(data),
             Some(ChunkData::Task(handle)) => {
+                info!("waiting for chunk {position:?}");
                 tasks.block_on(handle)?;
                 let res = self
                     .threaded
                     .pending_cache
                     .get(&position)
                     .unwrap()
-                    .packet_bytes
+                    .base_packet_bytes
                     .clone();
                 Some(res)
             }
@@ -147,7 +157,7 @@ impl Blocks {
         Ok(result)
     }
 
-    pub fn load_pending(&mut self) {
+    pub fn load_pending(&mut self, world: &World) {
         let keys: Vec<_> = self
             .threaded
             .pending_cache
@@ -156,9 +166,27 @@ impl Blocks {
             .collect();
 
         for key in keys {
-            let (_, v) = self.threaded.pending_cache.remove(&key).unwrap();
-            self.cache.insert(key, v);
+            let (_, loaded_chunk) = self.threaded.pending_cache.remove(&key).unwrap();
+
+            let entity = world
+                .entity()
+                .set(loaded_chunk)
+                .set(EventQueue::default())
+                .set(NeighborNotify::default())
+                .set(PendingChanges::default());
+
+            self.cache.insert(key, entity.id());
         }
+    }
+
+    #[must_use]
+    pub fn get_loaded_chunk_entity<'a>(
+        &self,
+        chunk_position: I16Vec2,
+        world: &'a World,
+    ) -> Option<EntityView<'a>> {
+        let entity = self.cache.get(&chunk_position).copied()?;
+        Some(world.entity_from_id(entity))
     }
 
     /// Returns the unloaded chunk if it is loaded, otherwise `None`.
@@ -167,15 +195,24 @@ impl Blocks {
     // I wonder if we can just implement something, where we can return an `impl Deref`
     // and see if this would make more sense or not.
     #[must_use]
+    pub fn get_loaded_chunk<R>(
+        &self,
+        chunk_position: I16Vec2,
+        world: &World,
+        f: impl FnOnce(Option<&loaded::LoadedChunk>) -> R,
+    ) -> R {
+        let Some(entity) = self.get_loaded_chunk_entity(chunk_position, world) else {
+            return f(None);
+        };
 
-    pub fn get_loaded_chunk(&self, chunk_position: I16Vec2) -> Option<&UnloadedChunk> {
-        self.cache
-            .get(&chunk_position)
-            .and_then(|x| x.chunk.as_ref())
+        let entity = world.entity_from_id(entity);
+
+        entity.map::<&loaded::LoadedChunk, _>(|chunk| f(Some(chunk)))
     }
 
     /// Returns all loaded blocks within the range from `start` to `end` (inclusive).
-    pub fn get_blocks<F, R>(&self, start: BlockPos, end: BlockPos, mut f: F) -> R
+    #[allow(clippy::excessive_nesting)]
+    pub fn get_blocks<F, R>(&self, start: BlockPos, end: BlockPos, world: &World, mut f: F) -> R
     where
         F: FnMut(BlockPos, BlockState) -> R,
         R: Try<Output = ()>,
@@ -231,29 +268,35 @@ impl Blocks {
 
                 let chunk_pos = IVec2::new(cx, cz).as_i16vec2();
 
-                let Some(chunk) = self.get_loaded_chunk(chunk_pos) else {
-                    continue;
-                };
+                self.get_loaded_chunk(chunk_pos, world, |chunk| {
+                    let Some(chunk) = chunk else {
+                        return R::from_output(());
+                    };
 
-                for x in start.x..=end.x {
-                    for z in start.y..=end.y {
-                        for y in y_start..=y_end {
-                            debug_assert!(x <= 15);
-                            debug_assert!(z <= 15);
+                    let chunk = &chunk.chunk;
+                    for x in start.x..=end.x {
+                        for z in start.y..=end.y {
+                            for y in y_start..=y_end {
+                                debug_assert!(x <= 15);
+                                debug_assert!(z <= 15);
 
-                            let block = chunk.block_state(x, y, z);
+                                let block = chunk.block_state(x, y, z);
 
-                            let y = y as i32 + START_Y;
-                            let pos = BlockPos::new(
-                                x as i32 + chunk_start.x,
-                                y,
-                                z as i32 + chunk_start.y,
-                            );
+                                let y = y as i32 + START_Y;
+                                let pos = BlockPos::new(
+                                    x as i32 + chunk_start.x,
+                                    y,
+                                    z as i32 + chunk_start.y,
+                                );
 
-                            f(pos, block)?;
+                                f(pos, block)?;
+                            }
                         }
                     }
-                }
+
+                    // todo: pretty sure something is wrong here
+                    R::from_output(())
+                })?;
             }
         }
 
@@ -262,7 +305,7 @@ impl Blocks {
 
     /// Get a block
     #[must_use]
-    pub fn get_block(&self, position: BlockPos) -> Option<BlockState> {
+    pub fn get_block(&self, position: BlockPos, world: &World) -> Option<BlockState> {
         const START_Y: i32 = -64;
 
         if position.y < START_Y {
@@ -274,16 +317,45 @@ impl Blocks {
         let chunk_start_block: IVec2 = chunk_pos << 4;
         let chunk_pos = chunk_pos.as_i16vec2();
 
-        let chunk = self.get_loaded_chunk(chunk_pos)?;
+        self.get_loaded_chunk(chunk_pos, world, |chunk| {
+            let chunk = chunk?;
 
-        // todo: is this right for negative numbers?
-        // I have no idea... let's test
-        // non-absolute difference should work as well, but we want a u32
-        let x = u32::try_from(position.x - chunk_start_block[0]).unwrap();
-        let y = u32::try_from(position.y - START_Y).unwrap();
-        let z = u32::try_from(position.z - chunk_start_block[1]).unwrap();
+            let chunk = &chunk.chunk;
+            // todo: is this right for negative numbers?
+            // I have no idea... let's test
+            // non-absolute difference should work as well, but we want a u32
+            let x = u32::try_from(position.x - chunk_start_block[0]).unwrap();
+            let y = u32::try_from(position.y - START_Y).unwrap();
+            let z = u32::try_from(position.z - chunk_start_block[1]).unwrap();
 
-        Some(chunk.block_state(x, y, z))
+            Some(chunk.block_state(x, y, z))
+        })
+    }
+
+    pub fn set_block(&self, position: BlockPos, state: BlockState, world: &World) {
+        const START_Y: i32 = -64;
+
+        if position.y < START_Y {
+            // This block is in the void.
+            return;
+        }
+
+        let chunk_pos: IVec2 = IVec2::new(position.x, position.z) >> 4;
+        let chunk_start_block: IVec2 = chunk_pos << 4;
+        let chunk_pos = chunk_pos.as_i16vec2();
+
+        let chunk = self.get_loaded_chunk_entity(chunk_pos, world).unwrap();
+
+        chunk.get::<&PendingChanges>(|changes| {
+            // non-absolute difference should work as well, but we want a u32
+            let x = u8::try_from(position.x - chunk_start_block[0]).unwrap();
+            let y = u16::try_from(position.y - START_Y).unwrap();
+            let z = u8::try_from(position.z - chunk_start_block[1]).unwrap();
+
+            let delta = Delta::new(x, y, z, state);
+
+            changes.push(delta, world);
+        });
     }
 
     // todo: allow modifying the chunk. we will need to implement resending
@@ -293,15 +365,18 @@ impl Blocks {
     // If you want to implement this, I also recommend waiting until that's done.
     // That should be done in a couple of days, probably.
 
-    // #[instrument(skip_all, level = "trace")]
     /// get the cached chunk for the given position or load it if it is not cached.
     pub fn get_cached_or_load(
         &self,
         position: I16Vec2,
         tasks: &AsyncRuntime,
+        world: &World,
     ) -> anyhow::Result<Option<ChunkData>> {
-        if let Some(result) = self.cache.get(&position) {
-            return Ok(Some(ChunkData::Cached(result.packet_bytes.clone())));
+        if let Some(&result) = self.cache.get(&position) {
+            let result = world.entity_from_id(result);
+            let result = result.map::<&loaded::LoadedChunk, _>(loaded::LoadedChunk::bytes);
+
+            return Ok(Some(ChunkData::Cached(result)));
         }
 
         if !self.threaded.loading.insert(position) {
@@ -337,10 +412,9 @@ impl Blocks {
 
             let Ok(chunk) = parse_chunk(raw_chunk.data, &inner.biome_to_id) else {
                 error!("failed to parse chunk {position:?}");
-                inner.pending_cache.insert(position, LoadedChunk {
-                    packet_bytes: Bytes::new(),
-                    chunk: None,
-                });
+                inner
+                    .pending_cache
+                    .insert(position, loaded::LoadedChunk::default());
 
                 inner.loading.remove(&position);
 
@@ -349,19 +423,17 @@ impl Blocks {
 
             STATE.with_borrow_mut(|state| {
                 let Ok(Some(bytes)) = encode_chunk_packet(&chunk, position, state) else {
-                    inner.pending_cache.insert(position, LoadedChunk {
-                        packet_bytes: Bytes::new(),
-                        chunk: None,
-                    });
-
+                    inner
+                        .pending_cache
+                        .insert(position, loaded::LoadedChunk::default());
                     inner.loading.remove(&position);
                     return;
                 };
 
-                inner.pending_cache.insert(position, LoadedChunk {
-                    packet_bytes: bytes.freeze(),
-                    chunk: Some(chunk),
-                });
+                inner.pending_cache.insert(
+                    position,
+                    loaded::LoadedChunk::new(bytes.freeze(), chunk, position),
+                );
 
                 let present = inner.loading.remove(&position);
 
@@ -454,3 +526,150 @@ fn write_biomes(biomes: &BiomeContainer, writer: &mut impl Write) -> anyhow::Res
     )?;
     Ok(())
 }
+
+struct Block {
+    on_block_interact:
+        fn(blocks: &MinecraftWorld, block_pos: BlockPos, state: BlockState, world: &World),
+    on_neighbor_block_change:
+        fn(blocks: &MinecraftWorld, block_pos: BlockPos, state: BlockState, world: &World),
+}
+
+impl Default for Block {
+    fn default() -> Self {
+        Self {
+            on_block_interact: |_, _, _, _| {},
+            on_neighbor_block_change: |_, _, _, _| {},
+        }
+    }
+}
+
+impl From<BlockState> for Block {
+    fn from(state: BlockState) -> Self {
+        match state.to_kind() {
+            BlockKind::OakDoor => DOOR,
+            _ => Self::default(),
+        }
+    }
+}
+
+trait BlockInfo {
+    fn on_block_interact(
+        blocks: &MinecraftWorld,
+        block_pos: BlockPos,
+        state: BlockState,
+        world: &World,
+    );
+    fn on_neighbor_block_change(
+        blocks: &MinecraftWorld,
+        block_pos: BlockPos,
+        state: BlockState,
+        world: &World,
+    );
+}
+
+struct Door;
+
+impl BlockInfo for Door {
+    fn on_block_interact(
+        blocks: &MinecraftWorld,
+        block_pos: BlockPos,
+        state: BlockState,
+        world: &World,
+    ) {
+        let value = state.get(PropName::Open).unwrap();
+
+        // toggle
+        let open_prop = match value {
+            PropValue::True => PropValue::False,
+            PropValue::False => PropValue::True,
+            _ => unreachable!(),
+        };
+
+        blocks.set_block(block_pos, state.set(PropName::Open, open_prop), world);
+
+        match state.get(PropName::Half).unwrap() {
+            PropValue::Upper => {
+                let below = block_pos.get_in_direction(Direction::Down);
+                let Some(below_state) = blocks.get_block(below, world) else {
+                    return;
+                };
+
+                blocks.set_block(below, below_state.set(PropName::Open, open_prop), world);
+            }
+            PropValue::Lower => {
+                let above = block_pos.get_in_direction(Direction::Up);
+                let Some(above_state) = blocks.get_block(above, world) else {
+                    return;
+                };
+
+                blocks.set_block(above, above_state.set(PropName::Open, open_prop), world);
+            }
+            _ => unreachable!(),
+        }
+    }
+
+    #[instrument(skip_all)]
+    fn on_neighbor_block_change(
+        blocks: &MinecraftWorld,
+        block_pos: BlockPos,
+        state: BlockState,
+        world: &World,
+    ) {
+        let value = state.get(PropName::Half).unwrap();
+
+        let open = state.get(PropName::Open).unwrap();
+
+        match value {
+            PropValue::Upper => {
+                let Some(below) =
+                    blocks.get_block(block_pos.get_in_direction(Direction::Down), world)
+                else {
+                    return;
+                };
+
+                if below.to_kind() == BlockKind::OakDoor {
+                    let below_open = below.get(PropName::Open).unwrap();
+
+                    if below_open != open {
+                        let state = state.set(PropName::Open, below_open);
+                        info!("adj to be same as below");
+                        blocks.set_block(block_pos, state, world);
+                    }
+
+                    return;
+                }
+
+                info!("set air at {block_pos}");
+                blocks.set_block(block_pos, BlockState::AIR, world);
+            }
+            PropValue::Lower => {
+                let Some(above) =
+                    blocks.get_block(block_pos.get_in_direction(Direction::Up), world)
+                else {
+                    return;
+                };
+
+                if above.to_kind() == BlockKind::OakDoor {
+                    let above_open = above.get(PropName::Open).unwrap();
+
+                    if above_open != open {
+                        let state = state.set(PropName::Open, above_open);
+                        info!("adj to be same as above");
+                        blocks.set_block(block_pos, state, world);
+                    }
+
+                    return;
+                }
+
+                info!("set air at {block_pos}");
+                blocks.set_block(block_pos, BlockState::AIR, world);
+            }
+            _ => unreachable!(),
+        }
+    }
+}
+
+const DOOR: Block = Block {
+    on_block_interact: Door::on_block_interact,
+    on_neighbor_block_change: Door::on_neighbor_block_change,
+};

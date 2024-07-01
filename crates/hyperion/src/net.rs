@@ -1,19 +1,20 @@
 //! All the networking related code.
 
-use std::{cell::RefCell, fmt::Debug, ops::Deref, sync::atomic::AtomicU64};
+use std::{cell::RefCell, fmt::Debug, sync::atomic::AtomicU64};
 
 use bytes::BytesMut;
 pub use decoder::PacketDecoder;
-use flecs_ecs::macros::Component;
+use derive_more::Deref;
+use flecs_ecs::{core::World, macros::Component};
 use hyperion_proto::ChunkPosition;
 use libdeflater::CompressionLvl;
 use prost::Message;
 use slotmap::KeyData;
-use thread_local::ThreadLocal;
 
 use crate::{
     global::Global,
     net::encoder::{append_packet_without_compression, PacketEncoder},
+    thread_local::ThreadLocal,
     Scratch, Scratches,
 };
 
@@ -35,34 +36,19 @@ mod decoder;
 pub mod encoder;
 
 /// Thread-local [`libdeflater::Compressor`] for encoding packets.
-#[derive(Component)]
+#[derive(Component, Deref)]
 pub struct Compressors {
     compressors: ThreadLocal<RefCell<libdeflater::Compressor>>,
-    level: CompressionLvl,
 }
 
 impl Compressors {
     #[must_use]
-    pub(crate) const fn new(level: CompressionLvl) -> Self {
+    pub(crate) fn new(level: CompressionLvl) -> Self {
         Self {
-            compressors: ThreadLocal::new(),
-            level,
+            compressors: ThreadLocal::new_with(|_| {
+                RefCell::new(libdeflater::Compressor::new(level))
+            }),
         }
-    }
-}
-
-impl Deref for Compressors {
-    type Target = RefCell<libdeflater::Compressor>;
-
-    fn deref(&self) -> &Self::Target {
-        self.compressors
-            .get_or(|| libdeflater::Compressor::new(self.level).into())
-    }
-}
-
-impl Default for Compressors {
-    fn default() -> Self {
-        Self::new(CompressionLvl::default())
     }
 }
 
@@ -187,7 +173,12 @@ impl Compose {
     }
 
     /// Send a packet to a single player.
-    pub fn unicast<P>(&self, packet: &P, stream_id: &NetworkStreamRef) -> anyhow::Result<()>
+    pub fn unicast<P>(
+        &self,
+        packet: &P,
+        stream_id: &NetworkStreamRef,
+        world: &World,
+    ) -> anyhow::Result<()>
     where
         P: valence_protocol::Packet + valence_protocol::Encode,
     {
@@ -200,7 +191,7 @@ impl Compose {
             // Or a better word for no_compress, or should we just use negative field names?
             compress: true,
         }
-        .send()
+        .send(world)
     }
 
     /// Send a packet to a single player without compression.
@@ -208,6 +199,7 @@ impl Compose {
         &self,
         packet: &P,
         stream_id: &NetworkStreamRef,
+        world: &World,
     ) -> anyhow::Result<()>
     where
         P: valence_protocol::Packet + valence_protocol::Encode,
@@ -218,11 +210,16 @@ impl Compose {
             compose: self,
             compress: false,
         }
-        .send()
+        .send(world)
     }
 
     /// Send a packet to multiple players.
-    pub fn multicast<P>(&self, packet: &P, ids: &[NetworkStreamRef]) -> anyhow::Result<()>
+    pub fn multicast<P>(
+        &self,
+        packet: &P,
+        ids: &[NetworkStreamRef],
+        world: &World,
+    ) -> anyhow::Result<()>
     where
         P: valence_protocol::Packet + valence_protocol::Encode,
     {
@@ -231,7 +228,7 @@ impl Compose {
             compose: self,
             ids: unsafe { core::slice::from_raw_parts(ids.as_ptr().cast(), ids.len()) },
         }
-        .send()
+        .send(world)
     }
 
     #[must_use]
@@ -242,14 +239,14 @@ impl Compose {
 
     /// Obtain a thread-local scratch buffer.
     #[must_use]
-    pub fn scratch(&self) -> &RefCell<Scratch> {
-        self.scratch.get_or_default()
+    pub fn scratch(&self, world: &World) -> &RefCell<Scratch> {
+        self.scratch.get(world)
     }
 
     /// Obtain a thread-local [`libdeflater::Compressor`]
     #[must_use]
-    pub fn compressor(&self) -> &RefCell<libdeflater::Compressor> {
-        &self.compressor
+    pub fn compressor(&self, world: &World) -> &RefCell<libdeflater::Compressor> {
+        self.compressor.get(world)
     }
 }
 
@@ -282,12 +279,13 @@ impl<'a, 'b, 'c, P> Unicast<'a, 'b, 'c, P>
 where
     P: valence_protocol::Packet + valence_protocol::Encode,
 {
-    fn send(&self) -> anyhow::Result<()> {
+    fn send(&self, world: &World) -> anyhow::Result<()> {
         self.compose.io_buf.unicast_private(
             self.packet,
             self.stream_id,
             self.compose,
             self.compress,
+            world,
         )
     }
 }
@@ -302,10 +300,10 @@ impl<'a, 'b, P> Multicast<'a, 'b, P>
 where
     P: valence_protocol::Packet + valence_protocol::Encode,
 {
-    fn send(&self) -> anyhow::Result<()> {
+    fn send(&self, world: &World) -> anyhow::Result<()> {
         self.compose
             .io_buf
-            .multicast_private(self.packet, self.ids, self.compose)
+            .multicast_private(self.packet, self.ids, self.compose, world)
     }
 }
 
@@ -317,18 +315,18 @@ impl<'a, 'b, P> Broadcast<'a, 'b, P> {
     }
 
     /// Send the packet to all players.
-    pub fn send(self) -> anyhow::Result<()>
+    pub fn send(self, world: &World) -> anyhow::Result<()>
     where
         P: valence_protocol::Packet + valence_protocol::Encode,
     {
         let bytes = self
             .compose
             .io_buf
-            .encode_packet(self.packet, self.compose)?;
+            .encode_packet(self.packet, self.compose, world)?;
 
         self.compose
             .io_buf
-            .broadcast_raw(bytes, self.optional, self.exclude);
+            .broadcast_raw(bytes, self.optional, self.exclude, world);
 
         Ok(())
     }
@@ -369,14 +367,14 @@ impl<'a, 'b, P> BroadcastLocal<'a, 'b, P> {
     }
 
     /// Send the packet
-    pub fn send(self) -> anyhow::Result<()>
+    pub fn send(self, world: &World) -> anyhow::Result<()>
     where
         P: valence_protocol::Packet + valence_protocol::Encode,
     {
         let bytes = self
             .compose
             .io_buf
-            .encode_packet(self.packet, self.compose)?;
+            .encode_packet(self.packet, self.compose, world)?;
 
         self.compose.io_buf.broadcast_local_raw(
             bytes,
@@ -384,6 +382,7 @@ impl<'a, 'b, P> BroadcastLocal<'a, 'b, P> {
             self.radius,
             self.optional,
             self.exclude,
+            world,
         );
 
         Ok(())
@@ -411,17 +410,22 @@ impl IoBuf {
             .map(|mut x| x.split())
     }
 
-    fn encode_packet<P>(&self, packet: &P, compose: &Compose) -> anyhow::Result<bytes::Bytes>
+    fn encode_packet<P>(
+        &self,
+        packet: &P,
+        compose: &Compose,
+        world: &World,
+    ) -> anyhow::Result<bytes::Bytes>
     where
         P: valence_protocol::Packet + valence_protocol::Encode,
     {
-        let temp_buffer = self.temp_buffer.get_or_default();
+        let temp_buffer = self.temp_buffer.get(world);
         let temp_buffer = &mut *temp_buffer.borrow_mut();
 
-        let compressor = compose.compressor();
+        let compressor = compose.compressor(world);
         let mut compressor = compressor.borrow_mut();
 
-        let scratch = compose.scratch.get_or_default();
+        let scratch = compose.scratch.get(world);
         let mut scratch = scratch.borrow_mut();
 
         let result =
@@ -432,11 +436,15 @@ impl IoBuf {
         Ok(result.freeze())
     }
 
-    fn encode_packet_no_compression<P>(&self, packet: &P) -> anyhow::Result<bytes::Bytes>
+    fn encode_packet_no_compression<P>(
+        &self,
+        packet: &P,
+        world: &World,
+    ) -> anyhow::Result<bytes::Bytes>
     where
         P: valence_protocol::Packet + valence_protocol::Encode,
     {
-        let temp_buffer = self.temp_buffer.get_or_default();
+        let temp_buffer = self.temp_buffer.get(world);
         let temp_buffer = &mut *temp_buffer.borrow_mut();
 
         let result = append_packet_without_compression(packet, temp_buffer)?;
@@ -450,26 +458,33 @@ impl IoBuf {
         id: &NetworkStreamRef,
         compose: &Compose,
         compress: bool,
+        world: &World,
     ) -> anyhow::Result<()>
     where
         P: valence_protocol::Packet + valence_protocol::Encode,
     {
         let bytes = if compress {
-            self.encode_packet(packet, compose)?
+            self.encode_packet(packet, compose, world)?
         } else {
-            self.encode_packet_no_compression(packet)?
+            self.encode_packet_no_compression(packet, world)?
         };
 
-        self.unicast_raw(bytes, id);
+        self.unicast_raw(bytes, id, world);
         Ok(())
     }
 
-    fn multicast_private<P>(&self, packet: &P, ids: &[u64], compose: &Compose) -> anyhow::Result<()>
+    fn multicast_private<P>(
+        &self,
+        packet: &P,
+        ids: &[u64],
+        compose: &Compose,
+        world: &World,
+    ) -> anyhow::Result<()>
     where
         P: valence_protocol::Packet + valence_protocol::Encode,
     {
-        let bytes = self.encode_packet(packet, compose)?;
-        self.multicast_raw(bytes, ids);
+        let bytes = self.encode_packet(packet, compose, world)?;
+        self.multicast_raw(bytes, ids, world);
         Ok(())
     }
 
@@ -480,8 +495,9 @@ impl IoBuf {
         radius: u32,
         optional: bool,
         exclude: u64,
+        world: &World,
     ) {
-        let buffer = self.buffer.get_or_default();
+        let buffer = self.buffer.get(world);
         let buffer = &mut *buffer.borrow_mut();
 
         let to_send = hyperion_proto::BroadcastLocal {
@@ -497,8 +513,14 @@ impl IoBuf {
             .unwrap();
     }
 
-    pub(crate) fn broadcast_raw(&self, data: bytes::Bytes, optional: bool, exclude: u64) {
-        let buffer = self.buffer.get_or_default();
+    pub(crate) fn broadcast_raw(
+        &self,
+        data: bytes::Bytes,
+        optional: bool,
+        exclude: u64,
+        world: &World,
+    ) {
+        let buffer = self.buffer.get(world);
         let buffer = &mut *buffer.borrow_mut();
 
         let to_send = hyperion_proto::BroadcastGlobal {
@@ -515,8 +537,8 @@ impl IoBuf {
             .unwrap();
     }
 
-    pub(crate) fn unicast_raw(&self, data: bytes::Bytes, stream: &NetworkStreamRef) {
-        let buffer = self.buffer.get_or_default();
+    pub(crate) fn unicast_raw(&self, data: bytes::Bytes, stream: &NetworkStreamRef, world: &World) {
+        let buffer = self.buffer.get(world);
         let buffer = &mut *buffer.borrow_mut();
 
         let to_send = hyperion_proto::Unicast {
@@ -531,8 +553,8 @@ impl IoBuf {
         to_send.encode_length_delimited(buffer).unwrap();
     }
 
-    pub(crate) fn multicast_raw(&self, data: bytes::Bytes, streams: &[u64]) {
-        let buffer = self.buffer.get_or_default();
+    pub(crate) fn multicast_raw(&self, data: bytes::Bytes, streams: &[u64], world: &World) {
+        let buffer = self.buffer.get(world);
         let buffer = &mut *buffer.borrow_mut();
 
         let to_send = hyperion_proto::Multicast {
@@ -545,8 +567,8 @@ impl IoBuf {
             .unwrap();
     }
 
-    pub(crate) fn set_receive_broadcasts(&self, stream: &NetworkStreamRef) {
-        let buffer = self.buffer.get_or_default();
+    pub(crate) fn set_receive_broadcasts(&self, stream: &NetworkStreamRef, world: &World) {
+        let buffer = self.buffer.get(world);
         let buffer = &mut *buffer.borrow_mut();
 
         let to_send = hyperion_proto::SetReceiveBroadcasts {

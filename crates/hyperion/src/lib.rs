@@ -1,7 +1,6 @@
 //! Hyperion
 
 #![feature(type_alias_impl_trait)]
-#![feature(lint_reasons)]
 #![feature(io_error_more)]
 #![feature(trusted_len)]
 #![feature(allocator_api)]
@@ -42,25 +41,27 @@ use flecs_ecs::core::World;
 use libc::{getrlimit, setrlimit, RLIMIT_NOFILE};
 use libdeflater::CompressionLvl;
 use once_cell::sync::Lazy;
-use thread_local::ThreadLocal;
 use tracing::{error, info, instrument, warn};
 use valence_protocol::CompressionThreshold;
 pub use valence_server;
 
 use crate::{
-    component::{blocks::Blocks, Comms},
+    component::{blocks::MinecraftWorld, Comms},
     event::ThreadLocalBump,
     global::Global,
     net::{proxy::init_proxy_comms, Compose, Compressors, IoBuf, MAX_PACKET_SIZE},
     runtime::AsyncRuntime,
     singleton::{fd_lookup::StreamLookup, player_id_lookup::EntityIdLookup},
     system::{chunks::ChunkChanges, player_join_world::generate_biome_registry},
+    thread_local::ThreadLocal,
     util::{db, db::Db},
 };
 
 pub mod component;
 // pub mod event;
 pub mod event;
+
+pub mod thread_local;
 
 pub mod global;
 pub mod net;
@@ -140,6 +141,11 @@ pub fn register_components(world: &World) {
     world.component::<ChunkChanges>();
     world.component::<component::EntityReaction>();
     world.component::<component::Play>();
+    world.component::<component::ConfirmBlockSequences>();
+
+    world.component::<component::blocks::loaded::LoadedChunk>();
+    world.component::<component::blocks::loaded::NeighborNotify>();
+    world.component::<component::blocks::loaded::PendingChanges>();
 
     world.component::<Db>();
     world.component::<db::SkinCollection>();
@@ -253,7 +259,7 @@ impl Hyperion {
         system::stats::stats(world);
         let biome_registry =
             generate_biome_registry().context("failed to generate biome registry")?;
-        world.set(Blocks::new(&biome_registry)?);
+        world.set(MinecraftWorld::new(&biome_registry)?);
 
         world.set(StreamLookup::default());
 

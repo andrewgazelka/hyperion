@@ -1,4 +1,3 @@
-#![feature(lint_reasons)]
 #![feature(portable_simd)]
 #![allow(clippy::redundant_pub_crate, clippy::pedantic)]
 

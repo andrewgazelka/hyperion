@@ -48,14 +48,14 @@ deny:
 # run in debug mode with tracy; auto-restarts on changes
 debug:
     #!/usr/bin/env -S parallel --shebang --ungroup --jobs 3
-    RUST_BACKTRACE=full RUN_MODE=debug-{{arch}} cargo watch --postpone --no-vcs-ignores -w {{project_root}}/.trigger -s './target/debug/infection -t'
+    RUST_BACKTRACE=full RUN_MODE=debug-{{arch}} cargo watch --postpone --no-vcs-ignores -w {{project_root}}/.trigger -s 'clear && ./target/debug/infection'
     RUST_BACKTRACE=full ulimit -Sn {{fds}} && cargo run --bin hyperion-proxy --release
     cargo watch --why -w '{{project_root}}/crates/hyperion' -w '{{project_root}}/events/infection' -s 'cargo build -p infection' -s 'touch {{project_root}}/.trigger'
 
 # run in release mode with tracy; auto-restarts on changes
 release:
     #!/usr/bin/env -S parallel --shebang --ungroup --jobs 3
-    RUN_MODE=release-{{arch}} cargo watch --postpone --no-vcs-ignores -w {{project_root}}/.trigger -s './target/release/infection -t'
+    RUN_MODE=release-{{arch}} cargo watch --postpone --no-vcs-ignores -w {{project_root}}/.trigger -s 'clear && ./target/release/infection -t'
     ulimit -Sn {{fds}} && cargo run --bin hyperion-proxy --release
     cargo watch --why -w '{{project_root}}/crates/hyperion' -w '{{project_root}}/events/infection' -s 'cargo build --release -p infection' -s 'touch {{project_root}}/.trigger'
 

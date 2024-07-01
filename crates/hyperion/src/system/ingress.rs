@@ -10,10 +10,10 @@ use base64::{engine::general_purpose, Engine};
 use flecs_ecs::{
     core::{
         flecs::pipeline::{OnUpdate, PreUpdate},
-        EntityView, IdOperations, Query, QueryAPI, QueryBuilderImpl, SystemAPI, TermBuilderImpl,
-        World,
+        Builder, EntityView, IdOperations, IntoWorld, Query, QueryAPI, QueryBuilderImpl, SystemAPI,
+        TermBuilderImpl, World,
     },
-    macros::{system, Component},
+    macros::{query, system, Component},
     prelude::WorldRef,
 };
 use parking_lot::Mutex;
@@ -32,8 +32,9 @@ use valence_protocol::{
 use crate::{
     component,
     component::{
-        blocks::Blocks, AiTargetable, ChunkPosition, Comms, EntityReaction, Health, ImmuneStatus,
-        InGameName, PacketState, Pose, Uuid, PLAYER_SPAWN_POSITION,
+        blocks::MinecraftWorld, AiTargetable, ChunkPosition, Comms, ConfirmBlockSequences,
+        EntityReaction, Health, ImmuneStatus, InGameName, PacketState, Pose, Uuid,
+        PLAYER_SPAWN_POSITION,
     },
     event::{EventQueue, ThreadLocalBump},
     net::{
@@ -46,7 +47,6 @@ use crate::{
     system::chunks::ChunkChanges,
     util::{db::SkinCollection, mojang::MojangClient, player_skin::PlayerSkin},
 };
-
 // pub type ThreadLocalIngressSender<'a, 'b> = SenderLocal<'a, 'b, IngressEventSet>;
 // pub type IngressSender<'a> = Sender<'a, IngressEventSet>;
 
@@ -77,6 +77,7 @@ pub fn player_connect_disconnect(world: &World, shared: Arc<Mutex<ReceiveStateIn
                 let view = world
                     .entity()
                     .set(NetworkStreamRef::new(connect.stream))
+                    .set(ConfirmBlockSequences::default())
                     .set(EventQueue::default())
                     .set(PacketState::Handshake)
                     .set(PacketDecoder::default())
@@ -150,18 +151,20 @@ pub fn remove_player_from_visibility(world: &World) {
         let uuids = &[uuid.0];
         let entity_ids = [VarInt(entity.id().0 as i32)];
 
+        let world = entity.world();
+
         // destroy
         let pkt = play::EntitiesDestroyS2c {
             entity_ids: Cow::Borrowed(&entity_ids),
         };
 
-        compose.broadcast(&pkt).send().unwrap();
+        compose.broadcast(&pkt).send(&world).unwrap();
 
         let pkt = play::PlayerRemoveS2c {
             uuids: Cow::Borrowed(uuids),
         };
 
-        compose.broadcast(&pkt).send().unwrap();
+        compose.broadcast(&pkt).send(&world).unwrap();
     });
 }
 
@@ -179,14 +182,14 @@ pub fn remove_player(world: &World) {
 
 #[allow(clippy::too_many_arguments, reason = "todo")]
 pub fn recv_data(world: &World) {
-    let query = world.new_query::<(&Uuid, &InGameName, &Pose)>();
+    let query = query!(world, &Uuid, &InGameName, &Pose).build();
 
     system!(
         "recv_data",
         world,
         &Compose($),
         &EntityIdLookup($),
-        &Blocks($),
+        &MinecraftWorld($),
         &AsyncRuntime($),
         &Comms($),
         &SkinCollection($),
@@ -197,6 +200,7 @@ pub fn recv_data(world: &World) {
         &EventQueue,
         ?&mut Pose,
         ?&InGameName,
+        &mut ConfirmBlockSequences,
     )
     .multi_threaded()
     .each_iter(
@@ -216,6 +220,7 @@ pub fn recv_data(world: &World) {
             event_queue,
             mut pose,
             name,
+            confirm_block_sequences,
         )| {
             let span = tracing::trace_span!("recv_data");
             let _enter = span.enter();
@@ -226,7 +231,7 @@ pub fn recv_data(world: &World) {
 
             loop {
                 let Some(frame) = decoder
-                    .try_next_packet(&mut *compose.scratch().borrow_mut())
+                    .try_next_packet(&mut *compose.scratch(&world).borrow_mut())
                     .unwrap()
                 else {
                     break;
@@ -243,7 +248,7 @@ pub fn recv_data(world: &World) {
                         }
                     }
                     PacketState::Status => {
-                        process_status(login_state, &frame, io_ref, compose).unwrap();
+                        process_status(login_state, &frame, io_ref, compose, &world).unwrap();
                     }
                     PacketState::Login => process_login(
                         &world,
@@ -277,14 +282,16 @@ pub fn recv_data(world: &World) {
                                 allocator,
                                 event_queue,
                                 world,
+                                blocks,
+                                confirm_block_sequences,
                             };
 
                             let name = name.map_or("unknown", |name| &***name);
 
                             tracing::trace_span!("ingress", ign = name).in_scope(|| {
-                                if let Err(err) = crate::packets::packet_switch(
-                                    &frame, lookup, &mut query, blocks,
-                                ) {
+                                if let Err(err) =
+                                    crate::packets::packet_switch(&frame, lookup, &mut query)
+                                {
                                     error!("failed to process packet {:?}: {err}", frame);
                                 }
                             });
@@ -360,7 +367,9 @@ fn process_login(
         threshold: VarInt(global.shared.compression_threshold.0),
     };
 
-    compose.unicast_no_compression(&pkt, stream_id).unwrap();
+    compose
+        .unicast_no_compression(&pkt, stream_id, world)
+        .unwrap();
 
     decoder.set_compression(global.shared.compression_threshold);
 
@@ -391,7 +400,7 @@ fn process_login(
         properties: Cow::default(),
     };
 
-    compose.unicast(&pkt, stream_id).unwrap();
+    compose.unicast(&pkt, stream_id, world).unwrap();
 
     // todo: impl rest
     *login_state = PacketState::Play;
@@ -416,7 +425,7 @@ fn process_login(
                 pitch: ByteAngle::from_degrees(pose.pitch),
             };
 
-            compose.unicast(&pkt, stream_id).unwrap();
+            compose.unicast(&pkt, stream_id, world).unwrap();
         });
 
     entity
@@ -431,7 +440,7 @@ fn process_login(
         .set(ChunkPosition::null())
         .set(EntityReaction::default());
 
-    compose.io_buf().set_receive_broadcasts(stream_id);
+    compose.io_buf().set_receive_broadcasts(stream_id, world);
 
     Ok(())
 }
@@ -451,6 +460,7 @@ fn process_status(
     packet: &PacketFrame,
     packets: &NetworkStreamRef,
     compose: &Compose,
+    world: &World,
 ) -> anyhow::Result<()> {
     debug_assert!(*login_state == PacketState::Status);
 
@@ -488,7 +498,9 @@ fn process_status(
             let send = packets::status::QueryResponseS2c { json: &json };
 
             trace!("sent query response: {query_request:?}");
-            compose.unicast_no_compression(&send, packets).unwrap();
+            compose
+                .unicast_no_compression(&send, packets, world)
+                .unwrap();
         }
 
         packets::status::QueryPingC2s::ID => {
@@ -498,7 +510,9 @@ fn process_status(
 
             let send = packets::status::QueryPongS2c { payload };
 
-            compose.unicast_no_compression(&send, packets).unwrap();
+            compose
+                .unicast_no_compression(&send, packets, world)
+                .unwrap();
 
             trace!("sent query pong: {query_ping:?}");
             *login_state = PacketState::Terminate;

@@ -10,7 +10,7 @@ use valence_protocol::{
 
 use crate::{component::Play, net::Compose};
 
-pub fn stats(world: &'static World) {
+pub fn stats(world: &World) {
     let mode = std::env::var("RUN_MODE").unwrap_or_else(|_| "Unknown".to_string());
 
     let mut players = world.new_query::<&Play>();
@@ -20,9 +20,13 @@ pub fn stats(world: &'static World) {
     system!(
         "stats_message",
         world,
-        &Compose($),
+        &mut Compose($),
     )
-    .each(move |compose| {
+    .each_iter(move |iter, _, compose| {
+        let world = iter.world();
+
+        compose.global_mut().tick += 1;
+
         let span = tracing::trace_span!("stats_message");
         let _enter = span.enter();
         let info = world.info();
@@ -53,7 +57,7 @@ pub fn stats(world: &'static World) {
             },
         };
 
-        compose.broadcast(&pkt).send().unwrap();
+        compose.broadcast(&pkt).send(&world).unwrap();
 
         // let player_count = compose.global().shared.player_count.load(std::sync::atomic::Ordering::Relaxed);
         let player_count = players.count();
@@ -79,6 +83,6 @@ pub fn stats(world: &'static World) {
             },
         };
 
-        compose.broadcast(&pkt).send().unwrap();
+        compose.broadcast(&pkt).send(&world).unwrap();
     });
 }

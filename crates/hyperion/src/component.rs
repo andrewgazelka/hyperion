@@ -54,6 +54,9 @@ pub struct Health {
     pub normal: f32,
 }
 
+#[derive(Component, Debug, Default, Deref, DerefMut)]
+pub struct ConfirmBlockSequences(pub Vec<i32>);
+
 // use unicode hearts
 impl Display for Health {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

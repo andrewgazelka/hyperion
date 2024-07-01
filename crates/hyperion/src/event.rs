@@ -1,12 +1,11 @@
 //! Flecs components which are used for events.
 
+pub use event_queue::*;
 use flecs_ecs::core::Entity;
-use glam::Vec3;
-use valence_protocol::Hand;
+use glam::{U16Vec3, Vec3};
+use valence_protocol::{Hand, VarInt};
 
 mod event_queue;
-pub use event_queue::*;
-
 /// Represents an attack action by an entity in the game.
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct AttackEntity {
@@ -50,3 +49,13 @@ pub struct PostureUpdate {
     /// The new posture of the entity.
     pub state: Posture,
 }
+
+// chunk event
+#[derive(Copy, Clone, Debug)]
+pub struct BlockBreak {
+    pub position: U16Vec3,
+    pub by: Entity,
+    pub id: VarInt,
+}
+
+pub struct BlockInteract {}

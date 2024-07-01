@@ -3,7 +3,7 @@ use std::{borrow::Cow, collections::BTreeSet};
 use anyhow::{bail, Context};
 use base64::Engine;
 use flecs_ecs::{
-    core::{Entity, IdOperations, Query, QueryAPI},
+    core::{Entity, IdOperations, Query, QueryAPI, World},
     prelude::{EntityView, WorldRef},
 };
 use glam::{I16Vec2, IVec3};
@@ -34,7 +34,7 @@ use valence_text::IntoText;
 pub mod list;
 
 use crate::{
-    component::{blocks::Blocks, InGameName, Pose, Uuid, PLAYER_SPAWN_POSITION},
+    component::{blocks::MinecraftWorld, InGameName, Pose, Uuid, PLAYER_SPAWN_POSITION},
     config::CONFIG,
     net::{Compose, NetworkStreamRef},
     runtime::AsyncRuntime,
@@ -336,7 +336,7 @@ use crate::{
 pub fn player_join_world(
     entity: &EntityView,
     tasks: &AsyncRuntime,
-    chunks: &Blocks,
+    chunks: &MinecraftWorld,
     compose: &Compose,
     uuid: uuid::Uuid,
     name: &str,
@@ -357,21 +357,21 @@ pub fn player_join_world(
             info!(
                 "caching world data for new players with compression level {compression_level:?}"
             );
-            inner(&mut encoder, chunks, tasks).unwrap();
+            inner(&mut encoder, chunks, tasks, world).unwrap();
 
             let bytes = encoder.take();
             bytes.freeze()
         })
         .clone();
 
-    compose.io_buf().unicast_raw(cached_data, packets);
+    compose.io_buf().unicast_raw(cached_data, packets, world);
 
     let text = play::GameMessageS2c {
         chat: format!("{name} joined the world").into_cow_text(),
         overlay: false,
     };
 
-    compose.broadcast(&text).send().unwrap();
+    compose.broadcast(&text).send(world).unwrap();
 
     compose
         .unicast(
@@ -383,6 +383,7 @@ pub fn player_join_world(
                 teleport_id: 1.into(),
             },
             packets,
+            world,
         )
         .unwrap();
 
@@ -403,7 +404,7 @@ pub fn player_join_world(
                 pitch: ByteAngle::from_degrees(pose.pitch),
             };
 
-            compose.unicast(&pkt, packets).unwrap();
+            compose.unicast(&pkt, packets, world).unwrap();
         });
 
     let mut entries = Vec::new();
@@ -452,6 +453,7 @@ pub fn player_join_world(
                 entries: Cow::Owned(entries),
             },
             packets,
+            world,
         )
         .unwrap();
 
@@ -483,7 +485,7 @@ pub fn player_join_world(
         entries: Cow::Borrowed(singleton_entry),
     };
 
-    compose.broadcast(&pkt).send().unwrap();
+    compose.broadcast(&pkt).send(world).unwrap();
 
     let player_name = vec![name];
 
@@ -495,7 +497,7 @@ pub fn player_join_world(
             },
         })
         .exclude(packets)
-        .send()
+        .send(world)
         .unwrap();
 
     compose
@@ -507,6 +509,7 @@ pub fn player_join_world(
                 },
             },
             packets,
+            world,
         )
         .unwrap();
 
@@ -522,27 +525,31 @@ pub fn player_join_world(
     compose
         .broadcast(&spawn_player)
         .exclude(packets)
-        .send()
+        .send(world)
         .unwrap();
 
     let show_all = show_all(entity.id().0 as i32);
     compose
         .broadcast(show_all.borrow_packet())
         .exclude(packets)
-        .send()
+        .send(world)
         .unwrap();
 
     info!("{name} joined the world");
 }
 
 #[allow(dead_code, reason = "will re-enable")]
-pub fn send_keep_alive(packets: &NetworkStreamRef, compose: &Compose) -> anyhow::Result<()> {
+pub fn send_keep_alive(
+    packets: &NetworkStreamRef,
+    compose: &Compose,
+    world: &World,
+) -> anyhow::Result<()> {
     let pkt = play::KeepAliveS2c {
         // The ID can be set to zero because it doesn't matter
         id: 0,
     };
 
-    compose.unicast(&pkt, packets)?;
+    compose.unicast(&pkt, packets, world)?;
 
     Ok(())
 }
@@ -832,7 +839,12 @@ fn send_sync_tags(encoder: &mut PacketEncoder) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn inner(encoder: &mut PacketEncoder, chunks: &Blocks, tasks: &AsyncRuntime) -> anyhow::Result<()> {
+fn inner(
+    encoder: &mut PacketEncoder,
+    chunks: &MinecraftWorld,
+    tasks: &AsyncRuntime,
+    world: &World,
+) -> anyhow::Result<()> {
     send_game_join_packet(encoder)?;
     send_sync_tags(encoder)?;
 
@@ -861,7 +873,10 @@ fn inner(encoder: &mut PacketEncoder, chunks: &Blocks, tasks: &AsyncRuntime) -> 
     let center_chunk = I16Vec2::new(center_chunk.x as i16, center_chunk.z as i16);
 
     // so they do not fall
-    let chunk = chunks.get_and_wait(center_chunk, tasks).unwrap().unwrap();
+    let chunk = chunks
+        .get_and_wait(center_chunk, tasks, world)
+        .unwrap()
+        .unwrap();
     encoder.append_bytes(&chunk);
 
     // let radius = 2;

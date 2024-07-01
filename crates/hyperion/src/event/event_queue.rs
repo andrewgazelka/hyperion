@@ -1,37 +1,30 @@
-use std::{any::TypeId, marker::PhantomData, ptr::NonNull};
+use std::{any::TypeId, cell::SyncUnsafeCell, ptr::NonNull, sync::atomic::AtomicUsize};
 
-use anyhow::bail;
 use bumpalo::Bump;
 use flecs_ecs::{core::World, macros::Component};
 use fxhash::FxHashMap;
 use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
 
-use crate::event::event_queue::raw::{RawQueue, TypedBumpPtr};
+use crate::{event::event_queue::raw::TypedBumpPtr, thread_local::ThreadLocal};
 
 mod raw;
 
-#[derive(Component)]
+#[derive(Component, Default)]
 pub struct EventQueue {
-    /// we want to be able to append to this `EventQueue` from any thread so we can do things concurrently.
-    /// For instance, if we are iterating over player A who has a packet to send to player B, we want to be able to
-    /// append to Player B's queue from Player A's thread.
-    ///
-    /// We are not using a `crossbeam_queue::ArrayQueue` because it requires consuming the queue to iterate over it.
-    inner: RawQueue,
-}
-
-impl Default for EventQueue {
-    fn default() -> Self {
-        Self::new()
-    }
+    pub count: AtomicUsize,
+    inner: ThreadLocal<SyncUnsafeCell<heapless::Vec<TypedBumpPtr, 32>>>,
 }
 
 impl EventQueue {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            inner: RawQueue::new(1024),
-        }
+    pub fn len(&mut self) -> usize {
+        self.inner
+            .iter_mut()
+            .map(|inner| inner.get_mut().len())
+            .sum()
+    }
+
+    pub fn is_empty(&mut self) -> bool {
+        self.len() == 0
     }
 
     pub fn push<T: 'static>(
@@ -50,22 +43,35 @@ impl EventQueue {
 
         let ptr = TypedBumpPtr::new(id, ptr);
 
-        if self.inner.push(ptr).is_err() {
-            bail!("Event queue is full");
+        let inner = self.inner.get(world);
+        let inner = unsafe { &mut *inner.get() };
+
+        if inner.push(ptr).is_err() {
+            return Ok(());
+            // bail!("Event queue is full");
         }
+
+        assert!(!inner.is_empty());
+
+        self.count
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 
         Ok(())
     }
 
     pub fn reset(&mut self) {
-        self.inner.reset();
+        self.inner
+            .iter_mut()
+            .for_each(|inner| inner.get_mut().clear());
+
+        self.count = AtomicUsize::new(0);
     }
 }
 
 #[derive(Component)]
 pub struct ThreadLocalBump {
     // todo: ThreadLocal has initialize logic which can slow down things if we are using it frequently.
-    // we proably want to pre-initialize these on all threads that will need access.
+    // we probably want to pre-initialize these on all threads that will need access.
     locals: Box<[Bump]>,
 }
 
@@ -92,36 +98,26 @@ impl ThreadLocalBump {
 
 // todo: improve code.
 /// 🚨 There is basically a 0% chance this is safe and not slightly UB depending on how it is used.
-pub struct EventQueueIterator<T> {
-    registered: FxHashMap<TypeId, fn(*mut (), *mut ())>,
-    _phantom: PhantomData<T>,
+#[derive(Default)]
+pub struct EventQueueIterator<'a> {
+    registered: FxHashMap<TypeId, Box<dyn FnMut(*mut ()) + 'a>>,
 }
 
-impl<T> Default for EventQueueIterator<T> {
-    fn default() -> Self {
-        Self {
-            registered: FxHashMap::default(),
-            _phantom: PhantomData,
-        }
-    }
-}
-
-impl<T> EventQueueIterator<T> {
+impl<'a> EventQueueIterator<'a> {
     #[must_use]
     pub fn new() -> Self {
         Self {
             registered: FxHashMap::default(),
-            _phantom: PhantomData,
         }
     }
 
-    pub fn register<E: 'static>(&mut self, f: fn(&mut E, &mut T)) {
+    pub fn register<E: 'static>(&mut self, mut f: impl FnMut(&mut E) + 'a) {
         let id = TypeId::of::<E>();
 
         // todo: is this safe
-        let g = unsafe { core::mem::transmute::<fn(&mut E, &mut T), fn(*mut (), *mut ())>(f) };
+        let g = move |ptr: *mut ()| unsafe { f(&mut *ptr.cast::<E>()) };
 
-        let previous = self.registered.insert(id, g);
+        let previous = self.registered.insert(id, Box::new(g));
 
         assert!(
             previous.is_none(),
@@ -129,21 +125,21 @@ impl<T> EventQueueIterator<T> {
         );
     }
 
-    fn get_fn(&self, id: TypeId) -> Option<fn(*mut (), &mut T)> {
-        let res = self.registered.get(&id)?;
-        let res = *res;
-        let res = unsafe { core::mem::transmute::<fn(*mut (), *mut ()), fn(*mut (), &mut T)>(res) };
-        Some(res)
-    }
+    pub fn run(&mut self, queue: &mut EventQueue) {
+        queue
+            .inner
+            .iter_mut()
+            .map(|inner| unsafe { &mut *inner.get() })
+            .flat_map(|inner| inner.iter_mut())
+            .for_each(|ptr| {
+                let Some(res) = self.registered.get_mut(&ptr.id()) else {
+                    return;
+                };
 
-    pub fn run(&self, queue: &EventQueue, t: &mut T) {
-        for ptr in queue.inner.iter() {
-            let Some(f) = self.get_fn(ptr.id()) else {
-                continue;
-            };
+                let f = &mut **res;
 
-            f(ptr.elem().as_ptr(), t);
-        }
+                f(ptr.elem().as_ptr());
+            });
     }
 }
 

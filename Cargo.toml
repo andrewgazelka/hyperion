@@ -28,10 +28,10 @@ panic = "abort"
 inherits = "release"
 debug = true
 
-[profile.bench]
-#debug = true
-lto = "fat"
-codegen-units = 1
+#[profile.bench]
+##debug = true
+#lto = "fat"
+#codegen-units = 1
 
 [workspace.dependencies]
 anyhow = "1.0.86"
@@ -86,7 +86,6 @@ slotmap = "1.0.7"
 tango-bench = "0.4.0"
 tar = "0.4.41"
 thiserror = "1.0.61"
-thread_local = "1.1.8"
 tokio = "1.38.0"
 toml = "0.8.14"
 tracing = { version = "0.1.40", features = ["release_max_level_info"] }

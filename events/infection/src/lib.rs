@@ -1,4 +1,3 @@
-#![feature(lint_reasons)]
 #![feature(allocator_api)]
 
 use std::net::ToSocketAddrs;

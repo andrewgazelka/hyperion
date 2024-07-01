@@ -28,7 +28,10 @@
 //     pub needs_resync: bool,
 // }
 
-use flecs_ecs::core::{IdOperations, QueryBuilderImpl, SystemAPI, TermBuilderImpl, World};
+use flecs_ecs::{
+    core::{IdOperations, IntoWorld, QueryBuilderImpl, SystemAPI, TermBuilderImpl, World},
+    macros::system,
+};
 use valence_protocol::{packets::play, ByteAngle, VarInt};
 
 use crate::{
@@ -37,16 +40,15 @@ use crate::{
 };
 
 pub fn sync_entity_position(world: &World) {
-    world
-        .system_named::<(&Compose, &Pose, &NetworkStreamRef)>("sync_entity_position")
-        .term_at(0)
+    system!("sync_entity_position", world, &Compose($), &Pose, &NetworkStreamRef)
         .multi_threaded()
-        .singleton()
         .each_iter(|iter, idx, (compose, pose, io)| {
             let span = tracing::trace_span!("sync_entity_position");
             let _enter = span.enter();
             let entity = iter.entity(idx);
             let entity_id = VarInt(entity.id().0 as i32);
+
+            let world = entity.world();
 
             let pkt = play::EntityPositionS2c {
                 entity_id,
@@ -56,6 +58,6 @@ pub fn sync_entity_position(world: &World) {
                 on_ground: false,
             };
 
-            compose.broadcast(&pkt).exclude(io).send().unwrap();
+            compose.broadcast(&pkt).exclude(io).send(&world).unwrap();
         });
 }

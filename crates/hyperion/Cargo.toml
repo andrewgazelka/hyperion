@@ -61,7 +61,6 @@ line_drawing.workspace = true
 slotmap.workspace = true
 flecs_ecs.workspace = true
 heapless.workspace = true
-thread_local = { workspace = true, features = ["nightly"] }
 base64.workspace = true
 kanal.workspace = true
 mongodb.workspace = true
@@ -77,6 +76,10 @@ hex.workspace = true
 rustc_version.workspace = true
 tango-bench = "0.5.0" # TODO:  use workspace version.
 tracing-subscriber.workspace = true
+
+[[bench]]
+name = "set"
+harness = false
 
 [lints]
 workspace = true

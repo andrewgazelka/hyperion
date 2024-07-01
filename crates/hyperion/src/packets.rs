@@ -4,19 +4,29 @@ use std::ops::ControlFlow;
 
 use bvh_region::aabb::Aabb;
 use flecs_ecs::core::{Entity, EntityView, World};
-use glam::Vec3;
+use glam::{I16Vec2, IVec2, IVec3, U16Vec3, Vec3};
 use tracing::{info, instrument, trace, warn};
 use valence_protocol::{
     decode::PacketFrame,
+    ident,
     packets::play::{
-        self, client_command_c2s::ClientCommand, player_interact_entity_c2s::EntityInteraction,
+        self, client_command_c2s::ClientCommand, player_action_c2s::PlayerAction,
+        player_interact_entity_c2s::EntityInteraction,
         player_position_look_s2c::PlayerPositionLookFlags,
     },
+    sound::{SoundCategory, SoundId},
     Decode, Packet, VarInt,
 };
+use valence_text::IntoText;
 
 use crate::{
-    component::{blocks::Blocks, Pose},
+    component::{
+        blocks::{
+            loaded::{LoadedChunk, START_Y},
+            MinecraftWorld,
+        },
+        ConfirmBlockSequences, Pose,
+    },
     event,
     event::{EventQueue, Posture, ThreadLocalBump},
     net::{Compose, NetworkStreamRef},
@@ -30,7 +40,7 @@ pub mod vanilla;
 //     // ignore
 // }
 
-fn full(query: &mut PacketSwitchQuery, mut data: &[u8], blocks: &Blocks) -> anyhow::Result<()> {
+fn full(query: &mut PacketSwitchQuery, mut data: &[u8]) -> anyhow::Result<()> {
     let pkt = play::FullC2s::decode(&mut data)?;
 
     let play::FullC2s {
@@ -44,7 +54,7 @@ fn full(query: &mut PacketSwitchQuery, mut data: &[u8], blocks: &Blocks) -> anyh
     // if they are, ignore the packet
 
     let position = position.as_vec3();
-    change_position_or_correct_client(query, position, blocks);
+    change_position_or_correct_client(query, position);
 
     query.pose.yaw = yaw;
     query.pose.pitch = pitch;
@@ -53,14 +63,10 @@ fn full(query: &mut PacketSwitchQuery, mut data: &[u8], blocks: &Blocks) -> anyh
 }
 
 #[instrument(skip_all)]
-fn change_position_or_correct_client(
-    query: &mut PacketSwitchQuery,
-    proposed: Vec3,
-    blocks: &Blocks,
-) {
+fn change_position_or_correct_client(query: &mut PacketSwitchQuery, proposed: Vec3) {
     let pose = &mut *query.pose;
 
-    if try_change_position(proposed, pose, blocks) {
+    if try_change_position(proposed, pose, query.blocks, query.world) {
         return;
     }
 
@@ -73,11 +79,19 @@ fn change_position_or_correct_client(
         teleport_id: VarInt(fastrand::i32(..)),
     };
 
-    query.compose.unicast(&pkt, query.io_ref).unwrap();
+    query
+        .compose
+        .unicast(&pkt, query.io_ref, query.world)
+        .unwrap();
 }
 
 /// Returns true if the position was changed, false if it was not.
-fn try_change_position(proposed: Vec3, pose: &mut Pose, blocks: &Blocks) -> bool {
+fn try_change_position(
+    proposed: Vec3,
+    pose: &mut Pose,
+    blocks: &MinecraftWorld,
+    world: &World,
+) -> bool {
     /// 100.0 m/tick; this is the same as the vanilla server
     const MAX_BLOCKS_PER_TICK: f32 = 5.0;
     let current = pose.position;
@@ -96,7 +110,7 @@ fn try_change_position(proposed: Vec3, pose: &mut Pose, blocks: &Blocks) -> bool
     // so no improper collisions
     let shrunk = proposed_pose.bounding.shrink(0.01);
 
-    let res = blocks.get_blocks(min, max, |pos, block| {
+    let res = blocks.get_blocks(min, max, world, |pos, block| {
         let pos = Vec3::new(pos.x as f32, pos.y as f32, pos.z as f32);
 
         for aabb in block.collision_shapes() {
@@ -134,18 +148,14 @@ fn look_and_on_ground(mut data: &[u8], full_entity_pose: &mut Pose) -> anyhow::R
     Ok(())
 }
 
-fn position_and_on_ground(
-    query: &mut PacketSwitchQuery,
-    mut data: &[u8],
-    blocks: &Blocks,
-) -> anyhow::Result<()> {
+fn position_and_on_ground(query: &mut PacketSwitchQuery, mut data: &[u8]) -> anyhow::Result<()> {
     let pkt = play::PositionAndOnGroundC2s::decode(&mut data)?;
 
     // debug!("position and on ground packet: {:?}", pkt);
 
     let play::PositionAndOnGroundC2s { position, .. } = pkt;
 
-    change_position_or_correct_client(query, position.as_vec3(), blocks);
+    change_position_or_correct_client(query, position.as_vec3());
 
     Ok(())
 }
@@ -251,45 +261,142 @@ pub struct PacketSwitchQuery<'a> {
     pub allocator: &'a ThreadLocalBump,
     pub event_queue: &'a EventQueue,
     pub world: &'a World,
+    pub blocks: &'a MinecraftWorld,
+    pub confirm_block_sequences: &'a mut ConfirmBlockSequences,
 }
-// // i.e., shooting a bow
-// fn player_action(
-//     mut data: &[u8],
-//     world: &'static World,
-//     query: &PacketSwitchQuery,
-// ) -> anyhow::Result<()> {
-//     let packet = play::PlayerActionC2s::decode(&mut data)?;
-//
-//     info!("player action: {:?}", packet);
-//
-//     let id = query.id;
-//     let position = packet.position;
-//     let sequence = packet.sequence.0;
-//
-//     match packet.action {
-//         PlayerAction::StartDestroyBlock => {
-//             // let elem = SendElem::new(id, event::BlockStartBreak { position, sequence });
-//             // world.push(elem);
-//             world.send_to(id, event::BlockStartBreak { position, sequence });
-//         }
-//         PlayerAction::AbortDestroyBlock => {
-//             // let elem = SendElem::new(id, event::BlockAbortBreak { position, sequence });
-//             // world.push(elem);
-//             world.send_to(id, event::BlockAbortBreak { position, sequence });
-//         }
-//         PlayerAction::StopDestroyBlock => {
-//             // let elem = SendElem::new(id, event::BlockFinishBreak { position, sequence });
-//             // world.push(elem);
-//             world.send_to(id, event::BlockFinishBreak { position, sequence });
-//         }
-//         PlayerAction::ReleaseUseItem => {
-//             world.send_to(id, event::ReleaseItem);
-//         }
-//         _ => {}
-//     }
-//
-//     Ok(())
-// }
+
+// i.e., shooting a bow
+fn player_action(mut data: &[u8], query: &PacketSwitchQuery) -> anyhow::Result<()> {
+    const START_Y: i32 = -64;
+
+    let packet = play::PlayerActionC2s::decode(&mut data)?;
+
+    // let id = query.id;
+    let position = packet.position;
+
+    let chunk_position = I16Vec2::new((position.x >> 4) as i16, (position.z >> 4) as i16);
+
+    let Some(entity) = query
+        .blocks
+        .get_loaded_chunk_entity(chunk_position, query.world)
+    else {
+        warn!("player_action: chunk not loaded");
+        return Ok(());
+    };
+
+    // get EventQueue
+
+    // let sequence = packet.sequence.0;
+
+    // let entry = ChunkDel {
+    //
+    // }
+    //
+    // play::ChunkDeltaUpdateS2c {
+    //     chunk_sect_pos: ChunkSectionPos {
+    //         x: 0,
+    //         y: 0,
+    //         z: 0,
+    //     },
+    //     blocks: Default::default(),
+    // };
+    //
+    // play::lockUpdateS2c {
+    //     position,
+    //     block_id: Default::default(),
+    // }
+
+    // let tick = query.compose.global().tick;
+    let world_id = query.world.stage_id();
+
+    match packet.action {
+        PlayerAction::AbortDestroyBlock => {
+            let chat = format!("{position} aborted breaking block ({world_id}) {entity:?}");
+            // chat message
+            let message = play::GameMessageS2c {
+                chat: chat.into_cow_text(),
+                overlay: true,
+            };
+
+            query.compose.broadcast(&message).send(query.world).unwrap();
+        }
+        PlayerAction::StopDestroyBlock => {
+            // for finishing destroying a block
+            let chat = format!("{position} finished breaking block ({world_id} {entity:?})");
+            // chat message
+            let message = play::GameMessageS2c {
+                chat: chat.into_cow_text(),
+                overlay: true,
+            };
+
+            let mut called = false;
+
+            entity.get::<&mut EventQueue>(|event_queue| {
+                let id = ident!("minecraft:block.note_block.harp");
+
+                let id = SoundId::Direct {
+                    id: id.into(),
+                    range: None,
+                };
+
+                let sound = play::PlaySoundS2c {
+                    id,
+                    category: SoundCategory::Ambient,
+                    position: IVec3::new(-3720, -120, -352),
+                    volume: 1.0,
+                    pitch: 0.5,
+                    seed: 0,
+                };
+
+                query
+                    .compose
+                    .unicast(&sound, query.io_ref, query.world)
+                    .unwrap();
+
+                info!("Break block!");
+
+                let x = u16::try_from(position.x & 0b1111).unwrap();
+                let z = u16::try_from(position.z & 0b1111).unwrap();
+
+                let y = u16::try_from(position.y - START_Y).unwrap();
+
+                let position = U16Vec3::new(x, y, z);
+
+                event_queue
+                    .push(
+                        event::BlockBreak {
+                            position,
+                            by: query.id,
+                            id: packet.sequence,
+                        },
+                        query.allocator,
+                        query.world,
+                    )
+                    .unwrap();
+
+                query.compose.broadcast(&message).send(query.world).unwrap();
+
+                called = true;
+            });
+
+            assert!(called, "Not called");
+        }
+
+        PlayerAction::StartDestroyBlock => {
+            let chat = format!("{position} started destroying block ({world_id})");
+
+            let message = play::GameMessageS2c {
+                chat: chat.into_cow_text(),
+                overlay: true,
+            };
+
+            query.compose.broadcast(&message).send(query.world).unwrap();
+        }
+        _ => {}
+    }
+
+    Ok(())
+}
 
 // for sneaking
 fn client_command(mut data: &[u8], query: &PacketSwitchQuery) -> anyhow::Result<()> {
@@ -340,11 +447,44 @@ fn client_command(mut data: &[u8], query: &PacketSwitchQuery) -> anyhow::Result<
 //     Ok(())
 // }
 
+pub fn player_interact_block(mut data: &[u8], query: &mut PacketSwitchQuery) -> anyhow::Result<()> {
+    let packet = play::PlayerInteractBlockC2s::decode(&mut data)?;
+
+    let position = packet.position;
+    let chunk_position = I16Vec2::new((position.x >> 4) as i16, (position.z >> 4) as i16);
+
+    let Some(entity) = query
+        .blocks
+        .get_loaded_chunk_entity(chunk_position, query.world)
+    else {
+        warn!("player_interact_block: chunk not found");
+        return Ok(());
+    };
+
+    let chunk_start: IVec2 = chunk_position.as_ivec2() << 4;
+
+    let x = position.x - chunk_start[0];
+    let z = position.z - chunk_start[1];
+
+    let y = position.y - START_Y;
+
+    let x = u8::try_from(x).unwrap();
+    let z = u8::try_from(z).unwrap();
+    let y = u16::try_from(y).unwrap();
+
+    query.confirm_block_sequences.push(packet.sequence.0);
+
+    entity.get::<&LoadedChunk>(|chunk| {
+        chunk.interact(x, y, z, query.blocks, query.world);
+    });
+
+    Ok(())
+}
+
 pub fn packet_switch(
     raw: &PacketFrame,
     id_lookup: &EntityIdLookup,
     query: &mut PacketSwitchQuery,
-    blocks: &Blocks,
 ) -> anyhow::Result<()> {
     let packet_id = raw.id;
     let data = raw.body.as_ref();
@@ -353,10 +493,11 @@ pub fn packet_switch(
         play::HandSwingC2s::ID => hand_swing(data, query)?,
         // play::PlayerInteractBlockC2s::ID => player_interact_block(data)?,
         play::ClientCommandC2s::ID => client_command(data, query)?,
-        play::FullC2s::ID => full(query, data, blocks)?,
-        // play::PlayerActionC2s::ID => player_action(data, world, query)?,
-        play::PositionAndOnGroundC2s::ID => position_and_on_ground(query, data, blocks)?,
+        play::FullC2s::ID => full(query, data)?,
+        play::PlayerActionC2s::ID => player_action(data, query)?,
+        play::PositionAndOnGroundC2s::ID => position_and_on_ground(query, data)?,
         play::LookAndOnGroundC2s::ID => look_and_on_ground(data, query.pose)?,
+        play::PlayerInteractBlockC2s::ID => player_interact_block(data, query)?,
         // play::ClientCommandC2s::ID => player_command(data),
         // play::UpdatePlayerAbilitiesC2s::ID => update_player_abilities(data)?,
         // play::UpdateSelectedSlotC2s::ID => update_selected_slot(data, world, query.id)?,
