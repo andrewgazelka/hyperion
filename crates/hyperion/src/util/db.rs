@@ -1,39 +1,27 @@
-//! Constructs for connecting and working with a `MongoDB` database.
+//! Constructs for connecting and working with a `PostgreSQL` database.
 
-use bson::doc;
 use derive_more::Deref;
 use flecs_ecs::macros::Component;
-use mongodb::{options::ClientOptions, IndexModel};
 use serde::{Deserialize, Serialize};
+use sqlx::{postgres::PgPoolOptions, Pool, Postgres};
+use tracing::info;
+use uuid::Uuid;
 
-use crate::{
-    component::{Inventory, Pose},
-    util::player_skin::PlayerSkin,
-};
+use crate::util::player_skin::PlayerSkin;
 
-#[derive(Serialize, Deserialize, Debug)]
-struct CorePlayer {
-    uuid: bson::Uuid,
-    name_on_login: String,
-    health: f32,
-    pose: Pose,
-    last_login: chrono::DateTime<chrono::Utc>,
-    inventory: Inventory,
-}
-
-/// The document for [`SkinCollection`]
-#[derive(Serialize, Deserialize, Debug)]
-pub struct SkinDocument {
+/// The database row for player skins
+#[derive(Serialize, Deserialize, Debug, sqlx::FromRow)]
+pub struct SkinRow {
     /// The UUID of the player.
-    pub uuid: bson::Uuid,
+    pub uuid: Uuid,
     /// The skin of the player.
-    pub skin: PlayerSkin,
+    pub skin: serde_json::Value, // Storing PlayerSkin as JSON
 }
 
-/// A wrapper around a [`mongodb::Database`]
+/// A wrapper around a `PostgreSQL` connection pool
 #[derive(Component, Debug, Clone, Deref)]
 pub struct Db {
-    inner: mongodb::Database,
+    inner: Pool<Postgres>,
 }
 
 impl Db {
@@ -44,62 +32,76 @@ impl Db {
     ///
     /// #[tokio::main]
     /// async fn main() -> anyhow::Result<()> {
-    ///     let db = Db::new("mongodb://localhost:27017").await?;
+    ///     let db = Db::new("postgres://username:password@localhost/hyperion").await?;
     ///     Ok(())
     /// }
     /// ```
-    ///
-    /// Also see crate level documention [here](crate::util::db).
-    pub async fn new(s: impl AsRef<str>) -> anyhow::Result<Self> {
-        let mut client_options = ClientOptions::parse(s).await?;
+    pub async fn new(connection_str: &str) -> anyhow::Result<Self> {
+        let pool = PgPoolOptions::new()
+            .max_connections(5)
+            .connect(connection_str)
+            .await?;
 
-        // Manually set an option.
-        client_options.app_name = Some("Hyperion".to_string());
+        // Initialize the database
+        sqlx::query!(
+            // language=postgresql
+            r#"
+            CREATE TABLE IF NOT EXISTS player_skins (
+                uuid UUID PRIMARY KEY,
+                skin JSONB NOT NULL
+            )
+            "#
+        )
+        .execute(&pool)
+        .await?;
 
-        // Get a handle to the deployment.
-        let client = mongodb::Client::with_options(client_options)?;
-
-        let db = client.database("hyperion");
-
-        Ok(Self { inner: db })
+        Ok(Self { inner: pool })
     }
 }
 
-/// A collection of [`SkinDocument`]s.
-#[derive(Component, Debug, Clone, Deref)]
-pub struct SkinCollection {
-    inner: mongodb::Collection<SkinDocument>,
+/// A handler for player skin operations
+#[derive(Component, Debug, Clone)]
+pub struct SkinHandler {
+    db: Db,
 }
 
-impl SkinCollection {
-    /// Creates a new [`SkinCollection`] from a given [`Db`].
-    pub async fn new(db: &Db) -> anyhow::Result<Self> {
-        let skins = db.collection::<SkinDocument>("skins");
-
-        let index_model = IndexModel::builder()
-            .keys(doc! {"uuid": 1})
-            .options(None)
-            .build();
-
-        skins.create_index(index_model, None).await?;
-
-        Ok(Self { inner: skins })
+impl SkinHandler {
+    /// Creates a new [`SkinHandler`] from a given [`Db`].
+    #[must_use]
+    pub const fn new(db: Db) -> Self {
+        Self { db }
     }
 
     /// Finds a [`PlayerSkin`] by its UUID.
-    pub async fn find(&self, uuid: uuid::Uuid) -> anyhow::Result<Option<PlayerSkin>> {
-        let uuid = bson::Uuid::from_uuid_1(uuid);
-        let result = self.find_one(doc! {"uuid": uuid}, None).await?;
-        Ok(result.map(|x| x.skin))
+    pub async fn find(&self, uuid: Uuid) -> anyhow::Result<Option<PlayerSkin>> {
+        let result = sqlx::query_as!(
+            SkinRow,
+            // language=postgresql
+            r#"SELECT uuid, skin as "skin: serde_json::Value" FROM player_skins WHERE uuid = $1"#,
+            uuid
+        )
+        .fetch_optional(&*self.db)
+        .await?;
+
+        Ok(result.map(|row| serde_json::from_value(row.skin).unwrap()))
     }
 
     /// Inserts a [`PlayerSkin`] into the database.
-    pub async fn insert(&self, uuid: uuid::Uuid, skin: PlayerSkin) -> anyhow::Result<()> {
-        let uuid = bson::Uuid::from_uuid_1(uuid);
+    pub async fn insert(&self, uuid: Uuid, skin: PlayerSkin) -> anyhow::Result<()> {
+        info!("inserting skin for {uuid}");
 
-        let skin = SkinDocument { uuid, skin };
-
-        self.insert_one(skin, None).await?;
+        sqlx::query!(
+            // language=postgresql
+            r#"
+            INSERT INTO player_skins (uuid, skin)
+            VALUES ($1, $2)
+            ON CONFLICT (uuid) DO UPDATE SET skin = EXCLUDED.skin
+            "#,
+            uuid,
+            serde_json::to_value(skin)? as _
+        )
+        .execute(&*self.db)
+        .await?;
 
         Ok(())
     }

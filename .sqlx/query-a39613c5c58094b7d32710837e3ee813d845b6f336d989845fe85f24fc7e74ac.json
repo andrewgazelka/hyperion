@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO player_skins (uuid, skin)\n            VALUES ($1, $2)\n            ON CONFLICT (uuid) DO UPDATE SET skin = EXCLUDED.skin\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Jsonb"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "a39613c5c58094b7d32710837e3ee813d845b6f336d989845fe85f24fc7e74ac"
+}

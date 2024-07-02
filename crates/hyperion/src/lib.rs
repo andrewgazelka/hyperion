@@ -26,13 +26,6 @@
     clippy::future_not_send
 )]
 
-pub use uuid;
-
-mod blocks;
-mod chunk;
-pub mod singleton;
-pub mod util;
-
 use std::{alloc::Allocator, cell::RefCell, fmt::Debug, net::ToSocketAddrs, sync::Arc};
 
 use anyhow::{bail, Context};
@@ -42,6 +35,7 @@ use libc::{getrlimit, setrlimit, RLIMIT_NOFILE};
 use libdeflater::CompressionLvl;
 use once_cell::sync::Lazy;
 use tracing::{error, info, instrument, warn};
+pub use uuid;
 use valence_protocol::CompressionThreshold;
 pub use valence_server;
 
@@ -56,6 +50,11 @@ use crate::{
     thread_local::ThreadLocal,
     util::{db, db::Db},
 };
+
+mod blocks;
+mod chunk;
+pub mod singleton;
+pub mod util;
 
 pub mod component;
 // pub mod event;
@@ -149,7 +148,7 @@ pub fn register_components(world: &World) {
     world.component::<component::blocks::loaded::PendingChanges>();
 
     world.component::<Db>();
-    world.component::<db::SkinCollection>();
+    world.component::<db::SkinHandler>();
 }
 
 impl Hyperion {
@@ -223,11 +222,11 @@ impl Hyperion {
 
         let tasks = AsyncRuntime::default();
 
-        let db = tasks
-            .block_on(Db::new("mongodb://localhost:27017"))
-            .unwrap();
+        let url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
 
-        let skins = tasks.block_on(db::SkinCollection::new(&db)).unwrap();
+        let db = tasks.block_on(Db::new(&url)).unwrap();
+
+        let skins = db::SkinHandler::new(db.clone());
 
         world.set(db);
         world.set(skins);

@@ -17,6 +17,8 @@ struct Args {
 }
 
 fn main() {
+    dotenvy::dotenv().ok();
+
     let Args { ip, port, tracy } = Args::parse();
 
     if tracy {

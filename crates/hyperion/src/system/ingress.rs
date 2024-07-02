@@ -46,7 +46,7 @@ use crate::{
     singleton::fd_lookup::StreamLookup,
     system::{chunks::ChunkChanges, joins::SendableRef},
     tracing_ext::TracingExt,
-    util::{db::SkinCollection, mojang::MojangClient, player_skin::PlayerSkin},
+    util::{db::SkinHandler, mojang::MojangClient, player_skin::PlayerSkin},
 };
 // pub type ThreadLocalIngressSender<'a, 'b> = SenderLocal<'a, 'b, IngressEventSet>;
 // pub type IngressSender<'a> = Sender<'a, IngressEventSet>;
@@ -200,7 +200,7 @@ pub fn recv_data(world: &World) {
         &MinecraftWorld($),
         &AsyncRuntime($),
         &Comms($),
-        &SkinCollection($),
+        &SkinHandler($),
         &ThreadLocalBump($),
         &mut PacketDecoder,
         &mut PacketState,
@@ -329,7 +329,7 @@ fn process_login(
     login_state: &mut PacketState,
     decoder: &mut PacketDecoder,
     comms: &Comms,
-    skins_collection: SkinCollection,
+    skins_collection: SkinHandler,
     packet: &PacketFrame,
     stream_id: &NetworkStreamRef,
     compose: &Compose,

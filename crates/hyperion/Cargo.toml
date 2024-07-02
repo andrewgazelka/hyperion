@@ -63,10 +63,8 @@ flecs_ecs.workspace = true
 heapless.workspace = true
 base64.workspace = true
 kanal.workspace = true
-mongodb.workspace = true
-bson = { workspace = true, features = ["uuid-1"] }
-chrono = { workspace = true, features = ["serde"] }
 ouroboros.workspace = true
+sqlx = { version = "0.7.4", features = ["postgres", "runtime-tokio", "uuid"] }
 
 [dev-dependencies]
 divan.workspace = true

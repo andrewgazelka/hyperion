@@ -17,6 +17,7 @@ clap = { workspace = true, features = ["derive"] }
 tracing-tracy.workspace = true
 bvh.workspace = true
 glam = { workspace = true, features = ["core-simd", "fast-math"] }
+dotenvy = "0.15.7"
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["full"] }

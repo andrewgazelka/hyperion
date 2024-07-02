@@ -1,7 +1,6 @@
 use std::{borrow::Cow, collections::BTreeSet};
 
 use anyhow::{bail, Context};
-use base64::Engine;
 use flecs_ecs::{
     core::{Entity, IdOperations, Query, QueryAPI, World},
     prelude::{EntityView, WorldRef},
@@ -31,8 +30,6 @@ use valence_registry::{
 use valence_server::entity::EntityKind;
 use valence_text::IntoText;
 
-pub mod list;
-
 use crate::{
     component::{blocks::MinecraftWorld, InGameName, Pose, Uuid, PLAYER_SPAWN_POSITION},
     config::CONFIG,
@@ -41,6 +38,8 @@ use crate::{
     system::player_join_world::list::{PlayerListActions, PlayerListEntry, PlayerListS2c},
     util::{metadata::show_all, player_skin::PlayerSkin},
 };
+
+pub mod list;
 
 // #[derive(Query, Debug)]
 // pub(crate) struct EntityQuery<'a> {
@@ -413,9 +412,10 @@ pub fn player_join_world(
     query.iter_stage(world).each(|(uuid, name, _, skin)| {
         // todo: in future, do not clone
 
-        let value = base64::engine::general_purpose::STANDARD.encode(&skin.textures.bytes);
-
-        let signature = base64::engine::general_purpose::STANDARD.encode(&skin.signature.bytes);
+        let PlayerSkin {
+            textures: value,
+            signature,
+        } = skin.clone();
 
         let property = valence_protocol::profile::Property {
             name: "textures".to_string(),
@@ -457,8 +457,10 @@ pub fn player_join_world(
         )
         .unwrap();
 
-    let textures = base64::engine::general_purpose::STANDARD.encode(&skin.textures.bytes);
-    let signature = base64::engine::general_purpose::STANDARD.encode(&skin.signature.bytes);
+    let PlayerSkin {
+        textures,
+        signature,
+    } = skin.clone();
 
     // todo: in future, do not clone
     let property = valence_protocol::profile::Property {
