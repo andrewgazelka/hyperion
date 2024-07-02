@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::cmp::Ordering;
 
 use derive_more::{Deref, DerefMut};
 use flecs_ecs::{
@@ -22,7 +22,7 @@ use crate::{
 
 #[derive(Component, Deref, DerefMut, Default)]
 pub struct ChunkChanges {
-    changes: HashSet<I16Vec2>,
+    changes: Vec<I16Vec2>,
 }
 
 pub fn load_pending(world: &World) {
@@ -41,6 +41,7 @@ pub fn load_pending(world: &World) {
 #[instrument(skip_all, level = "trace")]
 pub fn generate_chunk_changes(world: &World) {
     let radius = CONFIG.view_distance as i16;
+    let r2_liberal = (radius + 1).pow(2);
 
     system!(
         "generate_chunk_changes",
@@ -89,8 +90,34 @@ pub fn generate_chunk_changes(world: &World) {
                     !last_sent_x_range.contains(&pos.x) || !last_sent_z_range.contains(&pos.y)
                 });
 
+            let mut num_chunks_added = 0;
+
             for chunk in added_chunks {
-                chunk_changes.insert(chunk);
+                chunk_changes.push(chunk);
+                num_chunks_added += 1;
+            }
+
+            if num_chunks_added > 0 {
+                // remove further than radius
+                chunk_changes.retain(|elem| {
+                    let elem = elem.distance_squared(current_chunk);
+                    elem <= r2_liberal
+                });
+
+                chunk_changes.sort_unstable_by(|a, b| {
+                    let r1 = a.distance_squared(current_chunk);
+                    let r2 = b.distance_squared(current_chunk);
+
+                    // reverse because we want to get the closest chunks first and we are poping from the end
+                    match r1.cmp(&r2).reverse() {
+                        Ordering::Less => Ordering::Less,
+                        Ordering::Greater => Ordering::Greater,
+
+                        // so we can dedup properly (without same element could be scattered around)
+                        Ordering::Equal => a.to_array().cmp(&b.to_array()),
+                    }
+                });
+                chunk_changes.dedup();
             }
         },
     );
@@ -111,28 +138,46 @@ pub fn send_updates(world: &World) {
     .tracing_each_entity(
         trace_span!("send_updates"),
         |entity, (chunks, tasks, compose, stream_id, chunk_changes)| {
-            let mut left_over = Vec::new();
+            const MAX_CHUNKS_PER_TICK: usize = 32;
 
             let world = entity.world();
 
-            for &elem in &chunk_changes.changes {
+            let last = None;
+
+            let mut iter_count = 0;
+
+            let mut idx = (chunk_changes.changes.len() as isize) - 1;
+
+            #[allow(clippy::cast_sign_loss)]
+            while idx >= 0 {
+                let elem = chunk_changes.changes[idx as usize];
+
+                // a duplicate. todo: there are cases where duplicate will not be removed properly
+                // since sort is unstable
+                if last == Some(elem) {
+                    chunk_changes.changes.swap_remove(idx as usize);
+                    continue;
+                }
+
+                if iter_count >= MAX_CHUNKS_PER_TICK {
+                    break;
+                }
+
                 match chunks.get_cached_or_load(elem, tasks, &world) {
                     Ok(Some(ChunkData::Cached(chunk))) => {
                         compose.io_buf().unicast_raw(chunk, stream_id, &world);
-                        continue;
+                        iter_count += 1;
+                        chunk_changes.changes.swap_remove(idx as usize);
                     }
-                    Ok(Some(ChunkData::Task(..)) | None) => {
-                        left_over.push(elem);
-                        continue;
-                    }
+                    Ok(Some(ChunkData::Task(..)) | None) => {}
                     Err(err) => {
                         error!("failed to get chunk {elem:?}: {err}");
-                        continue;
+                        chunk_changes.changes.swap_remove(idx as usize);
                     }
                 }
-            }
 
-            chunk_changes.changes = left_over.into_iter().collect();
+                idx -= 1;
+            }
         },
     );
 }
