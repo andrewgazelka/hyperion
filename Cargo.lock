@@ -1672,6 +1672,7 @@ dependencies = [
  "arc-swap",
  "bvh",
  "bytes",
+ "clap",
  "glam",
  "heapless",
  "hyperion-proto",

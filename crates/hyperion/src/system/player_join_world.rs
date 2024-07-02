@@ -160,7 +160,7 @@ use crate::{
 //         chat_data: None,
 //         listed: true,
 //         ping: 0,
-//         game_mode: GameMode::Survival,
+//         game_mode: GameMode::Creative,
 //         display_name: Some(query.name.to_string().into_cow_text()),
 //     }];
 //
@@ -231,7 +231,7 @@ use crate::{
 //             chat_data: None,
 //             listed: true,
 //             ping: 20,
-//             game_mode: GameMode::Survival,
+//             game_mode: GameMode::Creative,
 //             display_name: Some(name.to_string().into_cow_text()),
 //         })
 //         .collect::<Vec<_>>();
@@ -431,7 +431,7 @@ pub fn player_join_world(
             chat_data: None,
             listed: true,
             ping: 20,
-            game_mode: GameMode::Survival,
+            game_mode: GameMode::Creative,
             display_name: Some(name.to_string().into_cow_text()),
         };
 
@@ -476,7 +476,7 @@ pub fn player_join_world(
         chat_data: None,
         listed: true,
         ping: 20,
-        game_mode: GameMode::Survival,
+        game_mode: GameMode::Creative,
         display_name: Some(name.to_string().into_cow_text()),
     }];
 
@@ -675,11 +675,11 @@ pub fn send_game_join_packet(encoder: &mut PacketEncoder) -> anyhow::Result<()> 
         enable_respawn_screen: false,
         dimension_name: dimension_name.into(),
         hashed_seed: 0,
-        game_mode: GameMode::Survival,
+        game_mode: GameMode::Creative,
         is_flat: false,
         last_death_location: None,
         portal_cooldown: 60.into(),
-        previous_game_mode: OptGameMode(Some(GameMode::Survival)),
+        previous_game_mode: OptGameMode(Some(GameMode::Creative)),
         dimension_type_name: "minecraft:overworld".try_into()?,
         is_debug: false,
     };

@@ -9,7 +9,7 @@ struct Args {
     #[clap(short, long, default_value = "0.0.0.0")]
     ip: String,
     /// The port the server should listen on. Defaults to 25565
-    #[clap(short, long, default_value = "25565")]
+    #[clap(short, long, default_value = "35565")]
     port: u16,
 
     #[clap(short, long, default_value = "false")]
