@@ -386,30 +386,15 @@ pub fn player_join_world(
         )
         .unwrap();
 
-    query
-        .iter_stage(world)
-        .each_iter(|it, idx, (uuid, _, pose, _)| {
-            let query_entity = it.entity(idx);
-
-            if entity.id() == query_entity.id() {
-                return;
-            }
-
-            let pkt = play::PlayerSpawnS2c {
-                entity_id: VarInt(query_entity.id().0 as i32),
-                player_uuid: uuid.0,
-                position: pose.position.as_dvec3(),
-                yaw: ByteAngle::from_degrees(pose.yaw),
-                pitch: ByteAngle::from_degrees(pose.pitch),
-            };
-
-            compose.unicast(&pkt, packets, world).unwrap();
-        });
-
     let mut entries = Vec::new();
     let mut all_player_names = Vec::new();
 
+    let count = query.iter_stage(world).count();
+
+    info!("sending skins for {count} players");
+
     query.iter_stage(world).each(|(uuid, name, _, skin)| {
+        info!("sending skin for {name}");
         // todo: in future, do not clone
 
         let PlayerSkin {
@@ -456,6 +441,31 @@ pub fn player_join_world(
             world,
         )
         .unwrap();
+
+    query
+        .iter_stage(world)
+        .each_iter(|it, idx, (uuid, _, pose, _)| {
+            let query_entity = it.entity(idx);
+
+            if entity.id() == query_entity.id() {
+                return;
+            }
+
+            let pkt = play::PlayerSpawnS2c {
+                entity_id: VarInt(query_entity.id().0 as i32),
+                player_uuid: uuid.0,
+                position: pose.position.as_dvec3(),
+                yaw: ByteAngle::from_degrees(pose.yaw),
+                pitch: ByteAngle::from_degrees(pose.pitch),
+            };
+
+            compose.unicast(&pkt, packets, world).unwrap();
+
+            let show_all = show_all(query_entity.id().0 as i32);
+            compose
+                .unicast(show_all.borrow_packet(), packets, world)
+                .unwrap();
+        });
 
     let PlayerSkin {
         textures,

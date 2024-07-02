@@ -50,7 +50,9 @@ pub fn joins(world: &'static World) {
         let mut skins = Vec::new();
 
         while let Ok(Some((entity, skin))) = comms.skins_rx.try_recv() {
-            skins.push((entity, skin));
+            skins.push((entity, skin.clone()));
+            let entity = world.entity_from_id(entity);
+            entity.set(skin);
         }
 
         // todo: par_iter but bugs...

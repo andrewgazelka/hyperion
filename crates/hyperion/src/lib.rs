@@ -252,6 +252,7 @@ impl Hyperion {
 
         system::ingress::player_connect_disconnect(world, receive_state.0.clone());
         system::ingress::ingress_to_ecs(world, receive_state.0);
+        system::ingress::remove_player_from_visibility(world);
         system::ingress::remove_player(world);
         system::stats::stats(world);
         system::joins::joins(world);
@@ -265,8 +266,6 @@ impl Hyperion {
         world.set(MinecraftWorld::new(&biome_registry)?);
 
         world.set(StreamLookup::default());
-
-        system::ingress::remove_player_from_visibility(world);
 
         system::ingress::recv_data(world);
 

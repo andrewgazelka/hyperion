@@ -62,7 +62,7 @@ release:
 # run a given number of bots to connect to hyperion
 bots count='1000':
     cargo install -q --git https://github.com/andrewgazelka/rust-mc-bot --branch optimize
-    ulimit -Sn {{fds}} && rust-mc-bot 127.0.0.1:25566 {{count}}
+    ulimit -Sn {{fds}} && rust-mc-bot 127.0.0.1:25565 {{count}}
 
 # run in release mode with tracy
 run:
