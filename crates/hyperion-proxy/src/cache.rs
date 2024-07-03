@@ -127,6 +127,8 @@ pub struct BufferedEgress {
     update_chunk_positions: Option<UpdatePlayerChunkPositions>,
 
     egress: Arc<Egress>,
+
+    broadcast_order: Option<u32>,
 }
 
 impl BufferedEgress {
@@ -136,16 +138,35 @@ impl BufferedEgress {
             update_chunk_positions: None,
             exclusions: GlobalExclusions::default(),
             egress,
+            broadcast_order: None,
         }
     }
 
+    // #[instrument(skip_all)]
     pub fn handle_packet(&mut self, message: ServerToProxyMessage) {
         match message {
             ServerToProxyMessage::UpdatePlayerChunkPositions(packet) => {
                 self.update_chunk_positions = Some(packet);
             }
             ServerToProxyMessage::BroadcastGlobal(packet) => {
-                // todo: care about optional
+                if let Some(order) = self.broadcast_order
+                    && order != packet.order
+                {
+                    // todo: remove packet
+                    let pkt = BroadcastGlobal {
+                        data: self.broadcast_required.split().freeze(),
+                        optional: false,
+                        exclude: 0,
+                        order,
+                    };
+
+                    self.egress
+                        .handle_broadcast_global(pkt, self.exclusions.take());
+                }
+
+                self.broadcast_order = Some(packet.order);
+
+                // // todo: care about optional
                 let current_len = self.broadcast_required.len();
                 self.broadcast_required.extend_from_slice(&packet.data);
 
@@ -166,6 +187,16 @@ impl BufferedEgress {
                 // want to send, we'll have to be getting data from the L3
                 // cache. If it's over a certain size, then that's not good,
                 // and the cache would be invalid for every single player probably.
+
+                // self.egress
+                //     .handle_broadcast_global(packet, self.exclusions.take());
+                //
+                // if let Some(update_chunk_positions) = self.update_chunk_positions.take() {
+                //     self.egress
+                //         .handle_packet(ServerToProxyMessage::UpdatePlayerChunkPositions(
+                //             update_chunk_positions,
+                //         ));
+                // }
             }
             // todo: impl
             ServerToProxyMessage::BroadcastLocal(_) | ServerToProxyMessage::Multicast(_) => {}
@@ -174,22 +205,41 @@ impl BufferedEgress {
                 self.egress.handle_packet(pkt);
             }
             ServerToProxyMessage::Flush(_) => {
-                let pkt = BroadcastGlobal {
-                    data: self.broadcast_required.split().freeze(),
-                    optional: false,
-                    exclude: 0,
-                };
+                if let Some(order) = self.broadcast_order {
+                    let pkt = BroadcastGlobal {
+                        data: self.broadcast_required.split().freeze(),
+                        optional: false,
+                        exclude: 0,
+                        order,
+                    };
+
+                    self.egress
+                        .handle_broadcast_global(pkt, self.exclusions.take());
+                }
+
+                self.broadcast_order = None;
+
+                self.egress.handle_flush();
+
+                // let pkt = BroadcastGlobal {
+                //     data: self.broadcast_required.split().freeze(),
+                //     optional: false,
+                //     exclude: 0,
+                //     order : 0,
+                // };
+
+                // todo!("order");
 
                 // todo: Properly handle exclude.
-                self.egress
-                    .handle_broadcast_global(pkt, self.exclusions.take());
-
-                if let Some(update_chunk_positions) = self.update_chunk_positions.take() {
-                    self.egress
-                        .handle_packet(ServerToProxyMessage::UpdatePlayerChunkPositions(
-                            update_chunk_positions,
-                        ));
-                }
+                // self.egress
+                //     .handle_broadcast_global(pkt, self.exclusions.take());
+                //
+                // if let Some(update_chunk_positions) = self.update_chunk_positions.take() {
+                //     self.egress
+                //         .handle_packet(ServerToProxyMessage::UpdatePlayerChunkPositions(
+                //             update_chunk_positions,
+                //         ));
+                // }
             }
         }
     }

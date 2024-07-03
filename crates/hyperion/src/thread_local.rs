@@ -24,6 +24,15 @@ impl<T> DerefMut for ThreadLocal<T> {
     }
 }
 
+impl<'a, T> IntoIterator for &'a mut ThreadLocal<T> {
+    type IntoIter = core::slice::IterMut<'a, T>;
+    type Item = &'a mut T;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.locals.iter_mut()
+    }
+}
+
 impl<T: Default> ThreadLocal<T> {
     #[must_use]
     pub fn new_defaults() -> Self {

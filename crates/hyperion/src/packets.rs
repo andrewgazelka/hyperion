@@ -4,8 +4,9 @@ use std::ops::ControlFlow;
 
 use bvh_region::aabb::Aabb;
 use flecs_ecs::core::{Entity, EntityView, World};
-use glam::{I16Vec2, IVec2, IVec3, U16Vec3, Vec3};
+use glam::{I16Vec2, IVec2, U16Vec3, Vec3};
 use tracing::{info, instrument, trace, warn};
+use valence_generated::block::{BlockKind, BlockState};
 use valence_protocol::{
     decode::PacketFrame,
     ident,
@@ -25,11 +26,13 @@ use crate::{
             loaded::{LoadedChunk, START_Y},
             MinecraftWorld,
         },
+        inventory::Inventory,
         ConfirmBlockSequences, Pose,
     },
     event,
     event::{EventQueue, Posture, ThreadLocalBump},
     net::{Compose, NetworkStreamRef},
+    SystemId,
 };
 
 pub mod vanilla;
@@ -80,7 +83,7 @@ fn change_position_or_correct_client(query: &mut PacketSwitchQuery, proposed: Ve
 
     query
         .compose
-        .unicast(&pkt, query.io_ref, query.world)
+        .unicast(&pkt, query.io_ref, query.system_id, query.world)
         .unwrap();
 }
 
@@ -243,13 +246,15 @@ pub struct PacketSwitchQuery<'a> {
     #[allow(unused)]
     pub view: EntityView<'a>,
     pub compose: &'a Compose,
-    pub io_ref: &'a NetworkStreamRef,
+    pub io_ref: NetworkStreamRef,
     pub pose: &'a mut Pose,
     pub allocator: &'a ThreadLocalBump,
     pub event_queue: &'a EventQueue,
     pub world: &'a World,
     pub blocks: &'a MinecraftWorld,
     pub confirm_block_sequences: &'a mut ConfirmBlockSequences,
+    pub system_id: SystemId,
+    pub inventory: &'a mut Inventory,
 }
 
 // i.e., shooting a bow
@@ -296,90 +301,78 @@ fn player_action(mut data: &[u8], query: &PacketSwitchQuery) -> anyhow::Result<(
     // let tick = query.compose.global().tick;
     let world_id = query.world.stage_id();
 
-    match packet.action {
-        PlayerAction::AbortDestroyBlock => {
-            let chat = format!("{position} aborted breaking block ({world_id}) {entity:?}");
-            // chat message
-            let message = play::GameMessageS2c {
-                chat: chat.into_cow_text(),
-                overlay: true,
+    // if creative or in survival and something like TNT that can be instantly destroyed
+    let instant_destroy = true;
+
+    let destroy = match packet.action {
+        PlayerAction::StopDestroyBlock => true,
+        PlayerAction::StartDestroyBlock => instant_destroy,
+        _ => false,
+    };
+
+    if destroy {
+        let chat = format!("{position} finished breaking block ({world_id} {entity:?})");
+        // chat message
+        let message = play::GameMessageS2c {
+            chat: chat.into_cow_text(),
+            overlay: true,
+        };
+
+        let mut called = false;
+
+        entity.get::<&mut EventQueue>(|event_queue| {
+            let id = ident!("minecraft:block.note_block.harp");
+
+            let id = SoundId::Direct {
+                id: id.into(),
+                range: None,
             };
 
-            query.compose.broadcast(&message).send(query.world).unwrap();
-        }
-        PlayerAction::StopDestroyBlock => {
-            // for finishing destroying a block
-            let chat = format!("{position} finished breaking block ({world_id} {entity:?})");
-            // chat message
-            let message = play::GameMessageS2c {
-                chat: chat.into_cow_text(),
-                overlay: true,
+            let sound = play::PlaySoundS2c {
+                id,
+                category: SoundCategory::Ambient,
+                position: query.pose.sound_position(),
+                volume: 1.0,
+                pitch: 0.5,
+                seed: 0,
             };
 
-            let mut called = false;
+            query
+                .compose
+                .unicast(&sound, query.io_ref, query.system_id, query.world)
+                .unwrap();
 
-            entity.get::<&mut EventQueue>(|event_queue| {
-                let id = ident!("minecraft:block.note_block.harp");
+            info!("Break block!");
 
-                let id = SoundId::Direct {
-                    id: id.into(),
-                    range: None,
-                };
+            let x = u16::try_from(position.x & 0b1111).unwrap();
+            let z = u16::try_from(position.z & 0b1111).unwrap();
 
-                let sound = play::PlaySoundS2c {
-                    id,
-                    category: SoundCategory::Ambient,
-                    position: IVec3::new(-3720, -120, -352),
-                    volume: 1.0,
-                    pitch: 0.5,
-                    seed: 0,
-                };
+            let y = u16::try_from(position.y - START_Y).unwrap();
 
-                query
-                    .compose
-                    .unicast(&sound, query.io_ref, query.world)
-                    .unwrap();
+            let position = U16Vec3::new(x, y, z);
 
-                info!("Break block!");
+            event_queue
+                .push(
+                    event::BlockBreak {
+                        position,
+                        by: query.id,
+                        id: packet.sequence,
+                    },
+                    query.allocator,
+                    query.world,
+                )
+                .unwrap();
 
-                let x = u16::try_from(position.x & 0b1111).unwrap();
-                let z = u16::try_from(position.z & 0b1111).unwrap();
+            query
+                .compose
+                .broadcast(&message, query.system_id)
+                .send(query.world)
+                .unwrap();
 
-                let y = u16::try_from(position.y - START_Y).unwrap();
+            called = true;
+        });
 
-                let position = U16Vec3::new(x, y, z);
-
-                event_queue
-                    .push(
-                        event::BlockBreak {
-                            position,
-                            by: query.id,
-                            id: packet.sequence,
-                        },
-                        query.allocator,
-                        query.world,
-                    )
-                    .unwrap();
-
-                query.compose.broadcast(&message).send(query.world).unwrap();
-
-                called = true;
-            });
-
-            assert!(called, "Not called");
-        }
-
-        PlayerAction::StartDestroyBlock => {
-            let chat = format!("{position} started destroying block ({world_id})");
-
-            let message = play::GameMessageS2c {
-                chat: chat.into_cow_text(),
-                overlay: true,
-            };
-
-            query.compose.broadcast(&message).send(query.world).unwrap();
-        }
-        _ => {}
+        assert!(called, "Not called");
     }
 
     Ok(())
@@ -448,6 +441,26 @@ pub fn player_interact_block(mut data: &[u8], query: &mut PacketSwitchQuery) -> 
         return Ok(());
     };
 
+    if let Some(item) = query.inventory.get_held()
+        && !item.is_empty()
+    {
+        let item = item.item;
+
+        let Some(block) = BlockKind::from_item_kind(item) else {
+            warn!("invalid item kind to place: {item:?}");
+            return Ok(());
+        };
+
+        let block = BlockState::from_kind(block);
+
+        let position = position.get_in_direction(packet.face);
+
+        query.blocks.set_block(position, block, query.world);
+
+        info!("placed block at {position:?}");
+        return Ok(());
+    }
+
     let chunk_start: IVec2 = chunk_position.as_ivec2() << 4;
 
     let x = position.x - chunk_start[0];
@@ -468,6 +481,60 @@ pub fn player_interact_block(mut data: &[u8], query: &mut PacketSwitchQuery) -> 
     Ok(())
 }
 
+// pub  fn inventory(mut data: &[u8], query: &PacketSwitchQuery) -> anyhow::Result<()> {
+//     // "Set Container Content" packet (ID 0x12)
+//     let packet = play::InventoryS2c::decode(&mut data)?;
+//
+//     let play::InventoryS2c {
+//         window_id,
+//         state_id,
+//         slots,
+//         carried_item,
+//     } = packet;
+//
+//     if window_id != 0 {
+//         warn!("not player inventory");
+//         return Ok(());
+//     };
+//
+//     info!("inventory packet: {window_id} {state_id:?} {slots:?} {carried_item:?}");
+//
+//
+//     Ok(())
+// }
+
+pub fn update_selected_slot(mut data: &[u8], query: &mut PacketSwitchQuery) -> anyhow::Result<()> {
+    // "Set Selected Slot" packet (ID 0x0B)
+    let packet = play::UpdateSelectedSlotC2s::decode(&mut data)?;
+
+    let play::UpdateSelectedSlotC2s { slot } = packet;
+
+    query.inventory.set_cursor(slot);
+
+    Ok(())
+}
+
+pub fn creative_inventory_action(
+    mut data: &[u8],
+    query: &mut PacketSwitchQuery,
+) -> anyhow::Result<()> {
+    // "Creative Inventory Action" packet (ID 0x0C)
+    let packet = play::CreativeInventoryActionC2s::decode(&mut data)?;
+
+    let play::CreativeInventoryActionC2s { slot, clicked_item } = packet;
+
+    info!("creative inventory action: {slot} {clicked_item:?}");
+
+    let Ok(slot) = u16::try_from(slot) else {
+        warn!("invalid slot {slot}");
+        return Ok(());
+    };
+
+    query.inventory.set_slot(slot, clicked_item);
+
+    Ok(())
+}
+
 pub fn packet_switch(raw: &PacketFrame, query: &mut PacketSwitchQuery) -> anyhow::Result<()> {
     let packet_id = raw.id;
     let data = raw.body.as_ref();
@@ -479,6 +546,9 @@ pub fn packet_switch(raw: &PacketFrame, query: &mut PacketSwitchQuery) -> anyhow
         play::FullC2s::ID => full(query, data)?,
         play::PlayerActionC2s::ID => player_action(data, query)?,
         play::PositionAndOnGroundC2s::ID => position_and_on_ground(query, data)?,
+        // play::InventoryS2c::ID => inventory(data, query)?,
+        play::UpdateSelectedSlotC2s::ID => update_selected_slot(data, query)?,
+        play::CreativeInventoryActionC2s::ID => creative_inventory_action(data, query)?,
         play::LookAndOnGroundC2s::ID => look_and_on_ground(data, query.pose)?,
         play::PlayerInteractBlockC2s::ID => player_interact_block(data, query)?,
         // play::ClientCommandC2s::ID => player_command(data),

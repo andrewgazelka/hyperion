@@ -1,5 +1,5 @@
 use flecs_ecs::{
-    core::{QueryAPI, QueryBuilderImpl, SystemAPI, TermBuilderImpl, World},
+    core::{flecs::pipeline, QueryAPI, QueryBuilderImpl, SystemAPI, TermBuilderImpl, World},
     macros::system,
 };
 use uuid::Uuid;
@@ -8,20 +8,23 @@ use valence_protocol::{
     text::IntoText,
 };
 
-use crate::{component::Play, net::Compose};
+use crate::{component::Play, net::Compose, SystemRegistry};
 
-pub fn stats(world: &World) {
+pub fn stats(world: &World, registry: &mut SystemRegistry) {
     let mode = std::env::var("RUN_MODE").unwrap_or_else(|_| "Unknown".to_string());
 
     let mut players = world.new_query::<&Play>();
 
     let mut last_frame_time_total = 0.0;
 
+    let system_id = registry.register();
+
     system!(
         "stats_message",
         world,
         &mut Compose($),
     )
+    .kind::<pipeline::OnUpdate>()
     .each_iter(move |iter, _, compose| {
         let world = iter.world();
 
@@ -57,7 +60,7 @@ pub fn stats(world: &World) {
             },
         };
 
-        compose.broadcast(&pkt).send(&world).unwrap();
+        compose.broadcast(&pkt, system_id).send(&world).unwrap();
 
         // let player_count = compose.global().shared.player_count.load(std::sync::atomic::Ordering::Relaxed);
         let player_count = players.count();
@@ -83,6 +86,6 @@ pub fn stats(world: &World) {
             },
         };
 
-        compose.broadcast(&pkt).send(&world).unwrap();
+        compose.broadcast(&pkt, system_id).send(&world).unwrap();
     });
 }

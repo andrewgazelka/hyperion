@@ -2,7 +2,7 @@ use std::cmp::Ordering;
 
 use derive_more::{Deref, DerefMut};
 use flecs_ecs::{
-    core::{IntoWorld, QueryBuilderImpl, SystemAPI, TermBuilderImpl, World},
+    core::{flecs::pipeline, IntoWorld, QueryBuilderImpl, SystemAPI, TermBuilderImpl, World},
     macros::{system, Component},
 };
 use glam::I16Vec2;
@@ -18,6 +18,7 @@ use crate::{
     net::{Compose, NetworkStreamRef},
     runtime::AsyncRuntime,
     tracing_ext::TracingExt,
+    SystemRegistry,
 };
 
 #[derive(Component, Deref, DerefMut, Default)]
@@ -39,9 +40,11 @@ pub fn load_pending(world: &World) {
 }
 
 #[instrument(skip_all, level = "trace")]
-pub fn generate_chunk_changes(world: &World) {
+pub fn generate_chunk_changes(world: &World, registry: &mut SystemRegistry) {
     let radius = CONFIG.view_distance as i16;
     let r2_liberal = (radius + 1).pow(2);
+
+    let system_id = registry.register();
 
     system!(
         "generate_chunk_changes",
@@ -52,10 +55,11 @@ pub fn generate_chunk_changes(world: &World) {
         &NetworkStreamRef,
         &mut ChunkChanges,
     )
+    .kind::<pipeline::OnUpdate>()
     .multi_threaded()
     .tracing_each_entity(
         trace_span!("generate_chunk_changes"),
-        move |entity, (compose, last_sent, pose, stream_id, chunk_changes)| {
+        move |entity, (compose, last_sent, pose, &stream_id, chunk_changes)| {
             let world = entity.world();
 
             let last_sent_chunk = last_sent.0;
@@ -74,7 +78,9 @@ pub fn generate_chunk_changes(world: &World) {
                 chunk_z: i32::from(current_chunk.y).into(),
             };
 
-            compose.unicast(&center_chunk, stream_id, &world).unwrap();
+            compose
+                .unicast(&center_chunk, stream_id, system_id, &world)
+                .unwrap();
 
             last_sent.0 = current_chunk;
 
@@ -123,7 +129,9 @@ pub fn generate_chunk_changes(world: &World) {
     );
 }
 
-pub fn send_updates(world: &World) {
+pub fn send_updates(world: &World, registry: &mut SystemRegistry) {
+    let system_id = registry.register();
+
     system!(
         "send_updates",
         world,
@@ -134,10 +142,11 @@ pub fn send_updates(world: &World) {
         &mut ChunkChanges,
     )
     .with::<&Play>()
+    .kind::<pipeline::OnUpdate>()
     .multi_threaded()
     .tracing_each_entity(
         trace_span!("send_updates"),
-        |entity, (chunks, tasks, compose, stream_id, chunk_changes)| {
+        move |entity, (chunks, tasks, compose, &stream_id, chunk_changes)| {
             const MAX_CHUNKS_PER_TICK: usize = 32;
 
             let world = entity.world();
@@ -165,7 +174,9 @@ pub fn send_updates(world: &World) {
 
                 match chunks.get_cached_or_load(elem, tasks, &world) {
                     Ok(Some(ChunkData::Cached(chunk))) => {
-                        compose.io_buf().unicast_raw(chunk, stream_id, &world);
+                        compose
+                            .io_buf()
+                            .unicast_raw(chunk, stream_id, system_id, &world);
                         iter_count += 1;
                         chunk_changes.changes.swap_remove(idx as usize);
                     }

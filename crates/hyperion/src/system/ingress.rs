@@ -32,9 +32,9 @@ use valence_protocol::{
 use crate::{
     component,
     component::{
-        blocks::MinecraftWorld, AiTargetable, ChunkPosition, Comms, ConfirmBlockSequences,
-        EntityReaction, Health, ImmuneStatus, InGameName, PacketState, Pose, Uuid,
-        PLAYER_SPAWN_POSITION,
+        blocks::MinecraftWorld, inventory::PlayerInventory, AiTargetable, ChunkPosition, Comms,
+        ConfirmBlockSequences, EntityReaction, Health, ImmuneStatus, InGameName, PacketState, Pose,
+        Uuid, PLAYER_SPAWN_POSITION,
     },
     event::{EventQueue, ThreadLocalBump},
     net::{
@@ -47,7 +47,9 @@ use crate::{
     system::{chunks::ChunkChanges, joins::SendableRef},
     tracing_ext::TracingExt,
     util::{db::SkinHandler, mojang::MojangClient, player_skin::PlayerSkin},
+    SystemId, SystemRegistry,
 };
+
 // pub type ThreadLocalIngressSender<'a, 'b> = SenderLocal<'a, 'b, IngressEventSet>;
 // pub type IngressSender<'a> = Sender<'a, IngressEventSet>;
 
@@ -80,6 +82,7 @@ pub fn player_connect_disconnect(world: &World, shared: Arc<Mutex<ReceiveStateIn
             let view = world
                 .entity()
                 .set(NetworkStreamRef::new(connect.stream))
+                .set(PlayerInventory::default())
                 .set(ConfirmBlockSequences::default())
                 .set(EventQueue::default())
                 .set(PacketState::Handshake)
@@ -148,7 +151,8 @@ pub fn ingress_to_ecs(world: &'static World, shared: Arc<Mutex<ReceiveStateInner
 // The `Receiver<Tick>` parameter tells our handler to listen for the `Tick` event.
 #[instrument(skip_all, level = "trace")]
 #[allow(clippy::too_many_arguments, reason = "todo")]
-pub fn remove_player_from_visibility(world: &World) {
+pub fn remove_player_from_visibility(world: &World, registry: &mut SystemRegistry) {
+    let system_id = registry.register();
     system!(
         "remove_player_from_visibility",
         world,
@@ -156,25 +160,29 @@ pub fn remove_player_from_visibility(world: &World) {
         &Compose($),
     )
     .with::<&PendingRemove>()
-    .tracing_each_entity(trace_span!("remove_player"), |entity, (uuid, compose)| {
-        let uuids = &[uuid.0];
-        let entity_ids = [VarInt(entity.id().0 as i32)];
+    .kind::<OnUpdate>()
+    .tracing_each_entity(
+        trace_span!("remove_player"),
+        move |entity, (uuid, compose)| {
+            let uuids = &[uuid.0];
+            let entity_ids = [VarInt(entity.id().0 as i32)];
 
-        let world = entity.world();
+            let world = entity.world();
 
-        // destroy
-        let pkt = play::EntitiesDestroyS2c {
-            entity_ids: Cow::Borrowed(&entity_ids),
-        };
+            // destroy
+            let pkt = play::EntitiesDestroyS2c {
+                entity_ids: Cow::Borrowed(&entity_ids),
+            };
 
-        compose.broadcast(&pkt).send(&world).unwrap();
+            compose.broadcast(&pkt, system_id).send(&world).unwrap();
 
-        let pkt = play::PlayerRemoveS2c {
-            uuids: Cow::Borrowed(uuids),
-        };
+            let pkt = play::PlayerRemoveS2c {
+                uuids: Cow::Borrowed(uuids),
+            };
 
-        compose.broadcast(&pkt).send(&world).unwrap();
-    });
+            compose.broadcast(&pkt, system_id).send(&world).unwrap();
+        },
+    );
 }
 
 // The `Receiver<Tick>` parameter tells our handler to listen for the `Tick` event.
@@ -183,6 +191,7 @@ pub fn remove_player_from_visibility(world: &World) {
 pub fn remove_player(world: &World) {
     world
         .system_named::<()>("remove_player")
+        .kind::<OnUpdate>()
         .with::<&PendingRemove>()
         .tracing_each_entity(trace_span!("remove_player"), |entity, ()| {
             entity.destruct();
@@ -190,8 +199,10 @@ pub fn remove_player(world: &World) {
 }
 
 #[allow(clippy::too_many_arguments, reason = "todo")]
-pub fn recv_data(world: &World) {
+pub fn recv_data(world: &World, registry: &mut SystemRegistry) {
     let query = query!(world, &Uuid, &InGameName, &Pose).build();
+
+    let system_id = registry.register();
 
     system!(
         "recv_data",
@@ -208,7 +219,9 @@ pub fn recv_data(world: &World) {
         &EventQueue,
         ?&mut Pose,
         &mut ConfirmBlockSequences,
+        &mut PlayerInventory,
     )
+    .kind::<OnUpdate>()
     .multi_threaded()
     .tracing_each_entity(
         trace_span!("recv_data"),
@@ -222,10 +235,11 @@ pub fn recv_data(world: &World) {
             allocator,
             decoder,
             login_state,
-            io_ref,
+            &io_ref,
             event_queue,
             mut pose,
             confirm_block_sequences,
+            inventory,
         )| {
             let world = entity.world();
 
@@ -248,7 +262,8 @@ pub fn recv_data(world: &World) {
                         }
                     }
                     PacketState::Status => {
-                        process_status(login_state, &frame, io_ref, compose, &world).unwrap();
+                        process_status(login_state, system_id, &frame, io_ref, compose, &world)
+                            .unwrap();
                     }
                     PacketState::Login => process_login(
                         &world,
@@ -261,6 +276,7 @@ pub fn recv_data(world: &World) {
                         io_ref,
                         compose,
                         &mut entity,
+                        system_id,
                         &query,
                     )
                     .unwrap(),
@@ -282,7 +298,9 @@ pub fn recv_data(world: &World) {
                                 event_queue,
                                 world,
                                 blocks,
+                                system_id,
                                 confirm_block_sequences,
+                                inventory,
                             };
 
                             // trace_span!("ingress", ign = name).in_scope(|| {
@@ -331,9 +349,10 @@ fn process_login(
     comms: &Comms,
     skins_collection: SkinHandler,
     packet: &PacketFrame,
-    stream_id: &NetworkStreamRef,
+    stream_id: NetworkStreamRef,
     compose: &Compose,
     entity: &mut EntityView,
+    system_id: SystemId,
     query: &Query<(&Uuid, &InGameName, &Pose)>,
 ) -> anyhow::Result<()> {
     static UUIDS: once_cell::sync::Lazy<Mutex<Vec<uuid::Uuid>>> =
@@ -362,7 +381,7 @@ fn process_login(
     };
 
     compose
-        .unicast_no_compression(&pkt, stream_id, world)
+        .unicast_no_compression(&pkt, stream_id, system_id, world)
         .unwrap();
 
     decoder.set_compression(global.shared.compression_threshold);
@@ -394,7 +413,7 @@ fn process_login(
         properties: Cow::default(),
     };
 
-    compose.unicast(&pkt, stream_id, world).unwrap();
+    compose.unicast(&pkt, stream_id, system_id, world).unwrap();
 
     // todo: impl rest
     *login_state = PacketState::Play;
@@ -416,7 +435,7 @@ fn process_login(
                 pitch: ByteAngle::from_degrees(pose.pitch),
             };
 
-            compose.unicast(&pkt, stream_id, world).unwrap();
+            compose.unicast(&pkt, stream_id, system_id, world).unwrap();
         });
 
     entity
@@ -448,8 +467,9 @@ fn offline_uuid(username: &str) -> anyhow::Result<uuid::Uuid> {
 
 fn process_status(
     login_state: &mut PacketState,
+    system_id: SystemId,
     packet: &PacketFrame,
-    packets: &NetworkStreamRef,
+    packets: NetworkStreamRef,
     compose: &Compose,
     world: &World,
 ) -> anyhow::Result<()> {
@@ -490,7 +510,7 @@ fn process_status(
 
             trace!("sent query response: {query_request:?}");
             compose
-                .unicast_no_compression(&send, packets, world)
+                .unicast_no_compression(&send, packets, system_id, world)
                 .unwrap();
         }
 
@@ -502,7 +522,7 @@ fn process_status(
             let send = packets::status::QueryPongS2c { payload };
 
             compose
-                .unicast_no_compression(&send, packets, world)
+                .unicast_no_compression(&send, packets, system_id, world)
                 .unwrap();
 
             trace!("sent query pong: {query_ping:?}");

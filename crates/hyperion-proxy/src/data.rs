@@ -20,12 +20,22 @@ pub struct OrderedBytes {
     /// The player's order will need to be >= the order of the packet to send. Each packet sent
     /// will increase the order by 1.
     /// todo: handle wrapping around
-    pub order: u64,
+    pub order: u32,
     pub data: Bytes,
     pub exclusions: Option<Arc<GlobalExclusions>>,
 }
 
 impl OrderedBytes {
+    pub const FLUSH: Self = Self {
+        order: 0,
+        data: Bytes::from_static(b"flush"),
+        exclusions: None,
+    };
+
+    pub fn is_flush(&self) -> bool {
+        self.data.as_ref() == b"flush"
+    }
+
     pub const fn no_order(data: Bytes) -> Self {
         Self {
             order: 0,

@@ -14,6 +14,7 @@
 #![feature(io_slice_advance)]
 #![feature(assert_matches)]
 #![feature(try_trait_v2)]
+#![feature(let_chains)]
 #![allow(
     clippy::redundant_pub_crate,
     clippy::cast_possible_truncation,
@@ -30,7 +31,7 @@ use std::{alloc::Allocator, cell::RefCell, fmt::Debug, net::ToSocketAddrs, sync:
 
 use anyhow::{bail, Context};
 use derive_more::{Deref, DerefMut};
-use flecs_ecs::core::World;
+use flecs_ecs::core::{flecs, Entity, IdOperations, World};
 use libc::{getrlimit, setrlimit, RLIMIT_NOFILE};
 use libdeflater::CompressionLvl;
 use once_cell::sync::Lazy;
@@ -147,8 +148,50 @@ pub fn register_components(world: &World) {
     world.component::<component::blocks::loaded::NeighborNotify>();
     world.component::<component::blocks::loaded::PendingChanges>();
 
+    world.component::<component::inventory::Inventory>();
+
     world.component::<Db>();
     world.component::<db::SkinHandler>();
+}
+
+struct CustomPipeline {
+    egress: Entity,
+}
+
+impl CustomPipeline {
+    fn new(world: &World) -> Self {
+        let egress = world
+            .entity()
+            .add::<flecs::pipeline::Phase>()
+            .depends_on::<flecs::pipeline::PostUpdate>();
+
+        Self {
+            egress: egress.id(),
+        }
+    }
+}
+
+#[derive(Default)]
+struct SystemRegistry {
+    current_idx: u16,
+}
+
+#[derive(Copy, Clone, Debug)]
+pub struct SystemId(u16);
+
+impl SystemId {
+    const fn id(self) -> u16 {
+        self.0
+    }
+}
+
+impl SystemRegistry {
+    fn register(&mut self) -> SystemId {
+        // checked
+        let idx = self.current_idx;
+        self.current_idx = self.current_idx.checked_add(1).unwrap();
+        SystemId(idx)
+    }
 }
 
 impl Hyperion {
@@ -204,6 +247,8 @@ impl Hyperion {
 
         register_components(world);
 
+        let pipeline = CustomPipeline::new(world);
+
         handlers(world);
 
         let mut app = world.app();
@@ -250,33 +295,35 @@ impl Hyperion {
         world.set(egress_comm);
         world.set(tasks);
 
-        system::ingress::player_connect_disconnect(world, receive_state.0.clone());
-        system::ingress::ingress_to_ecs(world, receive_state.0);
-        system::ingress::remove_player_from_visibility(world);
-        system::ingress::remove_player(world);
-        system::stats::stats(world);
-        system::joins::joins(world);
-
-        system::chunks::load_pending(world);
-        system::chunks::generate_chunk_changes(world);
-        system::chunks::send_updates(world);
-
         let biome_registry =
             generate_biome_registry().context("failed to generate biome registry")?;
         world.set(MinecraftWorld::new(&biome_registry)?);
 
         world.set(StreamLookup::default());
 
-        system::ingress::recv_data(world);
+        let mut system_registry = SystemRegistry::default();
 
-        system::sync_entity_position::sync_entity_position(world);
+        system::ingress::player_connect_disconnect(world, receive_state.0.clone());
+        system::ingress::ingress_to_ecs(world, receive_state.0);
+        system::ingress::remove_player_from_visibility(world, &mut system_registry);
+        system::ingress::remove_player(world);
+        system::stats::stats(world, &mut system_registry);
+        system::joins::joins(world, &mut system_registry);
+
+        system::chunks::load_pending(world);
+        system::chunks::generate_chunk_changes(world, &mut system_registry);
+        system::chunks::send_updates(world, &mut system_registry);
+
+        system::ingress::recv_data(world, &mut system_registry);
+
+        system::sync_entity_position::sync_entity_position(world, &mut system_registry);
 
         // system::pkt_attack::send_pkt_attack_player(world);
-        system::event_handler::handle_events(world);
+        system::event_handler::handle_events(world, &mut system_registry);
         system::event_handler::reset_event_queue(world);
         system::event_handler::reset_allocators(world);
 
-        system::egress::egress(world);
+        system::egress::egress(world, &pipeline);
 
         app.run();
 

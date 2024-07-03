@@ -1,6 +1,7 @@
 #![feature(maybe_uninit_slice)]
 #![feature(allocator_api)]
 #![feature(io_slice_advance)]
+#![feature(let_chains)]
 #![allow(
     clippy::redundant_pub_crate,
     clippy::cast_possible_truncation,
@@ -153,7 +154,7 @@ impl Debug for ServerReader {
 }
 
 impl ServerReader {
-    #[instrument]
+    #[instrument(level = "trace")]
     pub fn new(server_read: BufReader<tokio::net::tcp::OwnedReadHalf>) -> Self {
         Self {
             server_read,
@@ -161,7 +162,7 @@ impl ServerReader {
         }
     }
 
-    #[instrument]
+    #[instrument(level = "trace")]
     pub async fn next(&mut self) -> anyhow::Result<ServerToProxyMessage> {
         let len = self.read_varint().await?;
 
@@ -171,7 +172,7 @@ impl ServerReader {
         Ok(message)
     }
 
-    #[instrument]
+    #[instrument(level = "trace")]
     async fn read_varint(&mut self) -> anyhow::Result<usize> {
         let mut vint = [0u8; 4];
         let mut i = 0;
@@ -191,7 +192,7 @@ impl ServerReader {
         Ok(usize::try_from(len).expect("Failed to convert varint to usize"))
     }
 
-    #[instrument]
+    #[instrument(level = "trace")]
     async fn next_server_packet(&mut self, len: usize) -> anyhow::Result<ServerToProxyMessage> {
         if self.buffer.len() < len {
             self.buffer.resize(len, 0);

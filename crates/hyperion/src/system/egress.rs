@@ -1,15 +1,15 @@
 use flecs_ecs::{
-    core::{flecs::pipeline, QueryBuilderImpl, SystemAPI, TermBuilderImpl, World},
+    core::{QueryBuilderImpl, SystemAPI, TermBuilderImpl, World},
     macros::system,
 };
 use hyperion_proto::Flush;
 use prost::Message;
 use tracing::instrument;
 
-use crate::{component::EgressComm, net::Compose};
+use crate::{component::EgressComm, net::Compose, CustomPipeline};
 
 #[instrument(skip_all, level = "trace")]
-pub fn egress(world: &World) {
+pub fn egress(world: &World, pipeline: &CustomPipeline) {
     // ByteMut::with_capacity(1024);
     // ByteMut [----------------------------------------------------------------------] ALLOC [A]
     // we write 30 bytes to the buffer
@@ -40,12 +40,12 @@ pub fn egress(world: &World) {
         &mut Compose($),
         &mut EgressComm($),
     )
-    .kind::<pipeline::PostUpdate>()
+    .kind_id(pipeline.egress)
     .each(|(compose, egress)| {
         let span = tracing::trace_span!("egress");
         let _enter = span.enter();
         let io = compose.io_buf_mut();
-        for bytes in io.split() {
+        for bytes in io.reset_and_split() {
             if bytes.is_empty() {
                 continue;
             }

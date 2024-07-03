@@ -1,10 +1,13 @@
-use std::sync::{atomic::Ordering, Arc};
+use std::{
+    sync::{atomic::Ordering, Arc},
+    time::Duration,
+};
 
 use arc_swap::ArcSwap;
 use bvh::{Aabb, Bvh, Data, Point};
 use hyperion_proto::ServerToProxyMessage;
 use slotmap::KeyData;
-use tracing::{debug, error, info, instrument};
+use tracing::{debug, error, info, instrument, warn};
 
 use crate::{
     cache::GlobalExclusions,
@@ -27,7 +30,6 @@ impl Egress {
         }
     }
 
-    #[instrument(skip(self, packet), level = "trace")]
     pub fn handle_packet(self: &Arc<Self>, packet: ServerToProxyMessage) {
         match packet {
             ServerToProxyMessage::UpdatePlayerChunkPositions(pkt) => {
@@ -73,7 +75,7 @@ impl Egress {
         info!("Updated player chunk positions and stored new BVH");
     }
 
-    #[instrument(skip(self, pkt, exclusions))]
+    #[instrument(skip(self, pkt, exclusions), level = "trace")]
     pub fn handle_broadcast_global(
         &self,
         pkt: hyperion_proto::BroadcastGlobal,
@@ -96,6 +98,17 @@ impl Egress {
 
             if let Err(e) = player.writer.try_send(to_send) {
                 debug!("Failed to send data to player: {:?}", e);
+            }
+        }
+    }
+
+    #[instrument(skip_all)]
+    pub fn handle_flush(&self) {
+        let players = self.registry.read().unwrap();
+
+        for player in players.values() {
+            if let Err(e) = player.writer.try_send(OrderedBytes::FLUSH) {
+                warn!("Failed to send data to player: {:?}", e);
             }
         }
     }
@@ -166,7 +179,7 @@ impl Egress {
         }
     }
 
-    #[instrument(skip(self, pkt))]
+    // #[instrument(skip(self, pkt))]
     pub fn handle_unicast(&self, pkt: hyperion_proto::Unicast) {
         let data = pkt.data;
 
@@ -197,18 +210,37 @@ impl Egress {
     }
 
     pub fn handle_set_receive_broadcasts(&self, pkt: hyperion_proto::SetReceiveBroadcasts) {
-        let players = self.registry.read().unwrap();
-        let stream = pkt.stream;
-        let stream = KeyData::from_ffi(stream);
-        let stream = PlayerId::from(stream);
+        // delay a second
 
-        let Some(player) = players.get(stream) else {
-            drop(players);
-            error!("Player not found for stream {stream:?}");
-            return;
-        };
+        let registry = self.registry.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_secs(1)).await;
+            let players = registry.read().unwrap();
+            let stream = pkt.stream;
+            let stream = KeyData::from_ffi(stream);
+            let stream = PlayerId::from(stream);
 
-        player.can_receive_broadcasts.store(true, Ordering::Relaxed);
+            let Some(player) = players.get(stream) else {
+                drop(players);
+                error!("Player not found for stream {stream:?}");
+                return;
+            };
+
+            player.can_receive_broadcasts.store(true, Ordering::Relaxed);
+        });
+
+        // let players = self.registry.read().unwrap();
+        // let stream = pkt.stream;
+        // let stream = KeyData::from_ffi(stream);
+        // let stream = PlayerId::from(stream);
+        //
+        // let Some(player) = players.get(stream) else {
+        //     drop(players);
+        //     error!("Player not found for stream {stream:?}");
+        //     return;
+        // };
+        //
+        // player.can_receive_broadcasts.store(true, Ordering::Relaxed);
     }
 }
 

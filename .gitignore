@@ -1,5 +1,6 @@
 /.vscode
 /target
+.env
 *.webm
 *.jar
 /profiling

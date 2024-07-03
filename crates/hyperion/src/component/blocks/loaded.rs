@@ -4,17 +4,20 @@ use bytes::Bytes;
 use derive_more::{Deref, DerefMut};
 use flecs_ecs::{core::World, macros::Component};
 use glam::I16Vec2;
+use tracing::trace;
 use valence_generated::block::BlockState;
 use valence_protocol::{packets::play, BlockPos};
 use valence_server::layer::chunk::{Chunk, UnloadedChunk};
-
-pub const START_Y: i32 = -64;
 
 use crate::{
     component::blocks::{Block, MinecraftWorld},
     net::Compose,
     thread_local::ThreadLocal,
+    SystemId,
 };
+
+pub const START_Y: i32 = -64;
+
 // 384 / 16 = 24
 // const CHUNK_HEIGHT: usize = 24;
 
@@ -22,10 +25,10 @@ use crate::{
 // to get size_of::<Delta>() == 5
 #[derive(Copy, Clone, Debug)]
 pub struct Delta {
-    x: u8,            // 1
-    z: u8,            // 1
-    y: u16,           // 2
-    block_state: u16, // 2
+    x: u8,                   // 1
+    z: u8,                   // 1
+    y: u16,                  // 2
+    block_state: BlockState, // 2
 }
 
 impl Delta {
@@ -37,9 +40,9 @@ impl Delta {
 
         Self {
             x,
-            y,
             z,
-            block_state: block_state.to_raw(),
+            y,
+            block_state,
         }
     }
 }
@@ -216,8 +219,7 @@ impl LoadedChunk {
         &mut self.chunk
     }
 
-    fn set_block_internal(&mut self, x: u8, y: u16, z: u8, block_state: u16) {
-        let state = BlockState::from_raw(block_state).unwrap();
+    fn set_block_internal(&mut self, x: u8, y: u16, z: u8, state: BlockState) {
         self.chunk
             .set_block(u32::from(x), u32::from(y), u32::from(z), state);
     }
@@ -287,6 +289,7 @@ impl LoadedChunk {
         compose: &Compose,
         notify: &NeighborNotify,
         mc: &MinecraftWorld,
+        system_id: SystemId,
         world: &World,
     ) {
         const MAX_Y: u16 = 384;
@@ -302,6 +305,8 @@ impl LoadedChunk {
         {
             self.set_block_internal(x, y, z, block_state);
 
+            trace!("set block at {x} {y} {z} to {block_state}");
+
             let start_x = i32::from(position.x) << 4;
             let start_z = i32::from(position.y) << 4;
 
@@ -313,10 +318,10 @@ impl LoadedChunk {
 
             let pkt = play::BlockUpdateS2c {
                 position: block_pos,
-                block_id: BlockState::from_raw(block_state).unwrap(),
+                block_id: block_state,
             };
 
-            compose.broadcast(&pkt).send(world).unwrap();
+            compose.broadcast(&pkt, system_id).send(world).unwrap();
 
             // notify neighbors
             if x == 0 {

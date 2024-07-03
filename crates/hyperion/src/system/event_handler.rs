@@ -29,7 +29,6 @@ use flecs_ecs::{
     },
     macros::system,
 };
-use glam::IVec3;
 use rayon::iter::ParallelIterator;
 use tracing::{info, info_span, instrument, trace_span};
 use valence_generated::block::BlockState;
@@ -46,12 +45,14 @@ use crate::{
             loaded::{Delta, LoadedChunk, NeighborNotify, PendingChanges},
             MinecraftWorld,
         },
-        ConfirmBlockSequences,
+        ConfirmBlockSequences, Pose,
     },
     event::{BlockBreak, EventQueue, EventQueueIterator, ThreadLocalBump},
     net::{Compose, NetworkStreamRef},
     tracing_ext::TracingExt,
+    SystemRegistry,
 };
+
 // #[instrument(skip_all, level = "trace")]
 // // Check immunity of the entity being attacked
 // pub fn check_immunity(
@@ -148,7 +149,7 @@ use crate::{
 //     }
 //
 //     vitals.hurt(&global, event.damage, immunity);
-pub fn handle_events(world: &World) {
+pub fn handle_events(world: &World, registry: &mut SystemRegistry) {
     // let mut chunk_iter = EventQueueIterator::default();
     //
     // chunk_iter.register::<BlockBreak>(|block, query| {
@@ -272,6 +273,15 @@ pub fn handle_events(world: &World) {
     //     compose.broadcast(&pkt).send(query.world).unwrap();
     // });
 
+    world
+        .system_named::<()>("sync_point")
+        .kind::<pipeline::PostUpdate>()
+        .with::<&mut PendingChanges>()
+        .with::<&mut NeighborNotify>()
+        .each(|()| {});
+
+    let system_id = registry.register();
+
     system!(
         "handle_events_block",
         world,
@@ -280,6 +290,7 @@ pub fn handle_events(world: &World) {
         &PendingChanges,
     )
     .kind::<pipeline::PostUpdate>()
+    // .read::<Pose>()
     .multi_threaded()
     .tracing_each_entity(
         info_span!("handle_events_block"),
@@ -316,7 +327,7 @@ pub fn handle_events(world: &World) {
                 let entity = world.entity_from_id(block.by);
 
                 // get NetRef
-                entity.get::<&NetworkStreamRef>(|stream| {
+                entity.get::<(&NetworkStreamRef, &Pose)>(|(&stream, pose)| {
                     // confirm
                     // compose
                     //     .unicast(
@@ -347,13 +358,13 @@ pub fn handle_events(world: &World) {
                     let sound = play::PlaySoundS2c {
                         id,
                         category: SoundCategory::Ambient,
-                        position: IVec3::new(-3720, -120, -352),
+                        position: pose.sound_position(),
                         volume: 1.0,
                         pitch: 1.0,
                         seed: 0,
                     };
 
-                    compose.unicast(&sound, stream, world).unwrap();
+                    compose.unicast(&sound, stream, system_id, world).unwrap();
                 });
             });
 
@@ -378,6 +389,8 @@ pub fn handle_events(world: &World) {
         },
     );
 
+    let system_id = registry.register();
+
     system!(
         "handle_chunk_pending_changes",
         world,
@@ -391,29 +404,31 @@ pub fn handle_events(world: &World) {
     .multi_threaded()
     .tracing_each_entity(
         info_span!("handle_chunk_pending_changes"),
-        |entity, (chunk, compose, mc, pending, notify)| {
+        move |entity, (chunk, compose, mc, pending, notify)| {
             let world = entity.world();
-            chunk.process_pending_changes(pending, compose, notify, mc, &world);
+            chunk.process_pending_changes(pending, compose, notify, mc, system_id, &world);
         },
     );
+
+    let system_id = registry.register();
 
     system!(
         "confirm_block_sequences",
         world,
         &Compose($),
-        &NetworkStreamRef,
+        &mut NetworkStreamRef,
         &mut ConfirmBlockSequences,
     )
     .kind::<pipeline::PostUpdate>()
     .multi_threaded()
     .tracing_each_entity(
         info_span!("confirm_block_sequences"),
-        |entity, (compose, stream, confirm_block_sequences)| {
+        move |entity, (compose, &mut stream, confirm_block_sequences)| {
             let world = entity.world();
             for sequence in confirm_block_sequences.drain(..) {
                 let sequence = VarInt(sequence);
                 let ack = play::PlayerActionResponseS2c { sequence };
-                compose.unicast(&ack, stream, &world).unwrap();
+                compose.unicast(&ack, stream, system_id, &world).unwrap();
             }
         },
     );

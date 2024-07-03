@@ -58,7 +58,6 @@ bitvec.workspace = true
 hyperion-proto.workspace = true
 prost.workspace = true
 line_drawing.workspace = true
-slotmap.workspace = true
 flecs_ecs.workspace = true
 heapless.workspace = true
 base64.workspace = true

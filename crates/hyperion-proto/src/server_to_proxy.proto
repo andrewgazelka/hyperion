@@ -18,6 +18,7 @@ message BroadcastGlobal {
   bytes data = 1;
   bool optional = 2;
   uint64 exclude = 3;
+  uint32 order = 4;
 }
 
 // Resulting priority is calculated by the taxicab distance multiplied by the priority
@@ -27,11 +28,13 @@ message BroadcastLocal {
   shared.ChunkPosition center = 3;
   bool optional = 4;
   uint64 exclude = 5;
+  uint32 order = 6;
 }
 
 message Multicast {
   bytes data = 1;
   repeated uint64 stream = 2;
+  uint32 order = 3;
 }
 
 // Send a message to a specific player.
@@ -41,7 +44,7 @@ message Unicast {
   // The player to send the message to.
   uint64 stream = 2;
   // The order in which the message should be sent to the player. This starts at 0 and increases by 1 for each message sent.
-  uint64 order = 3;
+  uint32 order = 3;
 }
 
 // Flush all the queued messages. No messages will be sent over TCP to the players until flush is called. Flushing is

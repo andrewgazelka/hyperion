@@ -29,7 +29,10 @@
 // }
 
 use flecs_ecs::{
-    core::{IdOperations, IntoWorld, QueryBuilderImpl, TermBuilderImpl, World},
+    core::{
+        flecs::pipeline::OnUpdate, IdOperations, IntoWorld, QueryBuilderImpl, TermBuilderImpl,
+        World,
+    },
     macros::system,
 };
 use tracing::trace_span;
@@ -39,14 +42,17 @@ use crate::{
     component::Pose,
     net::{Compose, NetworkStreamRef},
     tracing_ext::TracingExt,
+    SystemRegistry,
 };
 
-pub fn sync_entity_position(world: &World) {
+pub fn sync_entity_position(world: &World, registry: &mut SystemRegistry) {
+    let system_id = registry.register();
     system!("sync_entity_position", world, &Compose($), &Pose, &NetworkStreamRef)
         .multi_threaded()
+        .kind::<OnUpdate>()
         .tracing_each_entity(
             trace_span!("sync_entity_position"),
-            |entity, (compose, pose, io)| {
+            move |entity, (compose, pose, &io)| {
                 let entity_id = VarInt(entity.id().0 as i32);
 
                 let world = entity.world();
@@ -59,7 +65,22 @@ pub fn sync_entity_position(world: &World) {
                     on_ground: false,
                 };
 
-                compose.broadcast(&pkt).exclude(io).send(&world).unwrap();
+                compose
+                    .broadcast(&pkt, system_id)
+                    .exclude(io)
+                    .send(&world)
+                    .unwrap();
+
+                let pkt = play::EntitySetHeadYawS2c {
+                    entity_id,
+                    head_yaw: ByteAngle::from_degrees(pose.yaw),
+                };
+
+                compose
+                    .broadcast(&pkt, system_id)
+                    .exclude(io)
+                    .send(&world)
+                    .unwrap();
             },
         );
 }

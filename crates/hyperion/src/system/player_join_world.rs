@@ -7,7 +7,7 @@ use flecs_ecs::{
 };
 use glam::{I16Vec2, IVec3};
 use serde::Deserialize;
-use tracing::{debug, info};
+use tracing::{debug, info, instrument};
 use valence_nbt::{value::ValueRef, Value};
 use valence_protocol::{
     game_mode::OptGameMode,
@@ -37,6 +37,7 @@ use crate::{
     runtime::AsyncRuntime,
     system::player_join_world::list::{PlayerListActions, PlayerListEntry, PlayerListS2c},
     util::{metadata::show_all, player_skin::PlayerSkin},
+    SystemId,
 };
 
 pub mod list;
@@ -332,6 +333,7 @@ pub mod list;
 // }
 
 #[allow(clippy::too_many_arguments, reason = "todo")]
+#[instrument(skip_all, fields(name = name))]
 pub fn player_join_world(
     entity: &EntityView,
     tasks: &AsyncRuntime,
@@ -339,10 +341,11 @@ pub fn player_join_world(
     compose: &Compose,
     uuid: uuid::Uuid,
     name: &str,
-    packets: &NetworkStreamRef,
+    packets: NetworkStreamRef,
     pose: &Pose,
     world: &WorldRef,
     skin: &PlayerSkin,
+    system_id: SystemId,
     query: &Query<(&Uuid, &InGameName, &Pose, &PlayerSkin)>,
 ) {
     static CACHED_DATA: once_cell::sync::OnceCell<bytes::Bytes> = once_cell::sync::OnceCell::new();
@@ -363,14 +366,16 @@ pub fn player_join_world(
         })
         .clone();
 
-    compose.io_buf().unicast_raw(cached_data, packets, world);
+    compose
+        .io_buf()
+        .unicast_raw(cached_data, packets, system_id, world);
 
     let text = play::GameMessageS2c {
         chat: format!("{name} joined the world").into_cow_text(),
         overlay: false,
     };
 
-    compose.broadcast(&text).send(world).unwrap();
+    compose.broadcast(&text, system_id).send(world).unwrap();
 
     compose
         .unicast(
@@ -382,6 +387,7 @@ pub fn player_join_world(
                 teleport_id: 1.into(),
             },
             packets,
+            system_id,
             world,
         )
         .unwrap();
@@ -438,6 +444,7 @@ pub fn player_join_world(
                 entries: Cow::Owned(entries),
             },
             packets,
+            system_id,
             world,
         )
         .unwrap();
@@ -459,11 +466,11 @@ pub fn player_join_world(
                 pitch: ByteAngle::from_degrees(pose.pitch),
             };
 
-            compose.unicast(&pkt, packets, world).unwrap();
+            compose.unicast(&pkt, packets, system_id, world).unwrap();
 
             let show_all = show_all(query_entity.id().0 as i32);
             compose
-                .unicast(show_all.borrow_packet(), packets, world)
+                .unicast(show_all.borrow_packet(), packets, system_id, world)
                 .unwrap();
         });
 
@@ -497,17 +504,42 @@ pub fn player_join_world(
         entries: Cow::Borrowed(singleton_entry),
     };
 
-    compose.broadcast(&pkt).send(world).unwrap();
+    compose.broadcast(&pkt, system_id).send(world).unwrap();
 
     let player_name = vec![name];
 
     compose
-        .broadcast(&play::TeamS2c {
-            team_name: "no_tag",
-            mode: Mode::AddEntities {
-                entities: player_name,
+        .broadcast(
+            &play::TeamS2c {
+                team_name: "no_tag",
+                mode: Mode::AddEntities {
+                    entities: player_name,
+                },
             },
-        })
+            system_id,
+        )
+        .exclude(packets)
+        .send(world)
+        .unwrap();
+
+    let current_entity_id = VarInt(entity.id().0 as i32);
+
+    let spawn_player = play::PlayerSpawnS2c {
+        entity_id: current_entity_id,
+        player_uuid: uuid,
+        position: pose.position.as_dvec3(),
+        yaw: ByteAngle::from_degrees(pose.yaw),
+        pitch: ByteAngle::from_degrees(pose.pitch),
+    };
+    compose
+        .broadcast(&spawn_player, system_id)
+        .exclude(packets)
+        .send(world)
+        .unwrap();
+
+    let show_all = show_all(entity.id().0 as i32);
+    compose
+        .broadcast(show_all.borrow_packet(), system_id)
         .exclude(packets)
         .send(world)
         .unwrap();
@@ -521,30 +553,9 @@ pub fn player_join_world(
                 },
             },
             packets,
+            system_id,
             world,
         )
-        .unwrap();
-
-    let current_entity_id = VarInt(entity.id().0 as i32);
-
-    let spawn_player = play::PlayerSpawnS2c {
-        entity_id: current_entity_id,
-        player_uuid: uuid,
-        position: pose.position.as_dvec3(),
-        yaw: ByteAngle::from_degrees(pose.yaw),
-        pitch: ByteAngle::from_degrees(pose.pitch),
-    };
-    compose
-        .broadcast(&spawn_player)
-        .exclude(packets)
-        .send(world)
-        .unwrap();
-
-    let show_all = show_all(entity.id().0 as i32);
-    compose
-        .broadcast(show_all.borrow_packet())
-        .exclude(packets)
-        .send(world)
         .unwrap();
 
     info!("{name} joined the world");
@@ -552,8 +563,9 @@ pub fn player_join_world(
 
 #[allow(dead_code, reason = "will re-enable")]
 pub fn send_keep_alive(
-    packets: &NetworkStreamRef,
+    packets: NetworkStreamRef,
     compose: &Compose,
+    system_id: SystemId,
     world: &World,
 ) -> anyhow::Result<()> {
     let pkt = play::KeepAliveS2c {
@@ -561,8 +573,7 @@ pub fn send_keep_alive(
         id: 0,
     };
 
-    compose.unicast(&pkt, packets, world)?;
-
+    compose.unicast(&pkt, packets, system_id, world)?;
     Ok(())
 }
 

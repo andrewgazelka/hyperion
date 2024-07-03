@@ -5,13 +5,14 @@ use std::fmt::Display;
 use bvh_region::aabb::Aabb;
 use derive_more::{Deref, DerefMut, Display, From};
 use flecs_ecs::{core::Entity, macros::Component};
-use glam::{I16Vec2, Vec3};
+use glam::{I16Vec2, IVec3, Vec3};
 use serde::{Deserialize, Serialize};
 use valence_protocol::BlockPos;
 
 use crate::{global::Global, util::player_skin::PlayerSkin};
 
 pub mod blocks;
+pub mod inventory;
 
 /// Communicates with the proxy server.
 #[derive(Component, Deref, DerefMut, From)]
@@ -139,10 +140,6 @@ impl Default for RunningSpeed {
 #[derive(Component)]
 pub struct AiTargetable;
 
-/// Placeholder; this will be added later.
-#[derive(Component, Serialize, Deserialize, Debug)]
-pub struct Inventory;
-
 /// The full pose of an entity. This is used for both [`Player`] and [`Npc`].
 #[derive(Component, Copy, Clone, Debug, Serialize, Deserialize)]
 pub struct Pose {
@@ -159,6 +156,14 @@ pub struct Pose {
 
     /// The bounding box of the entity.
     pub bounding: Aabb,
+}
+
+impl Pose {
+    #[must_use]
+    pub fn sound_position(&self) -> IVec3 {
+        let position = self.position * 8.0;
+        position.as_ivec3()
+    }
 }
 
 impl Display for Pose {

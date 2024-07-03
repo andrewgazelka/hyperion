@@ -1,6 +1,9 @@
 //! All the networking related code.
 
-use std::{cell::RefCell, fmt::Debug, sync::atomic::AtomicU64};
+use std::{
+    cell::{Cell, RefCell},
+    fmt::Debug,
+};
 
 use bytes::BytesMut;
 pub use decoder::PacketDecoder;
@@ -9,13 +12,12 @@ use flecs_ecs::{core::World, macros::Component};
 use hyperion_proto::ChunkPosition;
 use libdeflater::CompressionLvl;
 use prost::Message;
-use slotmap::KeyData;
 
 use crate::{
     global::Global,
     net::encoder::{append_packet_without_compression, PacketEncoder},
     thread_local::ThreadLocal,
-    Scratch, Scratches,
+    Scratch, Scratches, SystemId,
 };
 
 pub mod proxy;
@@ -56,36 +58,16 @@ impl Compressors {
 ///
 /// This struct contains a stream ID that serves as a unique identifier for the network stream and a packet order counter
 /// that helps in maintaining the correct sequence of packets being sent through the proxy.
-#[derive(Component)]
+#[derive(Component, Copy, Clone, Debug)]
 pub struct NetworkStreamRef {
     /// Unique identifier for the network stream.
     stream_id: u64,
-
-    /// This starts at 0. Every single packet we encode, we increment this by 1,
-    /// and we wrap it around if we ever get to the maximum value.
-    /// This is used so that the proxy will always send these packets in order.
-    /// It's sent as part of the protocol.  
-    packet_order: AtomicU64,
-}
-
-impl Debug for NetworkStreamRef {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let stream_id = KeyData::from_ffi(self.stream_id);
-
-        f.debug_struct("StreamId")
-            .field("stream_id", &stream_id)
-            .field("packet_on", &self.packet_order)
-            .finish()
-    }
 }
 
 impl NetworkStreamRef {
     #[must_use]
     pub(crate) const fn new(stream_id: u64) -> Self {
-        Self {
-            stream_id,
-            packet_order: AtomicU64::new(0),
-        }
+        Self { stream_id }
     }
 }
 
@@ -128,7 +110,11 @@ impl Compose {
     /// Broadcast globally to all players
     ///
     /// See <https://github.com/andrewgazelka/hyperion-proto/blob/main/src/server_to_proxy.proto#L17-L22>
-    pub const fn broadcast<'a, 'b, P>(&'a self, packet: &'b P) -> Broadcast<'a, 'b, P>
+    pub const fn broadcast<'a, 'b, P>(
+        &'a self,
+        packet: &'b P,
+        system_id: SystemId,
+    ) -> Broadcast<'a, 'b, P>
     where
         P: valence_protocol::Packet + valence_protocol::Encode,
     {
@@ -137,6 +123,7 @@ impl Compose {
             optional: false,
             compose: self,
             exclude: 0,
+            system_id,
         }
     }
 
@@ -158,6 +145,7 @@ impl Compose {
         &'a self,
         packet: &'b P,
         center: ChunkPosition,
+        system_id: SystemId,
     ) -> BroadcastLocal<'a, 'b, P>
     where
         P: valence_protocol::Packet + valence_protocol::Encode,
@@ -169,6 +157,7 @@ impl Compose {
             radius: 0,
             exclude: 0,
             center,
+            system_id,
         }
     }
 
@@ -176,7 +165,8 @@ impl Compose {
     pub fn unicast<P>(
         &self,
         packet: &P,
-        stream_id: &NetworkStreamRef,
+        stream_id: NetworkStreamRef,
+        system_id: SystemId,
         world: &World,
     ) -> anyhow::Result<()>
     where
@@ -186,6 +176,7 @@ impl Compose {
             packet,
             stream_id,
             compose: self,
+            system_id,
 
             // todo: Should we have this true by default, or is there a better way?
             // Or a better word for no_compress, or should we just use negative field names?
@@ -198,7 +189,8 @@ impl Compose {
     pub fn unicast_no_compression<P>(
         &self,
         packet: &P,
-        stream_id: &NetworkStreamRef,
+        stream_id: NetworkStreamRef,
+        system_id: SystemId,
         world: &World,
     ) -> anyhow::Result<()>
     where
@@ -208,6 +200,7 @@ impl Compose {
             packet,
             stream_id,
             compose: self,
+            system_id,
             compress: false,
         }
         .send(world)
@@ -218,6 +211,7 @@ impl Compose {
         &self,
         packet: &P,
         ids: &[NetworkStreamRef],
+        system_id: SystemId,
         world: &World,
     ) -> anyhow::Result<()>
     where
@@ -226,6 +220,7 @@ impl Compose {
         Multicast {
             packet,
             compose: self,
+            system_id,
             ids: unsafe { core::slice::from_raw_parts(ids.as_ptr().cast(), ids.len()) },
         }
         .send(world)
@@ -254,7 +249,23 @@ impl Compose {
 #[derive(Component, Default)]
 pub struct IoBuf {
     buffer: ThreadLocal<RefCell<BytesMut>>,
+    // system_on: ThreadLocal<Cell<u32>>,
+    // broadcast_buffer: ThreadLocal<RefCell<BytesMut>>,
     temp_buffer: ThreadLocal<RefCell<BytesMut>>,
+    idx: ThreadLocal<Cell<u16>>,
+}
+
+impl IoBuf {
+    pub fn fetch_add_idx(&self, world: &World) -> u16 {
+        let cell = self.idx.get(world);
+        let result = cell.get();
+        cell.set(result + 1);
+        result
+    }
+
+    pub fn order_id(&self, system_id: SystemId, world: &World) -> u32 {
+        u32::from(system_id.id()) << 16 | u32::from(self.fetch_add_idx(world))
+    }
 }
 
 /// A broadcast builder
@@ -264,18 +275,20 @@ pub struct Broadcast<'a, 'b, P> {
     optional: bool,
     compose: &'a Compose,
     exclude: u64,
+    system_id: SystemId,
 }
 
 /// A unicast builder
 #[must_use]
-struct Unicast<'a, 'b, 'c, P> {
+struct Unicast<'a, 'b, P> {
     packet: &'b P,
-    stream_id: &'c NetworkStreamRef,
+    stream_id: NetworkStreamRef,
     compose: &'a Compose,
     compress: bool,
+    system_id: SystemId,
 }
 
-impl<'a, 'b, 'c, P> Unicast<'a, 'b, 'c, P>
+impl<'a, 'b, P> Unicast<'a, 'b, P>
 where
     P: valence_protocol::Packet + valence_protocol::Encode,
 {
@@ -285,6 +298,7 @@ where
             self.stream_id,
             self.compose,
             self.compress,
+            self.system_id,
             world,
         )
     }
@@ -294,6 +308,7 @@ struct Multicast<'a, 'b, P> {
     packet: &'b P,
     ids: &'a [u64],
     compose: &'a Compose,
+    system_id: SystemId,
 }
 
 impl<'a, 'b, P> Multicast<'a, 'b, P>
@@ -301,9 +316,13 @@ where
     P: valence_protocol::Packet + valence_protocol::Encode,
 {
     fn send(&self, world: &World) -> anyhow::Result<()> {
-        self.compose
-            .io_buf
-            .multicast_private(self.packet, self.ids, self.compose, world)
+        self.compose.io_buf.multicast_private(
+            self.packet,
+            self.ids,
+            self.compose,
+            self.system_id,
+            world,
+        )
     }
 }
 
@@ -324,19 +343,24 @@ impl<'a, 'b, P> Broadcast<'a, 'b, P> {
             .io_buf
             .encode_packet(self.packet, self.compose, world)?;
 
-        self.compose
-            .io_buf
-            .broadcast_raw(bytes, self.optional, self.exclude, world);
+        self.compose.io_buf.broadcast_raw(
+            bytes,
+            self.optional,
+            self.exclude,
+            self.system_id,
+            world,
+        );
 
         Ok(())
     }
 
     /// Exclude a certain player from the broadcast. This can only be called once.
-    pub const fn exclude(self, exclude: &NetworkStreamRef) -> Self {
+    pub const fn exclude(self, exclude: NetworkStreamRef) -> Self {
         Broadcast {
             packet: self.packet,
             optional: self.optional,
             compose: self.compose,
+            system_id: self.system_id,
             exclude: exclude.stream_id,
         }
     }
@@ -351,6 +375,7 @@ pub struct BroadcastLocal<'a, 'b, P> {
     center: ChunkPosition,
     optional: bool,
     exclude: u64,
+    system_id: SystemId,
 }
 
 impl<'a, 'b, P> BroadcastLocal<'a, 'b, P> {
@@ -382,6 +407,7 @@ impl<'a, 'b, P> BroadcastLocal<'a, 'b, P> {
             self.radius,
             self.optional,
             self.exclude,
+            self.system_id,
             world,
         );
 
@@ -397,13 +423,19 @@ impl<'a, 'b, P> BroadcastLocal<'a, 'b, P> {
             center: self.center,
             optional: self.optional,
             exclude: exclude.stream_id,
+            system_id: self.system_id,
         }
     }
 }
 
 impl IoBuf {
     /// Returns an iterator over the result of splitting the buffer into packets with [`BytesMut::split`].
-    pub fn split(&mut self) -> impl Iterator<Item = BytesMut> + '_ {
+    pub fn reset_and_split(&mut self) -> impl Iterator<Item = BytesMut> + '_ {
+        // reset idx
+        for elem in &mut self.idx {
+            elem.set(0);
+        }
+
         self.buffer
             .iter_mut()
             .map(|x| x.borrow_mut())
@@ -455,9 +487,10 @@ impl IoBuf {
     fn unicast_private<P>(
         &self,
         packet: &P,
-        id: &NetworkStreamRef,
+        id: NetworkStreamRef,
         compose: &Compose,
         compress: bool,
+        system_id: SystemId,
         world: &World,
     ) -> anyhow::Result<()>
     where
@@ -469,7 +502,7 @@ impl IoBuf {
             self.encode_packet_no_compression(packet, world)?
         };
 
-        self.unicast_raw(bytes, id, world);
+        self.unicast_raw(bytes, id, system_id, world);
         Ok(())
     }
 
@@ -478,16 +511,18 @@ impl IoBuf {
         packet: &P,
         ids: &[u64],
         compose: &Compose,
+        system_id: SystemId,
         world: &World,
     ) -> anyhow::Result<()>
     where
         P: valence_protocol::Packet + valence_protocol::Encode,
     {
         let bytes = self.encode_packet(packet, compose, world)?;
-        self.multicast_raw(bytes, ids, world);
+        self.multicast_raw(bytes, ids, system_id, world);
         Ok(())
     }
 
+    #[allow(clippy::too_many_arguments, reason = "todo")]
     fn broadcast_local_raw(
         &self,
         data: bytes::Bytes,
@@ -495,10 +530,13 @@ impl IoBuf {
         radius: u32,
         optional: bool,
         exclude: u64,
+        system_id: SystemId,
         world: &World,
     ) {
         let buffer = self.buffer.get(world);
         let buffer = &mut *buffer.borrow_mut();
+
+        let order = self.order_id(system_id, world);
 
         let to_send = hyperion_proto::BroadcastLocal {
             data,
@@ -506,6 +544,7 @@ impl IoBuf {
             center: Some(center),
             optional,
             exclude,
+            order,
         };
 
         hyperion_proto::ServerToProxy::from(to_send)
@@ -518,10 +557,13 @@ impl IoBuf {
         data: bytes::Bytes,
         optional: bool,
         exclude: u64,
+        system_id: SystemId,
         world: &World,
     ) {
         let buffer = self.buffer.get(world);
         let buffer = &mut *buffer.borrow_mut();
+
+        let order = u32::from(system_id.id()) << 16;
 
         let to_send = hyperion_proto::BroadcastGlobal {
             data,
@@ -530,6 +572,7 @@ impl IoBuf {
             // We want to probably allow encoding without allocation in the future.
             // Fortunately, `to_vec` will not require any allocation if the buffer is empty.
             exclude,
+            order,
         };
 
         hyperion_proto::ServerToProxy::from(to_send)
@@ -537,29 +580,44 @@ impl IoBuf {
             .unwrap();
     }
 
-    pub(crate) fn unicast_raw(&self, data: bytes::Bytes, stream: &NetworkStreamRef, world: &World) {
+    pub(crate) fn unicast_raw(
+        &self,
+        data: bytes::Bytes,
+        stream: NetworkStreamRef,
+        system_id: SystemId,
+        world: &World,
+    ) {
         let buffer = self.buffer.get(world);
         let buffer = &mut *buffer.borrow_mut();
+
+        let order = self.order_id(system_id, world);
 
         let to_send = hyperion_proto::Unicast {
             data,
             stream: stream.stream_id,
-            order: stream
-                .packet_order
-                .fetch_add(1, std::sync::atomic::Ordering::Relaxed),
+            order,
         };
 
         let to_send = hyperion_proto::ServerToProxy::from(to_send);
         to_send.encode_length_delimited(buffer).unwrap();
     }
 
-    pub(crate) fn multicast_raw(&self, data: bytes::Bytes, streams: &[u64], world: &World) {
+    pub(crate) fn multicast_raw(
+        &self,
+        data: bytes::Bytes,
+        streams: &[u64],
+        system_id: SystemId,
+        world: &World,
+    ) {
         let buffer = self.buffer.get(world);
         let buffer = &mut *buffer.borrow_mut();
+
+        let order = self.order_id(system_id, world);
 
         let to_send = hyperion_proto::Multicast {
             data,
             stream: streams.to_vec(),
+            order,
         };
 
         hyperion_proto::ServerToProxy::from(to_send)
@@ -567,7 +625,7 @@ impl IoBuf {
             .unwrap();
     }
 
-    pub(crate) fn set_receive_broadcasts(&self, stream: &NetworkStreamRef, world: &World) {
+    pub(crate) fn set_receive_broadcasts(&self, stream: NetworkStreamRef, world: &World) {
         let buffer = self.buffer.get(world);
         let buffer = &mut *buffer.borrow_mut();
 

@@ -1621,7 +1621,6 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
- "slotmap",
  "sqlx",
  "tango-bench 0.5.0",
  "tar",
