@@ -11,6 +11,7 @@ use std::{
 
 use anyhow::Context;
 use bytes::{Bytes, BytesMut};
+use compact_str::format_compact;
 use dashmap::{DashMap, DashSet};
 use flecs_ecs::{
     core::{Entity, EntityView, IdOperations, World},
@@ -166,10 +167,14 @@ impl MinecraftWorld {
             .collect();
 
         for key in keys {
-            let (_, loaded_chunk) = self.threaded.pending_cache.remove(&key).unwrap();
+            let (pos, loaded_chunk) = self.threaded.pending_cache.remove(&key).unwrap();
+
+            let x = pos[0];
+            let z = pos[1];
+            let name = format_compact!("chunk_{x:03}_{z:03}");
 
             let entity = world
-                .entity()
+                .entity_named(&name)
                 .set(loaded_chunk)
                 .set(EventQueue::default())
                 .set(NeighborNotify::default())

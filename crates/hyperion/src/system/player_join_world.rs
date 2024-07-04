@@ -31,7 +31,10 @@ use valence_server::entity::EntityKind;
 use valence_text::IntoText;
 
 use crate::{
-    component::{blocks::MinecraftWorld, InGameName, Pose, Uuid, PLAYER_SPAWN_POSITION},
+    component::{
+        blocks::MinecraftWorld, command::get_command_packet, InGameName, Pose, Uuid,
+        PLAYER_SPAWN_POSITION,
+    },
     config::CONFIG,
     net::{Compose, NetworkStreamRef},
     runtime::AsyncRuntime,
@@ -346,6 +349,7 @@ pub fn player_join_world(
     world: &WorldRef,
     skin: &PlayerSkin,
     system_id: SystemId,
+    root_command: Entity,
     query: &Query<(&Uuid, &InGameName, &Pose, &PlayerSkin)>,
 ) {
     static CACHED_DATA: once_cell::sync::OnceCell<bytes::Bytes> = once_cell::sync::OnceCell::new();
@@ -556,6 +560,12 @@ pub fn player_join_world(
             system_id,
             world,
         )
+        .unwrap();
+
+    let command_packet = get_command_packet(world, root_command);
+
+    compose
+        .unicast(&command_packet, packets, system_id, world)
         .unwrap();
 
     info!("{name} joined the world");

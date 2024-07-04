@@ -1074,7 +1074,7 @@ dependencies = [
 [[package]]
 name = "flecs_ecs"
 version = "0.0.2"
-source = "git+https://github.com/Indra-db/flecs-ecs-rs#f511406409a9971c3304c350056dc1f3b35f731d"
+source = "git+https://github.com/Indra-db/flecs-ecs-rs#3055e543e7ace3b1bb466627a7620433a5f9e2ed"
 dependencies = [
  "compact_str",
  "flecs_ecs_derive",
@@ -1085,7 +1085,7 @@ dependencies = [
 [[package]]
 name = "flecs_ecs_derive"
 version = "0.1.0"
-source = "git+https://github.com/Indra-db/flecs-ecs-rs#f511406409a9971c3304c350056dc1f3b35f731d"
+source = "git+https://github.com/Indra-db/flecs-ecs-rs#3055e543e7ace3b1bb466627a7620433a5f9e2ed"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1095,7 +1095,7 @@ dependencies = [
 [[package]]
 name = "flecs_ecs_sys"
 version = "0.1.0"
-source = "git+https://github.com/Indra-db/flecs-ecs-rs#f511406409a9971c3304c350056dc1f3b35f731d"
+source = "git+https://github.com/Indra-db/flecs-ecs-rs#3055e543e7ace3b1bb466627a7620433a5f9e2ed"
 dependencies = [
  "bindgen",
  "cc",
@@ -1590,6 +1590,7 @@ dependencies = [
  "bumpalo",
  "bvh-region",
  "bytes",
+ "compact_str",
  "dashmap",
  "derive_more 0.99.18",
  "dirs-next",
@@ -4515,18 +4516,18 @@ checksum = "cfe53a6657fd280eaa890a3bc59152892ffa3e30101319d168b781ed6529b049"
 
 [[package]]
 name = "zerocopy"
-version = "0.7.34"
+version = "0.7.35"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ae87e3fcd617500e5d106f0380cf7b77f3c6092aae37191433159dda23cfb087"
+checksum = "1b9b4fd18abc82b8136838da5d50bae7bdea537c574d8dc1a34ed098d6c166f0"
 dependencies = [
  "zerocopy-derive",
 ]
 
 [[package]]
 name = "zerocopy-derive"
-version = "0.7.34"
+version = "0.7.35"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "15e934569e47891f7d9411f1a451d947a60e000ab3bd24fbb970f000387d1b3b"
+checksum = "fa4f8080344d4671fb4e831a13ad1e68092748387dfc4f55e356242fae12ce3e"
 dependencies = [
  "proc-macro2",
  "quote",

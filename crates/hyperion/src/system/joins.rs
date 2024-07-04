@@ -1,7 +1,7 @@
 use flecs_ecs::{
     core::{
-        flecs::pipeline, Query, QueryBuilderImpl, QueryTuple, SystemAPI, TermBuilderImpl, World,
-        WorldRef,
+        flecs::pipeline, IdOperations, Query, QueryBuilderImpl, QueryTuple, SystemAPI,
+        TermBuilderImpl, World, WorldRef,
     },
     macros::system,
 };
@@ -9,7 +9,7 @@ use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
 use crate::{
     component,
-    component::{blocks::MinecraftWorld, Comms, InGameName, Pose, Uuid},
+    component::{blocks::MinecraftWorld, command::Command, Comms, InGameName, Pose, Uuid},
     net::{Compose, NetworkStreamRef},
     runtime::AsyncRuntime,
     system::player_join_world::player_join_world,
@@ -42,6 +42,20 @@ pub fn joins(world: &'static World, registry: &mut SystemRegistry) {
 
     let system_id = registry.register();
 
+    let root_command = world.entity().set(Command::ROOT);
+
+    let hello_command = world
+        .entity()
+        .set(Command::literal("hello"))
+        .child_of_id(root_command);
+
+    world
+        .entity()
+        .set(Command::literal("world"))
+        .child_of_id(hello_command);
+
+    let root_command = root_command.id();
+
     system!(
         "joins",
         world,
@@ -73,9 +87,9 @@ pub fn joins(world: &'static World, registry: &mut SystemRegistry) {
             if !world.is_alive(entity) {
                 return;
             }
-            //
+
             let entity = world.entity_from_id(entity);
-            //
+
             entity.add::<component::Play>();
 
             entity.get::<(&Uuid, &InGameName, &Pose, &NetworkStreamRef)>(
@@ -84,8 +98,19 @@ pub fn joins(world: &'static World, registry: &mut SystemRegistry) {
                     let query = &query.0;
 
                     player_join_world(
-                        &entity, tasks, blocks, compose, uuid.0, name, stream_id, pose, &world,
-                        &skin, system_id, query,
+                        &entity,
+                        tasks,
+                        blocks,
+                        compose,
+                        uuid.0,
+                        name,
+                        stream_id,
+                        pose,
+                        &world,
+                        &skin,
+                        system_id,
+                        root_command,
+                        query,
                     );
                 },
             );

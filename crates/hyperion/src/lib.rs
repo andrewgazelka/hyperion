@@ -15,6 +15,7 @@
 #![feature(assert_matches)]
 #![feature(try_trait_v2)]
 #![feature(let_chains)]
+#![feature(ptr_metadata)]
 #![allow(
     clippy::redundant_pub_crate,
     clippy::cast_possible_truncation,
