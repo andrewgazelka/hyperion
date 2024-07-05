@@ -45,7 +45,6 @@ bvh-region = { path = "crates/bvh-region" }
 bytes = "1.6.0"
 clap = "4.5.7"
 criterion = "0.5.1"
-dashmap = "5.5.3"
 derive_more = "0.99.18"
 dirs-next = "2.0.0"
 divan = "0.1.14"
@@ -91,7 +90,7 @@ tracing-tracy = "0.11.0"
 uuid = "1.8.0"
 
 bvh = { git = "https://github.com/andrewgazelka/bvh-data" }
-flecs_ecs = { git = "https://github.com/Indra-db/flecs-ecs-rs"}
+flecs_ecs = { git = "https://github.com/andrewgazelka/flecs-ecs-rs", branch = "fix-macro" }
 hyperion = { path = "crates/hyperion" }
 hyperion-proto = { path = "crates/hyperion-proto" }
 valence_text = { git = "https://github.com/andrewgazelka/valence", branch = "feat-open" }

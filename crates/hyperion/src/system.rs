@@ -4,7 +4,7 @@
 
 // pub mod block_update;
 // pub mod chat_message;
-pub mod chunks;
+pub mod chunk_comm;
 // pub mod compass;
 // pub mod despawn_player;
 // pub mod disguise_player;

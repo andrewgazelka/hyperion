@@ -44,12 +44,11 @@ use crate::{
     packets::PacketSwitchQuery,
     runtime::AsyncRuntime,
     singleton::fd_lookup::StreamLookup,
-    system::{chunks::ChunkChanges, joins::SendableRef},
+    system::{chunk_comm::ChunkChanges, joins::SendableRef},
     tracing_ext::TracingExt,
     util::{db::SkinHandler, mojang::MojangClient, player_skin::PlayerSkin},
     SystemId, SystemRegistry,
 };
-
 // pub type ThreadLocalIngressSender<'a, 'b> = SenderLocal<'a, 'b, IngressEventSet>;
 // pub type IngressSender<'a> = Sender<'a, IngressEventSet>;
 

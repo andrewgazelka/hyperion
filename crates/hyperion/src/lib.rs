@@ -48,7 +48,7 @@ use crate::{
     net::{proxy::init_proxy_comms, Compose, Compressors, IoBuf, MAX_PACKET_SIZE},
     runtime::AsyncRuntime,
     singleton::fd_lookup::StreamLookup,
-    system::{chunks::ChunkChanges, player_join_world::generate_biome_registry},
+    system::{chunk_comm::ChunkChanges, player_join_world::generate_biome_registry},
     thread_local::ThreadLocal,
     util::{db, db::Db},
 };
@@ -145,9 +145,9 @@ pub fn register_components(world: &World) {
     world.component::<component::Play>();
     world.component::<component::ConfirmBlockSequences>();
 
-    world.component::<component::blocks::loaded::LoadedChunk>();
-    world.component::<component::blocks::loaded::NeighborNotify>();
-    world.component::<component::blocks::loaded::PendingChanges>();
+    world.component::<component::blocks::chunk::LoadedChunk>();
+    world.component::<component::blocks::chunk::NeighborNotify>();
+    world.component::<component::blocks::chunk::PendingChanges>();
 
     world.component::<component::inventory::Inventory>();
 
@@ -266,11 +266,11 @@ impl Hyperion {
             .next()
             .context("could not get first address")?;
 
-        let tasks = AsyncRuntime::default();
+        let runtime = AsyncRuntime::default();
 
         let url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
 
-        let db = tasks.block_on(Db::new(&url)).unwrap();
+        let db = runtime.block_on(Db::new(&url)).unwrap();
 
         let skins = db::SkinHandler::new(db.clone());
 
@@ -280,7 +280,7 @@ impl Hyperion {
         let thread_local_bump = ThreadLocalBump::new(world);
         world.set(thread_local_bump);
 
-        let (receive_state, egress_comm) = init_proxy_comms(&tasks, address);
+        let (receive_state, egress_comm) = init_proxy_comms(&runtime, address);
 
         let global = Global::new(shared.clone());
 
@@ -294,11 +294,14 @@ impl Hyperion {
         world.set(Comms::default());
 
         world.set(egress_comm);
-        world.set(tasks);
 
         let biome_registry =
             generate_biome_registry().context("failed to generate biome registry")?;
-        world.set(MinecraftWorld::new(&biome_registry)?);
+
+        let minecraft_world = MinecraftWorld::new(&biome_registry, runtime.clone())?;
+
+        world.set(minecraft_world);
+        world.set(runtime);
 
         world.set(StreamLookup::default());
 
@@ -311,9 +314,9 @@ impl Hyperion {
         system::stats::stats(world, &mut system_registry);
         system::joins::joins(world, &mut system_registry);
 
-        system::chunks::load_pending(world);
-        system::chunks::generate_chunk_changes(world, &mut system_registry);
-        system::chunks::send_updates(world, &mut system_registry);
+        system::chunk_comm::load_pending(world);
+        system::chunk_comm::generate_chunk_changes(world, &mut system_registry);
+        system::chunk_comm::send_updates(world, &mut system_registry);
 
         system::ingress::recv_data(world, &mut system_registry);
 

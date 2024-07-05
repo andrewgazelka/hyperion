@@ -52,7 +52,6 @@ tokio = { workspace = true, features = ["full"] }
 parking_lot.workspace = true
 tar.workspace = true
 thiserror.workspace = true
-dashmap.workspace = true
 bitfield-struct.workspace = true
 bitvec.workspace = true
 hyperion-proto.workspace = true

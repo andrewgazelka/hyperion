@@ -23,7 +23,7 @@ use valence_text::IntoText;
 use crate::{
     component::{
         blocks::{
-            loaded::{LoadedChunk, START_Y},
+            chunk::{LoadedChunk, START_Y},
             MinecraftWorld,
         },
         inventory::Inventory,

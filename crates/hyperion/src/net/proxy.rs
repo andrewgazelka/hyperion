@@ -102,6 +102,7 @@ async fn inner(
 pub struct ReceiveState(pub Arc<Mutex<ReceiveStateInner>>);
 
 /// Initializes proxy communications.
+#[must_use]
 pub fn init_proxy_comms(tasks: &AsyncRuntime, socket: SocketAddr) -> (ReceiveState, EgressComm) {
     let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
     let shared = Arc::new(Mutex::new(ReceiveStateInner::default()));

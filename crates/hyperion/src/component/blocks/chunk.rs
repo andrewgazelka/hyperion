@@ -185,7 +185,7 @@ impl<T> ThreadHeaplessVec<T> {
 }
 
 /// A chunk which has been loaded into memory.
-#[derive(Debug, Component, Default)]
+#[derive(Debug, Component)]
 pub struct LoadedChunk {
     /// The raw (usually compressed) bytes of the chunk that are sent to the client via the Minecraft protocol.
     pub base_packet_bytes: Bytes,

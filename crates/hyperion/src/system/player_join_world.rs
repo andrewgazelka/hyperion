@@ -906,10 +906,7 @@ fn inner(
     let center_chunk = I16Vec2::new(center_chunk.x as i16, center_chunk.z as i16);
 
     // so they do not fall
-    let chunk = chunks
-        .get_and_wait(center_chunk, tasks, world)
-        .unwrap()
-        .unwrap();
+    let chunk = unsafe { chunks.get_and_wait(center_chunk, tasks, world) };
     encoder.append_bytes(&chunk);
 
     // let radius = 2;

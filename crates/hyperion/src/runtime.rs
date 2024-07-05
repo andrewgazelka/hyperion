@@ -1,12 +1,14 @@
 //! See [`AsyncRuntime`].
 
+use std::sync::Arc;
+
 use derive_more::{Deref, DerefMut};
 use flecs_ecs::macros::Component;
 
 /// Wrapper around [`tokio::runtime::Runtime`]
-#[derive(Component, Deref, DerefMut)]
+#[derive(Component, Deref, DerefMut, Clone)]
 pub struct AsyncRuntime {
-    runtime: tokio::runtime::Runtime,
+    runtime: Arc<tokio::runtime::Runtime>,
 }
 
 impl Default for AsyncRuntime {
@@ -15,6 +17,8 @@ impl Default for AsyncRuntime {
             .enable_all()
             .build()
             .unwrap();
+
+        let runtime = Arc::new(runtime);
 
         Self { runtime }
     }

@@ -42,7 +42,7 @@ use valence_protocol::{
 use crate::{
     component::{
         blocks::{
-            loaded::{Delta, LoadedChunk, NeighborNotify, PendingChanges},
+            chunk::{Delta, LoadedChunk, NeighborNotify, PendingChanges},
             MinecraftWorld,
         },
         ConfirmBlockSequences, Pose,

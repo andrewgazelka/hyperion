@@ -1,186 +1,119 @@
 //! Constructs for working with blocks.
 
-use std::{
-    borrow::Cow,
-    cell::RefCell,
-    collections::{BTreeMap, HashMap},
-    io::Write,
-    ops::Try,
-    sync::Arc,
-};
+use std::{collections::HashMap, ops::Try, sync::Arc};
 
-use anyhow::Context;
-use bytes::{Bytes, BytesMut};
+use bytes::Bytes;
 use compact_str::format_compact;
-use dashmap::{DashMap, DashSet};
 use flecs_ecs::{
     core::{Entity, EntityView, IdOperations, World},
     macros::Component,
 };
-use fxhash::{FxBuildHasher, FxHashMap};
+use fxhash::FxHashMap;
 use glam::{I16Vec2, IVec2};
-use itertools::Itertools;
-use libdeflater::{CompressionLvl, Compressor};
-use tokio::task::JoinHandle;
-use tracing::{error, info, instrument};
-use valence_anvil::parsing::parse_chunk;
+use tracing::{info, instrument};
 use valence_generated::block::{BlockKind, BlockState, PropName, PropValue};
-use valence_nbt::{compound, List};
-use valence_protocol::{
-    packets::play, BlockPos, ChunkPos, CompressionThreshold, Direction, Encode, FixedArray, Ident,
-};
-use valence_registry::{biome::BiomeId, BiomeRegistry, RegistryIdx};
-use valence_server::layer::chunk::{
-    bit_width, BiomeContainer, BlockStateContainer, Chunk, UnloadedChunk,
-};
+use valence_protocol::{BlockPos, Direction};
+use valence_registry::BiomeRegistry;
+use valence_server::layer::chunk::Chunk;
 
 use crate::{
-    bits::BitStorage,
-    chunk::heightmap,
     component::blocks::{
-        loaded::{Delta, NeighborNotify, PendingChanges},
-        loader::Regions,
+        chunk::{Delta, LoadedChunk, NeighborNotify, PendingChanges},
+        loader::{launch_manager, LaunchHandle},
+        shared::Shared,
     },
     event::EventQueue,
-    net::encoder::PacketEncoder,
     runtime::AsyncRuntime,
-    Scratch,
 };
 
+pub mod chunk;
 pub mod interact;
-pub mod loaded;
+
 mod loader;
+mod manager;
+
 mod region;
 
-/// Thread-local state for encoding chunks.
-struct TasksState {
-    bytes: BytesMut,
-    compressor: Compressor,
-    scratch: Scratch,
-}
+mod shared;
 
-impl Default for TasksState {
-    fn default() -> Self {
-        Self {
-            bytes: BytesMut::new(),
-            compressor: Compressor::new(CompressionLvl::new(6).unwrap()),
-            scratch: Scratch::default(),
-        }
-    }
+pub enum GetChunkBytes {
+    Loaded(Bytes),
+    Loading,
 }
 
 /// Accessor of blocks.
 #[derive(Component)]
 pub struct MinecraftWorld {
-    threaded: Arc<BlocksInner>,
-
     /// Map to a Chunk by Entity ID
     cache: FxHashMap<I16Vec2, Entity>,
-}
 
-/// Inner state of the [`MinecraftWorld`] component.
-pub struct BlocksInner {
-    // todo: impl more efficient (probably lru) cache
-    pending_cache: DashMap<I16Vec2, loaded::LoadedChunk, FxBuildHasher>,
-    loading: DashSet<I16Vec2, FxBuildHasher>,
-    regions: Regions,
-    biome_to_id: BTreeMap<Ident<String>, BiomeId>,
-}
+    launch_manager: LaunchHandle,
 
-impl BlocksInner {
-    pub(crate) fn new(biomes: &BiomeRegistry) -> anyhow::Result<Self> {
-        let regions = Regions::new().context("failed to get anvil data")?;
-
-        let biome_to_id = biomes
-            .iter()
-            .map(|(id, name, _)| (name.to_string_ident(), id))
-            .collect();
-
-        Ok(Self {
-            pending_cache: DashMap::default(),
-            loading: DashSet::default(),
-            regions,
-            biome_to_id,
-        })
-    }
-}
-
-thread_local! {
-  static STATE: RefCell<TasksState> = RefCell::new(TasksState::default());
-}
-
-/// The current data of a chunk.
-pub enum ChunkData {
-    /// The chunk has been loaded into memory and is cached.
-    Cached(Bytes),
-    /// The chunks is currently being processed and loaded into memory.
-    Task(JoinHandle<()>),
+    tx_loaded_chunks: tokio::sync::mpsc::UnboundedSender<LoadedChunk>,
+    rx_loaded_chunks: tokio::sync::mpsc::UnboundedReceiver<LoadedChunk>,
 }
 
 impl MinecraftWorld {
-    pub(crate) fn new(registry: &BiomeRegistry) -> anyhow::Result<Self> {
-        let inner = BlocksInner::new(registry)?;
+    pub(crate) fn new(registry: &BiomeRegistry, runtime: AsyncRuntime) -> anyhow::Result<Self> {
+        let shared = Shared::new(registry)?;
+        let shared = Arc::new(shared);
+
+        let (tx_loaded_chunks, rx_loaded_chunks) = tokio::sync::mpsc::unbounded_channel();
+
         Ok(Self {
-            threaded: Arc::new(inner),
             cache: HashMap::default(),
+            launch_manager: launch_manager(shared, runtime),
+            tx_loaded_chunks,
+            rx_loaded_chunks,
         })
     }
 
-    /// todo: doesn't work in loading state
+    /// get_and_wait can only be called if a chunk has not already been loaded
     #[allow(clippy::missing_panics_doc, reason = "todo use unwrap unchecked")]
     #[instrument(skip_all)]
-    pub fn get_and_wait(
+    pub unsafe fn get_and_wait(
         &self,
         position: I16Vec2,
         tasks: &AsyncRuntime,
         world: &World,
-    ) -> anyhow::Result<Option<Bytes>> {
-        let result = match self.get_cached_or_load(position, tasks, world)? {
-            None => {
-                info!("chunk {position:?} not found");
-                None
-            }
-            Some(ChunkData::Cached(data)) => Some(data),
-            Some(ChunkData::Task(handle)) => {
-                info!("waiting for chunk {position:?}");
-                tasks.block_on(handle)?;
-                let res = self
-                    .threaded
-                    .pending_cache
-                    .get(&position)
-                    .unwrap()
-                    .base_packet_bytes
-                    .clone();
-                Some(res)
-            }
-        };
+    ) -> Bytes {
+        if let Some(cached) = self.get_cached(position, world) {
+            return cached;
+        }
 
-        Ok(result)
+        // get_and_wait is called infrequently, ideally this would be a oneshot channel
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+
+        // todo: potential race condition where this is called twice
+        self.launch_manager.send(position, tx);
+
+        let result = tasks.block_on(async move { rx.recv().await.unwrap() });
+
+        let bytes = result.base_packet_bytes.clone();
+
+        // forward to the main channel
+        self.tx_loaded_chunks.send(result).unwrap();
+
+        bytes
     }
 
     pub fn load_pending(&mut self, world: &World) {
-        let keys: Vec<_> = self
-            .threaded
-            .pending_cache
-            .iter()
-            .map(|x| *x.key())
-            .collect();
+        while let Ok(chunk) = self.rx_loaded_chunks.try_recv() {
+            let position = chunk.position;
 
-        for key in keys {
-            let (pos, loaded_chunk) = self.threaded.pending_cache.remove(&key).unwrap();
+            let x = position[0];
+            let z = position[1];
 
-            let x = pos[0];
-            let z = pos[1];
             let name = format_compact!("chunk_{x:03}_{z:03}");
 
             let entity = world
                 .entity_named(&name)
-                .set(loaded_chunk)
+                .set(chunk)
                 .set(EventQueue::default())
                 .set(NeighborNotify::default())
                 .set(PendingChanges::default());
 
-            self.cache.insert(key, entity.id());
+            self.cache.insert(position, entity.id());
         }
     }
 
@@ -204,7 +137,7 @@ impl MinecraftWorld {
         &self,
         chunk_position: I16Vec2,
         world: &World,
-        f: impl FnOnce(Option<&loaded::LoadedChunk>) -> R,
+        f: impl FnOnce(Option<&chunk::LoadedChunk>) -> R,
     ) -> R {
         let Some(entity) = self.get_loaded_chunk_entity(chunk_position, world) else {
             return f(None);
@@ -212,7 +145,7 @@ impl MinecraftWorld {
 
         let entity = world.entity_from_id(entity);
 
-        entity.map::<&loaded::LoadedChunk, _>(|chunk| f(Some(chunk)))
+        entity.map::<&chunk::LoadedChunk, _>(|chunk| f(Some(chunk)))
     }
 
     /// Returns all loaded blocks within the range from `start` to `end` (inclusive).
@@ -370,166 +303,29 @@ impl MinecraftWorld {
     // If you want to implement this, I also recommend waiting until that's done.
     // That should be done in a couple of days, probably.
 
-    /// get the cached chunk for the given position or load it if it is not cached.
-    pub fn get_cached_or_load(
-        &self,
-        position: I16Vec2,
-        tasks: &AsyncRuntime,
-        world: &World,
-    ) -> anyhow::Result<Option<ChunkData>> {
+    pub fn get_cached(&self, position: I16Vec2, world: &World) -> Option<Bytes> {
         if let Some(&result) = self.cache.get(&position) {
             let result = world.entity_from_id(result);
-            let result = result.map::<&loaded::LoadedChunk, _>(loaded::LoadedChunk::bytes);
+            let result = result.map::<&chunk::LoadedChunk, _>(chunk::LoadedChunk::bytes);
 
-            return Ok(Some(ChunkData::Cached(result)));
+            return Some(result);
         }
 
-        if !self.threaded.loading.insert(position) {
-            // we are currently loading this chunk
-            return Ok(None);
-        }
-
-        let inner = self.threaded.clone();
-
-        let handle = tasks.spawn(async move {
-            let mut decompress_buf = vec![0; 1024 * 1024];
-
-            // https://rust-lang.github.io/rust-clippy/master/index.html#/large_futures
-            let region = inner
-                .regions
-                .get_region_from_chunk(i32::from(position.x), i32::from(position.y))
-                .await;
-
-            let raw_chunk = {
-                let mut region_access = region.lock().await;
-
-                region_access
-                    .get_chunk(
-                        i32::from(position.x),
-                        i32::from(position.y),
-                        &mut decompress_buf,
-                        inner.regions.root(),
-                    )
-                    .await
-                    .unwrap()
-                    .unwrap()
-            };
-
-            let Ok(chunk) = parse_chunk(raw_chunk.data, &inner.biome_to_id) else {
-                error!("failed to parse chunk {position:?}");
-                inner
-                    .pending_cache
-                    .insert(position, loaded::LoadedChunk::default());
-
-                inner.loading.remove(&position);
-
-                return;
-            };
-
-            STATE.with_borrow_mut(|state| {
-                let Ok(Some(bytes)) = encode_chunk_packet(&chunk, position, state) else {
-                    inner
-                        .pending_cache
-                        .insert(position, loaded::LoadedChunk::default());
-                    inner.loading.remove(&position);
-                    return;
-                };
-
-                inner.pending_cache.insert(
-                    position,
-                    loaded::LoadedChunk::new(bytes.freeze(), chunk, position),
-                );
-
-                let present = inner.loading.remove(&position);
-
-                debug_assert!(present.is_some());
-            });
-        });
-
-        Ok(Some(ChunkData::Task(handle)))
-    }
-}
-
-// #[instrument(skip_all, level = "trace", fields(location = ?location))]
-fn encode_chunk_packet(
-    chunk: &UnloadedChunk,
-    location: I16Vec2,
-    state: &mut TasksState,
-) -> anyhow::Result<Option<BytesMut>> {
-    let encoder = PacketEncoder::new(CompressionThreshold::from(6));
-
-    let section_count = 384 / 16_usize;
-    let dimension_height = 384;
-
-    let map = heightmap(dimension_height, dimension_height - 3);
-    let map = map.into_iter().map(i64::try_from).try_collect()?;
-
-    // convert section_count + 2 0b1s into `u64` array
-    let mut bits = BitStorage::new(1, section_count + 2, None).unwrap();
-
-    for i in 0..section_count + 2 {
-        bits.set(i, 1);
+        None
     }
 
-    // 2048 bytes per section -> long count = 2048 / 8 = 256
-    let sky_light_array = FixedArray([0xFF_u8; 2048]);
-    let sky_light_arrays = vec![sky_light_array; section_count + 2];
+    /// get the cached chunk for the given position or load it if it is not cached.
+    #[must_use]
+    pub fn get_cached_or_load(&self, position: I16Vec2, world: &World) -> GetChunkBytes {
+        if let Some(result) = self.get_cached(position, world) {
+            return GetChunkBytes::Loaded(result);
+        };
 
-    let mut section_bytes = Vec::new();
+        self.launch_manager
+            .send(position, self.tx_loaded_chunks.clone());
 
-    for section in &chunk.sections {
-        let non_air_blocks: u16 = 42;
-        non_air_blocks.encode(&mut section_bytes).unwrap();
-
-        write_block_states(&section.block_states, &mut section_bytes).unwrap();
-        write_biomes(&section.biomes, &mut section_bytes).unwrap();
+        GetChunkBytes::Loading
     }
-
-    let pkt = play::ChunkDataS2c {
-        pos: ChunkPos::new(i32::from(location.x), i32::from(location.y)),
-        heightmaps: Cow::Owned(compound! {
-            "MOTION_BLOCKING" => List::Long(map),
-        }),
-        blocks_and_biomes: &section_bytes,
-        block_entities: Cow::Borrowed(&[]),
-
-        sky_light_mask: Cow::Owned(bits.into_data()),
-        block_light_mask: Cow::Borrowed(&[]),
-        empty_sky_light_mask: Cow::Borrowed(&[]),
-        empty_block_light_mask: Cow::Borrowed(&[]),
-        sky_light_arrays: Cow::Owned(sky_light_arrays),
-        block_light_arrays: Cow::Borrowed(&[]),
-    };
-
-    let buf = &mut state.bytes;
-    let scratch = &mut state.scratch;
-    let compressor = &mut state.compressor;
-
-    let result = encoder.append_packet(&pkt, buf, scratch, compressor)?;
-
-    Ok(Some(result))
-}
-
-fn write_block_states(states: &BlockStateContainer, writer: &mut impl Write) -> anyhow::Result<()> {
-    states.encode_mc_format(
-        writer,
-        |b| b.to_raw().into(),
-        4,
-        8,
-        bit_width(BlockState::max_raw().into()),
-    )?;
-    Ok(())
-}
-
-fn write_biomes(biomes: &BiomeContainer, writer: &mut impl Write) -> anyhow::Result<()> {
-    biomes.encode_mc_format(
-        writer,
-        |b| b.to_index() as u64,
-        0,
-        3,
-        6, // bit_width(info.biome_registry_len - 1),
-    )?;
-    Ok(())
 }
 
 struct Block {

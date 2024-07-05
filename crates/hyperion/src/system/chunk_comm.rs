@@ -6,17 +6,16 @@ use flecs_ecs::{
     macros::{system, Component},
 };
 use glam::I16Vec2;
-use tracing::{debug, error, instrument, trace_span};
+use tracing::{instrument, trace_span};
 use valence_protocol::packets::play;
 
 use crate::{
     component::{
-        blocks::{ChunkData, MinecraftWorld},
+        blocks::{GetChunkBytes, MinecraftWorld},
         ChunkPosition, Play, Pose,
     },
     config::CONFIG,
     net::{Compose, NetworkStreamRef},
-    runtime::AsyncRuntime,
     tracing_ext::TracingExt,
     SystemRegistry,
 };
@@ -42,7 +41,6 @@ pub fn load_pending(world: &World) {
 #[instrument(skip_all, level = "trace")]
 pub fn generate_chunk_changes(world: &World, registry: &mut SystemRegistry) {
     let radius = CONFIG.view_distance as i16;
-    let r2_liberal = (radius + 1).pow(2);
 
     let system_id = registry.register();
 
@@ -70,8 +68,6 @@ pub fn generate_chunk_changes(world: &World, registry: &mut SystemRegistry) {
                 return;
             }
 
-            debug!("sending chunk updates {last_sent:?} -> {current_chunk:?}");
-
             // center chunk
             let center_chunk = play::ChunkRenderDistanceCenterS2c {
                 chunk_x: i32::from(current_chunk.x).into(),
@@ -84,11 +80,11 @@ pub fn generate_chunk_changes(world: &World, registry: &mut SystemRegistry) {
 
             last_sent.0 = current_chunk;
 
-            let last_sent_x_range = last_sent_chunk.x - radius..last_sent_chunk.x + radius;
-            let last_sent_z_range = last_sent_chunk.y - radius..last_sent_chunk.y + radius;
+            let last_sent_x_range = (last_sent_chunk.x - radius)..(last_sent_chunk.x + radius);
+            let last_sent_z_range = (last_sent_chunk.y - radius)..(last_sent_chunk.y + radius);
 
-            let current_x_range = current_chunk.x - radius..current_chunk.x + radius;
-            let current_z_range = current_chunk.y - radius..current_chunk.y + radius;
+            let current_x_range = (current_chunk.x - radius)..(current_chunk.x + radius);
+            let current_z_range = (current_chunk.y - radius)..(current_chunk.y + radius);
 
             let added_chunks = current_x_range
                 .flat_map(move |x| current_z_range.clone().map(move |z| I16Vec2::new(x, z)))
@@ -105,10 +101,14 @@ pub fn generate_chunk_changes(world: &World, registry: &mut SystemRegistry) {
 
             if num_chunks_added > 0 {
                 // remove further than radius
-                chunk_changes.retain(|elem| {
-                    let elem = elem.distance_squared(current_chunk);
-                    elem <= r2_liberal
-                });
+
+                // commented out because it can break things
+                // todo: re-add but have better check so we con't prune things and then never
+                // send them
+                // chunk_changes.retain(|elem| {
+                //     let elem = elem.distance_squared(current_chunk);
+                //     elem <= r2_very_liberal
+                // });
 
                 chunk_changes.sort_unstable_by(|a, b| {
                     let r1 = a.distance_squared(current_chunk);
@@ -136,7 +136,6 @@ pub fn send_updates(world: &World, registry: &mut SystemRegistry) {
         "send_updates",
         world,
         &MinecraftWorld($),
-        &AsyncRuntime($),
         &Compose($),
         &NetworkStreamRef,
         &mut ChunkChanges,
@@ -146,7 +145,7 @@ pub fn send_updates(world: &World, registry: &mut SystemRegistry) {
     .multi_threaded()
     .tracing_each_entity(
         trace_span!("send_updates"),
-        move |entity, (chunks, tasks, compose, &stream_id, chunk_changes)| {
+        move |entity, (chunks, compose, &stream_id, chunk_changes)| {
             const MAX_CHUNKS_PER_TICK: usize = 32;
 
             let world = entity.world();
@@ -172,19 +171,16 @@ pub fn send_updates(world: &World, registry: &mut SystemRegistry) {
                     break;
                 }
 
-                match chunks.get_cached_or_load(elem, tasks, &world) {
-                    Ok(Some(ChunkData::Cached(chunk))) => {
+                match chunks.get_cached_or_load(elem, &world) {
+                    GetChunkBytes::Loaded(chunk) => {
                         compose
                             .io_buf()
                             .unicast_raw(chunk, stream_id, system_id, &world);
+
                         iter_count += 1;
                         chunk_changes.changes.swap_remove(idx as usize);
                     }
-                    Ok(Some(ChunkData::Task(..)) | None) => {}
-                    Err(err) => {
-                        error!("failed to get chunk {elem:?}: {err}");
-                        chunk_changes.changes.swap_remove(idx as usize);
-                    }
+                    GetChunkBytes::Loading => {}
                 }
 
                 idx -= 1;
