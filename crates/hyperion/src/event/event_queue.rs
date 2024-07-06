@@ -1,18 +1,20 @@
-use std::{any::TypeId, cell::SyncUnsafeCell, ptr::NonNull, sync::atomic::AtomicUsize};
+use std::{any::TypeId, cell::SyncUnsafeCell, ptr::NonNull};
 
 use bumpalo::Bump;
+use derive_more::{Deref, DerefMut};
 use flecs_ecs::{core::World, macros::Component};
 use fxhash::FxHashMap;
-use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
 
-use crate::{event::event_queue::raw::TypedBumpPtr, thread_local::ThreadLocal};
+use crate::{
+    component::blocks::chunk::ThreadLocalVec, event::event_queue::raw::TypedBumpPtr,
+    thread_local::ThreadLocal,
+};
 
-mod raw;
+pub mod raw;
 
 #[derive(Component, Default)]
 pub struct EventQueue {
-    pub count: AtomicUsize,
-    inner: ThreadLocal<SyncUnsafeCell<heapless::Vec<TypedBumpPtr, 32>>>,
+    inner: ThreadLocalVec<TypedBumpPtr>,
 }
 
 impl EventQueue {
@@ -24,7 +26,10 @@ impl EventQueue {
     }
 
     pub fn is_empty(&mut self) -> bool {
-        self.len() == 0
+        self.inner
+            .iter_mut()
+            .map(SyncUnsafeCell::get_mut)
+            .all(|x| x.is_empty())
     }
 
     pub fn push<T: 'static>(
@@ -46,15 +51,9 @@ impl EventQueue {
         let inner = self.inner.get(world);
         let inner = unsafe { &mut *inner.get() };
 
-        if inner.push(ptr).is_err() {
-            return Ok(());
-            // bail!("Event queue is full");
-        }
+        inner.push(ptr);
 
         assert!(!inner.is_empty());
-
-        self.count
-            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 
         Ok(())
     }
@@ -63,37 +62,14 @@ impl EventQueue {
         self.inner
             .iter_mut()
             .for_each(|inner| inner.get_mut().clear());
-
-        self.count = AtomicUsize::new(0);
     }
 }
 
-#[derive(Component)]
+#[derive(Component, Deref, DerefMut, Default)]
 pub struct ThreadLocalBump {
     // todo: ThreadLocal has initialize logic which can slow down things if we are using it frequently.
     // we probably want to pre-initialize these on all threads that will need access.
-    locals: Box<[Bump]>,
-}
-
-impl ThreadLocalBump {
-    #[must_use]
-    pub fn new(world: &World) -> Self {
-        let num_locals = world.get_stage_count();
-        Self {
-            locals: (0..num_locals).map(|_| Bump::new()).collect(),
-        }
-    }
-
-    #[must_use]
-    pub fn get(&self, world: &World) -> &Bump {
-        let id = world.stage_id();
-        let id = usize::try_from(id).expect("failed to convert stage id");
-        &self.locals[id]
-    }
-
-    pub fn par_iter_mut(&mut self) -> impl ParallelIterator<Item = &mut Bump> {
-        self.locals.par_iter_mut()
-    }
+    locals: ThreadLocal<Bump>,
 }
 
 // todo: improve code.

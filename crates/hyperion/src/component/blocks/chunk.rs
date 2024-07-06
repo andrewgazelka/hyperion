@@ -1,4 +1,8 @@
-use std::{cell::SyncUnsafeCell, fmt::Debug};
+use std::{
+    cell::{Cell, SyncUnsafeCell},
+    fmt::Debug,
+    mem::MaybeUninit,
+};
 
 use bytes::Bytes;
 use derive_more::{Deref, DerefMut};
@@ -94,16 +98,45 @@ impl OnChange {
 const _: () = assert!(size_of::<OnChange>() == 3);
 
 #[derive(Debug)]
-pub struct ThreadHeaplessVec<T> {
-    inner: ThreadLocal<SyncUnsafeCell<heapless::Vec<T, 32>>>,
+pub struct ThreadHeaplessVec<T, const N: usize = 32> {
+    inner: ThreadLocal<SyncUnsafeCell<heapless::Vec<T, N>>>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Deref, DerefMut)]
 pub struct ThreadLocalVec<T> {
     inner: ThreadLocal<SyncUnsafeCell<Vec<T>>>,
 }
 
-impl<T> Default for ThreadHeaplessVec<T> {
+pub struct ThreadLocalCustomVec<T> {
+    lens: ThreadLocal<Cell<u16>>,
+    inner: ThreadLocal<SyncUnsafeCell<Box<[MaybeUninit<T>]>>>,
+}
+
+impl<T> ThreadLocalCustomVec<T> {
+    #[must_use]
+    pub fn with_capacity(n: usize) -> Self {
+        Self {
+            lens: ThreadLocal::default(),
+            inner: ThreadLocal::new_with(|_| SyncUnsafeCell::new(Box::new_uninit_slice(n))),
+        }
+    }
+
+    pub fn push(&self, elem: T, world: &World) {
+        let lens = self.lens.get(world);
+        let idx = lens.get();
+        lens.set(idx + 1);
+
+        let inner = self.inner.get(world);
+        let inner = unsafe { &mut *inner.get() };
+        inner[idx as usize].write(elem);
+    }
+
+    pub fn is_empty(&mut self) -> bool {
+        self.lens.iter_mut().all(|x| x.get() == 0)
+    }
+}
+
+impl<T, const N: usize> Default for ThreadHeaplessVec<T, N> {
     fn default() -> Self {
         Self {
             inner: ThreadLocal::new_defaults(),
@@ -120,16 +153,39 @@ impl<T> Default for ThreadLocalVec<T> {
 }
 
 #[derive(Debug, Default, Deref, DerefMut, Component)]
-pub struct PendingChanges(ThreadHeaplessVec<Delta>);
+pub struct PendingChanges(ThreadLocalVec<Delta>);
 
 #[derive(Debug, Default, Deref, DerefMut, Component)]
-pub struct NeighborNotify(ThreadHeaplessVec<OnChange>);
+pub struct NeighborNotify(ThreadLocalVec<OnChange>);
 
-impl<T: Debug> ThreadHeaplessVec<T> {
+impl<T: Debug, const N: usize> ThreadHeaplessVec<T, N> {
     pub fn push(&self, element: T, world: &World) {
         let inner = self.inner.get(world);
         let inner = unsafe { &mut *inner.get() };
         assert!(inner.push(element).is_ok(), "ThreadList {inner:?} is full");
+    }
+}
+
+impl<T> ThreadLocalVec<T> {
+    #[must_use]
+    pub fn with_capacity(n: usize) -> Self {
+        Self {
+            inner: ThreadLocal::new_with(|_| SyncUnsafeCell::new(Vec::with_capacity(n))),
+        }
+    }
+
+    pub fn drain(&mut self) -> impl Iterator<Item = T> + '_ {
+        self.inner
+            .iter_mut()
+            .map(SyncUnsafeCell::get_mut)
+            .flat_map(|x| x.drain(..))
+    }
+
+    pub fn is_empty(&mut self) -> bool {
+        self.inner
+            .iter_mut()
+            .map(SyncUnsafeCell::get_mut)
+            .all(|x| x.is_empty())
     }
 }
 
@@ -181,6 +237,13 @@ impl<T> ThreadHeaplessVec<T> {
             .iter_mut()
             .map(SyncUnsafeCell::get_mut)
             .flat_map(|inner| Drain::new(inner))
+    }
+
+    pub fn is_empty(&mut self) -> bool {
+        self.inner
+            .iter_mut()
+            .map(SyncUnsafeCell::get_mut)
+            .all(|x| x.is_empty())
     }
 }
 

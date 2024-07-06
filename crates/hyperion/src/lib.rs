@@ -70,7 +70,7 @@ pub mod net;
 // pub mod inventory;
 
 mod packets;
-mod system;
+pub mod system;
 mod tracing_ext;
 
 mod bits;
@@ -173,7 +173,7 @@ impl CustomPipeline {
 }
 
 #[derive(Default)]
-struct SystemRegistry {
+pub struct SystemRegistry {
     current_idx: u16,
 }
 
@@ -277,7 +277,7 @@ impl Hyperion {
         world.set(db);
         world.set(skins);
 
-        let thread_local_bump = ThreadLocalBump::new(world);
+        let thread_local_bump = ThreadLocalBump::default();
         world.set(thread_local_bump);
 
         let (receive_state, egress_comm) = init_proxy_comms(&runtime, address);
@@ -316,7 +316,7 @@ impl Hyperion {
 
         system::chunk_comm::load_pending(world);
         system::chunk_comm::generate_chunk_changes(world, &mut system_registry);
-        system::chunk_comm::send_updates(world, &mut system_registry);
+        system::chunk_comm::send_full_loaded_chunks(world, &mut system_registry);
 
         system::ingress::recv_data(world, &mut system_registry);
 

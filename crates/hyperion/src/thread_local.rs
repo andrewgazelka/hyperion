@@ -10,6 +10,8 @@ pub struct ThreadLocal<T> {
     locals: [T; NUM_THREADS],
 }
 
+unsafe impl<T> Sync for ThreadLocal<T> {}
+
 impl<T> Deref for ThreadLocal<T> {
     type Target = [T];
 
@@ -52,9 +54,10 @@ impl<T> ThreadLocal<T> {
     }
 
     #[must_use]
+    #[allow(clippy::cast_sign_loss)]
     pub fn get(&self, world: &World) -> &T {
         let id = world.stage_id();
-        let id = usize::try_from(id).expect("failed to convert stage id");
-        &self.locals[id]
+        let id = id as usize;
+        unsafe { self.locals.get_unchecked(id) }
     }
 }

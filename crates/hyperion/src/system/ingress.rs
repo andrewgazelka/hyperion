@@ -32,9 +32,10 @@ use valence_protocol::{
 use crate::{
     component,
     component::{
-        blocks::MinecraftWorld, inventory::PlayerInventory, AiTargetable, ChunkPosition, Comms,
-        ConfirmBlockSequences, EntityReaction, Health, ImmuneStatus, InGameName, PacketState, Pose,
-        Uuid, PLAYER_SPAWN_POSITION,
+        blocks::{chunk::PendingChanges, MinecraftWorld},
+        inventory::PlayerInventory,
+        AiTargetable, ChunkPosition, Comms, ConfirmBlockSequences, EntityReaction, Health,
+        ImmuneStatus, InGameName, PacketState, Pose, Uuid, PLAYER_SPAWN_POSITION,
     },
     event::{EventQueue, ThreadLocalBump},
     net::{
@@ -221,6 +222,7 @@ pub fn recv_data(world: &World, registry: &mut SystemRegistry) {
         &mut PlayerInventory,
     )
     .kind::<OnUpdate>()
+    .write::<PendingChanges>()
     .multi_threaded()
     .tracing_each_entity(
         trace_span!("recv_data"),

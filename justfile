@@ -59,6 +59,11 @@ release:
     ulimit -Sn {{fds}} && cargo run --bin hyperion-proxy --release
     cargo watch --why -w '{{project_root}}/crates/hyperion' -w '{{project_root}}/events/infection' -s 'cargo build --release -p infection' -s 'touch {{project_root}}/.trigger'
 
+release-full:
+    #!/usr/bin/env -S parallel --shebang --ungroup --jobs 2
+    RUN_MODE=release-f-{{arch}} cargo run --profile release-full -p infection -- -t
+    ulimit -Sn {{fds}} && cargo run --bin hyperion-proxy --profile release-full
+
 # run a given number of bots to connect to hyperion
 bots count='1000':
     cargo install -q --git https://github.com/andrewgazelka/rust-mc-bot --branch optimize

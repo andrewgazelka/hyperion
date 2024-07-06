@@ -16,26 +16,31 @@ unsafe impl Send for TypedBumpPtr {}
 unsafe impl Sync for TypedBumpPtr {}
 
 impl TypedBumpPtr {
+    #[must_use]
     pub const fn new(id: TypeId, elem: NonNull<()>) -> Self {
         Self { id, elem }
     }
 
+    #[must_use]
     pub const fn id(&self) -> TypeId {
         self.id
     }
 
+    #[must_use]
     pub const fn elem(&self) -> NonNull<()> {
         self.elem
     }
 }
 
-/// Think of this as a fixed capacity Vec<TypedBumpPtr>
-pub struct RawQueue {
-    elems: Box<[SyncUnsafeCell<MaybeUninit<TypedBumpPtr>>]>,
+/// Think of this as a fixed capacity `Vec<T>`
+pub struct RawQueue<T> {
+    elems: Box<[SyncUnsafeCell<MaybeUninit<T>>]>,
     len: AtomicUsize,
 }
 
-impl RawQueue {
+// todo: remove Copy requirement.
+impl<T: Copy> RawQueue<T> {
+    #[must_use]
     pub fn new(size: usize) -> Self {
         let elems = (0..size)
             .map(|_| SyncUnsafeCell::new(MaybeUninit::uninit()))
@@ -47,7 +52,7 @@ impl RawQueue {
         }
     }
 
-    pub fn push(&self, elem: TypedBumpPtr) -> anyhow::Result<()> {
+    pub fn push(&self, elem: T) -> anyhow::Result<()> {
         let ptr = self.len.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 
         let elems = &*self.elems;
@@ -63,7 +68,7 @@ impl RawQueue {
         Ok(())
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = TypedBumpPtr> + '_ {
+    pub fn iter(&self) -> impl Iterator<Item = T> + '_ {
         let len = self.len.load(std::sync::atomic::Ordering::Relaxed);
 
         (0..len).map(move |i| {

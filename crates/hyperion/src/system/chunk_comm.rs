@@ -129,11 +129,11 @@ pub fn generate_chunk_changes(world: &World, registry: &mut SystemRegistry) {
     );
 }
 
-pub fn send_updates(world: &World, registry: &mut SystemRegistry) {
+pub fn send_full_loaded_chunks(world: &World, registry: &mut SystemRegistry) {
     let system_id = registry.register();
 
     system!(
-        "send_updates",
+        "send_full_loaded_chunks",
         world,
         &MinecraftWorld($),
         &Compose($),
@@ -144,7 +144,7 @@ pub fn send_updates(world: &World, registry: &mut SystemRegistry) {
     .kind::<pipeline::OnUpdate>()
     .multi_threaded()
     .tracing_each_entity(
-        trace_span!("send_updates"),
+        trace_span!("send_full_loaded_chunks"),
         move |entity, (chunks, compose, &stream_id, chunk_changes)| {
             const MAX_CHUNKS_PER_TICK: usize = 32;
 

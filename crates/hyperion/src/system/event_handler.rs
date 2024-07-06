@@ -29,7 +29,6 @@ use flecs_ecs::{
     },
     macros::system,
 };
-use rayon::iter::ParallelIterator;
 use tracing::{info, info_span, instrument, trace_span};
 use valence_generated::block::BlockState;
 use valence_protocol::{
@@ -273,15 +272,9 @@ pub fn handle_events(world: &World, registry: &mut SystemRegistry) {
     //     compose.broadcast(&pkt).send(query.world).unwrap();
     // });
 
-    world
-        .system_named::<()>("sync_point")
-        .kind::<pipeline::PostUpdate>()
-        .with::<&mut PendingChanges>()
-        .with::<&mut NeighborNotify>()
-        .each(|()| {});
-
     let system_id = registry.register();
 
+    // 444 µs
     system!(
         "handle_events_block",
         world,
@@ -290,7 +283,6 @@ pub fn handle_events(world: &World, registry: &mut SystemRegistry) {
         &PendingChanges,
     )
     .kind::<pipeline::PostUpdate>()
-    // .read::<Pose>()
     .multi_threaded()
     .tracing_each_entity(
         info_span!("handle_events_block"),
@@ -298,19 +290,13 @@ pub fn handle_events(world: &World, registry: &mut SystemRegistry) {
             let world = entity.world();
             let world = &world;
 
-            let len = event_queue.len();
-            let count = event_queue.count.load(std::sync::atomic::Ordering::Relaxed);
-            assert_eq!(len, count);
-
-            // let state = chunk.chunk.block_state(u32::from(position.x), u32::from(position.y), u32::from(position.z));
-
-            // let value = state.get(PropName::Facing);
+            if event_queue.is_empty() {
+                return;
+            }
 
             let mut iter = EventQueueIterator::default();
 
             iter.register::<BlockBreak>(|block| {
-                assert_ne!(len, 0, "event queue is empty");
-
                 let position = block.position;
 
                 let delta = Delta::new(
@@ -480,9 +466,11 @@ pub fn reset_allocators(world: &World) {
     )
     .kind::<pipeline::PostUpdate>()
     .each(|allocator| {
-        let span = tracing::info_span!("reset_allocators");
+        let span = info_span!("reset_allocators");
         let _enter = span.enter();
-        allocator.par_iter_mut().for_each(|allocator| {
+
+        // par iter is 177µs
+        allocator.iter_mut().for_each(|allocator| {
             allocator.reset();
         });
     });

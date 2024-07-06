@@ -78,6 +78,10 @@ tracing-subscriber.workspace = true
 name = "set"
 harness = false
 
+[[bench]]
+name = "atomic"
+harness = false
+
 [lints]
 workspace = true
 
