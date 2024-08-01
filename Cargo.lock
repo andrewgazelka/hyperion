@@ -668,6 +668,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "compact_str"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6050c3a16ddab2e412160b31f2c871015704239bca62f72f6e5f0be631d3f644"
+dependencies = [
+ "castaway",
+ "cfg-if",
+ "itoa",
+ "rustversion",
+ "ryu",
+ "static_assertions",
+]
+
+[[package]]
 name = "concurrent-queue"
 version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1060,10 +1074,11 @@ dependencies = [
 
 [[package]]
 name = "flecs_ecs"
-version = "0.0.2"
-source = "git+https://github.com/andrewgazelka/flecs-ecs-rs?branch=fix-macro#2fb1299c9664064460b710c0e3deebf77f22ca31"
+version = "0.1.3"
+source = "git+https://github.com/Indra-db/Flecs-Rust#9505d680d30c9bceed78d0b98ac8091a6d169bf7"
 dependencies = [
- "compact_str",
+ "bitflags 2.6.0",
+ "compact_str 0.8.0",
  "flecs_ecs_derive",
  "flecs_ecs_sys",
  "fxhash",
@@ -1072,7 +1087,7 @@ dependencies = [
 [[package]]
 name = "flecs_ecs_derive"
 version = "0.1.0"
-source = "git+https://github.com/andrewgazelka/flecs-ecs-rs?branch=fix-macro#2fb1299c9664064460b710c0e3deebf77f22ca31"
+source = "git+https://github.com/Indra-db/Flecs-Rust#9505d680d30c9bceed78d0b98ac8091a6d169bf7"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1081,8 +1096,8 @@ dependencies = [
 
 [[package]]
 name = "flecs_ecs_sys"
-version = "0.1.0"
-source = "git+https://github.com/andrewgazelka/flecs-ecs-rs?branch=fix-macro#2fb1299c9664064460b710c0e3deebf77f22ca31"
+version = "0.1.2"
+source = "git+https://github.com/Indra-db/Flecs-Rust#9505d680d30c9bceed78d0b98ac8091a6d169bf7"
 dependencies = [
  "bindgen",
  "cc",
@@ -1577,7 +1592,7 @@ dependencies = [
  "bumpalo",
  "bvh-region",
  "bytes",
- "compact_str",
+ "compact_str 0.7.1",
  "derive_more 0.99.18",
  "dirs-next",
  "divan",

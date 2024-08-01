@@ -11,7 +11,6 @@
 #![feature(new_uninit)]
 #![feature(sync_unsafe_cell)]
 #![feature(iter_array_chunks)]
-#![feature(io_slice_advance)]
 #![feature(assert_matches)]
 #![feature(try_trait_v2)]
 #![feature(let_chains)]

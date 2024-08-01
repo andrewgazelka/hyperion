@@ -10,8 +10,8 @@ use base64::{engine::general_purpose, Engine};
 use flecs_ecs::{
     core::{
         flecs::pipeline::{OnUpdate, PreUpdate},
-        Builder, EntityView, IdOperations, IntoWorld, Query, QueryAPI, QueryBuilderImpl, SystemAPI,
-        TermBuilderImpl, World,
+        Builder, EntityView, IdOperations, Query, QueryAPI, QueryBuilderImpl, SystemAPI,
+        TermBuilderImpl, World, WorldProvider,
     },
     macros::{query, system, Component},
     prelude::WorldRef,

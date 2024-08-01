@@ -5,5 +5,3 @@
 //! `message_id`: `VarInt`,
 //! channel: String,
 //! data: Bytes,
-
-pub mod lunar;

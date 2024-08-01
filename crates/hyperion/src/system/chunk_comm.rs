@@ -2,7 +2,7 @@ use std::cmp::Ordering;
 
 use derive_more::{Deref, DerefMut};
 use flecs_ecs::{
-    core::{flecs::pipeline, IntoWorld, QueryBuilderImpl, SystemAPI, TermBuilderImpl, World},
+    core::{flecs::pipeline, QueryBuilderImpl, SystemAPI, TermBuilderImpl, World, WorldProvider},
     macros::{system, Component},
 };
 use glam::I16Vec2;

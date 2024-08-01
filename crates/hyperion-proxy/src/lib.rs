@@ -1,6 +1,5 @@
 #![feature(maybe_uninit_slice)]
 #![feature(allocator_api)]
-#![feature(io_slice_advance)]
 #![feature(let_chains)]
 #![allow(
     clippy::redundant_pub_crate,
