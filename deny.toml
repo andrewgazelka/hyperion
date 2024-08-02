@@ -85,6 +85,7 @@ allow = [
     "OpenSSL",
     "ISC",
     "MPL-2.0",
+    "BSD-2-Clause",
 ]
 # The confidence threshold for detecting a license from license text.
 # The higher the value, the more closely the license text must be to the
@@ -217,6 +218,10 @@ skip = [
     "semver",
     "rustls-pemfile",
     "rustc_version",
+    "compact_str",
+    "zerocopy",
+    "clap",
+    "itertools",
 
     #{ crate = "ansi_term@0.11.0", reason = "you can specify a reason why it can't be updated/removed" },
 ]
@@ -246,7 +251,7 @@ allow-registry = ["https://github.com/rust-lang/crates.io-index"]
 allow-git = [
     "https://github.com/andrewgazelka/valence",
     "https://github.com/andrewgazelka/bvh-data",
-    "https://github.com/andrewgazelka/flecs-ecs-rs",
+    "https://github.com/Indra-db/Flecs-Rust",
 ]
 
 [sources.allow-org]

@@ -51,7 +51,6 @@ reqwest = { workspace = true, features = ["blocking"] }
 tokio = { workspace = true, features = ["full"] }
 parking_lot.workspace = true
 tar.workspace = true
-thiserror.workspace = true
 bitfield-struct.workspace = true
 bitvec.workspace = true
 hyperion-proto.workspace = true
@@ -62,16 +61,15 @@ heapless.workspace = true
 base64.workspace = true
 kanal.workspace = true
 ouroboros.workspace = true
-sqlx = { version = "0.7.4", features = ["postgres", "runtime-tokio", "uuid"] }
-compact_str = "0.7.1"
+sqlx.workspace = true
+compact_str.workspace = true
 
 [dev-dependencies]
 divan.workspace = true
 fastrand.workspace = true
 hex.workspace = true
-#rust-mc-bot.workspace = true
 rustc_version.workspace = true
-tango-bench = "0.5.0" # TODO:  use workspace version.
+tango-bench.workspace = true
 tracing-subscriber.workspace = true
 
 [[bench]]

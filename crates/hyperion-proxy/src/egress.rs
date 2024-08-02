@@ -5,6 +5,7 @@ use std::{
 
 use arc_swap::ArcSwap;
 use bvh::{Aabb, Bvh, Data, Point};
+use glam::I16Vec2;
 use hyperion_proto::ServerToProxyMessage;
 use slotmap::KeyData;
 use tracing::{debug, error, info, instrument, warn};
@@ -250,9 +251,9 @@ struct PlayerChunkPosRef<'a> {
 }
 
 impl<'a> Point for PlayerChunkPosRef<'a> {
-    fn point(&self) -> glam::I16Vec2 {
+    fn point(&self) -> I16Vec2 {
         let position = &self.parent.positions[self.idx].clone();
-        glam::I16Vec2::new(position.x as i16, position.z as i16)
+        I16Vec2::new(position.x as i16, position.z as i16)
     }
 }
 

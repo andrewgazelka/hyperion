@@ -1,7 +1,5 @@
 //! Components for the main hyperion server.
 
-use std::fmt::Display;
-
 use bvh_region::aabb::Aabb;
 use derive_more::{Deref, DerefMut, Display, From};
 use flecs_ecs::{core::Entity, macros::Component};
