@@ -25,11 +25,9 @@ valence_generated.workspace = true
 # no secure alloc
 sha2.workspace = true
 itertools.workspace = true
-rand.workspace = true
 
 # todo: how much will adding "sync" wakers hurt performance?
 uuid = { workspace = true, features = ["v3"] }
-rand_distr.workspace = true
 rayon.workspace = true
 libc.workspace = true
 serde = { workspace = true, features = ["derive"] }
@@ -55,7 +53,6 @@ bitfield-struct.workspace = true
 bitvec.workspace = true
 hyperion-proto.workspace = true
 prost.workspace = true
-line_drawing.workspace = true
 flecs_ecs.workspace = true
 heapless.workspace = true
 base64.workspace = true
