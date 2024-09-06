@@ -3,7 +3,7 @@
 use std::ops::ControlFlow;
 
 use bvh_region::aabb::Aabb;
-use flecs_ecs::core::{Entity, EntityView, World};
+use flecs_ecs::core::{Entity, EntityView, EntityViewGet, World};
 use glam::{I16Vec2, IVec2, U16Vec3, Vec3};
 use tracing::{info, instrument, trace, warn};
 use valence_generated::block::{BlockKind, BlockState};
@@ -42,7 +42,7 @@ pub mod vanilla;
 //     // ignore
 // }
 
-fn full(query: &mut PacketSwitchQuery, mut data: &[u8]) -> anyhow::Result<()> {
+fn full(query: &mut PacketSwitchQuery<'_>, mut data: &[u8]) -> anyhow::Result<()> {
     let pkt = play::FullC2s::decode(&mut data)?;
 
     let play::FullC2s {
@@ -65,7 +65,7 @@ fn full(query: &mut PacketSwitchQuery, mut data: &[u8]) -> anyhow::Result<()> {
 }
 
 // #[instrument(skip_all)]
-fn change_position_or_correct_client(query: &mut PacketSwitchQuery, proposed: Vec3) {
+fn change_position_or_correct_client(query: &mut PacketSwitchQuery<'_>, proposed: Vec3) {
     let pose = &mut *query.pose;
 
     if try_change_position(proposed, pose, query.blocks, query.world) {
@@ -150,7 +150,10 @@ fn look_and_on_ground(mut data: &[u8], full_entity_pose: &mut Pose) -> anyhow::R
     Ok(())
 }
 
-fn position_and_on_ground(query: &mut PacketSwitchQuery, mut data: &[u8]) -> anyhow::Result<()> {
+fn position_and_on_ground(
+    query: &mut PacketSwitchQuery<'_>,
+    mut data: &[u8],
+) -> anyhow::Result<()> {
     let pkt = play::PositionAndOnGroundC2s::decode(&mut data)?;
 
     // debug!("position and on ground packet: {:?}", pkt);
@@ -178,7 +181,7 @@ fn position_and_on_ground(query: &mut PacketSwitchQuery, mut data: &[u8]) -> any
 
 // fn chat_command(
 //     mut data: &[u8],
-//     query: &PacketSwitchQuery,
+//     query: &PacketSwitchQuery<'_,
 //     world: &'static World,
 // ) -> anyhow::Result<()> {
 //     let pkt = play::CommandExecutionC2s::decode(&mut data)?;
@@ -192,7 +195,7 @@ fn position_and_on_ground(query: &mut PacketSwitchQuery, mut data: &[u8]) -> any
 //     Ok(())
 // }
 
-fn hand_swing(mut data: &[u8], query: &PacketSwitchQuery) -> anyhow::Result<()> {
+fn hand_swing(mut data: &[u8], query: &PacketSwitchQuery<'_>) -> anyhow::Result<()> {
     let packet = play::HandSwingC2s::decode(&mut data)?;
 
     let packet = packet.hand;
@@ -208,7 +211,7 @@ fn hand_swing(mut data: &[u8], query: &PacketSwitchQuery) -> anyhow::Result<()> 
 }
 
 #[instrument(skip_all)]
-fn player_interact_entity(mut data: &[u8], query: &PacketSwitchQuery) -> anyhow::Result<()> {
+fn player_interact_entity(mut data: &[u8], query: &PacketSwitchQuery<'_>) -> anyhow::Result<()> {
     let packet = play::PlayerInteractEntityC2s::decode(&mut data)?;
 
     let from_pos = query.pose.position;
@@ -258,7 +261,7 @@ pub struct PacketSwitchQuery<'a> {
 }
 
 // i.e., shooting a bow
-fn player_action(mut data: &[u8], query: &PacketSwitchQuery) -> anyhow::Result<()> {
+fn player_action(mut data: &[u8], query: &PacketSwitchQuery<'_>) -> anyhow::Result<()> {
     const START_Y: i32 = -64;
 
     let packet = play::PlayerActionC2s::decode(&mut data)?;
@@ -379,7 +382,7 @@ fn player_action(mut data: &[u8], query: &PacketSwitchQuery) -> anyhow::Result<(
 }
 
 // for sneaking
-fn client_command(mut data: &[u8], query: &PacketSwitchQuery) -> anyhow::Result<()> {
+fn client_command(mut data: &[u8], query: &PacketSwitchQuery<'_>) -> anyhow::Result<()> {
     let packet = play::ClientCommandC2s::decode(&mut data)?;
 
     match packet.action {
@@ -415,7 +418,7 @@ fn client_command(mut data: &[u8], query: &PacketSwitchQuery) -> anyhow::Result<
 // // starting to wind up bow
 // pub fn player_interact_item(
 //     mut data: &[u8],
-//     query: &PacketSwitchQuery,
+//     query: &PacketSwitchQuery<'_>,
 //     world: &'static World,
 // ) -> anyhow::Result<()> {
 //     let _packet = play::PlayerInteractItemC2s::decode(&mut data)?;
@@ -427,7 +430,10 @@ fn client_command(mut data: &[u8], query: &PacketSwitchQuery) -> anyhow::Result<
 //     Ok(())
 // }
 
-pub fn player_interact_block(mut data: &[u8], query: &mut PacketSwitchQuery) -> anyhow::Result<()> {
+pub fn player_interact_block(
+    mut data: &[u8],
+    query: &mut PacketSwitchQuery<'_>,
+) -> anyhow::Result<()> {
     let packet = play::PlayerInteractBlockC2s::decode(&mut data)?;
 
     let position = packet.position;
@@ -481,7 +487,7 @@ pub fn player_interact_block(mut data: &[u8], query: &mut PacketSwitchQuery) -> 
     Ok(())
 }
 
-// pub  fn inventory(mut data: &[u8], query: &PacketSwitchQuery) -> anyhow::Result<()> {
+// pub  fn inventory(mut data: &[u8], query: &PacketSwitchQuery<'_>) -> anyhow::Result<()> {
 //     // "Set Container Content" packet (ID 0x12)
 //     let packet = play::InventoryS2c::decode(&mut data)?;
 //
@@ -503,7 +509,10 @@ pub fn player_interact_block(mut data: &[u8], query: &mut PacketSwitchQuery) -> 
 //     Ok(())
 // }
 
-pub fn update_selected_slot(mut data: &[u8], query: &mut PacketSwitchQuery) -> anyhow::Result<()> {
+pub fn update_selected_slot(
+    mut data: &[u8],
+    query: &mut PacketSwitchQuery<'_>,
+) -> anyhow::Result<()> {
     // "Set Selected Slot" packet (ID 0x0B)
     let packet = play::UpdateSelectedSlotC2s::decode(&mut data)?;
 
@@ -516,7 +525,7 @@ pub fn update_selected_slot(mut data: &[u8], query: &mut PacketSwitchQuery) -> a
 
 pub fn creative_inventory_action(
     mut data: &[u8],
-    query: &mut PacketSwitchQuery,
+    query: &mut PacketSwitchQuery<'_>,
 ) -> anyhow::Result<()> {
     // "Creative Inventory Action" packet (ID 0x0C)
     let packet = play::CreativeInventoryActionC2s::decode(&mut data)?;
@@ -535,7 +544,7 @@ pub fn creative_inventory_action(
     Ok(())
 }
 
-pub fn packet_switch(raw: &PacketFrame, query: &mut PacketSwitchQuery) -> anyhow::Result<()> {
+pub fn packet_switch(raw: &PacketFrame, query: &mut PacketSwitchQuery<'_>) -> anyhow::Result<()> {
     let packet_id = raw.id;
     let data = raw.body.as_ref();
 
@@ -573,7 +582,7 @@ pub fn packet_switch(raw: &PacketFrame, query: &mut PacketSwitchQuery) -> anyhow
 // fn inventory_action(
 //     mut data: &[u8],
 //     world: &'static World,
-//     query: &PacketSwitchQuery,
+//     query: &PacketSwitchQuery<'_>,
 // ) -> anyhow::Result<()> {
 //     let packet = play::ClickSlotC2s::decode(&mut data)?;
 //

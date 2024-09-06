@@ -1,5 +1,5 @@
 use flecs_ecs::{
-    core::{Entity, IdOperations, World},
+    core::{Entity, EntityViewGet, IdOperations, World},
     macros::Component,
 };
 use tracing::warn;

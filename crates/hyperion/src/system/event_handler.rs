@@ -25,7 +25,8 @@
 // }
 use flecs_ecs::{
     core::{
-        flecs::pipeline, Entity, QueryBuilderImpl, SystemAPI, TermBuilderImpl, World, WorldProvider,
+        flecs::pipeline, Entity, EntityViewGet, QueryBuilderImpl, SystemAPI, TermBuilderImpl,
+        World, WorldProvider,
     },
     macros::system,
 };

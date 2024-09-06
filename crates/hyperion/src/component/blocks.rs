@@ -5,7 +5,7 @@ use std::{collections::HashMap, ops::Try, sync::Arc};
 use bytes::Bytes;
 use compact_str::format_compact;
 use flecs_ecs::{
-    core::{Entity, EntityView, EntityViewMap, IdOperations, World},
+    core::{Entity, EntityView, EntityViewGet, IdOperations, World},
     macros::Component,
 };
 use fxhash::FxHashMap;
@@ -145,7 +145,7 @@ impl MinecraftWorld {
 
         let entity = world.entity_from_id(entity);
 
-        entity.map::<&LoadedChunk>(|chunk| f(Some(chunk)))
+        entity.get::<&LoadedChunk>(|chunk| f(Some(chunk)))
     }
 
     /// Returns all loaded blocks within the range from `start` to `end` (inclusive).
@@ -306,7 +306,7 @@ impl MinecraftWorld {
     pub fn get_cached(&self, position: I16Vec2, world: &World) -> Option<Bytes> {
         if let Some(&result) = self.cache.get(&position) {
             let result = world.entity_from_id(result);
-            let result = result.map::<&LoadedChunk>(LoadedChunk::bytes);
+            let result = result.get::<&LoadedChunk>(LoadedChunk::bytes);
 
             return Some(result);
         }

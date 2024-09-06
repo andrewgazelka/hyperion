@@ -106,6 +106,9 @@ valence_generated = { git = "https://github.com/andrewgazelka/valence", branch =
 # todo: re-enable rayon
 #evenio = { git = "https://github.com/andrewgazelka/evenio", features = ["rayon"], branch = "feat-sender-state-public"}
 
+[workspace.lints.rust]
+rust_2018_idioms = { level = "deny", priority = -1 }
+
 [workspace.lints.clippy]
 complexity = { level = "deny", priority = -1 }
 nursery = { level = "deny", priority = -1 }
@@ -113,3 +116,6 @@ pedantic = { level = "deny", priority = -1 }
 perf = { level = "deny", priority = -1 }
 style = { level = "deny", priority = -1 }
 suspicious = { level = "deny", priority = -1 }
+too_long_first_doc_paragraph = "allow"
+derive_partial_eq_without_eq = "allow"
+

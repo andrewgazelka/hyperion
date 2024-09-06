@@ -6,7 +6,10 @@ use std::{
 
 use bytes::Bytes;
 use derive_more::{Deref, DerefMut};
-use flecs_ecs::{core::World, macros::Component};
+use flecs_ecs::{
+    core::{EntityViewGet, World},
+    macros::Component,
+};
 use glam::I16Vec2;
 use tracing::trace;
 use valence_generated::block::BlockState;

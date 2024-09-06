@@ -244,7 +244,7 @@ impl<T: HasAabb + Send + Copy + Sync + Debug> Bvh<T> {
 }
 
 impl<T> Bvh<T> {
-    fn root(&self) -> Node<T> {
+    fn root(&self) -> Node<'_, T> {
         let root = self.root;
         if root < 0 {
             return Node::Leaf(&self.elements[..]);
@@ -358,11 +358,11 @@ impl BvhNode {
     }
 
     // impl Iterator
-    fn children<'a, T>(&'a self, root: &'a Bvh<T>) -> impl Iterator<Item = Node<T>> {
+    fn children<'a, T>(&'a self, root: &'a Bvh<T>) -> impl Iterator<Item = Node<'a, T>> {
         self.children_vec(root).into_iter()
     }
 
-    fn children_vec<'a, T>(&'a self, root: &'a Bvh<T>) -> ArrayVec<Node<T>, 2> {
+    fn children_vec<'a, T>(&'a self, root: &'a Bvh<T>) -> ArrayVec<Node<'a, T>, 2> {
         let left = self.left;
 
         // leaf

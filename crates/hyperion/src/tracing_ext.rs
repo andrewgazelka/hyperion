@@ -17,7 +17,7 @@ where
         func: Func,
     ) -> <Self as builder::Builder<'a>>::BuiltType
     where
-        Func: FnMut(EntityView, T::TupleType<'_>) + 'static,
+        Func: FnMut(EntityView<'_>, T::TupleType<'_>) + 'static,
     {
         self.run_each_entity(
             move |mut iter| {

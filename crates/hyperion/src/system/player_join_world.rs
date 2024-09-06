@@ -338,7 +338,7 @@ pub mod list;
 #[allow(clippy::too_many_arguments, reason = "todo")]
 #[instrument(skip_all, fields(name = name))]
 pub fn player_join_world(
-    entity: &EntityView,
+    entity: &EntityView<'_>,
     tasks: &AsyncRuntime,
     chunks: &MinecraftWorld,
     compose: &Compose,
@@ -346,7 +346,7 @@ pub fn player_join_world(
     name: &str,
     packets: NetworkStreamRef,
     pose: &Pose,
-    world: &WorldRef,
+    world: &WorldRef<'_>,
     skin: &PlayerSkin,
     system_id: SystemId,
     root_command: Entity,
@@ -687,7 +687,7 @@ pub fn send_game_join_packet(encoder: &mut PacketEncoder) -> anyhow::Result<()> 
     let registry_codec = registry_codec_raw()?;
     let codec = RegistryCodec::default();
 
-    let dimension_names: BTreeSet<Ident<Cow<str>>> = codec
+    let dimension_names: BTreeSet<Ident<Cow<'_, str>>> = codec
         .registry(BiomeRegistry::KEY)
         .iter()
         .map(|value| value.name.as_str_ident().into())

@@ -10,8 +10,8 @@ use base64::{engine::general_purpose, Engine};
 use flecs_ecs::{
     core::{
         flecs::pipeline::{OnUpdate, PreUpdate},
-        Builder, EntityView, IdOperations, Query, QueryAPI, QueryBuilderImpl, SystemAPI,
-        TermBuilderImpl, World, WorldProvider,
+        Builder, EntityView, EntityViewGet, IdOperations, Query, QueryAPI, QueryBuilderImpl,
+        SystemAPI, TermBuilderImpl, World, WorldProvider,
     },
     macros::{query, system, Component},
     prelude::WorldRef,
@@ -226,7 +226,7 @@ pub fn recv_data(world: &World, registry: &mut SystemRegistry) {
     .multi_threaded()
     .tracing_each_entity(
         trace_span!("recv_data"),
-        move |mut entity,
+        move |entity,
               (
             compose,
             blocks,
@@ -276,7 +276,7 @@ pub fn recv_data(world: &World, registry: &mut SystemRegistry) {
                         &frame,
                         io_ref,
                         compose,
-                        &mut entity,
+                        &entity,
                         system_id,
                         &query,
                     )
@@ -323,7 +323,7 @@ pub fn recv_data(world: &World, registry: &mut SystemRegistry) {
 fn process_handshake(login_state: &mut PacketState, packet: &PacketFrame) -> anyhow::Result<()> {
     debug_assert!(*login_state == PacketState::Handshake);
 
-    let handshake: packets::handshaking::HandshakeC2s = packet.decode()?;
+    let handshake: packets::handshaking::HandshakeC2s<'_> = packet.decode()?;
 
     // info!("received handshake: {:?}", handshake);
 
@@ -343,7 +343,7 @@ fn process_handshake(login_state: &mut PacketState, packet: &PacketFrame) -> any
 
 #[allow(clippy::too_many_arguments, reason = "todo del")]
 fn process_login(
-    world: &WorldRef,
+    world: &WorldRef<'_>,
     tasks: &AsyncRuntime,
     login_state: &mut PacketState,
     decoder: &mut PacketDecoder,
@@ -352,7 +352,7 @@ fn process_login(
     packet: &PacketFrame,
     stream_id: NetworkStreamRef,
     compose: &Compose,
-    entity: &mut EntityView,
+    entity: &EntityView<'_>,
     system_id: SystemId,
     query: &Query<(&Uuid, &InGameName, &Pose)>,
 ) -> anyhow::Result<()> {

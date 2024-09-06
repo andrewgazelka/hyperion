@@ -198,6 +198,7 @@ impl BitStorage {
         cell >> bit_index & self.mask
     }
 
+    #[expect(unused, reason = "might be used in future 🤷‍♂️")]
     pub fn get_and_set(&mut self, index: usize, value: u64) -> u64 {
         // 0 bit storage
         if self.data.is_empty() {
@@ -230,11 +231,13 @@ impl BitStorage {
 
     /// The number of entries.
     #[inline]
+    #[expect(unused, reason = "might be used in future 🤷‍♂️")]
     pub const fn size(&self) -> usize {
         self.size
     }
 
-    pub const fn iter(&self) -> BitStorageIter {
+    #[expect(unused, reason = "might be used in future 🤷‍♂️")]
+    pub const fn iter(&self) -> BitStorageIter<'_> {
         BitStorageIter {
             storage: self,
             index: 0,
