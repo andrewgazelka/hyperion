@@ -5,7 +5,7 @@ use ordered_float::OrderedFloat;
 
 const LEN: usize = 100;
 
-fn sort_unwrap(bencher: &mut Bencher) {
+fn sort_unwrap(bencher: &mut Bencher<'_>) {
     let mut arr = vec![0.0; LEN];
     bencher.iter(|| {
         // step 1: random arr of LEN, floats
@@ -18,7 +18,7 @@ fn sort_unwrap(bencher: &mut Bencher) {
     });
 }
 
-fn sort_unwrap_unchecked(bencher: &mut Bencher) {
+fn sort_unwrap_unchecked(bencher: &mut Bencher<'_>) {
     let mut arr = vec![0.0; LEN];
     bencher.iter(|| {
         // step 1: random arr of LEN, floats
@@ -31,7 +31,7 @@ fn sort_unwrap_unchecked(bencher: &mut Bencher) {
     });
 }
 
-fn sort_unwrap_unchecked_key(bencher: &mut Bencher) {
+fn sort_unwrap_unchecked_key(bencher: &mut Bencher<'_>) {
     let mut arr = vec![0.0; LEN];
     bencher.iter(|| {
         // step 1: random arr of len, floats

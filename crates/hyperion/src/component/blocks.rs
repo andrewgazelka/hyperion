@@ -45,7 +45,7 @@ pub enum GetChunkBytes {
 #[derive(Component)]
 pub struct MinecraftWorld {
     /// Map to a Chunk by Entity ID
-    cache: FxHashMap<I16Vec2, Entity>,
+    chunk_cache: FxHashMap<I16Vec2, Entity>,
 
     launch_manager: LaunchHandle,
 
@@ -61,7 +61,7 @@ impl MinecraftWorld {
         let (tx_loaded_chunks, rx_loaded_chunks) = tokio::sync::mpsc::unbounded_channel();
 
         Ok(Self {
-            cache: HashMap::default(),
+            chunk_cache: HashMap::default(),
             launch_manager: launch_manager(shared, runtime),
             tx_loaded_chunks,
             rx_loaded_chunks,
@@ -113,7 +113,7 @@ impl MinecraftWorld {
                 .set(NeighborNotify::default())
                 .set(PendingChanges::default());
 
-            self.cache.insert(position, entity.id());
+            self.chunk_cache.insert(position, entity.id());
         }
     }
 
@@ -123,7 +123,7 @@ impl MinecraftWorld {
         chunk_position: I16Vec2,
         world: &'a World,
     ) -> Option<EntityView<'a>> {
-        let entity = self.cache.get(&chunk_position).copied()?;
+        let entity = self.chunk_cache.get(&chunk_position).copied()?;
         Some(world.entity_from_id(entity))
     }
 
@@ -304,7 +304,7 @@ impl MinecraftWorld {
     // That should be done in a couple of days, probably.
 
     pub fn get_cached(&self, position: I16Vec2, world: &World) -> Option<Bytes> {
-        if let Some(&result) = self.cache.get(&position) {
+        if let Some(&result) = self.chunk_cache.get(&position) {
             let result = world.entity_from_id(result);
             let result = result.get::<&LoadedChunk>(LoadedChunk::bytes);
 

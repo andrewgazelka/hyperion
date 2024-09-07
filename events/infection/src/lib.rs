@@ -1,14 +1,25 @@
 #![feature(allocator_api)]
 
 use std::net::ToSocketAddrs;
-
+use flecs_ecs::core::WorldGet;
 use hyperion::{valence_server::protocol::anyhow, Hyperion};
+use hyperion::event::sync::GlobalEventHandlers;
+
+mod system;
+mod component;
 
 pub fn init_game(address: impl ToSocketAddrs + Send + Sync + 'static) -> anyhow::Result<()> {
-    Hyperion::init_with(address, |_| {
+    Hyperion::init_with(address, |world| {
         // // join events
-        // world.add_handler(system::scramble_player_name);
-        // world.add_handler(system::assign_team_on_join);
+        
+        
+        
+        
+        world.get::<&mut GlobalEventHandlers>(|handlers| {
+            handlers.set_username.register(system::scramble_player_name);
+        });
+        
+        
         //
         // world.add_handler(system::disable_attack_team);
         //

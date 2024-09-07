@@ -37,7 +37,10 @@ use crate::{
         AiTargetable, ChunkPosition, Comms, ConfirmBlockSequences, EntityReaction, Health,
         ImmuneStatus, InGameName, PacketState, Pose, Uuid, PLAYER_SPAWN_POSITION,
     },
-    event::{EventQueue, ThreadLocalBump},
+    event::{
+        sync::{GlobalEventHandlers, SetUsernameEvent},
+        EventQueue, ThreadLocalBump,
+    },
     net::{
         proxy::ReceiveStateInner, Compose, NetworkStreamRef, PacketDecoder, MINECRAFT_VERSION,
         PROTOCOL_VERSION,
@@ -45,7 +48,7 @@ use crate::{
     packets::PacketSwitchQuery,
     runtime::AsyncRuntime,
     singleton::fd_lookup::StreamLookup,
-    system::{chunk_comm::ChunkChanges, joins::SendableRef},
+    system::{chunk_comm::ChunkSendQueue, joins::SendableRef},
     tracing_ext::TracingExt,
     util::{db::SkinHandler, mojang::MojangClient, player_skin::PlayerSkin},
     SystemId, SystemRegistry,
@@ -213,6 +216,7 @@ pub fn recv_data(world: &World, registry: &mut SystemRegistry) {
         &Comms($),
         &SkinHandler($),
         &ThreadLocalBump($),
+        &GlobalEventHandlers($),
         &mut PacketDecoder,
         &mut PacketState,
         &NetworkStreamRef,
@@ -234,6 +238,7 @@ pub fn recv_data(world: &World, registry: &mut SystemRegistry) {
             comms,
             skins_collection,
             allocator,
+            handlers,
             decoder,
             login_state,
             &io_ref,
@@ -278,6 +283,7 @@ pub fn recv_data(world: &World, registry: &mut SystemRegistry) {
                         compose,
                         &entity,
                         system_id,
+                        handlers,
                         &query,
                     )
                     .unwrap(),
@@ -354,6 +360,7 @@ fn process_login(
     compose: &Compose,
     entity: &EntityView<'_>,
     system_id: SystemId,
+    handlers: &GlobalEventHandlers,
     query: &Query<(&Uuid, &InGameName, &Pose)>,
 ) -> anyhow::Result<()> {
     static UUIDS: once_cell::sync::Lazy<Mutex<Vec<uuid::Uuid>>> =
@@ -375,15 +382,21 @@ fn process_login(
 
     let username = username.0;
 
+    let mut set_username = SetUsernameEvent {
+        username: username.to_string(),
+    };
+
+    handlers.set_username.trigger_all(&mut set_username);
+
+    let username = set_username.username.as_str();
+
     let global = compose.global();
 
     let pkt = LoginCompressionS2c {
         threshold: VarInt(global.shared.compression_threshold.0),
     };
 
-    compose
-        .unicast_no_compression(&pkt, stream_id, system_id, world)
-        .unwrap();
+    compose.unicast_no_compression(&pkt, stream_id, system_id, world)?;
 
     decoder.set_compression(global.shared.compression_threshold);
 
@@ -447,7 +460,7 @@ fn process_login(
         .set(Uuid::from(uuid))
         .set(Health::default())
         .set(Pose::player(PLAYER_SPAWN_POSITION))
-        .set(ChunkChanges::default())
+        .set(ChunkSendQueue::default())
         .set(ChunkPosition::null())
         .set(EntityReaction::default());
 

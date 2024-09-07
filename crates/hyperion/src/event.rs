@@ -5,6 +5,8 @@ use flecs_ecs::core::Entity;
 use glam::{U16Vec3, Vec3};
 use valence_protocol::{Hand, VarInt};
 
+pub mod sync;
+
 mod event_queue;
 /// Represents an attack action by an entity in the game.
 #[derive(Copy, Clone, Debug, PartialEq)]

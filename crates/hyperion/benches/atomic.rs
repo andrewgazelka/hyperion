@@ -5,10 +5,18 @@ use std::hint::black_box;
 use divan::Bencher;
 use flecs_ecs::prelude::World;
 use hyperion::{
-    component::blocks::chunk::{ThreadHeaplessVec, ThreadLocalCustomVec, ThreadLocalVec},
+    component::blocks::chunk::{ThreadHeaplessVec, ThreadLocalSoaVec, ThreadLocalVec},
     event::raw::RawQueue,
     system::joins::SendableRef,
 };
+
+
+// chunks
+// [queue] for region
+// 
+
+
+
 
 const THREADS: &[usize] = &[1, 2, 4, 8];
 
@@ -21,7 +29,7 @@ const COUNT: usize = 16_384;
 #[divan::bench(
     args = THREADS,
 )]
-fn populate_queue(bencher: Bencher, threads: usize) {
+fn populate_queue(bencher: Bencher<'_, '_>, threads: usize) {
     let world = World::new();
     world.set_stage_count(4);
 
@@ -44,7 +52,7 @@ fn populate_queue(bencher: Bencher, threads: usize) {
 #[divan::bench(
     args = THREADS,
 )]
-fn populate_thread_local(bencher: Bencher, threads: usize) {
+fn populate_thread_local(bencher: Bencher<'_, '_>, threads: usize) {
     let world = World::new();
     world.set_stage_count(8);
 
@@ -72,7 +80,7 @@ fn populate_thread_local(bencher: Bencher, threads: usize) {
 #[divan::bench(
     args = THREADS,
 )]
-fn populate_thread_local_custom(bencher: Bencher, threads: usize) {
+fn populate_thread_local_custom(bencher: Bencher<'_, '_>, threads: usize) {
     let world = World::new();
     world.set_stage_count(8);
 
@@ -84,7 +92,7 @@ fn populate_thread_local_custom(bencher: Bencher, threads: usize) {
         .unwrap();
 
     bencher
-        .with_inputs(|| ThreadLocalCustomVec::with_capacity(COUNT))
+        .with_inputs(|| ThreadLocalSoaVec::with_capacity(COUNT))
         .bench_local_values(|elems| {
             pool.broadcast(|ctx| {
                 let index = ctx.index();
@@ -98,22 +106,22 @@ fn populate_thread_local_custom(bencher: Bencher, threads: usize) {
 }
 
 #[divan::bench]
-fn is_empty_thread_local_heapless(bencher: Bencher) {
+fn is_empty_thread_local_heapless(bencher: Bencher<'_, '_>) {
     let mut elems = ThreadHeaplessVec::<i32, 32>::default();
 
     bencher.bench_local(|| black_box(elems.is_empty()));
 }
 
 #[divan::bench]
-fn is_empty_thread_local(bencher: Bencher) {
+fn is_empty_thread_local(bencher: Bencher<'_, '_>) {
     let mut elems = ThreadLocalVec::<i32>::with_capacity(COUNT);
 
     bencher.bench_local(|| black_box(elems.is_empty()));
 }
 
 #[divan::bench]
-fn is_empty_thread_local_custom(bencher: Bencher) {
-    let mut elems = ThreadLocalCustomVec::<i32>::with_capacity(COUNT);
+fn is_empty_thread_local_custom(bencher: Bencher<'_, '_>) {
+    let mut elems = ThreadLocalSoaVec::<i32>::with_capacity(COUNT);
 
     bencher.bench_local(|| black_box(elems.is_empty()));
 }

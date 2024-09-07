@@ -107,6 +107,12 @@ valence_generated = { git = "https://github.com/andrewgazelka/valence", branch =
 #evenio = { git = "https://github.com/andrewgazelka/evenio", features = ["rayon"], branch = "feat-sender-state-public"}
 
 [workspace.lints.rust]
+future_incompatible = { level = "deny", priority = -1 }
+keyword_idents = { level = "deny", priority = -1 }
+let_underscore = { level = "deny", priority = -1 }
+nonstandard_style = { level = "deny", priority = -1 }
+refining_impl_trait = { level = "deny", priority = -1 }
+rust_2024_compatibility = { level = "deny", priority = -1 }
 rust_2018_idioms = { level = "deny", priority = -1 }
 
 [workspace.lints.clippy]

@@ -9,6 +9,8 @@ publish = false
 [dependencies]
 anyhow.workspace = true
 hyperion.workspace = true
+fastrand.workspace = true
+flecs_ecs.workspace = true
 tracing.workspace = true
 tracing-subscriber = { workspace = true, features = ["chrono", "env-filter"] }
 clap = { workspace = true, features = ["derive"] }

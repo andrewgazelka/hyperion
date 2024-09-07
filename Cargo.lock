@@ -1720,6 +1720,8 @@ dependencies = [
  "anyhow",
  "clap",
  "dotenvy",
+ "fastrand 2.1.1",
+ "flecs_ecs",
  "hyperion",
  "tokio",
  "tracing",

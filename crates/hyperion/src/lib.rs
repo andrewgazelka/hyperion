@@ -46,10 +46,11 @@ use crate::{
     net::{proxy::init_proxy_comms, Compose, Compressors, IoBuf, MAX_PACKET_SIZE},
     runtime::AsyncRuntime,
     singleton::fd_lookup::StreamLookup,
-    system::{chunk_comm::ChunkChanges, player_join_world::generate_biome_registry},
+    system::{chunk_comm::ChunkSendQueue, player_join_world::generate_biome_registry},
     thread_local::ThreadLocal,
     util::{db, db::Db},
 };
+use crate::event::sync::GlobalEventHandlers;
 
 mod blocks;
 mod chunk;
@@ -138,7 +139,7 @@ pub fn register_components(world: &World) {
     world.component::<component::Uuid>();
     world.component::<component::Health>();
     world.component::<component::ChunkPosition>();
-    world.component::<ChunkChanges>();
+    world.component::<ChunkSendQueue>();
     world.component::<component::EntityReaction>();
     world.component::<component::Play>();
     world.component::<component::ConfirmBlockSequences>();
@@ -247,9 +248,7 @@ impl Hyperion {
         register_components(world);
 
         let pipeline = CustomPipeline::new(world);
-
-        handlers(world);
-
+        
         let mut app = world.app();
 
         app.enable_rest(0)
@@ -267,9 +266,10 @@ impl Hyperion {
         let runtime = AsyncRuntime::default();
 
         let url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
+        
+        world.set(GlobalEventHandlers::default());
 
-        let db = runtime.block_on(Db::new(&url)).unwrap();
-
+        let db = runtime.block_on(Db::new(&url))?;
         let skins = db::SkinHandler::new(db.clone());
 
         world.set(db);
@@ -326,6 +326,8 @@ impl Hyperion {
         system::event_handler::reset_allocators(world);
 
         system::egress::egress(world, &pipeline);
+
+        handlers(world);
 
         app.run();
 

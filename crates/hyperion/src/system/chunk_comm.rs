@@ -21,7 +21,7 @@ use crate::{
 };
 
 #[derive(Component, Deref, DerefMut, Default)]
-pub struct ChunkChanges {
+pub struct ChunkSendQueue {
     changes: Vec<I16Vec2>,
 }
 
@@ -51,7 +51,7 @@ pub fn generate_chunk_changes(world: &World, registry: &mut SystemRegistry) {
         &mut ChunkPosition,
         &Pose,
         &NetworkStreamRef,
-        &mut ChunkChanges,
+        &mut ChunkSendQueue,
     )
     .kind::<pipeline::OnUpdate>()
     .multi_threaded()
@@ -103,7 +103,7 @@ pub fn generate_chunk_changes(world: &World, registry: &mut SystemRegistry) {
                 // remove further than radius
 
                 // commented out because it can break things
-                // todo: re-add but have better check so we con't prune things and then never
+                // todo: re-add but have better check so we don't prune things and then never
                 // send them
                 // chunk_changes.retain(|elem| {
                 //     let elem = elem.distance_squared(current_chunk);
@@ -138,7 +138,7 @@ pub fn send_full_loaded_chunks(world: &World, registry: &mut SystemRegistry) {
         &MinecraftWorld($),
         &Compose($),
         &NetworkStreamRef,
-        &mut ChunkChanges,
+        &mut ChunkSendQueue,
     )
     .with::<&Play>()
     .kind::<pipeline::OnUpdate>()

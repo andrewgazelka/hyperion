@@ -10,7 +10,7 @@ use flecs_ecs::{
     core::{EntityViewGet, World},
     macros::Component,
 };
-use glam::I16Vec2;
+use glam::{I16Vec2, IVec3};
 use tracing::trace;
 use valence_generated::block::BlockState;
 use valence_protocol::{packets::play, BlockPos};
@@ -110,12 +110,14 @@ pub struct ThreadLocalVec<T> {
     inner: ThreadLocal<SyncUnsafeCell<Vec<T>>>,
 }
 
-pub struct ThreadLocalCustomVec<T> {
+/// Structure of arrays
+/// todo: bench? I do not know how much better or worse this is in practice
+pub struct ThreadLocalSoaVec<T> {
     lens: ThreadLocal<Cell<u16>>,
     inner: ThreadLocal<SyncUnsafeCell<Box<[MaybeUninit<T>]>>>,
 }
 
-impl<T> ThreadLocalCustomVec<T> {
+impl<T> ThreadLocalSoaVec<T> {
     #[must_use]
     pub fn with_capacity(n: usize) -> Self {
         Self {
@@ -262,6 +264,29 @@ pub struct LoadedChunk {
 
     pub position: I16Vec2,
 }
+
+pub struct BlockChange {
+    pub location: IVec3,
+    pub r#type: BlockChangeType,
+}
+
+enum BlockChangeType {
+    Modify { kind: BlockState },
+    Destroy,
+}
+
+/// We use Region so we can have put events into fewer large boxes to have more cache locality
+pub struct Region {
+    // todo: LoadedChunk need to partition based on x,z
+    // probs x >> 4 z >> 4 so region would be 256x256 area 🤔
+    // we can probs ignore things occurring on the edges of the region for now
+    // ...  or maybe just wait 1 extra tick for things on edge?
+    // todo: we might wanna make our own local world? idk if this is overkill... could
+    // avoid enums but at what cost/benefit? this would allow us to order block place/destruction
+    // also we could use non-archetypal ECS as well for events but idk 🤷‍♂️
+    pub events: ThreadLocalSoaVec<BlockChange>,
+}
+
 
 impl LoadedChunk {
     pub const fn new(base_packet_bytes: Bytes, chunk: UnloadedChunk, position: I16Vec2) -> Self {

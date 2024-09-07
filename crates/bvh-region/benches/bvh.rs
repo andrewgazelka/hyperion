@@ -18,7 +18,7 @@ const ENTITY_COUNTS: &[usize] = &[100, 1_000, 10_000];
     args = ENTITY_COUNTS,
     types = [TrivialHeuristic],
 )]
-fn build<H: Heuristic>(b: Bencher, count: usize) {
+fn build<H: Heuristic>(b: Bencher<'_, '_>, count: usize) {
     let elements = create_random_elements_1(count, 100.0);
     b.counter(count)
         .bench_local(|| Bvh::build::<H>(elements.clone()));
@@ -28,7 +28,7 @@ fn build<H: Heuristic>(b: Bencher, count: usize) {
     args = ENTITY_COUNTS,
     types = [TrivialHeuristic],
 )]
-fn query<T: Heuristic>(b: Bencher, count: usize) {
+fn query<T: Heuristic>(b: Bencher<'_, '_>, count: usize) {
     let elements = create_random_elements_1(count, 100.0);
     let bvh = Bvh::build::<T>(elements);
     let elements = (0..count).map(|_| random_aabb(100.0)).collect::<Vec<_>>();
@@ -47,7 +47,7 @@ fn query<T: Heuristic>(b: Bencher, count: usize) {
     args = ENTITY_COUNTS,
     types = [TrivialHeuristic],
 )]
-fn query_par_sparse<T: Heuristic>(b: Bencher, count: usize) {
+fn query_par_sparse<T: Heuristic>(b: Bencher<'_, '_>, count: usize) {
     let elements = create_random_elements_1(100_000, 10_000.0);
     let bvh = Bvh::build::<T>(elements);
 
@@ -70,7 +70,7 @@ fn query_par_sparse<T: Heuristic>(b: Bencher, count: usize) {
     args = ENTITY_COUNTS,
 types = [TrivialHeuristic],
 )]
-fn query_par_compact<T: Heuristic>(b: Bencher, count: usize) {
+fn query_par_compact<T: Heuristic>(b: Bencher<'_, '_>, count: usize) {
     let elements = create_random_elements_1(100_000, 100.0);
     let bvh = Bvh::build::<T>(elements);
 
@@ -93,7 +93,7 @@ const THREAD_COUNTS: &[usize] = &[1, 2, 4, 8];
     args = THREAD_COUNTS,
     types = [TrivialHeuristic],
 )]
-fn build_1m_rayon<T: Heuristic>(b: Bencher, count: usize) {
+fn build_1m_rayon<T: Heuristic>(b: Bencher<'_, '_>, count: usize) {
     let thread_pool = rayon::ThreadPoolBuilder::default()
         .num_threads(count)
         .build()
