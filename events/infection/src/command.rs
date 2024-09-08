@@ -19,9 +19,14 @@ pub fn add_to_tree(world: &World) {
     let root_command = get_root_command();
 
     // add to tree
-    let _team_command = world
+    world
         .entity()
         .set(Command::literal("team"))
+        .child_of_id(root_command);
+
+    world
+        .entity()
+        .set(Command::literal("zombie"))
         .child_of_id(root_command);
 }
 
@@ -34,7 +39,7 @@ pub fn process(world: &World, registry: &mut SystemRegistry) {
         &Compose($),
         &mut EventQueue,
         &NetworkStreamRef,
-        ?&Team,
+        &mut Team,
     )
     .multi_threaded()
     .tracing_each_entity(
@@ -48,10 +53,8 @@ pub fn process(world: &World, registry: &mut SystemRegistry) {
 
                 debug!("executed: {executed}");
 
-                if let Some(team) = team
-                    && executed == "team"
-                {
-                    let msg = format!("You are now in team {team}");
+                if executed == "team" {
+                    let msg = format!("You are now on team {team}");
 
                     let text = play::GameMessageS2c {
                         chat: msg.into_cow_text(),
@@ -61,7 +64,18 @@ pub fn process(world: &World, registry: &mut SystemRegistry) {
                     compose.unicast(&text, *stream, system_id, &world).unwrap();
                 }
 
-                // send messages with
+                if executed == "zombie" {
+                    let msg = "Turning to zombie";
+
+                    let text = play::GameMessageS2c {
+                        chat: msg.into_cow_text(),
+                        overlay: false,
+                    };
+
+                    compose.unicast(&text, *stream, system_id, &world).unwrap();
+
+                    *team = Team::Zombie;
+                }
             });
 
             iterator.run(event_queue);
