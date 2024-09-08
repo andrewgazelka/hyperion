@@ -8,12 +8,20 @@ use hyperion::{
     event::{EventQueue, EventQueueIterator},
     net::{Compose, NetworkStreamRef},
     tracing_ext::TracingExt,
-    valence_protocol::{packets::play, text::IntoText},
+    valence_protocol::{
+        packets::{
+            play,
+            play::{player_abilities_s2c::PlayerAbilitiesFlags, PlayerAbilitiesS2c},
+        },
+        text::IntoText,
+    },
     SystemRegistry,
 };
 use tracing::{debug, trace_span};
 
-use crate::component::team::Team;
+use crate::{command::parse::ParsedCommand, component::team::Team};
+
+mod parse;
 
 pub fn add_to_tree(world: &World) {
     let root_command = get_root_command();
@@ -46,6 +54,8 @@ pub fn add_to_tree(world: &World) {
 pub fn process(world: &World, registry: &mut SystemRegistry) {
     let system_id = registry.register();
 
+    // create the iterator here
+
     system!(
         "handle_infection_events_player",
         world,
@@ -66,7 +76,7 @@ pub fn process(world: &World, registry: &mut SystemRegistry) {
 
                 debug!("executed: {executed}");
 
-                let Ok((_, command)) = parse_command(executed) else {
+                let Ok((_, command)) = parse::command(executed) else {
                     return;
                 };
 
@@ -77,23 +87,9 @@ pub fn process(world: &World, registry: &mut SystemRegistry) {
                             chat: msg.into_cow_text(),
                             overlay: false,
                         };
+
                         compose.unicast(&pkt, *stream, system_id, &world).unwrap();
 
-                        // let pkt = play::EntityAttributesS2c {
-                        //     entity_id: VarInt(0), // every player thinks they are 0
-                        //     properties: vec![
-                        //         AttributeProperty {
-                        //             key: ident!("generic.movement_speed").into(),
-                        //             value: amount,
-                        //             modifiers: vec![],
-                        //         },
-                        //         AttributeProperty {
-                        //             key: ident!("generic.flying_speed").into(),
-                        //             value: amount,
-                        //             modifiers: vec![],
-                        //         },
-                        //     ],
-                        // };
                         let pkt = fly_speed_packet(amount);
                         compose.unicast(&pkt, *stream, system_id, &world).unwrap();
                     }
@@ -107,6 +103,8 @@ pub fn process(world: &World, registry: &mut SystemRegistry) {
                     }
                     ParsedCommand::Zombie => {
                         let msg = "Turning to zombie";
+
+                        // todo: maybe this should be an event?
                         let text = play::GameMessageS2c {
                             chat: msg.into_cow_text(),
                             overlay: false,
@@ -122,55 +120,11 @@ pub fn process(world: &World, registry: &mut SystemRegistry) {
 }
 
 fn fly_speed_packet(amount: f32) -> PlayerAbilitiesS2c {
-    play::PlayerAbilitiesS2c {
+    PlayerAbilitiesS2c {
         flags: PlayerAbilitiesFlags::default()
             .with_allow_flying(true)
             .with_flying(true),
         flying_speed: amount,
         fov_modifier: 0.0,
     }
-}
-
-use hyperion::valence_protocol::{
-    ident,
-    packets::play::{
-        entity_attributes_s2c::AttributeProperty, player_abilities_s2c::PlayerAbilitiesFlags,
-        PlayerAbilitiesS2c,
-    },
-    Encode, VarInt,
-};
-use nom::{
-    branch::alt,
-    bytes::complete::tag,
-    character::complete::{digit1, space1},
-    combinator::{map, map_res},
-    number::complete::float,
-    sequence::preceded,
-    IResult,
-};
-
-#[derive(Debug, PartialEq)]
-enum ParsedCommand {
-    Speed(f32),
-    Team,
-    Zombie,
-}
-
-fn parse_speed(input: &str) -> IResult<&str, ParsedCommand> {
-    map(
-        preceded(preceded(tag("speed"), space1), float),
-        ParsedCommand::Speed,
-    )(input)
-}
-
-fn parse_team(input: &str) -> IResult<&str, ParsedCommand> {
-    map(tag("team"), |_| ParsedCommand::Team)(input)
-}
-
-fn parse_zombie(input: &str) -> IResult<&str, ParsedCommand> {
-    map(tag("zombie"), |_| ParsedCommand::Zombie)(input)
-}
-
-fn parse_command(input: &str) -> IResult<&str, ParsedCommand> {
-    alt((parse_speed, parse_team, parse_zombie))(input)
 }

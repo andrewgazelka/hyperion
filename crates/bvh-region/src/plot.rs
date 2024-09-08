@@ -40,8 +40,12 @@ impl<T: HasAabb + Copy> Bvh<T> {
 
     fn draw_node(
         &self,
-        chart: &mut ChartContext<BitMapBackend, Cartesian2d<RangedCoordf32, RangedCoordf32>>,
-        node: Option<Node<T>>,
+        chart: &mut ChartContext<
+            '_,
+            BitMapBackend<'_>,
+            Cartesian2d<RangedCoordf32, RangedCoordf32>,
+        >,
+        node: Option<Node<'_, T>>,
     ) -> Result<(), Box<dyn std::error::Error>> {
         if let Some(node) = node {
             match node {
@@ -68,7 +72,11 @@ impl<T: HasAabb + Copy> Bvh<T> {
     fn draw_aabb(
         &self,
         style: ShapeStyle,
-        chart: &mut ChartContext<BitMapBackend, Cartesian2d<RangedCoordf32, RangedCoordf32>>,
+        chart: &mut ChartContext<
+            '_,
+            BitMapBackend<'_>,
+            Cartesian2d<RangedCoordf32, RangedCoordf32>,
+        >,
         aabb: &Aabb,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let rect = [(aabb.min.x, aabb.min.y), (aabb.max.x, aabb.max.y)];

@@ -60,8 +60,6 @@ kanal.workspace = true
 ouroboros.workspace = true
 sqlx.workspace = true
 compact_str.workspace = true
-port_check = "0.2.1"
-port_scanner = "0.1.5"
 
 [dev-dependencies]
 divan.workspace = true
