@@ -11,7 +11,7 @@ use hyperion::{
     valence_protocol::{packets::play, text::IntoText},
     SystemRegistry,
 };
-use tracing::trace_span;
+use tracing::{debug, trace_span};
 
 use crate::component::team::Team;
 
@@ -46,16 +46,12 @@ pub fn process(world: &World, registry: &mut SystemRegistry) {
                 let world = view.world();
                 let executed = event.raw.as_str();
 
-                let text = play::GameMessageS2c {
-                    chat: format!("You executed {executed}").into_cow_text(),
-                    overlay: false,
-                };
+                debug!("executed: {executed}");
 
-                compose.unicast(&text, *stream, system_id, &world).unwrap();
-
-                if executed == "team" {
-                    // send team message
-                    let msg = format!("You are now in team {team:?}");
+                if let Some(team) = team
+                    && executed == "team"
+                {
+                    let msg = format!("You are now in team {team}");
 
                     let text = play::GameMessageS2c {
                         chat: msg.into_cow_text(),
