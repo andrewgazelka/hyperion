@@ -13,6 +13,13 @@ pub struct Command {
     data: NodeData,
 }
 
+pub(crate) static ROOT_COMMAND: once_cell::sync::OnceCell<Entity> =
+    once_cell::sync::OnceCell::new();
+
+pub fn get_root_command() -> Entity {
+    *ROOT_COMMAND.get().unwrap()
+}
+
 impl Command {
     pub const ROOT: Self = Self {
         data: NodeData::Root,

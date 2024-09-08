@@ -1,16 +1,8 @@
-use flecs_ecs::{core::EntityView, macros::Component};
+use flecs_ecs::macros::Component;
 
-#[derive(Component)]
+#[derive(Component, Debug)]
 #[repr(C)]
 pub enum Team {
     Zombie,
     Player,
-}
-
-fn add_zombie(entity: &EntityView) {
-    entity.add_enum(Team::Zombie);
-}
-
-fn add_player(entity: &EntityView) {
-    entity.add_enum(Team::Player);
 }

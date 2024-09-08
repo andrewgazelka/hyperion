@@ -30,18 +30,20 @@ use std::{alloc::Allocator, cell::RefCell, fmt::Debug, net::ToSocketAddrs, sync:
 
 use anyhow::{bail, Context};
 use derive_more::{Deref, DerefMut};
-use flecs_ecs::core::{flecs, Entity, IdOperations, World};
+use flecs_ecs::{
+    core::{flecs, Entity, IdOperations, World},
+    macros::Component,
+};
 use libc::{getrlimit, setrlimit, RLIMIT_NOFILE};
 use libdeflater::CompressionLvl;
 use once_cell::sync::Lazy;
 use tracing::{error, info, instrument, warn};
 pub use uuid;
 use valence_protocol::CompressionThreshold;
-pub use valence_server;
 
 use crate::{
     component::{blocks::MinecraftWorld, Comms},
-    event::ThreadLocalBump,
+    event::{sync::GlobalEventHandlers, ThreadLocalBump},
     global::Global,
     net::{proxy::init_proxy_comms, Compose, Compressors, IoBuf, MAX_PACKET_SIZE},
     runtime::AsyncRuntime,
@@ -50,7 +52,6 @@ use crate::{
     thread_local::ThreadLocal,
     util::{db, db::Db},
 };
-use crate::event::sync::GlobalEventHandlers;
 
 mod blocks;
 mod chunk;
@@ -70,7 +71,8 @@ pub mod net;
 
 mod packets;
 pub mod system;
-mod tracing_ext;
+pub use valence_protocol;
+pub mod tracing_ext;
 
 mod bits;
 
@@ -171,7 +173,7 @@ impl CustomPipeline {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Component)]
 pub struct SystemRegistry {
     current_idx: u16,
 }
@@ -186,7 +188,7 @@ impl SystemId {
 }
 
 impl SystemRegistry {
-    fn register(&mut self) -> SystemId {
+    pub fn register(&mut self) -> SystemId {
         // checked
         let idx = self.current_idx;
         self.current_idx = self.current_idx.checked_add(1).unwrap();
@@ -248,7 +250,7 @@ impl Hyperion {
         register_components(world);
 
         let pipeline = CustomPipeline::new(world);
-        
+
         let mut app = world.app();
 
         app.enable_rest(0)
@@ -266,7 +268,7 @@ impl Hyperion {
         let runtime = AsyncRuntime::default();
 
         let url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
-        
+
         world.set(GlobalEventHandlers::default());
 
         let db = runtime.block_on(Db::new(&url))?;
@@ -326,6 +328,8 @@ impl Hyperion {
         system::event_handler::reset_allocators(world);
 
         system::egress::egress(world, &pipeline);
+
+        world.set(system_registry);
 
         handlers(world);
 

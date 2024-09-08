@@ -10,13 +10,9 @@ use hyperion::{
     system::joins::SendableRef,
 };
 
-
 // chunks
 // [queue] for region
-// 
-
-
-
+//
 
 const THREADS: &[usize] = &[1, 2, 4, 8];
 
@@ -43,7 +39,7 @@ fn populate_queue(bencher: Bencher<'_, '_>, threads: usize) {
         .bench_local_values(|elems| {
             pool.broadcast(|_| {
                 for _ in 0..COUNT {
-                    let _ = elems.push(42);
+                    elems.push(42).unwrap();
                 }
             });
         });

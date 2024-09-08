@@ -179,21 +179,20 @@ fn position_and_on_ground(
 //     Ok(())
 // }
 
-// fn chat_command(
-//     mut data: &[u8],
-//     query: &PacketSwitchQuery<'_,
-//     world: &'static World,
-// ) -> anyhow::Result<()> {
-//     let pkt = play::CommandExecutionC2s::decode(&mut data)?;
-//
-//     let event = event::Command {
-//         raw: pkt.command.0.to_owned(),
-//     };
-//
-//     world.send_to(query.id, event);
-//
-//     Ok(())
-// }
+fn chat_command(mut data: &[u8], query: &PacketSwitchQuery<'_>) -> anyhow::Result<()> {
+    // todo: we could technically remove allocations &[u8] exists until end of tick
+    let pkt = play::CommandExecutionC2s::decode(&mut data)?;
+
+    let command = pkt.command.0.to_owned();
+
+    query.event_queue.push(
+        event::Command { raw: command },
+        query.allocator,
+        query.world,
+    )?;
+
+    Ok(())
+}
 
 fn hand_swing(mut data: &[u8], query: &PacketSwitchQuery<'_>) -> anyhow::Result<()> {
     let packet = play::HandSwingC2s::decode(&mut data)?;
@@ -560,7 +559,6 @@ pub fn packet_switch(raw: &PacketFrame, query: &mut PacketSwitchQuery<'_>) -> an
         play::CreativeInventoryActionC2s::ID => creative_inventory_action(data, query)?,
         play::LookAndOnGroundC2s::ID => look_and_on_ground(data, query.pose)?,
         play::PlayerInteractBlockC2s::ID => player_interact_block(data, query)?,
-        // play::ClientCommandC2s::ID => player_command(data),
         // play::UpdatePlayerAbilitiesC2s::ID => update_player_abilities(data)?,
         // play::UpdateSelectedSlotC2s::ID => update_selected_slot(data, world, query.id)?,
         play::PlayerInteractEntityC2s::ID => {
@@ -568,7 +566,7 @@ pub fn packet_switch(raw: &PacketFrame, query: &mut PacketSwitchQuery<'_>) -> an
         }
         // play::PlayerInteractItemC2s::ID => player_interact_item(data, query, world)?,
         // play::KeepAliveC2s::ID => keep_alive(query.keep_alive)?,
-        // play::CommandExecutionC2s::ID => chat_command(data, query, world)?,
+        play::CommandExecutionC2s::ID => chat_command(data, query)?,
         // play::ClickSlotC2s::ID => inventory_action(data, world, query)?,
         _ => {
             trace!("unknown packet id: 0x{:02X}", packet_id);

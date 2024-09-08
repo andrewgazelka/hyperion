@@ -179,7 +179,7 @@ mod tests {
     use super::*;
     use crate::Scratch;
 
-    fn compare_decoder(packet: &LoginHelloC2s, threshold: CompressionThreshold, msg: &str) {
+    fn compare_decoder(packet: &LoginHelloC2s<'_>, threshold: CompressionThreshold, msg: &str) {
         let mut valence_decoder = valence_protocol::PacketDecoder::new();
         valence_decoder.set_compression(threshold);
 
@@ -218,8 +218,8 @@ mod tests {
             "Packet body mismatch for {msg}"
         );
 
-        let valence_decoded_pkt: LoginHelloC2s = valence_frame.decode().unwrap();
-        let custom_decoded_pkt: LoginHelloC2s = custom_frame.decode().unwrap();
+        let valence_decoded_pkt: LoginHelloC2s<'_> = valence_frame.decode().unwrap();
+        let custom_decoded_pkt: LoginHelloC2s<'_> = custom_frame.decode().unwrap();
 
         assert_eq!(
             valence_decoded_pkt.profile_id,
@@ -253,7 +253,7 @@ mod tests {
 
     #[test]
     fn test_compressed() {
-        fn compare(packet: &LoginHelloC2s, msg: &str) {
+        fn compare(packet: &LoginHelloC2s<'_>, msg: &str) {
             compare_decoder(packet, CompressionThreshold(10), msg);
         }
 

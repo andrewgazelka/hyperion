@@ -1,6 +1,6 @@
 //! Communication to a proxy which forwards packets to the players.
 
-use std::{collections::HashMap, io::Cursor, net::SocketAddr, sync::Arc};
+use std::{collections::HashMap, io::Cursor, net::SocketAddr, process::Command, sync::Arc};
 
 use anyhow::bail;
 use bytes::{Buf, BytesMut};
@@ -23,12 +23,56 @@ pub struct ReceiveStateInner {
     pub packets: HashMap<u64, BytesMut>,
 }
 
+fn get_pid_from_port(port: u16) -> Result<Option<u32>, std::io::Error> {
+    let output = if cfg!(target_os = "windows") {
+        // todo: untested
+        Command::new("cmd")
+            .args(["/C", &format!("netstat -ano | findstr :{port}")])
+            .output()?
+    } else {
+        Command::new("sh")
+            .arg("-c")
+            .arg(format!("lsof -i :{port} -t"))
+            .output()?
+    };
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let pid = stdout.lines().next().and_then(|line| line.parse().ok());
+
+    Ok(pid)
+}
+
 async fn inner(
     socket: SocketAddr,
     mut server_to_proxy: tokio::sync::mpsc::UnboundedReceiver<bytes::Bytes>,
     shared: Arc<Mutex<ReceiveStateInner>>,
 ) {
-    let listener = tokio::net::TcpListener::bind(socket).await.unwrap();
+    let listener = match tokio::net::TcpListener::bind(socket).await {
+        Ok(listener) => listener,
+        Err(e) if e.kind() == std::io::ErrorKind::AddrInUse => {
+            let error_msg = format!(
+                "Failed to bind to address {socket}: Already in use. Is another process using \
+                 this port?"
+            );
+            let port = socket.port();
+
+            match get_pid_from_port(port) {
+                Ok(Some(pid)) => {
+                    let error_msg =
+                        format!("{error_msg}\nAlready in use by process with PID {pid}");
+                    panic!("{error_msg}");
+                }
+                Ok(None) => {
+                    panic!("{error_msg}");
+                }
+                Err(e) => {
+                    let error_msg = format!("{error_msg}\n{e}");
+                    panic!("{error_msg}");
+                }
+            }
+        }
+        Err(e) => panic!("Failed to bind to address {socket}: {e}"),
+    };
 
     tokio::spawn(
         async move {

@@ -38,7 +38,7 @@ use crate::{
         ImmuneStatus, InGameName, PacketState, Pose, Uuid, PLAYER_SPAWN_POSITION,
     },
     event::{
-        sync::{GlobalEventHandlers, SetUsernameEvent},
+        sync::{GlobalEventHandlers, PlayerJoinServer},
         EventQueue, ThreadLocalBump,
     },
     net::{
@@ -382,13 +382,14 @@ fn process_login(
 
     let username = username.0;
 
-    let mut set_username = SetUsernameEvent {
+    let mut player_join = PlayerJoinServer {
         username: username.to_string(),
+        entity: entity.id(),
     };
 
-    handlers.set_username.trigger_all(&mut set_username);
+    handlers.join_server.trigger_all(world, &mut player_join);
 
-    let username = set_username.username.as_str();
+    let username = player_join.username.as_str();
 
     let global = compose.global();
 

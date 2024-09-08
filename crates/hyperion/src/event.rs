@@ -60,4 +60,8 @@ pub struct BlockBreak {
     pub id: VarInt,
 }
 
+pub struct Command {
+    pub raw: String,
+}
+
 pub struct BlockInteract {}

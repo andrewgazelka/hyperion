@@ -9,7 +9,11 @@ use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
 use crate::{
     component,
-    component::{blocks::MinecraftWorld, command::Command, Comms, InGameName, Pose, Uuid},
+    component::{
+        blocks::MinecraftWorld,
+        command::{Command, ROOT_COMMAND},
+        Comms, InGameName, Pose, Uuid,
+    },
     net::{Compose, NetworkStreamRef},
     runtime::AsyncRuntime,
     system::player_join_world::player_join_world,
@@ -43,6 +47,8 @@ pub fn joins(world: &'static World, registry: &mut SystemRegistry) {
     let system_id = registry.register();
 
     let root_command = world.entity().set(Command::ROOT);
+
+    ROOT_COMMAND.set(root_command.id()).unwrap();
 
     let hello_command = world
         .entity()

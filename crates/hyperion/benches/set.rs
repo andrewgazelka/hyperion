@@ -20,7 +20,7 @@ fn main() {
     ],
     args = LENS,
 )]
-fn from_iter<T>(bencher: Bencher, len: usize)
+fn from_iter<T>(bencher: Bencher<'_, '_>, len: usize)
 where
     T: FromIterator<usize> + Contains<usize>,
 {
