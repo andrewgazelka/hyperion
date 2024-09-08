@@ -95,7 +95,7 @@ fn try_change_position(
     world: &World,
 ) -> bool {
     /// 100.0 m/tick; this is the same as the vanilla server
-    const MAX_BLOCKS_PER_TICK: f32 = 5.0;
+    const MAX_BLOCKS_PER_TICK: f32 = 100.0;
     let current = pose.position;
     let delta = proposed - current;
 

@@ -3,6 +3,7 @@ use flecs_ecs::{
     macros::Component,
 };
 use tracing::warn;
+pub use valence_protocol::packets::play::command_tree_s2c::Parser;
 use valence_protocol::{
     packets::play::command_tree_s2c::{Node, NodeData},
     VarInt,
@@ -30,6 +31,17 @@ impl Command {
         Self {
             data: NodeData::Literal {
                 name: name.to_string(),
+            },
+        }
+    }
+
+    #[must_use]
+    pub fn argument(name: &str, parser: Parser) -> Self {
+        Self {
+            data: NodeData::Argument {
+                name: name.to_string(),
+                parser,
+                suggestion: None,
             },
         }
     }

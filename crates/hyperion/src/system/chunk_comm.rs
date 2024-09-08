@@ -146,7 +146,7 @@ pub fn send_full_loaded_chunks(world: &World, registry: &mut SystemRegistry) {
     .tracing_each_entity(
         trace_span!("send_full_loaded_chunks"),
         move |entity, (chunks, compose, &stream_id, chunk_changes)| {
-            const MAX_CHUNKS_PER_TICK: usize = 32;
+            const MAX_CHUNKS_PER_TICK: usize = 2_048;
 
             let world = entity.world();
 

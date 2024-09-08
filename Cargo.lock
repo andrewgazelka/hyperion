@@ -1725,6 +1725,7 @@ dependencies = [
  "fastrand 2.1.1",
  "flecs_ecs",
  "hyperion",
+ "nom",
  "tokio",
  "tracing",
  "tracing-subscriber",

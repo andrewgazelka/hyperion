@@ -16,6 +16,7 @@ tracing-subscriber = { workspace = true, features = ["chrono", "env-filter"] }
 clap = { workspace = true, features = ["derive"] }
 tracing-tracy.workspace = true
 dotenvy = "0.15.7"
+nom = "7.1.3"
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["full"] }
