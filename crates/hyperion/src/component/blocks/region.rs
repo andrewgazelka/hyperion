@@ -1,15 +1,12 @@
 use std::{
     hash::Hash,
-    io::{Read, SeekFrom},
+    io::Read,
     path::{Path, PathBuf},
 };
 
 use bitfield_struct::bitfield;
 use flate2::bufread::{GzDecoder, ZlibDecoder};
-use tokio::{
-    fs::File,
-    io::{AsyncReadExt, AsyncSeekExt},
-};
+use tokio::fs::File;
 use valence_anvil::{Compression, RawChunk, RegionError};
 use valence_nbt::binary::FromModifiedUtf8;
 
@@ -30,9 +27,11 @@ impl Location {
     }
 }
 
+use memmap2::MmapOptions;
+
 #[derive(Debug)]
 pub struct Region {
-    file: File,
+    mmap: memmap2::Mmap,
     locations: [Location; 1024],
     timestamps: [u32; 1024],
 }
@@ -40,9 +39,10 @@ pub struct Region {
 const SECTOR_SIZE: usize = 4096;
 
 impl Region {
-    pub async fn open(mut file: File) -> Result<Self, RegionError> {
-        let mut header = [0; SECTOR_SIZE * 2];
-        file.read_exact(&mut header).await?;
+    pub fn open(file: File) -> Result<Self, RegionError> {
+        let mmap = unsafe { MmapOptions::new().map(&file)? };
+
+        let header = &mmap[..SECTOR_SIZE * 2];
 
         let locations = std::array::from_fn(|i| {
             Location(u32::from_be_bytes(
@@ -72,7 +72,7 @@ impl Region {
             if sector_count == 0 {
                 continue;
             }
-            if sector_offset * SECTOR_SIZE as u64 > file.metadata().await?.len() {
+            if sector_offset * SECTOR_SIZE as u64 > mmap.len() as u64 {
                 // this would go past the end of the file, which is impossible
                 continue;
             }
@@ -81,15 +81,15 @@ impl Region {
         }
 
         Ok(Self {
-            file,
+            mmap,
             locations,
             timestamps,
             // used_sectors,
         })
     }
 
-    pub async fn get_chunk<S>(
-        &mut self,
+    pub fn get_chunk<S>(
+        &self,
         pos_x: i32,
         pos_z: i32,
         decompress_buf: &mut Vec<u8>,
@@ -116,12 +116,16 @@ impl Region {
             return Err(RegionError::InvalidChunkSectorOffset);
         }
 
-        // Seek to the beginning of the chunk's data.
-        self.file
-            .seek(SeekFrom::Start(sector_offset * SECTOR_SIZE as u64))
-            .await?;
+        let chunk_start = sector_offset * SECTOR_SIZE as u64;
+        let chunk_end = chunk_start + (sector_count * SECTOR_SIZE) as u64;
 
-        let exact_chunk_size = self.file.read_u32().await? as usize;
+        if chunk_end as usize > self.mmap.len() {
+            return Err(RegionError::InvalidChunkSize);
+        }
+
+        let chunk_data = &self.mmap[chunk_start as usize..chunk_end as usize];
+
+        let exact_chunk_size = u32::from_be_bytes(chunk_data[..4].try_into().unwrap()) as usize;
         if exact_chunk_size == 0 {
             return Err(RegionError::MissingChunkStream);
         }
@@ -131,20 +135,15 @@ impl Region {
             return Err(RegionError::InvalidChunkSize);
         }
 
-        let mut compression = self.file.read_u8().await?;
+        let compression = chunk_data[4];
 
         let data_buf = if Self::is_external_stream_chunk(compression) {
-            compression = Self::external_chunk_version(compression);
-            let mut external_file =
-                File::open(Self::external_chunk_file(pos_x, pos_z, region_root)).await?;
-            let mut buf = Vec::new();
-            external_file.read_to_end(&mut buf).await?;
-            buf.into_boxed_slice()
+            let external_file =
+                std::fs::File::open(Self::external_chunk_file(pos_x, pos_z, region_root))?;
+            let external_mmap = unsafe { MmapOptions::new().map(&external_file)? };
+            external_mmap.to_vec().into_boxed_slice()
         } else {
-            // the size includes the version of the stream, but we have already read that
-            let mut data_buf = vec![0; exact_chunk_size - 1].into_boxed_slice();
-            self.file.read_exact(&mut data_buf).await?;
-            data_buf
+            chunk_data[5..exact_chunk_size].to_vec().into_boxed_slice()
         };
 
         let r: &[u8] = data_buf.as_ref();

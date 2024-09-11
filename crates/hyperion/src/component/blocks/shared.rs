@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 
 use anyhow::Context;
+use tokio::runtime::Runtime;
 use valence_protocol::Ident;
 use valence_registry::{biome::BiomeId, BiomeRegistry};
 
@@ -13,8 +14,8 @@ pub struct Shared {
 }
 
 impl Shared {
-    pub(crate) fn new(biomes: &BiomeRegistry) -> anyhow::Result<Self> {
-        let regions = RegionManager::new().context("failed to get anvil data")?;
+    pub(crate) fn new(biomes: &BiomeRegistry, runtime: &Runtime) -> anyhow::Result<Self> {
+        let regions = RegionManager::new(runtime).context("failed to get anvil data")?;
 
         let biome_to_id = biomes
             .iter()

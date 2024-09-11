@@ -60,6 +60,7 @@ kanal.workspace = true
 ouroboros.workspace = true
 sqlx.workspace = true
 compact_str.workspace = true
+memmap2 = "0.9.4"
 
 [dev-dependencies]
 divan.workspace = true

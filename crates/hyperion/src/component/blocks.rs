@@ -55,7 +55,7 @@ pub struct MinecraftWorld {
 
 impl MinecraftWorld {
     pub(crate) fn new(registry: &BiomeRegistry, runtime: AsyncRuntime) -> anyhow::Result<Self> {
-        let shared = Shared::new(registry)?;
+        let shared = Shared::new(registry, &runtime)?;
         let shared = Arc::new(shared);
 
         let (tx_loaded_chunks, rx_loaded_chunks) = tokio::sync::mpsc::unbounded_channel();
@@ -100,7 +100,7 @@ impl MinecraftWorld {
     pub fn load_pending(&mut self, world: &World) {
         while let Ok(chunk) = self.rx_loaded_chunks.try_recv() {
             let position = chunk.position;
-
+            
             let x = position[0];
             let z = position[1];
 

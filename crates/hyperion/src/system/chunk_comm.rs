@@ -6,7 +6,7 @@ use flecs_ecs::{
     macros::{system, Component},
 };
 use glam::I16Vec2;
-use tracing::{instrument, trace_span};
+use tracing::{info, instrument, trace_span};
 use valence_protocol::packets::play;
 
 use crate::{
@@ -145,8 +145,8 @@ pub fn send_full_loaded_chunks(world: &World, registry: &mut SystemRegistry) {
     .multi_threaded()
     .tracing_each_entity(
         trace_span!("send_full_loaded_chunks"),
-        move |entity, (chunks, compose, &stream_id, chunk_changes)| {
-            const MAX_CHUNKS_PER_TICK: usize = 2_048;
+        move |entity, (chunks, compose, &stream_id, queue)| {
+            const MAX_CHUNKS_PER_TICK: usize = 16;
 
             let world = entity.world();
 
@@ -154,16 +154,16 @@ pub fn send_full_loaded_chunks(world: &World, registry: &mut SystemRegistry) {
 
             let mut iter_count = 0;
 
-            let mut idx = (chunk_changes.changes.len() as isize) - 1;
-
+            let mut idx = (queue.changes.len() as isize) - 1;
+            
             #[allow(clippy::cast_sign_loss)]
             while idx >= 0 {
-                let elem = chunk_changes.changes[idx as usize];
+                let elem = queue.changes[idx as usize];
 
-                // a duplicate. todo: there are cases where duplicate will not be removed properly
+                // de-duplicate. todo: there are cases where duplicate will not be removed properly
                 // since sort is unstable
                 if last == Some(elem) {
-                    chunk_changes.changes.swap_remove(idx as usize);
+                    queue.changes.swap_remove(idx as usize);
                     continue;
                 }
 
@@ -178,7 +178,7 @@ pub fn send_full_loaded_chunks(world: &World, registry: &mut SystemRegistry) {
                             .unicast_raw(chunk, stream_id, system_id, &world);
 
                         iter_count += 1;
-                        chunk_changes.changes.swap_remove(idx as usize);
+                        queue.changes.swap_remove(idx as usize);
                     }
                     GetChunkBytes::Loading => {}
                 }

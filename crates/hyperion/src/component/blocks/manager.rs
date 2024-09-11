@@ -1,112 +1,118 @@
 use std::{
     collections::HashMap,
     path::{Path, PathBuf},
-    sync::{Arc, Weak},
+    sync::Arc,
 };
 
 use glam::IVec2;
 use tokio::{
     fs::File,
-    sync::{Notify, RwLock},
+    sync::{mpsc, oneshot, RwLock},
 };
-
+use tokio::runtime::Runtime;
 use crate::{blocks::get_nyc_save, component::blocks::region::Region};
 
-enum RegionState {
-    Pending(Weak<Notify>),
-    Loaded(Arc<tokio::sync::Mutex<Region>>),
+enum RegionRequest {
+    Get {
+        coord: IVec2,
+        response: oneshot::Sender<Arc<Region>>,
+    },
 }
 
 pub struct RegionManager {
     root: PathBuf,
-    regions: RwLock<HashMap<IVec2, RegionState>>,
+    sender: mpsc::Sender<RegionRequest>,
 }
 
 impl RegionManager {
-    pub fn new() -> anyhow::Result<Self> {
+    pub fn new(runtime: &Runtime) -> anyhow::Result<Self> {
         let save = get_nyc_save()?;
+        let root = save.join("region");
+        let (sender, receiver) = mpsc::channel(100);
 
-        Ok(Self {
-            root: save.join("region"),
-            regions: RwLock::new(HashMap::new()),
-        })
+        runtime.spawn(RegionManagerTask::new(root.clone(), receiver).run());
+
+        Ok(Self { root, sender })
     }
 
     pub fn root(&self) -> &Path {
         &self.root
     }
 
-    fn region_path(&self, pos_x: i32, pos_z: i32) -> PathBuf {
-        self.root.join(format!("r.{pos_x}.{pos_z}.mca"))
-    }
-
-    // #[instrument(skip_all, level = "trace")]
-    async fn region_file(&self, pos_x: i32, pos_z: i32) -> File {
-        File::open(self.region_path(pos_x, pos_z)).await.unwrap()
-    }
-
-    // #[instrument(skip_all, level = "trace")]
     pub async fn get_region_from_chunk(
         &self,
         pos_x: i32,
         pos_z: i32,
-    ) -> Arc<tokio::sync::Mutex<Region>> {
+    ) -> Arc<Region> {
         let region_x = pos_x.div_euclid(32);
         let region_z = pos_z.div_euclid(32);
-
         let coord = IVec2::new(region_x, region_z);
 
-        let mut write = self.regions.write().await;
+        let (response_tx, response_rx) = oneshot::channel();
+        self.sender
+            .send(RegionRequest::Get {
+                coord,
+                response: response_tx,
+            })
+            .await
+            .expect("RegionManagerTask has been dropped");
 
-        if let Some(value) = write.get(&coord) {
-            return match value {
-                RegionState::Pending(notifier) => {
-                    let notifier = notifier.clone();
-                    drop(write);
+        response_rx.await.expect("RegionManagerTask has been dropped")
+    }
+}
 
-                    notifier.upgrade().unwrap().notified().await;
+struct RegionManagerTask {
+    root: PathBuf,
+    receiver: mpsc::Receiver<RegionRequest>,
+    regions: HashMap<IVec2, Arc<Region>>,
+}
 
-                    let read = self.regions.read().await;
-                    let value = read.get(&coord).unwrap();
-
-                    match value {
-                        RegionState::Pending(_) => unreachable!(),
-                        RegionState::Loaded(loaded) => {
-                            let res = loaded.clone();
-                            drop(read);
-                            res
-                        }
-                    }
-                }
-                RegionState::Loaded(loaded) => loaded.clone(),
-            };
+impl RegionManagerTask {
+    fn new(root: PathBuf, receiver: mpsc::Receiver<RegionRequest>) -> Self {
+        Self {
+            root,
+            receiver,
+            regions: HashMap::new(),
         }
+    }
 
-        // insert
-        let pending = Arc::new(Notify::new());
-        {
-            let pending = Arc::downgrade(&pending);
-            write.insert(coord, RegionState::Pending(pending));
+    fn region_path(&self, pos_x: i32, pos_z: i32) -> PathBuf {
+        self.root.join(format!("r.{pos_x}.{pos_z}.mca"))
+    }
+
+    async fn region_file(&self, pos_x: i32, pos_z: i32) -> File {
+        File::open(self.region_path(pos_x, pos_z)).await.unwrap()
+    }
+
+    async fn run(mut self) {
+        while let Some(request) = self.receiver.recv().await {
+            self.handle_request(request).await;
         }
+    }
 
-        drop(write);
+    async fn handle_request(&mut self, request: RegionRequest) {
+        match request {
+            RegionRequest::Get { coord, response } => {
+                let region = self.get_or_create_region(coord).await;
+                // todo: what should we  do here
+                drop(response.send(region));
+            }
+        }
+    }
 
-        let file = self.region_file(region_x, region_z).await;
-        let region = Box::pin(Region::open(file)).await.unwrap();
+    async fn get_or_create_region(&mut self, coord: IVec2) -> Arc<Region> {
+        if let Some(region) = self.regions.get(&coord) {
+            region.clone()
+        } else {
+            self.create_and_insert_region(coord).await
+        }
+    }
 
-        let mut write = self.regions.write().await;
-        let region = Arc::new(tokio::sync::Mutex::new(region));
-        let prev = write
-            .insert(coord, RegionState::Loaded(region.clone()))
-            .unwrap();
-        drop(write);
-
-        let RegionState::Pending(notifier) = prev else {
-            unreachable!();
-        };
-
-        notifier.upgrade().unwrap().notify_waiters();
-
+    async fn create_and_insert_region(&mut self, coord: IVec2) -> Arc<Region> {
+        let file = self.region_file(coord.x, coord.y).await;
+        let region = Region::open(file).unwrap();
+        let region = Arc::new(region);
+        self.regions.insert(coord, region.clone());
         region
     }
 }

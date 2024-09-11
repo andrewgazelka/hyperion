@@ -1,7 +1,8 @@
 use std::{borrow::Cow, cell::RefCell, collections::HashSet, io::Write, sync::Arc};
 
-use anyhow::bail;
+use anyhow::{bail, Context};
 use bytes::BytesMut;
+use fxhash::FxHashSet;
 use glam::I16Vec2;
 use itertools::Itertools;
 use libdeflater::{CompressionLvl, Compressor};
@@ -21,20 +22,6 @@ use crate::{
     runtime::AsyncRuntime,
     Scratch,
 };
-
-// fn launch() {
-//     let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
-//
-//
-//
-//
-//
-//
-//
-//
-//
-// }
-//
 
 struct TasksState {
     bytes: BytesMut,
@@ -63,7 +50,7 @@ struct Message {
 
 struct LaunchManager {
     rx_load_chunk_requests: tokio::sync::mpsc::UnboundedReceiver<Message>,
-    recieved_request: HashSet<I16Vec2>,
+    received_request: FxHashSet<I16Vec2>,
     shared: Arc<Shared>,
     runtime: AsyncRuntime,
 }
@@ -88,7 +75,7 @@ pub fn launch_manager(shared: Arc<Shared>, runtime: AsyncRuntime) -> LaunchHandl
         async move {
             LaunchManager {
                 rx_load_chunk_requests,
-                recieved_request: HashSet::default(),
+                received_request: HashSet::default(),
                 shared,
                 runtime,
             }
@@ -111,7 +98,7 @@ impl LaunchManager {
 
     fn handle_load_chunk(&mut self, message: Message) {
         let position = message.position;
-        let newly_inserted = self.recieved_request.insert(position);
+        let newly_inserted = self.received_request.insert(position);
 
         if !newly_inserted {
             // people should already have a cached version of this chunk
@@ -162,13 +149,10 @@ async fn load_chunk(position: I16Vec2, shared: &Shared) -> anyhow::Result<Loaded
     let region = shared.regions.get_region_from_chunk(x, y).await;
 
     let raw_chunk = {
-        let mut region_access = region.lock().await;
-
-        region_access
-            .get_chunk(x, y, &mut decompress_buf, shared.regions.root())
-            .await
-            .unwrap()
-            .unwrap()
+        // todo: note that this is likely blocking to tokio
+        region
+            .get_chunk(x, y, &mut decompress_buf, shared.regions.root())?
+            .context("no chunk found")?
     };
 
     let Ok(chunk) = parse_chunk(raw_chunk.data, &shared.biome_to_id) else {
