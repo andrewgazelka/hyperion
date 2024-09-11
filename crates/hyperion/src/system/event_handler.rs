@@ -29,131 +29,131 @@ use crate::{
 };
 
 pub fn handle_events(world: &World, registry: &mut SystemRegistry) {
-    let system_id = registry.register();
+    // let system_id = registry.register();
 
     // 444 µs
-    system!(
-        "handle_events_block",
-        world,
-        &Compose($),
-        &mut EventQueue,
-        &PendingChanges,
-    )
-    .kind::<pipeline::PostUpdate>()
-    .multi_threaded()
-    .tracing_each_entity(
-        info_span!("handle_events_block"),
-        move |entity, (compose, event_queue, pending)| {
-            let world = entity.world();
-            let world = &world;
+    // system!(
+    //     "handle_events_block",
+    //     world,
+    //     &Compose($),
+    //     &mut EventQueue,
+    //     &PendingChanges,
+    // )
+    // .kind::<pipeline::PostUpdate>()
+    // .multi_threaded()
+    // .tracing_each_entity(
+    //     info_span!("handle_events_block"),
+    //     move |entity, (compose, event_queue, pending)| {
+    //         let world = entity.world();
+    //         let world = &world;
+    // 
+    //         if event_queue.is_empty() {
+    //             return;
+    //         }
+    // 
+    //         let mut iter = EventQueueIterator::default();
+    // 
+    //         iter.register::<BlockBreak>(|block| {
+    //             let position = block.position;
+    // 
+    //             let delta = Delta::new(
+    //                 position.x as u8,
+    //                 position.y,
+    //                 position.z as u8,
+    //                 BlockState::AIR,
+    //             );
+    // 
+    //             pending.push(delta, world);
+    // 
+    //             info!("block break: {block:?}");
+    // 
+    //             let entity = world.entity_from_id(block.by);
+    // 
+    //             entity.get::<(&NetworkStreamRef, &Pose)>(|(&stream, pose)| {
+    //                 let id = ident!("minecraft:block.note_block.harp");
+    // 
+    //                 let id = SoundId::Direct {
+    //                     id: id.into(),
+    //                     range: None,
+    //                 };
+    // 
+    //                 let sound = play::PlaySoundS2c {
+    //                     id,
+    //                     category: SoundCategory::Ambient,
+    //                     position: pose.sound_position(),
+    //                     volume: 1.0,
+    //                     pitch: 1.0,
+    //                     seed: 0,
+    //                 };
+    // 
+    //                 compose.unicast(&sound, stream, system_id, world).unwrap();
+    //             });
+    //         });
+    // 
+    //         iter.run(event_queue);
+    //     },
+    // );
 
-            if event_queue.is_empty() {
-                return;
-            }
-
-            let mut iter = EventQueueIterator::default();
-
-            iter.register::<BlockBreak>(|block| {
-                let position = block.position;
-
-                let delta = Delta::new(
-                    position.x as u8,
-                    position.y,
-                    position.z as u8,
-                    BlockState::AIR,
-                );
-
-                pending.push(delta, world);
-
-                info!("block break: {block:?}");
-
-                let entity = world.entity_from_id(block.by);
-
-                entity.get::<(&NetworkStreamRef, &Pose)>(|(&stream, pose)| {
-                    let id = ident!("minecraft:block.note_block.harp");
-
-                    let id = SoundId::Direct {
-                        id: id.into(),
-                        range: None,
-                    };
-
-                    let sound = play::PlaySoundS2c {
-                        id,
-                        category: SoundCategory::Ambient,
-                        position: pose.sound_position(),
-                        volume: 1.0,
-                        pitch: 1.0,
-                        seed: 0,
-                    };
-
-                    compose.unicast(&sound, stream, system_id, world).unwrap();
-                });
-            });
-
-            iter.run(event_queue);
-        },
-    );
-
-    system!(
-        "handle_chunk_neighbor_notify",
-        world,
-        &LoadedChunk,
-        &MinecraftWorld($),
-        &mut NeighborNotify,
-    )
-    .kind::<pipeline::PostUpdate>()
-    .multi_threaded()
-    .tracing_each_entity(
-        info_span!("handle_chunk_neighbor_notify"),
-        |entity, (chunk, mc, notify)| {
-            let world = entity.world();
-            chunk.process_neighbor_changes(notify, mc, &world);
-        },
-    );
-
-    let system_id = registry.register();
-
-    system!(
-        "handle_chunk_pending_changes",
-        world,
-        &mut LoadedChunk,
-        &Compose($),
-        &MinecraftWorld($),
-        &mut PendingChanges,
-        &NeighborNotify,
-    )
-    .kind::<pipeline::PostUpdate>()
-    .multi_threaded()
-    .tracing_each_entity(
-        info_span!("handle_chunk_pending_changes"),
-        move |entity, (chunk, compose, mc, pending, notify)| {
-            let world = entity.world();
-            chunk.process_pending_changes(pending, compose, notify, mc, system_id, &world);
-        },
-    );
-
-    let system_id = registry.register();
-
-    system!(
-        "confirm_block_sequences",
-        world,
-        &Compose($),
-        &mut NetworkStreamRef,
-        &mut ConfirmBlockSequences,
-    )
-    .kind::<pipeline::PostUpdate>()
-    .multi_threaded()
-    .tracing_each_entity(
-        info_span!("confirm_block_sequences"),
-        move |entity, (compose, &mut stream, confirm_block_sequences)| {
-            let world = entity.world();
-            for sequence in confirm_block_sequences.drain(..) {
-                let sequence = VarInt(sequence);
-                let ack = play::PlayerActionResponseS2c { sequence };
-                compose.unicast(&ack, stream, system_id, &world).unwrap();
-            }
-        },
-    );
+    // system!(
+    //     "handle_chunk_neighbor_notify",
+    //     world,
+    //     &LoadedChunk,
+    //     &MinecraftWorld($),
+    //     &mut NeighborNotify,
+    // )
+    // .kind::<pipeline::PostUpdate>()
+    // .multi_threaded()
+    // .tracing_each_entity(
+    //     info_span!("handle_chunk_neighbor_notify"),
+    //     |entity, (chunk, mc, notify)| {
+    //         let world = entity.world();
+    //         chunk.process_neighbor_changes(notify, mc, &world);
+    //     },
+    // );
+    // 
+    // let system_id = registry.register();
+    // 
+    // system!(
+    //     "handle_chunk_pending_changes",
+    //     world,
+    //     &mut LoadedChunk,
+    //     &Compose($),
+    //     &MinecraftWorld($),
+    //     &mut PendingChanges,
+    //     &NeighborNotify,
+    // )
+    // .kind::<pipeline::PostUpdate>()
+    // .multi_threaded()
+    // .tracing_each_entity(
+    //     info_span!("handle_chunk_pending_changes"),
+    //     move |entity, (chunk, compose, mc, pending, notify)| {
+    //         let world = entity.world();
+    //         chunk.process_pending_changes(pending, compose, notify, mc, system_id, &world);
+    //     },
+    // );
+    // 
+    // let system_id = registry.register();
+    // 
+    // system!(
+    //     "confirm_block_sequences",
+    //     world,
+    //     &Compose($),
+    //     &mut NetworkStreamRef,
+    //     &mut ConfirmBlockSequences,
+    // )
+    // .kind::<pipeline::PostUpdate>()
+    // .multi_threaded()
+    // .tracing_each_entity(
+    //     info_span!("confirm_block_sequences"),
+    //     move |entity, (compose, &mut stream, confirm_block_sequences)| {
+    //         let world = entity.world();
+    //         for sequence in confirm_block_sequences.drain(..) {
+    //             let sequence = VarInt(sequence);
+    //             let ack = play::PlayerActionResponseS2c { sequence };
+    //             compose.unicast(&ack, stream, system_id, &world).unwrap();
+    //         }
+    //     },
+    // );
 
     // system!(
     //     "handle_events_player",

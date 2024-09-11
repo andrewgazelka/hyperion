@@ -48,7 +48,7 @@ pub fn stats(world: &World, registry: &mut SystemRegistry) {
         let ms_per_tick = (current_frame_time_total - last_frame_time_total) * 1000.0;
         last_frame_time_total = current_frame_time_total;
 
-        let title = format!("{ms_per_tick:05.2} ms/tick, {mode}");
+        let title = format!("{ms_per_tick:04.1} ms/tick, {mode}");
         let title = title.into_cow_text();
         let health = (ms_per_tick / 50.0).min(1.0);
 
@@ -98,43 +98,4 @@ pub fn stats(world: &World, registry: &mut SystemRegistry) {
 
         compose.broadcast(&pkt, system_id).send(&world).unwrap();
     });
-
-    let system_id = registry.register();
-
-    system!(
-        "local_stats",
-        world,
-        &Compose($),
-        &ChunkSendQueue,
-        &NetworkStreamRef,
-    )
-    .multi_threaded()
-    .kind::<pipeline::OnUpdate>()
-    .tracing_each_entity(
-        trace_span!("local_stats"),
-        move |entity, (compose, chunk_send_queue, stream)| {
-            const FULL_BAR_CHUNKS: usize = 4096;
-
-            let world = entity.world();
-            let chunks_to_send = chunk_send_queue.len();
-
-            let title = format!("{chunks_to_send} chunks to send");
-            let title = title.into_cow_text();
-
-            let health = (chunks_to_send as f32 / FULL_BAR_CHUNKS as f32).min(1.0);
-
-            let pkt = valence_protocol::packets::play::BossBarS2c {
-                id: Uuid::from_u128(2),
-                action: BossBarAction::Add {
-                    title,
-                    health,
-                    color: BossBarColor::Red,
-                    division: BossBarDivision::NoDivision,
-                    flags: BossBarFlags::default(),
-                },
-            };
-
-            compose.unicast(&pkt, *stream, system_id, &world).unwrap();
-        },
-    );
 }
