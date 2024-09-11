@@ -12,7 +12,9 @@ use valence_generated::block::BlockState;
 use valence_nbt::{compound, List};
 use valence_protocol::{packets::play, ChunkPos, CompressionThreshold, FixedArray};
 use valence_registry::RegistryIdx;
-use valence_server::layer::chunk::{bit_width, BiomeContainer, BlockStateContainer, UnloadedChunk};
+use valence_server::layer::chunk::{
+    bit_width, BiomeContainer, BlockStateContainer, Chunk, UnloadedChunk,
+};
 
 use crate::{
     bits::BitStorage,
@@ -22,6 +24,9 @@ use crate::{
     runtime::AsyncRuntime,
     Scratch,
 };
+
+pub const CHUNK_SECTION_COUNT: u32 = 384 / 16;
+pub const CHUNK_HEIGHT_SPAN: u32 = 384;
 
 struct TasksState {
     bytes: BytesMut,
@@ -111,10 +116,21 @@ impl LaunchManager {
 
         self.runtime.spawn(async move {
             let loaded_chunk = match load_chunk(position, &shared).await {
-                Ok(loaded_chunk) => loaded_chunk,
+                Ok(loaded_chunk) => {
+                    if loaded_chunk.chunk.height() != CHUNK_HEIGHT_SPAN {
+                        warn!(
+                            "got a chunk that did not have the correct height at {position}, \
+                             setting to empty. This can happen if a chunk was generated in an old \
+                             version of Minecraft."
+                        );
+                        empty_chunk(position)
+                    } else {
+                        loaded_chunk
+                    }
+                }
                 Err(err) => {
                     warn!("failed to load chunk {position:?}: {err}");
-                    default_chunk(position)
+                    empty_chunk(position)
                 }
             };
 
@@ -123,17 +139,17 @@ impl LaunchManager {
     }
 }
 
-fn default_chunk(position: I16Vec2) -> LoadedChunk {
-    const CHUNK_SECTION_COUNT: u32 = 384 / 16;
-
+fn empty_chunk(position: I16Vec2) -> LoadedChunk {
     // height: 24
-    let unloaded = UnloadedChunk::with_height(CHUNK_SECTION_COUNT);
+    let unloaded = UnloadedChunk::with_height(CHUNK_HEIGHT_SPAN);
 
     let bytes = STATE.with_borrow_mut(|state| {
         encode_chunk_packet(&unloaded, position, state)
             .unwrap()
             .unwrap()
     });
+
+    debug_assert_eq!(unloaded.height(), CHUNK_HEIGHT_SPAN);
 
     LoadedChunk::new(bytes.freeze(), unloaded, position)
 }
@@ -146,7 +162,10 @@ async fn load_chunk(position: I16Vec2, shared: &Shared) -> anyhow::Result<Loaded
     let mut decompress_buf = vec![0; 1024 * 1024];
 
     // https://rust-lang.github.io/rust-clippy/master/index.html#/large_futures
-    let region = shared.regions.get_region_from_chunk(x, y).await;
+    let Ok(region) = shared.regions.get_region_from_chunk(x, y).await else {
+        // most likely the file representing the region does not exist so we will just return en empty chunk
+        return Ok(empty_chunk(position));
+    };
 
     let raw_chunk = {
         // todo: note that this is likely blocking to tokio

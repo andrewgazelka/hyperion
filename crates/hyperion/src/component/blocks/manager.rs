@@ -7,15 +7,16 @@ use std::{
 use glam::IVec2;
 use tokio::{
     fs::File,
+    runtime::Runtime,
     sync::{mpsc, oneshot, RwLock},
 };
-use tokio::runtime::Runtime;
+
 use crate::{blocks::get_nyc_save, component::blocks::region::Region};
 
 enum RegionRequest {
     Get {
         coord: IVec2,
-        response: oneshot::Sender<Arc<Region>>,
+        response: oneshot::Sender<std::io::Result<Arc<Region>>>,
     },
 }
 
@@ -43,7 +44,7 @@ impl RegionManager {
         &self,
         pos_x: i32,
         pos_z: i32,
-    ) -> Arc<Region> {
+    ) -> std::io::Result<Arc<Region>> {
         let region_x = pos_x.div_euclid(32);
         let region_z = pos_z.div_euclid(32);
         let coord = IVec2::new(region_x, region_z);
@@ -57,7 +58,9 @@ impl RegionManager {
             .await
             .expect("RegionManagerTask has been dropped");
 
-        response_rx.await.expect("RegionManagerTask has been dropped")
+        response_rx
+            .await
+            .expect("RegionManagerTask has been dropped")
     }
 }
 
@@ -80,8 +83,8 @@ impl RegionManagerTask {
         self.root.join(format!("r.{pos_x}.{pos_z}.mca"))
     }
 
-    async fn region_file(&self, pos_x: i32, pos_z: i32) -> File {
-        File::open(self.region_path(pos_x, pos_z)).await.unwrap()
+    async fn region_file(&self, pos_x: i32, pos_z: i32) -> std::io::Result<File> {
+        File::open(self.region_path(pos_x, pos_z)).await
     }
 
     async fn run(mut self) {
@@ -100,19 +103,19 @@ impl RegionManagerTask {
         }
     }
 
-    async fn get_or_create_region(&mut self, coord: IVec2) -> Arc<Region> {
+    async fn get_or_create_region(&mut self, coord: IVec2) -> std::io::Result<Arc<Region>> {
         if let Some(region) = self.regions.get(&coord) {
-            region.clone()
+            Ok(region.clone())
         } else {
             self.create_and_insert_region(coord).await
         }
     }
 
-    async fn create_and_insert_region(&mut self, coord: IVec2) -> Arc<Region> {
-        let file = self.region_file(coord.x, coord.y).await;
+    async fn create_and_insert_region(&mut self, coord: IVec2) -> std::io::Result<Arc<Region>> {
+        let file = self.region_file(coord.x, coord.y).await?;
         let region = Region::open(file).unwrap();
         let region = Arc::new(region);
         self.regions.insert(coord, region.clone());
-        region
+        Ok(region)
     }
 }

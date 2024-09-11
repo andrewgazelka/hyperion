@@ -38,7 +38,7 @@ use flecs_ecs::{
 use libc::{getrlimit, setrlimit, RLIMIT_NOFILE};
 use libdeflater::CompressionLvl;
 use once_cell::sync::Lazy;
-use tracing::info;
+use tracing::{info, instrument};
 pub use uuid;
 use valence_protocol::CompressionThreshold;
 

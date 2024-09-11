@@ -19,7 +19,7 @@ use valence_server::layer::chunk::Chunk;
 use crate::{
     component::blocks::{
         chunk::{Delta, LoadedChunk, NeighborNotify, PendingChanges},
-        loader::{launch_manager, LaunchHandle},
+        loader::{launch_manager, LaunchHandle, CHUNK_HEIGHT_SPAN},
         shared::Shared,
     },
     event::EventQueue,
@@ -100,7 +100,7 @@ impl MinecraftWorld {
     pub fn load_pending(&mut self, world: &World) {
         while let Ok(chunk) = self.rx_loaded_chunks.try_recv() {
             let position = chunk.position;
-            
+
             let x = position[0];
             let z = position[1];
 
@@ -217,6 +217,10 @@ impl MinecraftWorld {
                             for y in y_start..=y_end {
                                 debug_assert!(x <= 15);
                                 debug_assert!(z <= 15);
+
+                                if y >= CHUNK_HEIGHT_SPAN {
+                                    continue;
+                                }
 
                                 let block = chunk.block_state(x, y, z);
 
