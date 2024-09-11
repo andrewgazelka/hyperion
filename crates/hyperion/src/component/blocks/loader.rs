@@ -117,15 +117,15 @@ impl LaunchManager {
         self.runtime.spawn(async move {
             let loaded_chunk = match load_chunk(position, &shared).await {
                 Ok(loaded_chunk) => {
-                    if loaded_chunk.chunk.height() != CHUNK_HEIGHT_SPAN {
+                    if loaded_chunk.chunk.height() == CHUNK_HEIGHT_SPAN {
+                        loaded_chunk
+                    } else {
                         warn!(
                             "got a chunk that did not have the correct height at {position}, \
                              setting to empty. This can happen if a chunk was generated in an old \
                              version of Minecraft."
                         );
                         empty_chunk(position)
-                    } else {
-                        loaded_chunk
                     }
                 }
                 Err(err) => {

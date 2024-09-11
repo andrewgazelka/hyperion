@@ -29,73 +29,73 @@ pub fn stats(world: &World, registry: &mut SystemRegistry) {
 
     let system_id = registry.register();
 
-    system!(
-        "global_stats",
-        world,
-        &mut Compose($),
-    )
-    .kind::<pipeline::OnUpdate>()
-    .each_iter(move |iter, _, compose| {
-        let world = iter.world();
+    world
+        .system_named::<&mut Compose>("global_stats")
+        .term_at(0u32)
+        .singleton()
+        .kind::<pipeline::OnUpdate>()
+        .each_iter(move |iter, _, compose| {
+            let world = iter.world();
 
-        compose.global_mut().tick += 1;
+            let global = compose.global_mut();
 
-        let span = tracing::trace_span!("stats_message");
-        let _enter = span.enter();
-        let info = world.info();
+            global.tick += 1;
 
-        let current_frame_time_total = info.frame_time_total;
-        let ms_per_tick = (current_frame_time_total - last_frame_time_total) * 1000.0;
-        last_frame_time_total = current_frame_time_total;
 
-        let title = format!("{ms_per_tick:04.1} ms/tick, {mode}");
-        let title = title.into_cow_text();
-        let health = (ms_per_tick / 50.0).min(1.0);
+            // let player_count = compose.global().shared.player_count.load(std::sync::atomic::Ordering::Relaxed);
+            let player_count = players.count();
+            let player_count =
+                usize::try_from(player_count).expect("failed to convert player count");
 
-        let color = if health > 0.5 {
-            BossBarColor::Red
-        } else {
-            BossBarColor::White
-        };
+            *global.player_count.get_mut() = player_count;
 
-        // boss bar
-        let pkt = valence_protocol::packets::play::BossBarS2c {
-            id: Uuid::from_u128(0),
-            action: BossBarAction::Add {
-                title,
-                health,
-                color,
-                division: BossBarDivision::NoDivision,
-                flags: BossBarFlags::default(),
-            },
-        };
+            let span = trace_span!("stats_message");
+            let _enter = span.enter();
+            let info = world.info();
 
-        compose.broadcast(&pkt, system_id).send(&world).unwrap();
+            let current_frame_time_total = info.frame_time_total;
+            let ms_per_tick = (current_frame_time_total - last_frame_time_total) * 1000.0;
+            last_frame_time_total = current_frame_time_total;
 
-        // let player_count = compose.global().shared.player_count.load(std::sync::atomic::Ordering::Relaxed);
-        let player_count = players.count();
-        let player_count = usize::try_from(player_count).expect("failed to convert player count");
+            let title = format!("{ms_per_tick:05.2} ms/tick, {mode}");
+            let title = title.into_cow_text();
+            let health = (ms_per_tick / 50.0).min(1.0);
 
-        compose
-            .global()
-            .player_count
-            .store(player_count, std::sync::atomic::Ordering::Relaxed);
+            let color = if health > 0.5 {
+                BossBarColor::Red
+            } else {
+                BossBarColor::White
+            };
 
-        let title = format!("{player_count} player online");
-        let title = title.into_cow_text();
-        let health = (player_count as f32 / 10_000.0).min(1.0);
+            // boss bar
+            let pkt = valence_protocol::packets::play::BossBarS2c {
+                id: Uuid::from_u128(0),
+                action: BossBarAction::Add {
+                    title,
+                    health,
+                    color,
+                    division: BossBarDivision::NoDivision,
+                    flags: BossBarFlags::default(),
+                },
+            };
 
-        let pkt = valence_protocol::packets::play::BossBarS2c {
-            id: Uuid::from_u128(1),
-            action: BossBarAction::Add {
-                title,
-                health,
-                color: BossBarColor::White,
-                division: BossBarDivision::NoDivision,
-                flags: BossBarFlags::default(),
-            },
-        };
+            compose.broadcast(&pkt, system_id).send(&world).unwrap();
 
-        compose.broadcast(&pkt, system_id).send(&world).unwrap();
-    });
+            let title = format!("{player_count} player online");
+            let title = title.into_cow_text();
+            let health = (player_count as f32 / 10_000.0).min(1.0);
+
+            let pkt = valence_protocol::packets::play::BossBarS2c {
+                id: Uuid::from_u128(1),
+                action: BossBarAction::Add {
+                    title,
+                    health,
+                    color: BossBarColor::White,
+                    division: BossBarDivision::NoDivision,
+                    flags: BossBarFlags::default(),
+                },
+            };
+
+            compose.broadcast(&pkt, system_id).send(&world).unwrap();
+        });
 }
