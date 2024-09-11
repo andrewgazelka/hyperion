@@ -34,10 +34,11 @@ use flecs_ecs::{
     core::{flecs, Entity, IdOperations, World},
     macros::Component,
 };
+#[cfg(unix)]
 use libc::{getrlimit, setrlimit, RLIMIT_NOFILE};
 use libdeflater::CompressionLvl;
 use once_cell::sync::Lazy;
-use tracing::{error, info, instrument, warn};
+use tracing::info;
 pub use uuid;
 use valence_protocol::CompressionThreshold;
 
@@ -90,7 +91,10 @@ mod config;
     reason = "I have no idea why the cognitive complexity is calcualted as being high"
 )]
 #[instrument(skip_all)]
+#[cfg(unix)]
 pub fn adjust_file_descriptor_limits(recommended_min: u64) -> std::io::Result<()> {
+    use tracing::{error, instrument, warn};
+
     let mut limits = libc::rlimit {
         rlim_cur: 0, // Initialize soft limit to 0
         rlim_max: 0, // Initialize hard limit to 0
@@ -232,6 +236,7 @@ impl Hyperion {
         handlers: impl FnOnce(&World) + Send + Sync + 'static,
     ) -> anyhow::Result<()> {
         // 10k players * 2 file handles / player  = 20,000. We can probably get away with 16,384 file handles
+        #[cfg(unix)]
         adjust_file_descriptor_limits(32_768).context("failed to set file limits")?;
 
         info!("starting hyperion");
