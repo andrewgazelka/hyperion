@@ -1,13 +1,21 @@
 //! Flecs components which are used for events.
 
 pub use event_queue::*;
-use flecs_ecs::core::Entity;
+use flecs_ecs::{core::Entity, macros::Component};
 use glam::{U16Vec3, Vec3};
 use valence_protocol::{Hand, VarInt};
+use valence_server::entity::item_frame::ItemStack;
 
 pub mod sync;
 
 mod event_queue;
+
+#[derive(Component, Default)]
+pub struct ItemDropEvent {
+    pub item: ItemStack,
+    pub location: Vec3,
+}
+
 /// Represents an attack action by an entity in the game.
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct AttackEntity {
@@ -62,6 +70,7 @@ pub struct BlockBreak {
 
 pub struct Command {
     pub raw: String,
+    pub by: Entity,
 }
 
 pub struct BlockInteract {}

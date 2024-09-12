@@ -1,13 +1,9 @@
-use flecs_ecs::{
-    core::{QueryBuilderImpl, TermBuilderImpl, World, WorldProvider},
-    macros::system,
-};
+use flecs_ecs::core::{EntityViewGet, QueryBuilderImpl, SystemAPI, TermBuilderImpl, World};
 use hyperion::{
     component::command::{get_root_command, Command, Parser},
     event,
-    event::{EventQueue, EventQueueIterator},
+    event::EventQueue,
     net::{Compose, NetworkStreamRef},
-    tracing_ext::TracingExt,
     valence_protocol::{
         packets::{
             play,
@@ -54,24 +50,21 @@ pub fn add_to_tree(world: &World) {
 pub fn process(world: &World, registry: &mut SystemRegistry) {
     let system_id = registry.register();
 
-    // create the iterator here
+    world
+        .system_named::<(&Compose, &mut EventQueue<event::Command>)>(
+            "handle_infection_events_player",
+        )
+        .term_at(0)
+        .singleton()
+        .term_at(1)
+        .singleton()
+        .multi_threaded()
+        .each_iter(move |it, _, (compose, event_queue)| {
+            let span = trace_span!("handle_infection_events_player");
+            let _enter = span.enter();
 
-    system!(
-        "handle_infection_events_player",
-        world,
-        &Compose($),
-        &mut EventQueue,
-        &NetworkStreamRef,
-        &mut Team,
-    )
-    .multi_threaded()
-    .tracing_each_entity(
-        trace_span!("handle_infection_events_player"),
-        move |view, (compose, event_queue, stream, team)| {
-            let mut iterator = EventQueueIterator::default();
-
-            iterator.register::<event::Command>(|event| {
-                let world = view.world();
+            let world = it.world();
+            for event in event_queue.drain() {
                 let executed = event.raw.as_str();
 
                 debug!("executed: {executed}");
@@ -80,43 +73,45 @@ pub fn process(world: &World, registry: &mut SystemRegistry) {
                     return;
                 };
 
-                match command {
-                    ParsedCommand::Speed(amount) => {
-                        let msg = format!("Setting speed to {amount}");
-                        let pkt = play::GameMessageS2c {
-                            chat: msg.into_cow_text(),
-                            overlay: false,
-                        };
+                world
+                    .entity_from_id(event.by)
+                    .get::<(&NetworkStreamRef, &mut Team)>(|(stream, team)| {
+                        match command {
+                            ParsedCommand::Speed(amount) => {
+                                let msg = format!("Setting speed to {amount}");
+                                let pkt = play::GameMessageS2c {
+                                    chat: msg.into_cow_text(),
+                                    overlay: false,
+                                };
 
-                        compose.unicast(&pkt, *stream, system_id, &world).unwrap();
+                                compose.unicast(&pkt, *stream, system_id, &world).unwrap();
 
-                        let pkt = fly_speed_packet(amount);
-                        compose.unicast(&pkt, *stream, system_id, &world).unwrap();
-                    }
-                    ParsedCommand::Team => {
-                        let msg = format!("You are now on team {team}");
-                        let text = play::GameMessageS2c {
-                            chat: msg.into_cow_text(),
-                            overlay: false,
-                        };
-                        compose.unicast(&text, *stream, system_id, &world).unwrap();
-                    }
-                    ParsedCommand::Zombie => {
-                        let msg = "Turning to zombie";
+                                let pkt = fly_speed_packet(amount);
+                                compose.unicast(&pkt, *stream, system_id, &world).unwrap();
+                            }
+                            ParsedCommand::Team => {
+                                let msg = format!("You are now on team {team}");
+                                let text = play::GameMessageS2c {
+                                    chat: msg.into_cow_text(),
+                                    overlay: false,
+                                };
+                                compose.unicast(&text, *stream, system_id, &world).unwrap();
+                            }
+                            ParsedCommand::Zombie => {
+                                let msg = "Turning to zombie";
 
-                        // todo: maybe this should be an event?
-                        let text = play::GameMessageS2c {
-                            chat: msg.into_cow_text(),
-                            overlay: false,
-                        };
-                        compose.unicast(&text, *stream, system_id, &world).unwrap();
-                        *team = Team::Zombie;
-                    }
-                }
-            });
-            iterator.run(event_queue);
-        },
-    );
+                                // todo: maybe this should be an event?
+                                let text = play::GameMessageS2c {
+                                    chat: msg.into_cow_text(),
+                                    overlay: false,
+                                };
+                                compose.unicast(&text, *stream, system_id, &world).unwrap();
+                                *team = Team::Zombie;
+                            }
+                        }
+                    });
+            }
+        });
 }
 
 fn fly_speed_packet(amount: f32) -> PlayerAbilitiesS2c {

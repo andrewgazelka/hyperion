@@ -39,7 +39,6 @@ no_denormals.workspace = true
 flate2 = { workspace = true, features = ["zlib-ng"] }
 fxhash.workspace = true
 derive_more.workspace = true
-bumpalo = { workspace = true, features = ["allocator_api"] }
 libdeflater.workspace = true
 more-asserts.workspace = true
 #rayon-local = { version = "0.1.0", path = "../rayon-local" }
@@ -60,6 +59,7 @@ kanal.workspace = true
 ouroboros.workspace = true
 sqlx.workspace = true
 compact_str.workspace = true
+snafu = "0.8.4"
 memmap2 = "0.9.4"
 
 [dev-dependencies]

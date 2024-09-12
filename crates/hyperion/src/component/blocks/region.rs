@@ -244,6 +244,7 @@ impl Region {
         (stream_version & 0x80) != 0
     }
 
+    #[expect(unused, reason = "todo")]
     const fn external_chunk_version(stream_version: u8) -> u8 {
         stream_version & !0x80
     }

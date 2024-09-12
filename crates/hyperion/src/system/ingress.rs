@@ -39,7 +39,7 @@ use crate::{
     },
     event::{
         sync::{GlobalEventHandlers, PlayerJoinServer},
-        EventQueue, ThreadLocalBump,
+        Events,
     },
     net::{
         proxy::ReceiveStateInner, Compose, NetworkStreamRef, PacketDecoder, MINECRAFT_VERSION,
@@ -53,8 +53,6 @@ use crate::{
     util::{db::SkinHandler, mojang::MojangClient, player_skin::PlayerSkin},
     SystemId, SystemRegistry,
 };
-// pub type ThreadLocalIngressSender<'a, 'b> = SenderLocal<'a, 'b, IngressEventSet>;
-// pub type IngressSender<'a> = Sender<'a, IngressEventSet>;
 
 #[derive(Component, Debug)]
 pub struct PendingRemove;
@@ -87,7 +85,6 @@ pub fn player_connect_disconnect(world: &World, shared: Arc<Mutex<ReceiveStateIn
                 .set(NetworkStreamRef::new(connect.stream))
                 .set(PlayerInventory::default())
                 .set(ConfirmBlockSequences::default())
-                .set(EventQueue::default())
                 .set(PacketState::Handshake)
                 .set(PacketDecoder::default())
                 .add::<component::Player>();
@@ -215,12 +212,11 @@ pub fn recv_data(world: &World, registry: &mut SystemRegistry) {
         &AsyncRuntime($),
         &Comms($),
         &SkinHandler($),
-        &ThreadLocalBump($),
         &GlobalEventHandlers($),
         &mut PacketDecoder,
         &mut PacketState,
         &NetworkStreamRef,
-        &EventQueue,
+        &Events($),
         ?&mut Pose,
         &mut ConfirmBlockSequences,
         &mut PlayerInventory,
@@ -237,7 +233,6 @@ pub fn recv_data(world: &World, registry: &mut SystemRegistry) {
             tasks,
             comms,
             skins_collection,
-            allocator,
             handlers,
             decoder,
             login_state,
@@ -301,8 +296,7 @@ pub fn recv_data(world: &World, registry: &mut SystemRegistry) {
                                 compose,
                                 io_ref,
                                 pose,
-                                allocator,
-                                event_queue,
+                                events: event_queue,
                                 world,
                                 blocks,
                                 system_id,

@@ -25,7 +25,6 @@ use crate::{
     Scratch,
 };
 
-pub const CHUNK_SECTION_COUNT: u32 = 384 / 16;
 pub const CHUNK_HEIGHT_SPAN: u32 = 384;
 
 struct TasksState {

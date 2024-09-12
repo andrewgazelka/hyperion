@@ -22,7 +22,6 @@ use crate::{
         loader::{launch_manager, LaunchHandle, CHUNK_HEIGHT_SPAN},
         shared::Shared,
     },
-    event::EventQueue,
     runtime::AsyncRuntime,
 };
 
@@ -109,7 +108,6 @@ impl MinecraftWorld {
             let entity = world
                 .entity_named(&name)
                 .set(chunk)
-                .set(EventQueue::default())
                 .set(NeighborNotify::default())
                 .set(PendingChanges::default());
 

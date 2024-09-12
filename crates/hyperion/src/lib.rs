@@ -31,6 +31,7 @@ use std::{alloc::Allocator, cell::RefCell, fmt::Debug, net::ToSocketAddrs, sync:
 use anyhow::{bail, Context};
 use derive_more::{Deref, DerefMut};
 use flecs_ecs::{
+    component,
     core::{flecs, Entity, IdOperations, World},
     macros::Component,
 };
@@ -44,7 +45,7 @@ use valence_protocol::CompressionThreshold;
 
 use crate::{
     component::{blocks::MinecraftWorld, Comms},
-    event::{sync::GlobalEventHandlers, ThreadLocalBump},
+    event::sync::GlobalEventHandlers,
     global::Global,
     net::{proxy::init_proxy_comms, Compose, Compressors, IoBuf, MAX_PACKET_SIZE},
     runtime::AsyncRuntime,
@@ -93,7 +94,7 @@ mod config;
 #[instrument(skip_all)]
 #[cfg(unix)]
 pub fn adjust_file_descriptor_limits(recommended_min: u64) -> std::io::Result<()> {
-    use tracing::{error, instrument, warn};
+    use tracing::{error, warn};
 
     let mut limits = libc::rlimit {
         rlim_cur: 0, // Initialize soft limit to 0
@@ -149,6 +150,8 @@ pub fn register_components(world: &World) {
     world.component::<component::EntityReaction>();
     world.component::<component::Play>();
     world.component::<component::ConfirmBlockSequences>();
+
+    world.component::<event::Events>();
 
     world.component::<component::blocks::chunk::LoadedChunk>();
     world.component::<component::blocks::chunk::NeighborNotify>();
@@ -282,9 +285,6 @@ impl Hyperion {
         world.set(db);
         world.set(skins);
 
-        let thread_local_bump = ThreadLocalBump::default();
-        world.set(thread_local_bump);
-
         let (receive_state, egress_comm) = init_proxy_comms(&runtime, address);
 
         let global = Global::new(shared.clone());
@@ -297,6 +297,9 @@ impl Hyperion {
         ));
 
         world.set(Comms::default());
+
+        let events = event::Events::initialize(world);
+        world.set(events);
 
         world.set(egress_comm);
 
@@ -326,11 +329,6 @@ impl Hyperion {
         system::ingress::recv_data(world, &mut system_registry);
 
         system::sync_entity_position::sync_entity_position(world, &mut system_registry);
-
-        // system::pkt_attack::send_pkt_attack_player(world);
-        system::event_handler::handle_events(world, &mut system_registry);
-        system::event_handler::reset_event_queue(world);
-        system::event_handler::reset_allocators(world);
 
         system::egress::egress(world, &pipeline);
 

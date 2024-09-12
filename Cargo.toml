@@ -121,4 +121,5 @@ style = { level = "deny", priority = -1 }
 suspicious = { level = "deny", priority = -1 }
 too_long_first_doc_paragraph = "allow"
 derive_partial_eq_without_eq = "allow"
+enum_variant_names = "allow"
 

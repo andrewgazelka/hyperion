@@ -8,7 +8,7 @@ use glam::IVec2;
 use tokio::{
     fs::File,
     runtime::Runtime,
-    sync::{mpsc, oneshot, RwLock},
+    sync::{mpsc, oneshot},
 };
 
 use crate::{blocks::get_nyc_save, component::blocks::region::Region};

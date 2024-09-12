@@ -4,21 +4,17 @@ use std::ops::ControlFlow;
 
 use bvh_region::aabb::Aabb;
 use flecs_ecs::core::{Entity, EntityView, EntityViewGet, World};
-use glam::{I16Vec2, IVec2, U16Vec3, Vec3};
+use glam::{I16Vec2, IVec2, Vec3};
 use tracing::{info, instrument, trace, warn};
 use valence_generated::block::{BlockKind, BlockState};
 use valence_protocol::{
     decode::PacketFrame,
-    ident,
     packets::play::{
-        self, client_command_c2s::ClientCommand, player_action_c2s::PlayerAction,
-        player_interact_entity_c2s::EntityInteraction,
+        self, client_command_c2s::ClientCommand, player_interact_entity_c2s::EntityInteraction,
         player_position_look_s2c::PlayerPositionLookFlags,
     },
-    sound::{SoundCategory, SoundId},
     Decode, Packet, VarInt,
 };
-use valence_text::IntoText;
 
 use crate::{
     component::{
@@ -30,7 +26,7 @@ use crate::{
         ConfirmBlockSequences, Pose,
     },
     event,
-    event::{EventQueue, Posture, ThreadLocalBump},
+    event::{Events, Posture},
     net::{Compose, NetworkStreamRef},
     SystemId,
 };
@@ -185,11 +181,13 @@ fn chat_command(mut data: &[u8], query: &PacketSwitchQuery<'_>) -> anyhow::Resul
 
     let command = pkt.command.0.to_owned();
 
-    query.event_queue.push(
-        event::Command { raw: command },
-        query.allocator,
+    query.events.push(
+        event::Command {
+            raw: command,
+            by: query.id,
+        },
         query.world,
-    )?;
+    );
 
     Ok(())
 }
@@ -201,10 +199,7 @@ fn hand_swing(mut data: &[u8], query: &PacketSwitchQuery<'_>) -> anyhow::Result<
 
     let event = event::SwingArm { hand: packet };
 
-    query
-        .event_queue
-        .push(event, query.allocator, query.world)
-        .unwrap();
+    query.events.push(event, query.world);
 
     Ok(())
 }
@@ -226,18 +221,15 @@ fn player_interact_entity(mut data: &[u8], query: &PacketSwitchQuery<'_>) -> any
     info!("enqueue attack");
     let target = query.world.entity_from_id(target);
 
-    target.get::<&EventQueue>(|event_queue| {
-        event_queue
-            .push(
-                event::AttackEntity {
-                    from_pos,
-                    from: query.id,
-                    damage: 0.0,
-                },
-                query.allocator,
-                query.world,
-            )
-            .unwrap();
+    target.get::<&Events>(|event_queue| {
+        event_queue.push(
+            event::AttackEntity {
+                from_pos,
+                from: query.id,
+                damage: 0.0,
+            },
+            query.world,
+        );
     });
 
     Ok(())
@@ -250,8 +242,7 @@ pub struct PacketSwitchQuery<'a> {
     pub compose: &'a Compose,
     pub io_ref: NetworkStreamRef,
     pub pose: &'a mut Pose,
-    pub allocator: &'a ThreadLocalBump,
-    pub event_queue: &'a EventQueue,
+    pub events: &'a Events,
     pub world: &'a World,
     pub blocks: &'a MinecraftWorld,
     pub confirm_block_sequences: &'a mut ConfirmBlockSequences,
@@ -260,122 +251,10 @@ pub struct PacketSwitchQuery<'a> {
 }
 
 // i.e., shooting a bow
-fn player_action(mut data: &[u8], query: &PacketSwitchQuery<'_>) -> anyhow::Result<()> {
-    const START_Y: i32 = -64;
+fn player_action(mut data: &[u8], _query: &PacketSwitchQuery<'_>) -> anyhow::Result<()> {
+    let _packet = play::PlayerActionC2s::decode(&mut data)?;
 
-    let packet = play::PlayerActionC2s::decode(&mut data)?;
-
-    // let id = query.id;
-    let position = packet.position;
-
-    let chunk_position = I16Vec2::new((position.x >> 4) as i16, (position.z >> 4) as i16);
-
-    let Some(entity) = query
-        .blocks
-        .get_loaded_chunk_entity(chunk_position, query.world)
-    else {
-        warn!("player_action: chunk not loaded");
-        return Ok(());
-    };
-
-    // get EventQueue
-
-    // let sequence = packet.sequence.0;
-
-    // let entry = ChunkDel {
-    //
-    // }
-    //
-    // play::ChunkDeltaUpdateS2c {
-    //     chunk_sect_pos: ChunkSectionPos {
-    //         x: 0,
-    //         y: 0,
-    //         z: 0,
-    //     },
-    //     blocks: Default::default(),
-    // };
-    //
-    // play::lockUpdateS2c {
-    //     position,
-    //     block_id: Default::default(),
-    // }
-
-    // let tick = query.compose.global().tick;
-    let world_id = query.world.stage_id();
-
-    // if creative or in survival and something like TNT that can be instantly destroyed
-    let instant_destroy = true;
-
-    let destroy = match packet.action {
-        PlayerAction::StopDestroyBlock => true,
-        PlayerAction::StartDestroyBlock => instant_destroy,
-        _ => false,
-    };
-
-    if destroy {
-        let chat = format!("{position} finished breaking block ({world_id} {entity:?})");
-        // chat message
-        let message = play::GameMessageS2c {
-            chat: chat.into_cow_text(),
-            overlay: true,
-        };
-
-        let mut called = false;
-
-        entity.get::<&mut EventQueue>(|event_queue| {
-            let id = ident!("minecraft:block.note_block.harp");
-
-            let id = SoundId::Direct {
-                id: id.into(),
-                range: None,
-            };
-
-            let sound = play::PlaySoundS2c {
-                id,
-                category: SoundCategory::Ambient,
-                position: query.pose.sound_position(),
-                volume: 1.0,
-                pitch: 0.5,
-                seed: 0,
-            };
-
-            query
-                .compose
-                .unicast(&sound, query.io_ref, query.system_id, query.world)
-                .unwrap();
-
-            info!("Break block!");
-
-            let x = u16::try_from(position.x & 0b1111).unwrap();
-            let z = u16::try_from(position.z & 0b1111).unwrap();
-
-            let y = u16::try_from(position.y - START_Y).unwrap();
-
-            let position = U16Vec3::new(x, y, z);
-
-            event_queue
-                .push(
-                    event::BlockBreak {
-                        position,
-                        by: query.id,
-                        id: packet.sequence,
-                    },
-                    query.allocator,
-                    query.world,
-                )
-                .unwrap();
-
-            query
-                .compose
-                .broadcast(&message, query.system_id)
-                .send(query.world)
-                .unwrap();
-
-            called = true;
-        });
-
-        assert!(called, "Not called");
-    }
+    // todo: implement
 
     Ok(())
 }
@@ -385,30 +264,18 @@ fn client_command(mut data: &[u8], query: &PacketSwitchQuery<'_>) -> anyhow::Res
     let packet = play::ClientCommandC2s::decode(&mut data)?;
 
     match packet.action {
-        ClientCommand::StartSneaking => {
-            query
-                .event_queue
-                .push(
-                    event::PostureUpdate {
-                        state: Posture::Sneaking,
-                    },
-                    query.allocator,
-                    query.world,
-                )
-                .unwrap();
-        }
-        ClientCommand::StopSneaking => {
-            query
-                .event_queue
-                .push(
-                    event::PostureUpdate {
-                        state: Posture::Standing,
-                    },
-                    query.allocator,
-                    query.world,
-                )
-                .unwrap();
-        }
+        ClientCommand::StartSneaking => query.events.push(
+            event::PostureUpdate {
+                state: Posture::Sneaking,
+            },
+            query.world,
+        ),
+        ClientCommand::StopSneaking => query.events.push(
+            event::PostureUpdate {
+                state: Posture::Standing,
+            },
+            query.world,
+        ),
         _ => {}
     }
 

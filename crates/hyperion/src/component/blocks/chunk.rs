@@ -194,7 +194,7 @@ impl<T> ThreadLocalVec<T> {
     }
 }
 
-impl<T: Debug> ThreadLocalVec<T> {
+impl<T> ThreadLocalVec<T> {
     pub fn push(&self, element: T, world: &World) {
         let inner = self.inner.get(world);
         let inner = unsafe { &mut *inner.get() };

@@ -16,7 +16,6 @@ pub fn init_game(address: impl ToSocketAddrs + Send + Sync + 'static) -> anyhow:
         world.component::<component::team::Team>();
 
         world.get::<&mut GlobalEventHandlers>(|handlers| {
-            handlers.join_server.register(handler::scramble_player_name);
             handlers.join_server.register(handler::add_player_to_team);
         });
 

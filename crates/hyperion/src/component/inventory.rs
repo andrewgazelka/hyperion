@@ -2,6 +2,8 @@ use flecs_ecs::macros::Component;
 use tracing::info;
 use valence_protocol::ItemStack;
 
+pub mod action;
+
 pub type PlayerInventory = Inventory<46>;
 
 /// Placeholder; this will be added later.
@@ -52,6 +54,13 @@ impl<const T: usize> Inventory<T> {
         }
     }
 
+    pub fn swap(&mut self, index_a: u16, index_b: u16) {
+        let index_a = usize::from(index_a);
+        let index_b = usize::from(index_b);
+
+        self.slots.swap(index_a, index_b);
+    }
+
     #[must_use]
     pub fn get_hand_slot(&self, idx: u16) -> Option<&ItemStack> {
         const HAND_START_SLOT: u16 = 36;
@@ -64,6 +73,19 @@ impl<const T: usize> Inventory<T> {
         }
 
         self.get(idx)
+    }
+
+    pub fn get_hand_slot_mut(&mut self, idx: u16) -> Option<&mut ItemStack> {
+        const HAND_START_SLOT: u16 = 36;
+        const HAND_END_SLOT: u16 = 45;
+
+        let idx = idx + HAND_START_SLOT;
+
+        if idx >= HAND_END_SLOT {
+            return None;
+        }
+
+        self.get_mut(idx)
     }
 
     pub fn set_hand_slot(&mut self, idx: u16, stack: ItemStack) {
@@ -79,3 +101,21 @@ impl<const T: usize> Inventory<T> {
         self.set(idx, stack);
     }
 }
+
+#[must_use]
+pub fn slot_index_from_hand(hand_idx: u8) -> u16 {
+    const HAND_START_SLOT: u16 = 36;
+    const HAND_END_SLOT: u16 = 45;
+
+    let hand_idx = u16::from(hand_idx);
+    let hand_idx = hand_idx + HAND_START_SLOT;
+
+    if hand_idx >= HAND_END_SLOT {
+        return 0;
+    }
+
+    hand_idx
+}
+
+// todo: not sure if this is correct
+pub const OFFHAND_SLOT: u16 = 45;

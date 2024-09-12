@@ -6,7 +6,7 @@ use flecs_ecs::{
     macros::{system, Component},
 };
 use glam::I16Vec2;
-use tracing::{info, instrument, trace_span};
+use tracing::{instrument, trace_span};
 use uuid::Uuid;
 use valence_protocol::packets::{
     play,

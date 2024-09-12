@@ -1,9 +1,5 @@
-use flecs_ecs::{
-    core::{
-        flecs::pipeline, QueryAPI, QueryBuilderImpl, SystemAPI, TermBuilderImpl, World,
-        WorldProvider,
-    },
-    macros::system,
+use flecs_ecs::core::{
+    flecs::pipeline, QueryAPI, QueryBuilderImpl, SystemAPI, TermBuilderImpl, World,
 };
 use tracing::trace_span;
 use uuid::Uuid;
@@ -12,13 +8,7 @@ use valence_protocol::{
     text::IntoText,
 };
 
-use crate::{
-    component::Play,
-    net::{Compose, NetworkStreamRef},
-    system::chunk_comm::ChunkSendQueue,
-    tracing_ext::TracingExt,
-    SystemRegistry,
-};
+use crate::{component::Play, net::Compose, SystemRegistry};
 
 pub fn stats(world: &World, registry: &mut SystemRegistry) {
     let mode = std::env::var("RUN_MODE").unwrap_or_else(|_| "Unknown".to_string());
@@ -40,7 +30,6 @@ pub fn stats(world: &World, registry: &mut SystemRegistry) {
             let global = compose.global_mut();
 
             global.tick += 1;
-
 
             // let player_count = compose.global().shared.player_count.load(std::sync::atomic::Ordering::Relaxed);
             let player_count = players.count();
