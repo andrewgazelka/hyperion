@@ -1724,6 +1724,7 @@ dependencies = [
  "flecs_ecs",
  "hyperion",
  "nom",
+ "serde_json",
  "tokio",
  "tracing",
  "tracing-subscriber",
