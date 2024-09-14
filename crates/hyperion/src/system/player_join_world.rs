@@ -32,7 +32,7 @@ use valence_text::IntoText;
 
 use crate::{
     component::{
-        blocks::MinecraftWorld, command::get_command_packet, InGameName, Pose, Uuid,
+        blocks::MinecraftWorld, command::get_command_packet, InGameName, Position, Uuid,
         PLAYER_SPAWN_POSITION,
     },
     config::CONFIG,
@@ -55,12 +55,12 @@ pub fn player_join_world(
     uuid: uuid::Uuid,
     name: &str,
     packets: NetworkStreamRef,
-    pose: &Pose,
+    pose: &Position,
     world: &WorldRef<'_>,
     skin: &PlayerSkin,
     system_id: SystemId,
     root_command: Entity,
-    query: &Query<(&Uuid, &InGameName, &Pose, &PlayerSkin)>,
+    query: &Query<(&Uuid, &InGameName, &Position, &PlayerSkin)>,
 ) {
     static CACHED_DATA: once_cell::sync::OnceCell<bytes::Bytes> = once_cell::sync::OnceCell::new();
 
@@ -571,7 +571,7 @@ pub fn spawn_entity_packet(
     id: Entity,
     kind: EntityKind,
     uuid: Uuid,
-    pose: &Pose,
+    pose: &Position,
 ) -> play::EntitySpawnS2c {
     info!("spawning entity");
 

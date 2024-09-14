@@ -138,7 +138,7 @@ pub struct Hyperion;
 /// In flecs components are often registered lazily.
 /// However, they need to be registered before they are used in a multithreaded environment.
 pub fn register_components(world: &World) {
-    world.component::<component::Pose>();
+    world.component::<component::Position>();
     world.component::<component::Player>();
     world.component::<component::InGameName>();
     world.component::<component::AiTargetable>();
@@ -150,6 +150,7 @@ pub fn register_components(world: &World) {
     world.component::<component::EntityReaction>();
     world.component::<component::Play>();
     world.component::<component::ConfirmBlockSequences>();
+    world.component::<component::metadata::Metadata>();
 
     world.component::<event::Events>();
 

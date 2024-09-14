@@ -34,8 +34,9 @@ use crate::{
     component::{
         blocks::{chunk::PendingChanges, MinecraftWorld},
         inventory::PlayerInventory,
+        metadata::Metadata,
         AiTargetable, ChunkPosition, Comms, ConfirmBlockSequences, EntityReaction, Health,
-        ImmuneStatus, InGameName, PacketState, Pose, Uuid, PLAYER_SPAWN_POSITION,
+        ImmuneStatus, InGameName, PacketState, Position, Uuid, PLAYER_SPAWN_POSITION,
     },
     event::{
         sync::{GlobalEventHandlers, PlayerJoinServer},
@@ -86,6 +87,7 @@ pub fn player_connect_disconnect(world: &World, shared: Arc<Mutex<ReceiveStateIn
                 .set(PlayerInventory::default())
                 .set(ConfirmBlockSequences::default())
                 .set(PacketState::Handshake)
+                .set(Metadata::default())
                 .set(PacketDecoder::default())
                 .add::<component::Player>();
 
@@ -200,7 +202,7 @@ pub fn remove_player(world: &World) {
 
 #[allow(clippy::too_many_arguments, reason = "todo")]
 pub fn recv_data(world: &World, registry: &mut SystemRegistry) {
-    let query = query!(world, &Uuid, &InGameName, &Pose).build();
+    let query = query!(world, &Uuid, &InGameName, &Position).build();
 
     let system_id = registry.register();
 
@@ -217,9 +219,10 @@ pub fn recv_data(world: &World, registry: &mut SystemRegistry) {
         &mut PacketState,
         &NetworkStreamRef,
         &Events($),
-        ?&mut Pose,
+        ?&mut Position,
         &mut ConfirmBlockSequences,
         &mut PlayerInventory,
+        &mut Metadata,
     )
     .kind::<OnUpdate>()
     .write::<PendingChanges>()
@@ -241,6 +244,7 @@ pub fn recv_data(world: &World, registry: &mut SystemRegistry) {
             mut pose,
             confirm_block_sequences,
             inventory,
+            metadata,
         )| {
             let world = entity.world();
 
@@ -302,6 +306,7 @@ pub fn recv_data(world: &World, registry: &mut SystemRegistry) {
                                 system_id,
                                 confirm_block_sequences,
                                 inventory,
+                                metadata,
                             };
 
                             // trace_span!("ingress", ign = name).in_scope(|| {
@@ -355,7 +360,7 @@ fn process_login(
     entity: &EntityView<'_>,
     system_id: SystemId,
     handlers: &GlobalEventHandlers,
-    query: &Query<(&Uuid, &InGameName, &Pose)>,
+    query: &Query<(&Uuid, &InGameName, &Position)>,
 ) -> anyhow::Result<()> {
     static UUIDS: once_cell::sync::Lazy<Mutex<Vec<uuid::Uuid>>> =
         once_cell::sync::Lazy::new(|| {
@@ -395,7 +400,7 @@ fn process_login(
 
     decoder.set_compression(global.shared.compression_threshold);
 
-    let pose = Pose::player(PLAYER_SPAWN_POSITION);
+    let pose = Position::player(PLAYER_SPAWN_POSITION);
     let username = Box::from(username);
 
     let uuid = UUIDS
@@ -454,7 +459,7 @@ fn process_login(
         .set(ImmuneStatus::default())
         .set(Uuid::from(uuid))
         .set(Health::default())
-        .set(Pose::player(PLAYER_SPAWN_POSITION))
+        .set(Position::player(PLAYER_SPAWN_POSITION))
         .set(ChunkSendQueue::default())
         .set(ChunkPosition::null())
         .set(EntityReaction::default());

@@ -13,6 +13,8 @@ pub mod blocks;
 pub mod command;
 pub mod inventory;
 
+pub mod metadata;
+
 /// Communicates with the proxy server.
 #[derive(Component, Deref, DerefMut, From)]
 pub struct EgressComm {
@@ -141,7 +143,7 @@ pub struct AiTargetable;
 
 /// The full pose of an entity. This is used for both [`Player`] and [`Npc`].
 #[derive(Component, Copy, Clone, Debug, Serialize, Deserialize)]
-pub struct Pose {
+pub struct Position {
     /// The (x, y, z) position of the entity.
     /// Note we are using [`Vec3`] instead of [`glam::DVec3`] because *cache locality* is important.
     /// However, the Notchian server uses double precision floating point numbers for the position.
@@ -157,7 +159,7 @@ pub struct Pose {
     pub bounding: Aabb,
 }
 
-impl Pose {
+impl Position {
     #[must_use]
     pub fn sound_position(&self) -> IVec3 {
         let position = self.position * 8.0;
@@ -165,7 +167,7 @@ impl Pose {
     }
 }
 
-impl Display for Pose {
+impl Display for Position {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let position = self.position;
         let yaw = self.yaw;
@@ -193,7 +195,7 @@ impl ChunkPosition {
 /// The initial player spawn position. todo: this should not be a constant
 pub const PLAYER_SPAWN_POSITION: Vec3 = Vec3::new(-464.0, 120.0, -60.0);
 
-impl Pose {
+impl Position {
     // todo: possible have separate field for head yaw
     /// The player's head yaw.
     #[must_use]
@@ -201,7 +203,7 @@ impl Pose {
         self.yaw
     }
 
-    /// Create a new [`Pose`] for a player given their position and head yaw.
+    /// Create a new [`Position`] for a player given their position and head yaw.
     #[must_use]
     pub fn player(position: Vec3) -> Self {
         Self {
@@ -234,7 +236,7 @@ impl Pose {
     }
 }
 
-impl Pose {
+impl Position {
     /// Move the pose by the given vector.
     pub fn move_by(&mut self, vec: Vec3) {
         self.position += vec;
@@ -257,7 +259,7 @@ impl Pose {
 ///   we need to be able to make sure the bounding boxes are immutable (unless we have something like a
 ///   [`std::sync::Arc`] or [`std::sync::RwLock`], but this is not efficient).
 /// - Therefore, we have an [`EntityReaction`] component which is used to store the reaction of an entity to collisions.
-/// - Later we can apply the reaction to the entity's [`Pose`] to move the entity.
+/// - Later we can apply the reaction to the entity's [`Position`] to move the entity.
 #[derive(Component, Default, Debug)]
 pub struct EntityReaction {
     /// The velocity of the entity.

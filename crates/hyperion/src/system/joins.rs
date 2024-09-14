@@ -12,7 +12,7 @@ use crate::{
     component::{
         blocks::MinecraftWorld,
         command::{Command, ROOT_COMMAND},
-        Comms, InGameName, Pose, Uuid,
+        Comms, InGameName, Position, Uuid,
     },
     net::{Compose, NetworkStreamRef},
     runtime::AsyncRuntime,
@@ -35,7 +35,7 @@ unsafe impl<T: QueryTuple + Send> Send for SendableQuery<T> {}
 unsafe impl<T: QueryTuple> Sync for SendableQuery<T> {}
 
 pub fn joins(world: &'static World, registry: &mut SystemRegistry) {
-    let query = world.new_query::<(&Uuid, &InGameName, &Pose, &PlayerSkin)>();
+    let query = world.new_query::<(&Uuid, &InGameName, &Position, &PlayerSkin)>();
 
     let query = SendableQuery(query);
 
@@ -98,7 +98,7 @@ pub fn joins(world: &'static World, registry: &mut SystemRegistry) {
 
             entity.add::<component::Play>();
 
-            entity.get::<(&Uuid, &InGameName, &Pose, &NetworkStreamRef)>(
+            entity.get::<(&Uuid, &InGameName, &Position, &NetworkStreamRef)>(
                 |(uuid, name, pose, &stream_id)| {
                     let query = &query;
                     let query = &query.0;

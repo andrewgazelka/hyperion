@@ -211,7 +211,7 @@ impl Default for Section {
     }
 }
 
-#[allow(clippy::cast_sign_loss, clippy::cast_lossless)]
+#[allow(clippy::cast_sign_loss, clippy::cast_lossless, clippy::too_many_lines)]
 pub fn parse_chunk(
     mut nbt: Compound,
     biome_map: &BTreeMap<Ident<String>, BiomeId>, // TODO: replace with biome registry arg.

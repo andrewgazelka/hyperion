@@ -17,7 +17,7 @@ use valence_text::IntoText;
 use crate::{
     component::{
         blocks::{GetChunkBytes, MinecraftWorld},
-        ChunkPosition, Play, Pose,
+        ChunkPosition, Play, Position,
     },
     config::CONFIG,
     net::{Compose, NetworkStreamRef},
@@ -54,7 +54,7 @@ pub fn generate_chunk_changes(world: &World, registry: &mut SystemRegistry) {
         .system_named::<(
             &Compose,
             &mut ChunkPosition,
-            &Pose,
+            &Position,
             &NetworkStreamRef,
             &mut ChunkSendQueue,
         )>("generate_chunk_changes")

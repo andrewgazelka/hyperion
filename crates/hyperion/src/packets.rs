@@ -23,7 +23,8 @@ use crate::{
             MinecraftWorld,
         },
         inventory::Inventory,
-        ConfirmBlockSequences, Pose,
+        metadata::{Metadata, Pose},
+        ConfirmBlockSequences, Position,
     },
     event,
     event::{Events, Posture},
@@ -86,7 +87,7 @@ fn change_position_or_correct_client(query: &mut PacketSwitchQuery<'_>, proposed
 /// Returns true if the position was changed, false if it was not.
 fn try_change_position(
     proposed: Vec3,
-    pose: &mut Pose,
+    pose: &mut Position,
     blocks: &MinecraftWorld,
     world: &World,
 ) -> bool {
@@ -133,7 +134,7 @@ fn try_change_position(
     true
 }
 
-fn look_and_on_ground(mut data: &[u8], full_entity_pose: &mut Pose) -> anyhow::Result<()> {
+fn look_and_on_ground(mut data: &[u8], full_entity_pose: &mut Position) -> anyhow::Result<()> {
     let pkt = play::LookAndOnGroundC2s::decode(&mut data)?;
 
     // debug!("look and on ground packet: {:?}", pkt);
@@ -241,13 +242,14 @@ pub struct PacketSwitchQuery<'a> {
     pub view: EntityView<'a>,
     pub compose: &'a Compose,
     pub io_ref: NetworkStreamRef,
-    pub pose: &'a mut Pose,
+    pub pose: &'a mut Position,
     pub events: &'a Events,
     pub world: &'a World,
     pub blocks: &'a MinecraftWorld,
     pub confirm_block_sequences: &'a mut ConfirmBlockSequences,
     pub system_id: SystemId,
     pub inventory: &'a mut Inventory,
+    pub metadata: &'a mut Metadata,
 }
 
 // i.e., shooting a bow
@@ -260,22 +262,16 @@ fn player_action(mut data: &[u8], _query: &PacketSwitchQuery<'_>) -> anyhow::Res
 }
 
 // for sneaking
-fn client_command(mut data: &[u8], query: &PacketSwitchQuery<'_>) -> anyhow::Result<()> {
+fn client_command(mut data: &[u8], query: &mut PacketSwitchQuery<'_>) -> anyhow::Result<()> {
     let packet = play::ClientCommandC2s::decode(&mut data)?;
 
     match packet.action {
-        ClientCommand::StartSneaking => query.events.push(
-            event::PostureUpdate {
-                state: Posture::Sneaking,
-            },
-            query.world,
-        ),
-        ClientCommand::StopSneaking => query.events.push(
-            event::PostureUpdate {
-                state: Posture::Standing,
-            },
-            query.world,
-        ),
+        ClientCommand::StartSneaking => {
+            query.metadata.pose(Pose::Sneaking);
+        }
+        ClientCommand::StopSneaking => {
+            query.metadata.pose(Pose::Standing);
+        }
         _ => {}
     }
 
