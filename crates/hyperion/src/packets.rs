@@ -13,11 +13,13 @@ use valence_protocol::{
         self, client_command_c2s::ClientCommand, player_interact_entity_c2s::EntityInteraction,
         player_position_look_s2c::PlayerPositionLookFlags,
     },
-    Decode, Packet, VarInt,
+    Decode, Hand, Packet, VarInt,
 };
 
 use crate::{
     component::{
+        animation,
+        animation::ActiveAnimation,
         blocks::{
             chunk::{LoadedChunk, START_Y},
             MinecraftWorld,
@@ -193,14 +195,17 @@ fn chat_command(mut data: &[u8], query: &PacketSwitchQuery<'_>) -> anyhow::Resul
     Ok(())
 }
 
-fn hand_swing(mut data: &[u8], query: &PacketSwitchQuery<'_>) -> anyhow::Result<()> {
+fn hand_swing(mut data: &[u8], query: &mut PacketSwitchQuery<'_>) -> anyhow::Result<()> {
     let packet = play::HandSwingC2s::decode(&mut data)?;
 
-    let packet = packet.hand;
-
-    let event = event::SwingArm { hand: packet };
-
-    query.events.push(event, query.world);
+    match packet.hand {
+        Hand::Main => {
+            query.animation.push(animation::Kind::SwingMainArm);
+        }
+        Hand::Off => {
+            query.animation.push(animation::Kind::SwingOffHand);
+        }
+    }
 
     Ok(())
 }
@@ -250,6 +255,7 @@ pub struct PacketSwitchQuery<'a> {
     pub system_id: SystemId,
     pub inventory: &'a mut Inventory,
     pub metadata: &'a mut Metadata,
+    pub animation: &'a mut ActiveAnimation,
 }
 
 // i.e., shooting a bow
@@ -269,10 +275,12 @@ fn client_command(mut data: &[u8], query: &mut PacketSwitchQuery<'_>) -> anyhow:
         ClientCommand::StartSneaking => {
             query.metadata.pose(Pose::Sneaking);
         }
-        ClientCommand::StopSneaking => {
+        ClientCommand::StopSneaking | ClientCommand::LeaveBed => {
             query.metadata.pose(Pose::Standing);
         }
-        _ => {}
+        _ => {
+            // todo
+        }
     }
 
     Ok(())
@@ -423,7 +431,8 @@ pub fn packet_switch(raw: &PacketFrame, query: &mut PacketSwitchQuery<'_>) -> an
         play::LookAndOnGroundC2s::ID => look_and_on_ground(data, query.pose)?,
         play::PlayerInteractBlockC2s::ID => player_interact_block(data, query)?,
         // play::UpdatePlayerAbilitiesC2s::ID => update_player_abilities(data)?,
-        // play::UpdateSelectedSlotC2s::ID => update_selected_slot(data, world, query.id)?,
+        // play::UpdateSelectedSlotC2s::ID => update_selected_slot(data,
+        // world, query.id)?,
         play::PlayerInteractEntityC2s::ID => {
             player_interact_entity(data, query)?;
         }
@@ -449,7 +458,8 @@ pub fn packet_switch(raw: &PacketFrame, query: &mut PacketSwitchQuery<'_>) -> an
 //
 //     let play::ClickSlotC2s {
 //         window_id,
-//         // todo what is that for? something important?
+//         // todo what is that for?
+// something important?
 //         slot_idx,
 //         button,
 //         mode,

@@ -40,7 +40,6 @@ pub enum GetChunkBytes {
     Loading,
 }
 
-
 /// Accessor of blocks.
 #[derive(Component)]
 pub struct MinecraftWorld {

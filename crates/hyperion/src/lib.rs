@@ -151,6 +151,7 @@ pub fn register_components(world: &World) {
     world.component::<component::Play>();
     world.component::<component::ConfirmBlockSequences>();
     world.component::<component::metadata::Metadata>();
+    world.component::<component::animation::ActiveAnimation>();
 
     world.component::<event::Events>();
 

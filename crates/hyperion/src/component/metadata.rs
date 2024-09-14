@@ -1,4 +1,5 @@
 use std::ops::Deref;
+
 use bytes::BufMut;
 use flecs_ecs::macros::Component;
 use valence_protocol::{Encode, VarInt};
@@ -36,7 +37,6 @@ pub enum Pose {
     Emerging,
     Digging,
 }
-
 
 impl Metadata {
     fn index(&mut self, index: u8) {
@@ -76,12 +76,12 @@ impl<'a> Deref for MetadataView<'a> {
     type Target = [u8];
 
     fn deref(&self) -> &Self::Target {
-        &self.0.0
+        &self.0 .0
     }
 }
 
 impl<'a> Drop for MetadataView<'a> {
     fn drop(&mut self) {
-        self.0.0.clear();
+        self.0 .0.clear();
     }
 }

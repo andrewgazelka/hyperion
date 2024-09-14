@@ -9,10 +9,10 @@ use valence_protocol::BlockPos;
 
 use crate::{global::Global, util::player_skin::PlayerSkin};
 
+pub mod animation;
 pub mod blocks;
 pub mod command;
 pub mod inventory;
-
 pub mod metadata;
 
 /// Communicates with the proxy server.

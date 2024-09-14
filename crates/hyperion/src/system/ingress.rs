@@ -32,6 +32,7 @@ use valence_protocol::{
 use crate::{
     component,
     component::{
+        animation::ActiveAnimation,
         blocks::{chunk::PendingChanges, MinecraftWorld},
         inventory::PlayerInventory,
         metadata::Metadata,
@@ -88,6 +89,7 @@ pub fn player_connect_disconnect(world: &World, shared: Arc<Mutex<ReceiveStateIn
                 .set(ConfirmBlockSequences::default())
                 .set(PacketState::Handshake)
                 .set(Metadata::default())
+                .set(ActiveAnimation::NONE)
                 .set(PacketDecoder::default())
                 .add::<component::Player>();
 
@@ -223,6 +225,7 @@ pub fn recv_data(world: &World, registry: &mut SystemRegistry) {
         &mut ConfirmBlockSequences,
         &mut PlayerInventory,
         &mut Metadata,
+        &mut ActiveAnimation,
     )
     .kind::<OnUpdate>()
     .write::<PendingChanges>()
@@ -245,6 +248,7 @@ pub fn recv_data(world: &World, registry: &mut SystemRegistry) {
             confirm_block_sequences,
             inventory,
             metadata,
+            animation,
         )| {
             let world = entity.world();
 
@@ -307,6 +311,7 @@ pub fn recv_data(world: &World, registry: &mut SystemRegistry) {
                                 confirm_block_sequences,
                                 inventory,
                                 metadata,
+                                animation,
                             };
 
                             // trace_span!("ingress", ign = name).in_scope(|| {
