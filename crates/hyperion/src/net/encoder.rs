@@ -129,6 +129,9 @@ impl PacketEncoder {
                     let scratch = scratch.spare_capacity_mut();
                     let scratch = unsafe { MaybeUninit::slice_assume_init_mut(scratch) };
 
+                    let len = data_slice.len();
+                    let span = tracing::trace_span!("zlib_compress", bytes = len);
+                    let _enter = span.enter();
                     compressor.zlib_compress(data_slice, scratch)?
                 };
 

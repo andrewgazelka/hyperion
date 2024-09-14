@@ -1,61 +1,45 @@
-//! Constructs for connecting and working with a `PostgreSQL` database.
+//! Constructs for connecting and working with a `Heed` database.
 
-use derive_more::Deref;
+use std::path::Path;
+
+use byteorder::NativeEndian;
 use flecs_ecs::macros::Component;
-use serde::{Deserialize, Serialize};
-use sqlx::{postgres::PgPoolOptions, Pool, Postgres};
-use tracing::info;
+use heed::{types, Database, Env, EnvOpenOptions};
 use uuid::Uuid;
 
 use crate::util::player_skin::PlayerSkin;
 
-/// The database row for player skins
-#[derive(Serialize, Deserialize, Debug, sqlx::FromRow)]
-pub struct SkinRow {
-    /// The UUID of the player.
-    pub uuid: Uuid,
-    /// The skin of the player.
-    pub skin: serde_json::Value, // Storing PlayerSkin as JSON
-}
-
-/// A wrapper around a `PostgreSQL` connection pool
-#[derive(Component, Debug, Clone, Deref)]
+/// A wrapper around a `Heed` database
+#[derive(Component, Debug, Clone)]
 pub struct Db {
-    inner: Pool<Postgres>,
+    env: Env,
+
+    // mapping of UUID to Skin
+    skins: Database<types::U128<NativeEndian>, types::SerdeBincode<PlayerSkin>>,
 }
 
 impl Db {
-    /// Creates a new [`Db`] with the given connection string.
-    ///
-    /// ```no_run
-    /// use hyperion::util::db::Db;
-    ///
-    /// #[tokio::main]
-    /// async fn main() -> anyhow::Result<()> {
-    ///     let db = Db::new("postgres://username:password@localhost/hyperion").await?;
-    ///     Ok(())
-    /// }
-    /// ```
-    pub async fn new(connection_str: &str) -> anyhow::Result<Self> {
-        let pool = PgPoolOptions::new()
-            .max_connections(5)
-            .connect(connection_str)
-            .await?;
+    /// Creates a new [`Db`]
+    pub fn new() -> anyhow::Result<Self> {
+        let path = Path::new("db").join("heed.mdb");
 
-        // Initialize the database
-        sqlx::query!(
-            // language=postgresql
-            r#"
-            CREATE TABLE IF NOT EXISTS player_skins (
-                uuid UUID PRIMARY KEY,
-                skin JSONB NOT NULL
-            )
-            "#
-        )
-        .execute(&pool)
-        .await?;
+        std::fs::create_dir_all(&path)?;
 
-        Ok(Self { inner: pool })
+        let env = unsafe {
+            EnvOpenOptions::new()
+                .map_size(10 * 1024 * 1024) // 10MB
+                .max_dbs(1)
+                .open(&path)?
+        };
+        // We open the default unnamed database
+        let inner = {
+            let mut wtxn = env.write_txn()?;
+            let db = env.create_database(&mut wtxn, Some("uuid-to-skins"))?;
+            wtxn.commit()?;
+            db
+        };
+
+        Ok(Self { skins: inner, env })
     }
 }
 
@@ -73,35 +57,28 @@ impl SkinHandler {
     }
 
     /// Finds a [`PlayerSkin`] by its UUID.
-    pub async fn find(&self, uuid: Uuid) -> anyhow::Result<Option<PlayerSkin>> {
-        let result = sqlx::query_as!(
-            SkinRow,
-            // language=postgresql
-            r#"SELECT uuid, skin as "skin: serde_json::Value" FROM player_skins WHERE uuid = $1"#,
-            uuid
-        )
-        .fetch_optional(&*self.db)
-        .await?;
+    pub fn find(&self, uuid: Uuid) -> anyhow::Result<Option<PlayerSkin>> {
+        // We open a read transaction to check if those values are now available
 
-        Ok(result.map(|row| serde_json::from_value(row.skin).unwrap()))
+        let uuid = uuid.as_u128();
+
+        let rtxn = self.db.env.read_txn()?;
+        let skin = self.db.skins.get(&rtxn, &uuid);
+
+        let Some(skin) = skin? else {
+            return Ok(None);
+        };
+
+        Ok(Some(skin))
     }
 
     /// Inserts a [`PlayerSkin`] into the database.
-    pub async fn insert(&self, uuid: Uuid, skin: PlayerSkin) -> anyhow::Result<()> {
-        info!("inserting skin for {uuid}");
+    pub fn insert(&self, uuid: Uuid, skin: PlayerSkin) -> anyhow::Result<()> {
+        let uuid = uuid.as_u128();
 
-        sqlx::query!(
-            // language=postgresql
-            r#"
-            INSERT INTO player_skins (uuid, skin)
-            VALUES ($1, $2)
-            ON CONFLICT (uuid) DO UPDATE SET skin = EXCLUDED.skin
-            "#,
-            uuid,
-            serde_json::to_value(skin)? as _
-        )
-        .execute(&*self.db)
-        .await?;
+        let mut wtxn = self.db.env.write_txn()?;
+        self.db.skins.put(&mut wtxn, &uuid, &skin)?;
+        wtxn.commit()?;
 
         Ok(())
     }

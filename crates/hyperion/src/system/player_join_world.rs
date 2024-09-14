@@ -113,36 +113,39 @@ pub fn player_join_world(
 
     info!("sending skins for {count} players");
 
-    query.iter_stage(world).each(|(uuid, name, _, skin)| {
-        info!("sending skin for {name}");
-        // todo: in future, do not clone
+    {
+        let scope = tracing::trace_span!("generating_skins");
+        let _enter = scope.enter();
+        query.iter_stage(world).each(|(uuid, name, _, skin)| {
+            // todo: in future, do not clone
 
-        let PlayerSkin {
-            textures: value,
-            signature,
-        } = skin.clone();
+            let PlayerSkin {
+                textures: value,
+                signature,
+            } = skin.clone();
 
-        let property = valence_protocol::profile::Property {
-            name: "textures".to_string(),
-            value,
-            signature: Some(signature),
-        };
+            let property = valence_protocol::profile::Property {
+                name: "textures".to_string(),
+                value,
+                signature: Some(signature),
+            };
 
-        let entry = PlayerListEntry {
-            player_uuid: uuid.0,
-            username: name.to_string().into(),
-            // todo: eliminate alloc
-            properties: Cow::Owned(vec![property]),
-            chat_data: None,
-            listed: true,
-            ping: 20,
-            game_mode: GameMode::Creative,
-            display_name: Some(name.to_string().into_cow_text()),
-        };
+            let entry = PlayerListEntry {
+                player_uuid: uuid.0,
+                username: name.to_string().into(),
+                // todo: eliminate alloc
+                properties: Cow::Owned(vec![]),
+                chat_data: None,
+                listed: true,
+                ping: 20,
+                game_mode: GameMode::Creative,
+                display_name: Some(name.to_string().into_cow_text()),
+            };
 
-        entries.push(entry);
-        all_player_names.push(name.to_string());
-    });
+            entries.push(entry);
+            all_player_names.push(name.to_string());
+        });
+    }
 
     let all_player_names = all_player_names.iter().map(String::as_str).collect();
 
@@ -151,42 +154,51 @@ pub fn player_join_world(
         .with_update_listed(true)
         .with_update_display_name(true);
 
-    compose
-        .unicast(
-            &PlayerListS2c {
-                actions,
-                entries: Cow::Owned(entries),
-            },
-            packets,
-            system_id,
-            world,
-        )
-        .unwrap();
+    {
+        let scope = tracing::trace_span!("unicasting_player_list");
+        let _enter = scope.enter();
+        compose
+            .unicast(
+                &PlayerListS2c {
+                    actions,
+                    entries: Cow::Owned(entries),
+                },
+                packets,
+                system_id,
+                world,
+            )
+            .unwrap();
+    }
 
-    query
-        .iter_stage(world)
-        .each_iter(|it, idx, (uuid, _, pose, _)| {
-            let query_entity = it.entity(idx);
+    {
+        let scope = tracing::trace_span!("sending_player_spawns");
+        let _enter = scope.enter();
 
-            if entity.id() == query_entity.id() {
-                return;
-            }
+        query
+            .iter_stage(world)
+            .each_iter(|it, idx, (uuid, _, pose, _)| {
+                let query_entity = it.entity(idx);
 
-            let pkt = play::PlayerSpawnS2c {
-                entity_id: VarInt(query_entity.id().0 as i32),
-                player_uuid: uuid.0,
-                position: pose.position.as_dvec3(),
-                yaw: ByteAngle::from_degrees(pose.yaw),
-                pitch: ByteAngle::from_degrees(pose.pitch),
-            };
+                if entity.id() == query_entity.id() {
+                    return;
+                }
 
-            compose.unicast(&pkt, packets, system_id, world).unwrap();
+                let pkt = play::PlayerSpawnS2c {
+                    entity_id: VarInt(query_entity.id().0 as i32),
+                    player_uuid: uuid.0,
+                    position: pose.position.as_dvec3(),
+                    yaw: ByteAngle::from_degrees(pose.yaw),
+                    pitch: ByteAngle::from_degrees(pose.pitch),
+                };
 
-            let show_all = show_all(query_entity.id().0 as i32);
-            compose
-                .unicast(show_all.borrow_packet(), packets, system_id, world)
-                .unwrap();
-        });
+                compose.unicast(&pkt, packets, system_id, world).unwrap();
+
+                let show_all = show_all(query_entity.id().0 as i32);
+                compose
+                    .unicast(show_all.borrow_packet(), packets, system_id, world)
+                    .unwrap();
+            });
+    }
 
     let PlayerSkin {
         textures,

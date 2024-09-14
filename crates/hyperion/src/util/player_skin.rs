@@ -3,6 +3,7 @@ use anyhow::Context;
 use base64::{engine::general_purpose, Engine as _};
 use flecs_ecs::macros::Component;
 use serde::{Deserialize, Serialize};
+use tracing::info;
 
 use crate::util::{db::SkinHandler, mojang::MojangClient};
 
@@ -37,9 +38,12 @@ impl PlayerSkin {
         mojang: &MojangClient,
         skins: &SkinHandler,
     ) -> anyhow::Result<Option<Self>> {
-        if let Some(skin) = skins.find(uuid).await? {
+        if let Some(skin) = skins.find(uuid)? {
             return Ok(Some(skin));
         }
+
+        println!("cache miss for {uuid}");
+
         let json_object = mojang.data_from_uuid(&uuid).await?;
         let properties_array = json_object["properties"]
             .as_array()
@@ -70,7 +74,7 @@ impl PlayerSkin {
                 textures: textures.to_string(),
                 signature: signature.to_string(),
             };
-            skins.insert(uuid, res.clone()).await?;
+            skins.insert(uuid, res.clone())?;
             return Ok(Some(res));
         }
         Ok(None)

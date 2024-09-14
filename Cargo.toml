@@ -44,6 +44,7 @@ bumpalo = "3.16"
 bvh-region = { path = "crates/bvh-region" }
 bytes = "1.6.0"
 clap = { version = "4.5.7", features = ["derive"] }
+compact_str = "0.8.0"
 criterion = "0.5.1"
 derive_more = { version = "1.0.0-beta.7", features = ["display", "from", "deref", "deref_mut" ] }
 dirs-next = "2.0.0"
@@ -53,8 +54,7 @@ flate2 = { version = "1.0.30", default-features = false }
 fxhash = "0.2.1"
 glam = "0.26.0"
 heapless = "0.8.0"
-compact_str = "0.8.0"
-sqlx = { version = "0.8.0", features = ["postgres", "runtime-tokio", "uuid"] }
+heed = "0.20.5"
 hex = "0.4.3"
 itertools = "0.13.0"
 kanal = "0.1.0-pre8"

@@ -27,40 +27,42 @@ sha2.workspace = true
 itertools.workspace = true
 
 # todo: how much will adding "sync" wakers hurt performance?
-uuid = { workspace = true, features = ["v3"] }
-rayon.workspace = true
-libc.workspace = true
-serde = { workspace = true, features = ["derive"] }
-toml.workspace = true
-bvh-region.workspace = true
-glam = { workspace = true, features = ["serde"] }
-once_cell.workspace = true
-no_denormals.workspace = true
-flate2 = { workspace = true, features = ["zlib-ng"] }
-fxhash.workspace = true
-derive_more.workspace = true
-libdeflater.workspace = true
-more-asserts.workspace = true
 #rayon-local = { version = "0.1.0", path = "../rayon-local" }
-dirs-next.workspace = true
-fastrand.workspace = true
-reqwest = { workspace = true, features = ["blocking"] }
-tokio = { workspace = true, features = ["full"] }
-parking_lot.workspace = true
-tar.workspace = true
+base64.workspace = true
 bitfield-struct.workspace = true
 bitvec.workspace = true
-hyperion-proto.workspace = true
-prost.workspace = true
-flecs_ecs.workspace = true
-heapless.workspace = true
-base64.workspace = true
-kanal.workspace = true
-ouroboros.workspace = true
-sqlx.workspace = true
+bvh-region.workspace = true
 compact_str.workspace = true
-snafu = "0.8.4"
+derive_more.workspace = true
+dirs-next.workspace = true
+fastrand.workspace = true
+flate2 = { workspace = true, features = ["zlib-ng"] }
+flecs_ecs.workspace = true
+fxhash.workspace = true
+glam = { workspace = true, features = ["serde"] }
+heapless.workspace = true
+heed.workspace = true
+hyperion-proto.workspace = true
+kanal.workspace = true
+libc.workspace = true
+libdeflater.workspace = true
 memmap2 = "0.9.4"
+more-asserts.workspace = true
+no_denormals.workspace = true
+once_cell.workspace = true
+ouroboros.workspace = true
+parking_lot.workspace = true
+prost.workspace = true
+rayon.workspace = true
+reqwest = { workspace = true, features = ["blocking"] }
+serde = { workspace = true, features = ["derive"] }
+snafu = "0.8.4"
+tar.workspace = true
+tokio = { workspace = true, features = ["full"] }
+toml.workspace = true
+uuid = { workspace = true, features = ["v3"] }
+byteorder = "1.5.0"
+
 
 [dev-dependencies]
 divan.workspace = true

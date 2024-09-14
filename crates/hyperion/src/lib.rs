@@ -247,7 +247,7 @@ impl Hyperion {
 
         let shared = Arc::new(global::Shared {
             compression_threshold: CompressionThreshold(256),
-            compression_level: CompressionLvl::new(6)
+            compression_level: CompressionLvl::new(2)
                 .map_err(|_| anyhow::anyhow!("failed to create compression level"))?,
         });
 
@@ -275,12 +275,12 @@ impl Hyperion {
 
         let runtime = AsyncRuntime::default();
 
-        let url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
-
         world.set(GlobalEventHandlers::default());
 
-        let db = runtime.block_on(Db::new(&url))?;
+        info!("initializing database");
+        let db = Db::new()?;
         let skins = db::SkinHandler::new(db.clone());
+        info!("database initialized");
 
         world.set(db);
         world.set(skins);

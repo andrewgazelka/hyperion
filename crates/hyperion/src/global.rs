@@ -17,15 +17,6 @@ pub struct Shared {
     pub compression_level: CompressionLvl,
 }
 
-impl Default for Shared {
-    fn default() -> Self {
-        Self {
-            compression_threshold: CompressionThreshold(256),
-            compression_level: CompressionLvl::default(),
-        }
-    }
-}
-
 /// See [`crate::global`].
 #[derive(Component)]
 pub struct Global {
@@ -61,12 +52,5 @@ impl Global {
             ms_last_tick: 0.0,
             player_count: AtomicUsize::new(0),
         }
-    }
-}
-
-impl Default for Global {
-    fn default() -> Self {
-        let shared = Shared::default();
-        Self::new(Arc::new(shared))
     }
 }

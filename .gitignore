@@ -19,3 +19,4 @@ perf.data
 /extractor/classes
 /extractor/run
 /extractor/bin
+db/
