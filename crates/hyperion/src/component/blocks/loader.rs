@@ -207,16 +207,18 @@ fn encode_chunk_packet(
     let map = map.into_iter().map(i64::try_from).try_collect()?;
 
     // convert section_count + 2 0b1s into `u64` array
-    let mut bits = BitStorage::new(1, section_count + 2, None).unwrap();
+    // todo: this is jank let's do the non jank way so we can get smaller packet sizes
+    let mut all_ones = BitStorage::new(1, section_count + 2, None).unwrap();
 
     for i in 0..section_count + 2 {
-        bits.set(i, 1);
+        all_ones.set(i, 1);
     }
 
     // 2048 bytes per section -> long count = 2048 / 8 = 256
-    let empty_sky_light = FixedArray([0x00_u8; 2048]);
+    let empty_light = FixedArray([0x00_u8; 2048]);
 
-    let mut sky_light_arrays = vec![empty_sky_light];
+    let mut sky_light_arrays = vec![empty_light];
+    let mut block_light_arrays = vec![empty_light];
 
     let mut section_bytes = Vec::new();
 
@@ -232,14 +234,22 @@ fn encode_chunk_packet(
 
         sky_light_arrays.push(sky_light);
 
+        let block_light = section.block_light;
+        let block_light = FixedArray(block_light);
+
+        block_light_arrays.push(block_light);
+
         write_block_states(&section.block_states, &mut section_bytes).unwrap();
         write_biomes(&section.biomes, &mut section_bytes).unwrap();
     }
 
     // todo: Maybe we want the top one to actually be all Fs because I think this is just an edge case for how things are rendered.
-    sky_light_arrays.push(empty_sky_light);
+    sky_light_arrays.push(empty_light);
+    block_light_arrays.push(empty_light);
 
     debug_assert_eq!(sky_light_arrays.len(), section_count + 2);
+
+    let ones_data = all_ones.into_data();
 
     let pkt = play::ChunkDataS2c {
         pos: ChunkPos::new(i32::from(location.x), i32::from(location.y)),
@@ -251,12 +261,14 @@ fn encode_chunk_packet(
         blocks_and_biomes: &section_bytes,
         block_entities: Cow::Borrowed(&[]),
 
-        sky_light_mask: Cow::Owned(bits.into_data()),
-        block_light_mask: Cow::Borrowed(&[]),
+        sky_light_mask: Cow::Borrowed(&ones_data),
+        block_light_mask: Cow::Borrowed(&ones_data),
+
         empty_sky_light_mask: Cow::Borrowed(&[]),
         empty_block_light_mask: Cow::Borrowed(&[]),
+
         sky_light_arrays: Cow::Owned(sky_light_arrays),
-        block_light_arrays: Cow::Borrowed(&[]),
+        block_light_arrays: Cow::Owned(block_light_arrays),
     };
 
     let buf = &mut state.bytes;
