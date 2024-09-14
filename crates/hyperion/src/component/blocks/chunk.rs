@@ -14,7 +14,7 @@ use glam::I16Vec2;
 use tracing::trace;
 use valence_generated::block::BlockState;
 use valence_protocol::{packets::play, BlockPos};
-use valence_server::layer::chunk::{Chunk, UnloadedChunk};
+use valence_server::layer::chunk::Chunk;
 
 use crate::{
     component::blocks::{loader::parse::UnloadedChunkWithMetadata, Block, MinecraftWorld},

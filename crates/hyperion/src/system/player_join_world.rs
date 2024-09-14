@@ -124,7 +124,7 @@ pub fn player_join_world(
                 signature,
             } = skin.clone();
 
-            let property = valence_protocol::profile::Property {
+            let _property = valence_protocol::profile::Property {
                 name: "textures".to_string(),
                 value,
                 signature: Some(signature),

@@ -1,6 +1,5 @@
 use std::ops::Deref;
 
-use bytes::BufMut;
 use flecs_ecs::macros::Component;
 use valence_protocol::{Encode, VarInt};
 

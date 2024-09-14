@@ -7,14 +7,8 @@ use valence_nbt::{Compound, List, Value};
 use valence_protocol::Ident;
 use valence_registry::biome::BiomeId;
 use valence_server::layer::chunk::{
-    check_biome_oob, check_block_oob, check_section_oob, BiomeContainer, BlockStateContainer,
-    Chunk, UnloadedChunk,
+    check_biome_oob, check_block_oob, check_section_oob, BiomeContainer, BlockStateContainer, Chunk,
 };
-
-pub struct ParsedChunk {
-    pub chunk: UnloadedChunk,
-    pub timestamp: u32,
-}
 
 #[derive(Debug, Error)]
 #[non_exhaustive]

@@ -29,7 +29,7 @@ use crate::{
         ConfirmBlockSequences, Position,
     },
     event,
-    event::{Events, Posture},
+    event::Events,
     net::{Compose, NetworkStreamRef},
     SystemId,
 };

@@ -3,7 +3,6 @@ use anyhow::Context;
 use base64::{engine::general_purpose, Engine as _};
 use flecs_ecs::macros::Component;
 use serde::{Deserialize, Serialize};
-use tracing::info;
 
 use crate::util::{db::SkinHandler, mojang::MojangClient};
 

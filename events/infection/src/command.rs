@@ -1,4 +1,6 @@
-use std::{borrow::Cow, ops::Deref};
+#![expect(clippy::needless_pass_by_value)]
+
+use std::borrow::Cow;
 
 use flecs_ecs::core::{EntityViewGet, QueryBuilderImpl, SystemAPI, TermBuilderImpl, World};
 use hyperion::{
@@ -152,7 +154,7 @@ fn handle_team_command(context: CommandContext) {
         .unwrap();
 }
 
-fn handle_zombie_command(mut context: CommandContext) {
+fn handle_zombie_command(context: CommandContext) {
     static ZOMBIE_PROPERTY: std::sync::LazyLock<valence_protocol::profile::Property> =
         std::sync::LazyLock::new(|| {
             let skin = include_str!("zombie_skin.json");
