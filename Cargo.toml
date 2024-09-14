@@ -46,7 +46,7 @@ bytes = "1.6.0"
 clap = { version = "4.5.7", features = ["derive"] }
 compact_str = "0.8.0"
 criterion = "0.5.1"
-derive_more = { version = "1.0.0-beta.7", features = ["display", "from", "deref", "deref_mut" ] }
+derive_more = { version = "1.0.0-beta.7", features = ["display", "from", "deref", "deref_mut"] }
 dirs-next = "2.0.0"
 divan = "0.1.14"
 fastrand = "2.1.0"
@@ -81,6 +81,7 @@ sha2 = "0.10.8"
 slotmap = "1.0.7"
 tango-bench = "0.5.0"
 tar = "0.4.41"
+thiserror = "1.0.63"
 tokio = "1.38.0"
 toml = "0.8.14"
 tracing = { version = "0.1.40" }

@@ -16,10 +16,14 @@ use valence_server::layer::chunk::{
     bit_width, BiomeContainer, BlockStateContainer, Chunk, UnloadedChunk,
 };
 
+pub mod parse;
+
 use crate::{
     bits::BitStorage,
     chunk::heightmap,
-    component::blocks::{chunk::LoadedChunk, shared::Shared},
+    component::blocks::{
+        chunk::LoadedChunk, loader::parse::UnloadedChunkWithMetadata, shared::Shared,
+    },
     net::encoder::PacketEncoder,
     runtime::AsyncRuntime,
     Scratch,
@@ -140,7 +144,7 @@ impl LaunchManager {
 
 fn empty_chunk(position: I16Vec2) -> LoadedChunk {
     // height: 24
-    let unloaded = UnloadedChunk::with_height(CHUNK_HEIGHT_SPAN);
+    let unloaded = UnloadedChunkWithMetadata::with_height(CHUNK_HEIGHT_SPAN);
 
     let bytes = STATE.with_borrow_mut(|state| {
         encode_chunk_packet(&unloaded, position, state)
@@ -173,7 +177,7 @@ async fn load_chunk(position: I16Vec2, shared: &Shared) -> anyhow::Result<Loaded
             .context("no chunk found")?
     };
 
-    let Ok(chunk) = parse_chunk(raw_chunk.data, &shared.biome_to_id) else {
+    let Ok(chunk) = parse::parse_chunk(raw_chunk.data, &shared.biome_to_id) else {
         bail!("failed to parse chunk {position:?}");
     };
 
@@ -190,7 +194,7 @@ async fn load_chunk(position: I16Vec2, shared: &Shared) -> anyhow::Result<Loaded
 
 // #[instrument(skip_all, level = "trace", fields(location = ?location))]
 fn encode_chunk_packet(
-    chunk: &UnloadedChunk,
+    chunk: &UnloadedChunkWithMetadata,
     location: I16Vec2,
     state: &mut TasksState,
 ) -> anyhow::Result<Option<BytesMut>> {
@@ -210,8 +214,9 @@ fn encode_chunk_packet(
     }
 
     // 2048 bytes per section -> long count = 2048 / 8 = 256
-    let sky_light_array = FixedArray([0xFF_u8; 2048]);
-    let sky_light_arrays = vec![sky_light_array; section_count + 2];
+    let empty_sky_light = FixedArray([0x00_u8; 2048]);
+
+    let mut sky_light_arrays = vec![empty_sky_light];
 
     let mut section_bytes = Vec::new();
 
@@ -220,12 +225,26 @@ fn encode_chunk_packet(
         let non_air_blocks: u16 = 42;
         non_air_blocks.encode(&mut section_bytes).unwrap();
 
+        // todo: how do sky light and block light work differently?
+
+        let sky_light = section.sky_light;
+        let sky_light = FixedArray(sky_light);
+
+        sky_light_arrays.push(sky_light);
+
         write_block_states(&section.block_states, &mut section_bytes).unwrap();
         write_biomes(&section.biomes, &mut section_bytes).unwrap();
     }
 
+    // todo: Maybe we want the top one to actually be all Fs because I think this is just an edge case for how things are rendered.
+    sky_light_arrays.push(empty_sky_light);
+
+    debug_assert_eq!(sky_light_arrays.len(), section_count + 2);
+
     let pkt = play::ChunkDataS2c {
         pos: ChunkPos::new(i32::from(location.x), i32::from(location.y)),
+
+        // todo: I think this is for rain and snow???
         heightmaps: Cow::Owned(compound! {
             "MOTION_BLOCKING" => List::Long(map),
         }),
