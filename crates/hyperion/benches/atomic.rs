@@ -5,9 +5,8 @@ use std::hint::black_box;
 use divan::Bencher;
 use flecs_ecs::prelude::World;
 use hyperion::{
-    component::blocks::chunk::{ThreadHeaplessVec, ThreadLocalSoaVec, ThreadLocalVec},
-    event::raw::RawQueue,
-    system::joins::SendableRef,
+    storage::{raw::RawQueue, ThreadHeaplessVec, ThreadLocalSoaVec, ThreadLocalVec},
+    util::SendableRef,
 };
 
 // chunks
