@@ -201,7 +201,7 @@ fn encode_chunk_packet(
 
     // convert section_count + 2 0b1s into `u64` array
     // todo: this is jank let's do the non jank way so we can get smaller packet sizes
-    let mut all_ones = BitStorage::new(1, section_count + 2, None).unwrap();
+    let mut all_ones = BitStorage::new(1, section_count + 2, None)?;
 
     for i in 0..section_count + 2 {
         all_ones.set(i, 1);
