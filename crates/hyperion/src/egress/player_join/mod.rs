@@ -528,7 +528,7 @@ impl Module for PlayerJoinModule {
             &MinecraftWorld($),
             &Compose($),
         )
-        .kind::<flecs::pipeline::OnStore>()
+        .kind::<flecs::pipeline::PreUpdate>()
         .each(move |(tasks, comms, blocks, compose)| {
             let span = tracing::trace_span!("joins");
             let _enter = span.enter();

@@ -428,7 +428,7 @@ impl Module for IngressModule {
             &mut Metadata,
             &mut ActiveAnimation,
         )
-        .kind::<flecs::pipeline::PreStore>()
+        .kind::<flecs::pipeline::OnUpdate>()
         .write::<PendingChanges>()
         .multi_threaded()
         .tracing_each_entity(

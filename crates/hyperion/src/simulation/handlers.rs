@@ -147,8 +147,6 @@ fn position_and_on_ground(
 ) -> anyhow::Result<()> {
     let pkt = play::PositionAndOnGroundC2s::decode(&mut data)?;
 
-    // debug!("position and on ground packet: {:?}", pkt);
-
     let play::PositionAndOnGroundC2s { position, .. } = pkt;
 
     change_position_or_correct_client(query, position.as_vec3());
