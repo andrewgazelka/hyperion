@@ -11,12 +11,6 @@ use uuid;
 use valence_protocol::BlockPos;
 
 use crate::Global;
-/// See [`crate::singleton::player_uuid_lookup`].
-#[derive(Component, Default, Debug, Deref, DerefMut)]
-pub struct StreamLookup {
-    /// The UUID of all players
-    inner: FxHashMap<u64, Entity>,
-}
 
 pub mod animation;
 pub mod blocks;
@@ -28,7 +22,12 @@ pub mod metadata;
 pub mod skin;
 pub mod util;
 
-/// See [`crate::singleton::player_uuid_lookup`].
+#[derive(Component, Default, Debug, Deref, DerefMut)]
+pub struct StreamLookup {
+    /// The UUID of all players
+    inner: FxHashMap<u64, Entity>,
+}
+
 #[derive(Component, Default, Debug, Deref, DerefMut)]
 pub struct PlayerUuidLookup {
     /// The UUID of all players
@@ -50,7 +49,6 @@ impl HasAabb for LookupData {
     }
 }
 
-/// See [`crate::singleton::player_aabb_lookup`].
 #[derive(Component, Debug, Default)]
 pub struct PlayerBoundingBoxes {
     /// The bounding boxes of all players

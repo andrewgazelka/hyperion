@@ -18,7 +18,7 @@ fn uuid_url(uuid: &Uuid) -> String {
 /// A client to interface with the Mojang API.
 ///
 /// This uses [matdoes/mowojang](https://matdoes.dev/minecraft-uuids) as a primary source of data.
-/// This does not include caching, this should be done separately probably using [`crate::util::db::Db`].
+/// This does not include caching, this should be done separately probably using [`crate::storage::Db`].
 ///
 /// todo: add Mojang API backup
 #[derive(Component, Debug, Default)]

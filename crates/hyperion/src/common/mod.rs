@@ -22,7 +22,6 @@ pub struct Shared {
     pub compression_level: CompressionLvl,
 }
 
-/// See [`crate::global`].
 #[derive(Component)]
 pub struct Global {
     /// The current tick of the game. This is incremented every 50 ms.

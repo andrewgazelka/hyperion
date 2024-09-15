@@ -18,7 +18,7 @@ pub struct AttackEntity {
     pub from_pos: Vec3,
     /// The entity that is performing the attack.
     pub from: Entity,
-    /// The damage dealt by the attack. This corresponds to the same unit as [`crate::component::Health`].
+    /// The damage dealt by the attack. This corresponds to the same unit as [`crate::simulation::Health`].
     pub damage: f32,
 }
 
