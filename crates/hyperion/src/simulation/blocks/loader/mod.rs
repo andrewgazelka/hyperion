@@ -34,7 +34,7 @@ impl Default for TasksState {
     fn default() -> Self {
         Self {
             bytes: BytesMut::new(),
-            compressor: Compressor::new(CompressionLvl::new(6).unwrap()),
+            compressor: Compressor::new(CompressionLvl::new(1).unwrap()),
             scratch: Scratch::default(),
         }
     }
