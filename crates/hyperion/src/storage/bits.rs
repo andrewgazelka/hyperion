@@ -242,6 +242,15 @@ impl BitStorage {
     }
 }
 
+impl<'a> IntoIterator for &'a BitStorage {
+    type IntoIter = BitStorageIter<'a>;
+    type Item = u64;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
+    }
+}
+
 pub struct BitStorageIter<'a> {
     storage: &'a BitStorage,
     index: usize,

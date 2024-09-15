@@ -11,7 +11,7 @@ use prost::{encoding::decode_varint, Message};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tracing::{error, info, warn};
 
-use crate::{global::AsyncRuntime, simulation::EgressComm};
+use crate::{runtime::AsyncRuntime, simulation::EgressComm};
 
 /// This is used
 #[derive(Default)]

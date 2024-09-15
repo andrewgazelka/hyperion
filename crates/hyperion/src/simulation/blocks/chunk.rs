@@ -13,7 +13,7 @@ use valence_protocol::{packets::play, BlockPos};
 use valence_server::layer::chunk::Chunk;
 
 use super::{loader::parse::UnloadedChunkWithMetadata, Block, MinecraftWorld};
-use crate::{global::SystemId, net::Compose, storage::ThreadLocalVec};
+use crate::{net::Compose, storage::ThreadLocalVec, system_registry::SystemId};
 
 pub const START_Y: i32 = -64;
 

@@ -8,13 +8,10 @@ use flecs_ecs::macros::Component;
 use libdeflater::CompressionLvl;
 use valence_protocol::CompressionThreshold;
 
-mod config;
-mod runtime;
-mod system_registry;
-
-pub use config::*;
-pub use runtime::*;
-pub use system_registry::*;
+pub mod config;
+pub mod runtime;
+pub mod system_registry;
+pub mod util;
 
 /// Shared data that is shared between the ECS framework and the IO thread.
 pub struct Shared {

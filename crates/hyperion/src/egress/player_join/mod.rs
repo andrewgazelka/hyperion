@@ -23,9 +23,10 @@ mod list;
 pub use list::*;
 
 use crate::{
+    config::CONFIG,
     egress::metadata::show_all,
-    global::{AsyncRuntime, SystemId, CONFIG, PLAYER_JOINS},
     net::{Compose, NetworkStreamRef},
+    runtime::AsyncRuntime,
     simulation::{
         blocks::MinecraftWorld,
         command::{get_command_packet, Command, ROOT_COMMAND},
@@ -33,6 +34,7 @@ use crate::{
         util::registry_codec_raw,
         Comms, InGameName, Play, Position, Uuid, PLAYER_SPAWN_POSITION,
     },
+    system_registry::{SystemId, PLAYER_JOINS},
     util::{SendableQuery, SendableRef},
 };
 

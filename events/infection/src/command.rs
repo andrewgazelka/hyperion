@@ -3,13 +3,13 @@ use std::borrow::Cow;
 use flecs_ecs::prelude::*;
 use hyperion::{
     egress::player_join::{PlayerListActions, PlayerListEntry, PlayerListS2c},
-    global::SystemId,
     net::{Compose, NetworkStreamRef},
     simulation::{
         command::{get_root_command, Command, Parser},
         event, InGameName, Uuid,
     },
     storage::EventQueue,
+    system_registry::SystemId,
     uuid,
     valence_protocol::{
         self,
@@ -64,15 +64,15 @@ struct CommandContext<'a> {
     name: &'a InGameName,
 }
 
-fn process_command(command: ParsedCommand, context: CommandContext) {
+fn process_command(command: &ParsedCommand, context: &CommandContext<'_>) {
     match command {
-        ParsedCommand::Speed(amount) => handle_speed_command(amount, context),
+        ParsedCommand::Speed(amount) => handle_speed_command(*amount, context),
         ParsedCommand::Team => handle_team_command(context),
         ParsedCommand::Zombie => handle_zombie_command(context),
     }
 }
 
-fn handle_speed_command(amount: f32, context: CommandContext) {
+fn handle_speed_command(amount: f32, context: &CommandContext<'_>) {
     let msg = format!("Setting speed to {amount}");
     let pkt = play::GameMessageS2c {
         chat: msg.into_cow_text(),
@@ -91,7 +91,7 @@ fn handle_speed_command(amount: f32, context: CommandContext) {
         .unwrap();
 }
 
-fn handle_team_command(context: CommandContext) {
+fn handle_team_command(context: &CommandContext<'_>) {
     let msg = format!("You are now on team {}", context.team);
     let text = play::GameMessageS2c {
         chat: msg.into_cow_text(),
@@ -103,7 +103,7 @@ fn handle_team_command(context: CommandContext) {
         .unwrap();
 }
 
-fn handle_zombie_command(context: CommandContext) {
+fn handle_zombie_command(context: &CommandContext<'_>) {
     static ZOMBIE_PROPERTY: std::sync::LazyLock<valence_protocol::profile::Property> =
         std::sync::LazyLock::new(|| {
             let skin = include_str!("zombie_skin.json");
@@ -237,7 +237,7 @@ impl Module for CommandModule {
                                 uuid: uuid.0,
                                 name,
                             };
-                            process_command(command, context);
+                            process_command(&command, &context);
                         },
                     );
                 }

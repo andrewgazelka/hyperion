@@ -27,10 +27,10 @@ use super::{
     ConfirmBlockSequences, Position,
 };
 use crate::{
-    global::SystemId,
     net::{Compose, NetworkStreamRef},
     simulation::event,
     storage::Events,
+    system_registry::SystemId,
 };
 
 fn full(query: &mut PacketSwitchQuery<'_>, mut data: &[u8]) -> anyhow::Result<()> {

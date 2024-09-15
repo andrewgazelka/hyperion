@@ -14,10 +14,10 @@ use libdeflater::CompressionLvl;
 use prost::Message;
 
 use crate::{
-    global::{Global, SystemId},
     net::encoder::{append_packet_without_compression, PacketEncoder},
     storage::ThreadLocal,
-    Scratch, Scratches,
+    system_registry::SystemId,
+    Global, Scratch, Scratches,
 };
 
 mod decoder;

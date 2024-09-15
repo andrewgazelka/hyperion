@@ -6,7 +6,7 @@ use valence_protocol::{
     text::IntoText,
 };
 
-use crate::{global::GLOBAL_STATS, net::Compose, simulation::Play};
+use crate::{net::Compose, simulation::Play, system_registry::GLOBAL_STATS};
 
 #[derive(Component)]
 pub struct StatsModule;

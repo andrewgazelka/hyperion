@@ -32,7 +32,6 @@ use anyhow::{bail, Context};
 use derive_more::{Deref, DerefMut};
 use egress::EgressModule;
 use flecs_ecs::prelude::*;
-use global::CONFIG;
 use ingress::IngressModule;
 #[cfg(unix)]
 use libc::{getrlimit, setrlimit, RLIMIT_NOFILE};
@@ -48,17 +47,18 @@ pub use valence_protocol;
 use valence_protocol::CompressionThreshold;
 
 use crate::{
-    global::{AsyncRuntime, Global},
     net::{proxy::init_proxy_comms, Compose, Compressors, IoBuf, MAX_PACKET_SIZE},
+    runtime::AsyncRuntime,
 };
 
+mod common;
+pub use common::*;
+
 pub mod egress;
-pub mod global;
 pub mod ingress;
 pub mod net;
 pub mod simulation;
 pub mod storage;
-pub mod util;
 
 /// on macOS, the soft limit for the number of open file descriptors is often 256. This is far too low
 /// to test 10k players with.
@@ -149,9 +149,9 @@ impl Hyperion {
         adjust_file_descriptor_limits(32_768).context("failed to set file limits")?;
 
         info!("starting hyperion");
-        Lazy::force(&CONFIG);
+        Lazy::force(&config::CONFIG);
 
-        let shared = Arc::new(global::Shared {
+        let shared = Arc::new(common::Shared {
             compression_threshold: CompressionThreshold(256),
             compression_level: CompressionLvl::new(2)
                 .map_err(|_| anyhow::anyhow!("failed to create compression level"))?,

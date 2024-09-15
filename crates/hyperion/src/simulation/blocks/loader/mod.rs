@@ -18,7 +18,7 @@ pub mod parse;
 
 use super::{chunk::LoadedChunk, shared::Shared};
 use crate::{
-    global::AsyncRuntime, net::encoder::PacketEncoder, simulation::util::heightmap,
+    net::encoder::PacketEncoder, runtime::AsyncRuntime, simulation::util::heightmap,
     storage::BitStorage, Scratch,
 };
 

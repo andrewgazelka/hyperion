@@ -19,7 +19,7 @@ use valence_protocol::{BlockPos, Direction};
 use valence_registry::BiomeRegistry;
 use valence_server::layer::chunk::Chunk;
 
-use crate::global::AsyncRuntime;
+use crate::runtime::AsyncRuntime;
 
 pub mod chunk;
 

@@ -10,7 +10,7 @@ use skin::PlayerSkin;
 use uuid;
 use valence_protocol::BlockPos;
 
-use crate::global::Global;
+use crate::Global;
 /// See [`crate::singleton::player_uuid_lookup`].
 #[derive(Component, Default, Debug, Deref, DerefMut)]
 pub struct StreamLookup {

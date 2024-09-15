@@ -22,11 +22,11 @@ use valence_protocol::{
 
 use crate::{
     egress::sync_chunks::ChunkSendQueue,
-    global::{AsyncRuntime, SystemId, RECV_DATA, REMOVE_PLAYER_FROM_VISIBILITY},
     net::{
         proxy::ReceiveState, Compose, NetworkStreamRef, PacketDecoder, MINECRAFT_VERSION,
         PROTOCOL_VERSION,
     },
+    runtime::AsyncRuntime,
     simulation::{
         animation::ActiveAnimation,
         blocks::{chunk::PendingChanges, MinecraftWorld},
@@ -39,6 +39,7 @@ use crate::{
         PLAYER_SPAWN_POSITION,
     },
     storage::{Events, GlobalEventHandlers, PlayerJoinServer, SkinHandler},
+    system_registry::{SystemId, RECV_DATA, REMOVE_PLAYER_FROM_VISIBILITY},
     util::{mojang::MojangClient, SendableRef, TracingExt},
 };
 

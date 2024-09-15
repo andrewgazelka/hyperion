@@ -3,7 +3,7 @@ use tracing::trace_span;
 use valence_protocol::{packets::play, ByteAngle, RawBytes, VarInt};
 
 use crate::{
-    global::SYNC_ENTITY_POSITION, net::{Compose, NetworkStreamRef}, simulation::{animation::ActiveAnimation, metadata::Metadata, Position}, util::TracingExt
+    system_registry::SYNC_ENTITY_POSITION, net::{Compose, NetworkStreamRef}, simulation::{animation::ActiveAnimation, metadata::Metadata, Position}, util::TracingExt
 };
 
 #[derive(Component)]

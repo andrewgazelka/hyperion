@@ -12,12 +12,13 @@ use valence_protocol::packets::play::{
 use valence_text::IntoText;
 
 use crate::{
-    global::{CONFIG, GENERATE_CHUNK_CHANGES, LOCAL_STATS, SEND_FULL_LOADED_CHUNKS},
+    config::CONFIG,
     net::{Compose, NetworkStreamRef},
     simulation::{
         blocks::{GetChunkBytes, MinecraftWorld},
         ChunkPosition, Play, Position,
     },
+    system_registry::{GENERATE_CHUNK_CHANGES, LOCAL_STATS, SEND_FULL_LOADED_CHUNKS},
     util::TracingExt,
 };
 
@@ -63,6 +64,7 @@ impl Module for SyncChunksModule {
         .multi_threaded()
         .tracing_each_entity(
             trace_span!("generate_chunk_changes"),
+            #[allow(clippy::similar_names)]
             move |entity, (compose, last_sent, pose, &stream_id, chunk_changes)| {
                 let world = entity.world();
 
