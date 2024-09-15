@@ -30,59 +30,35 @@ use std::{alloc::Allocator, cell::RefCell, fmt::Debug, net::ToSocketAddrs, sync:
 
 use anyhow::{bail, Context};
 use derive_more::{Deref, DerefMut};
-use flecs_ecs::{
-    component,
-    core::{flecs, Entity, IdOperations, World},
-    macros::Component,
-};
+use egress::EgressModule;
+use flecs_ecs::prelude::*;
+use global::CONFIG;
+use ingress::IngressModule;
 #[cfg(unix)]
 use libc::{getrlimit, setrlimit, RLIMIT_NOFILE};
 use libdeflater::CompressionLvl;
 use once_cell::sync::Lazy;
-use tracing::{info, instrument};
+use simulation::{
+    blocks::MinecraftWorld, util::generate_biome_registry, Comms, SimModule, StreamLookup,
+};
+use storage::{Db, Events, GlobalEventHandlers, SkinHandler, ThreadLocal};
+use tracing::info;
 pub use uuid;
+pub use valence_protocol;
 use valence_protocol::CompressionThreshold;
 
 use crate::{
-    component::{blocks::MinecraftWorld, Comms},
-    event::sync::GlobalEventHandlers,
-    global::Global,
+    global::{AsyncRuntime, Global},
     net::{proxy::init_proxy_comms, Compose, Compressors, IoBuf, MAX_PACKET_SIZE},
-    runtime::AsyncRuntime,
-    singleton::fd_lookup::StreamLookup,
-    system::{chunk_comm::ChunkSendQueue, player_join_world::generate_biome_registry},
-    thread_local::ThreadLocal,
-    util::{db, db::Db},
 };
 
-mod blocks;
-mod chunk;
-pub mod singleton;
-pub mod util;
-
-pub mod component;
-// pub mod event;
-pub mod event;
-
-pub mod thread_local;
-
+pub mod egress;
 pub mod global;
+pub mod ingress;
 pub mod net;
-
-// pub mod inventory;
-
-mod packets;
-pub mod system;
-pub use valence_protocol;
-pub mod tracing_ext;
-
-mod bits;
-
-pub mod runtime;
-
-// mod tracker;
-
-mod config;
+pub mod simulation;
+pub mod storage;
+pub mod util;
 
 /// on macOS, the soft limit for the number of open file descriptors is often 256. This is far too low
 /// to test 10k players with.
@@ -91,7 +67,7 @@ mod config;
     clippy::cognitive_complexity,
     reason = "I have no idea why the cognitive complexity is calcualted as being high"
 )]
-#[instrument(skip_all)]
+#[tracing::instrument(skip_all)]
 #[cfg(unix)]
 pub fn adjust_file_descriptor_limits(recommended_min: u64) -> std::io::Result<()> {
     use tracing::{error, warn};
@@ -133,78 +109,6 @@ pub fn adjust_file_descriptor_limits(recommended_min: u64) -> std::io::Result<()
 /// The central [`Hyperion`] struct which owns and manages the entire server.
 pub struct Hyperion;
 
-/// Register all components with the ECS framework.
-///
-/// In flecs components are often registered lazily.
-/// However, they need to be registered before they are used in a multithreaded environment.
-pub fn register_components(world: &World) {
-    world.component::<component::Position>();
-    world.component::<component::Player>();
-    world.component::<component::InGameName>();
-    world.component::<component::AiTargetable>();
-    world.component::<component::ImmuneStatus>();
-    world.component::<component::Uuid>();
-    world.component::<component::Health>();
-    world.component::<component::ChunkPosition>();
-    world.component::<ChunkSendQueue>();
-    world.component::<component::EntityReaction>();
-    world.component::<component::Play>();
-    world.component::<component::ConfirmBlockSequences>();
-    world.component::<component::metadata::Metadata>();
-    world.component::<component::animation::ActiveAnimation>();
-
-    world.component::<event::Events>();
-
-    world.component::<component::blocks::chunk::LoadedChunk>();
-    world.component::<component::blocks::chunk::NeighborNotify>();
-    world.component::<component::blocks::chunk::PendingChanges>();
-
-    world.component::<component::inventory::Inventory>();
-
-    world.component::<Db>();
-    world.component::<db::SkinHandler>();
-}
-
-struct CustomPipeline {
-    egress: Entity,
-}
-
-impl CustomPipeline {
-    fn new(world: &World) -> Self {
-        let egress = world
-            .entity()
-            .add::<flecs::pipeline::Phase>()
-            .depends_on::<flecs::pipeline::PostUpdate>();
-
-        Self {
-            egress: egress.id(),
-        }
-    }
-}
-
-#[derive(Default, Component)]
-pub struct SystemRegistry {
-    current_idx: u16,
-}
-
-#[derive(Copy, Clone, Debug)]
-pub struct SystemId(u16);
-
-impl SystemId {
-    const fn id(self) -> u16 {
-        self.0
-    }
-}
-
-impl SystemRegistry {
-    pub fn register(&mut self) -> SystemId {
-        // checked
-        let idx = self.current_idx;
-        self.current_idx = self.current_idx.checked_add(1).unwrap();
-        SystemId(idx)
-    }
-}
-
 impl Hyperion {
     /// Initializes the server.
     pub fn init(address: impl ToSocketAddrs + Send + Sync + 'static) -> anyhow::Result<()> {
@@ -245,7 +149,7 @@ impl Hyperion {
         adjust_file_descriptor_limits(32_768).context("failed to set file limits")?;
 
         info!("starting hyperion");
-        Lazy::force(&config::CONFIG);
+        Lazy::force(&CONFIG);
 
         let shared = Arc::new(global::Shared {
             compression_threshold: CompressionThreshold(256),
@@ -256,10 +160,6 @@ impl Hyperion {
         let world = World::new();
         let world = Box::new(world);
         let world = Box::leak(world);
-
-        register_components(world);
-
-        let pipeline = CustomPipeline::new(world);
 
         let mut app = world.app();
 
@@ -275,19 +175,25 @@ impl Hyperion {
             .next()
             .context("could not get first address")?;
 
+        world.component::<Db>();
+        world.component::<SkinHandler>();
+        world.component::<storage::Events>();
+
         let runtime = AsyncRuntime::default();
 
         world.set(GlobalEventHandlers::default());
 
         info!("initializing database");
         let db = Db::new()?;
-        let skins = db::SkinHandler::new(db.clone());
+        let skins = SkinHandler::new(db.clone());
         info!("database initialized");
 
         world.set(db);
         world.set(skins);
 
         let (receive_state, egress_comm) = init_proxy_comms(&runtime, address);
+
+        world.set(receive_state);
 
         let global = Global::new(shared.clone());
 
@@ -300,7 +206,7 @@ impl Hyperion {
 
         world.set(Comms::default());
 
-        let events = event::Events::initialize(world);
+        let events = Events::initialize(world);
         world.set(events);
 
         world.set(egress_comm);
@@ -315,26 +221,9 @@ impl Hyperion {
 
         world.set(StreamLookup::default());
 
-        let mut system_registry = SystemRegistry::default();
-
-        system::ingress::player_connect_disconnect(world, receive_state.0.clone());
-        system::ingress::ingress_to_ecs(world, receive_state.0);
-        system::ingress::remove_player_from_visibility(world, &mut system_registry);
-        system::ingress::remove_player(world);
-        system::stats::stats(world, &mut system_registry);
-        system::joins::joins(world, &mut system_registry);
-
-        system::chunk_comm::load_pending(world);
-        system::chunk_comm::generate_chunk_changes(world, &mut system_registry);
-        system::chunk_comm::send_full_loaded_chunks(world, &mut system_registry);
-
-        system::ingress::recv_data(world, &mut system_registry);
-
-        system::sync_entity_position::sync_entity_position(world, &mut system_registry);
-
-        system::egress::egress(world, &pipeline);
-
-        world.set(system_registry);
+        world.import::<SimModule>();
+        world.import::<EgressModule>();
+        world.import::<IngressModule>();
 
         handlers(world);
 

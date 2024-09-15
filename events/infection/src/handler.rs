@@ -1,5 +1,5 @@
 use flecs_ecs::core::World;
-use hyperion::event::sync::PlayerJoinServer;
+use hyperion::storage::PlayerJoinServer;
 
 use crate::component::team::Team;
 

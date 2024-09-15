@@ -3,27 +3,35 @@
 
 use std::net::ToSocketAddrs;
 
-use flecs_ecs::core::WorldGet;
-use hyperion::{event::sync::GlobalEventHandlers, Hyperion, SystemRegistry};
+use flecs_ecs::prelude::*;
+use hyperion::{storage::GlobalEventHandlers, Hyperion};
 
 mod command;
 mod component;
 mod handler;
 
+use command::CommandModule;
+
+#[derive(Component)]
+pub struct InfectionModule;
+
+impl Module for InfectionModule {
+    fn module(world: &World) {
+        world.component::<component::team::Team>();
+
+        world.import::<CommandModule>();
+    }
+}
+
 pub fn init_game(address: impl ToSocketAddrs + Send + Sync + 'static) -> anyhow::Result<()> {
     Hyperion::init_with(address, |world| {
         // register component Team
-        world.component::<component::team::Team>();
 
         world.get::<&mut GlobalEventHandlers>(|handlers| {
             handlers.join_server.register(handler::add_player_to_team);
         });
 
-        command::add_to_tree(world);
-
-        world.get::<&mut SystemRegistry>(|system_registry| {
-            command::process(world, system_registry);
-        });
+        world.import::<InfectionModule>();
 
         // world.add_handler(system::disable_attack_team);
         //

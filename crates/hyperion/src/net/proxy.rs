@@ -4,13 +4,14 @@ use std::{collections::HashMap, io::Cursor, net::SocketAddr, process::Command, s
 
 use anyhow::bail;
 use bytes::{Buf, BytesMut};
+use flecs_ecs::macros::Component;
 use hyperion_proto::{PlayerConnect, PlayerDisconnect, ProxyToServer, ProxyToServerMessage};
 use parking_lot::Mutex;
 use prost::{encoding::decode_varint, Message};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tracing::{error, info, warn};
 
-use crate::{component::EgressComm, runtime::AsyncRuntime};
+use crate::{global::AsyncRuntime, simulation::EgressComm};
 
 /// This is used
 #[derive(Default)]
@@ -143,6 +144,7 @@ async fn inner(
 }
 
 /// A wrapper around [`ReceiveStateInner`]
+#[derive(Component)]
 pub struct ReceiveState(pub Arc<Mutex<ReceiveStateInner>>);
 
 /// Initializes proxy communications.
