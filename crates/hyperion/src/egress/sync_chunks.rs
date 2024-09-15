@@ -53,7 +53,7 @@ impl Module for SyncChunksModule {
         system!(
             "generate_chunk_changes",
             world,
-            &Compose,
+            &Compose($),
             &mut ChunkPosition,
             &Position,
             &NetworkStreamRef,

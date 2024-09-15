@@ -20,16 +20,6 @@ pub struct EgressModule;
 
 impl Module for EgressModule {
     fn module(world: &World) {
-        let pipeline = world
-            .entity()
-            .add::<flecs::pipeline::Phase>()
-            .depends_on::<flecs::pipeline::OnStore>();
-
-        world.import::<StatsModule>();
-        world.import::<PlayerJoinModule>();
-        world.import::<SyncChunksModule>();
-        world.import::<SyncPositionModule>();
-
         // ByteMut::with_capacity(1024);
         // ByteMut [----------------------------------------------------------------------] ALLOC [A]
         // we write 30 bytes to the buffer
@@ -53,6 +43,17 @@ impl Module for EgressModule {
             let data = Box::leak(data);
             bytes::Bytes::from_static(data)
         });
+        
+        let pipeline = world
+            .entity()
+            .add::<flecs::pipeline::Phase>()
+            .depends_on::<flecs::pipeline::OnStore>();
+
+        world.import::<StatsModule>();
+        world.import::<PlayerJoinModule>();
+        world.import::<SyncChunksModule>();
+        world.import::<SyncPositionModule>();
+
 
         system!(
             "egress",

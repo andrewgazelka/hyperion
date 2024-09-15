@@ -275,6 +275,7 @@ fn process_status(
 pub struct IngressModule;
 
 impl Module for IngressModule {
+    #[allow(clippy::too_many_lines)]
     fn module(world: &World) {
         system!(
             "generate_ingress_events",

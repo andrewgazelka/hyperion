@@ -67,7 +67,7 @@ pub mod util;
     clippy::cognitive_complexity,
     reason = "I have no idea why the cognitive complexity is calcualted as being high"
 )]
-#[instrument(skip_all)]
+#[tracing::instrument(skip_all)]
 #[cfg(unix)]
 pub fn adjust_file_descriptor_limits(recommended_min: u64) -> std::io::Result<()> {
     use tracing::{error, warn};
