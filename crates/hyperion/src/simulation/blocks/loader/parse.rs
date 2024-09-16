@@ -111,7 +111,6 @@ impl UnloadedChunkWithMetadata {
 
         self.sections[y as usize / 16].set_delta(idx, block)
     }
-    
 }
 
 impl Chunk for UnloadedChunkWithMetadata {

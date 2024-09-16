@@ -1,6 +1,11 @@
 use nom::{
-    branch::alt, bytes::complete::tag, character::complete::space1, combinator::map,
-    number::complete::float, sequence::{preceded, tuple}, IResult,
+    branch::alt,
+    bytes::complete::tag,
+    character::complete::space1,
+    combinator::map,
+    number::complete::float,
+    sequence::{preceded, tuple},
+    IResult,
 };
 
 #[derive(Debug, PartialEq)]

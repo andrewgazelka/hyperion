@@ -1,17 +1,12 @@
-use derive_more::From;
 use glam::{I16Vec2, IVec3};
+use ndarray::ArrayView3;
 use valence_generated::block::BlockState;
 
 use crate::simulation::blocks::{chunk::START_Y, MinecraftWorld};
 
-#[derive(From)]
-pub struct Frame {
-    elems: ndarray::Array3<BlockState>,
-}
-
-impl Frame {
-    pub fn paste(&self, offset: IVec3, mc: &mut MinecraftWorld) {
-        let (width, height, depth) = self.elems.dim();
+impl MinecraftWorld {
+    pub fn paste(&mut self, offset: IVec3, frame: ArrayView3<'_, BlockState>) {
+        let (width, height, depth) = frame.dim();
         let start = offset;
         let end = start + IVec3::new(width as i32 - 1, height as i32 - 1, depth as i32 - 1);
 
@@ -21,7 +16,7 @@ impl Frame {
         for section_x in start_chunk.x..=end_chunk.x {
             for section_z in start_chunk.z..=end_chunk.z {
                 let Some(loaded_chunk) =
-                    mc.get_loaded_chunk_mut(I16Vec2::new(section_x, section_z))
+                    self.get_loaded_chunk_mut(I16Vec2::new(section_x, section_z))
                 else {
                     continue;
                 };
@@ -47,11 +42,12 @@ impl Frame {
                     let iter_start = start.max(section_start);
                     let iter_end = end.min(section_end);
 
+                    #[allow(clippy::excessive_nesting)]
                     for y in iter_start.y..=iter_end.y {
                         for z in iter_start.z..=iter_end.z {
                             for x in iter_start.x..=iter_end.x {
                                 let frame_pos = IVec3::new(x, y, z) - start;
-                                let block = self.elems[[
+                                let block = frame[[
                                     frame_pos.x as usize,
                                     frame_pos.y as usize,
                                     frame_pos.z as usize,

@@ -76,8 +76,6 @@ impl<'a, T: Packet + Encode> PacketBundle for &'a T {
     }
 }
 
-
-
 /// on macOS, the soft limit for the number of open file descriptors is often 256. This is far too low
 /// to test 10k players with.
 /// This attempts to the specified `recommended_min` value.

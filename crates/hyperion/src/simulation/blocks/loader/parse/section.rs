@@ -35,7 +35,6 @@ impl Section {
         let before = self.block_states.set(idx as usize, new);
 
         if before != new {
-            self.block_states.set(idx as usize, new);
             self.deltas_since_prev_tick.insert(idx as u32);
         }
 

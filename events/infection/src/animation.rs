@@ -1,3 +1,8 @@
+use std::{
+    ops::{Coroutine, DerefMut},
+    pin::pin,
+};
+
 use flecs_ecs::{
     core::{QueryBuilderImpl, SystemAPI, TableIter, TermBuilderImpl, World},
     macros::{system, Component},
@@ -6,13 +11,14 @@ use flecs_ecs::{
 use hyperion::{
     net::{Compose, NetworkStreamRef},
     simulation::{
-        blocks::{chunk::LoadedChunk, frame::Frame, MinecraftWorld},
+        blocks::{chunk::LoadedChunk, MinecraftWorld},
         InGameName, Uuid,
     },
     system_registry::SystemId,
     valence_protocol::{math::IVec3, BlockPos, BlockState},
 };
 use ndarray::Array3;
+use rand::Rng;
 use tracing::{debug, trace_span};
 
 use crate::{
@@ -24,71 +30,90 @@ use crate::{
 pub struct AnimationModule;
 
 impl Module for AnimationModule {
+    #[allow(clippy::excessive_nesting)]
     fn module(world: &World) {
         add_to_tree(world);
 
         let mut tick = 0;
+
+        let animate = #[coroutine]
+        static move || {
+            // use yield; to wait a tick
+            let mut frame = Array3::from_elem((27, 40, 27), BlockState::AIR);
+
+            let air_block = BlockState::AIR;
+
+            let blocks = [
+                BlockState::LAPIS_BLOCK,
+                BlockState::COPPER_BLOCK,
+                BlockState::AMETHYST_BLOCK,
+                BlockState::PRISMARINE,
+                BlockState::PURPUR_BLOCK,
+                BlockState::QUARTZ_BLOCK,
+            ];
+
+            loop {
+                let height = 20;
+                let width = 10;
+                let thickness = 3;
+                let center_x = frame.shape()[0] / 2;
+                let center_z = frame.shape()[2] / 2;
+
+                // Build up, replacing previous blocks
+                for (&current_block) in blocks.iter() {
+                    for progress in 0..=height {
+                        for y in 0..progress {
+                            for x in 0..width {
+                                for z in 0..thickness {
+                                    if x < thickness
+                                        || x >= width - thickness
+                                        || (y == height / 2 || y == height / 2 + 1)
+                                    {
+                                        frame[[
+                                            center_x + x - width / 2,
+                                            y,
+                                            center_z + z - thickness / 2,
+                                        ]] = current_block;
+                                    }
+                                }
+                            }
+                        }
+                        yield frame.clone();
+                    }
+
+                    // Wait a bit before next block type
+                    for _ in 0..5 {
+                        yield frame.clone();
+                    }
+                }
+
+                // Wait before starting over
+                for _ in 0..(height * 10) {
+                    yield frame.clone();
+                }
+            }
+        };
+
+        let animate = Box::pin(animate);
+        let mut iter = core::iter::from_coroutine(animate);
 
         system!("regular_animation", world, &mut MinecraftWorld($))
             .multi_threaded()
             .each_iter(move |it: TableIter<'_, false>, _, (mc)| {
                 let span = trace_span!("regular_animation");
                 let _enter = span.enter();
-            
-                let world = it.world();
-            
-                tick += 1;
-                
-                if tick < 100 {
+
+                let Some(frame) = iter.next() else {
                     return;
-                }
-            
-                // Create a DNA double helix animation using Frame API
-                let radius = 5.0;
-                let height = 40;
-                let speed = 0.5;
-                let angle = tick as f32 * speed;
-            
-                // Create a frame for the DNA structure
-            
-                let mut frame = Array3::from_elem((27, 40, 27), BlockState::AIR);
-            
-                for y in 0..height {
-                    let helix_angle = (y as f32).mul_add(0.3, angle);
-                    let x1 = (radius * helix_angle.cos()) as i32 + 20;
-                    let z1 = (radius * helix_angle.sin()) as i32 + 20;
-                    let x2 = (radius * (helix_angle + std::f32::consts::PI).cos()) as i32 + 20;
-                    let z2 = (radius * (helix_angle + std::f32::consts::PI).sin()) as i32 + 20;
+                };
 
-                    {
-                        let x1 = usize::try_from(x1).unwrap();
-                        let z1 = usize::try_from(z1).unwrap();
-                        let x2 = usize::try_from(x2).unwrap();
-                        let z2 = usize::try_from(z2).unwrap();
+                {
+                    let span = trace_span!("paste_frame");
+                    let _enter = span.enter();
 
-                        // Create the two strands of the DNA
-                        frame[(x1, y, z1)] = BlockState::DIAMOND_BLOCK;
-                        frame[(x2, y, z2)] = BlockState::EMERALD_BLOCK;
-                    }
-            
-                    // Create the "rungs" of the DNA ladder
-                    if y % 2 == 0 {
-                        for t in 0..=20 {
-                            let xt = x1 + (x2 - x1) * t / 20;
-                            let zt = z1 + (z2 - z1) * t / 20;
-                            
-                            let xt = usize::try_from(xt).unwrap();
-                            let zt = usize::try_from(zt).unwrap();
-            
-                            frame[(xt, y, zt)] = BlockState::GOLD_BLOCK;
-                        }
-                    }
+                    let center = IVec3::new(-438, 100, -26);
+                    mc.paste(center - IVec3::new(20, 0, 20), frame.view());
                 }
-            
-                // Paste the frame into the world
-                let center = IVec3::new(-438, 100, -26);
-                let frame = Frame::from(frame);
-                frame.paste(center - IVec3::new(20, 0, 20), mc);
             });
     }
 }

@@ -1,5 +1,9 @@
 #![feature(allocator_api)]
 #![feature(let_chains)]
+#![feature(coroutines)]
+#![feature(stmt_expr_attributes)]
+#![feature(coroutine_trait)]
+#![feature(iter_from_coroutine)]
 
 use std::net::ToSocketAddrs;
 

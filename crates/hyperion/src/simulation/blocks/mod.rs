@@ -26,8 +26,8 @@ pub mod chunk;
 mod loader;
 mod manager;
 
-mod region;
 pub mod frame;
+mod region;
 mod shared;
 
 pub enum GetChunkBytes {
@@ -61,7 +61,7 @@ impl MinecraftWorld {
             rx_loaded_chunks,
         })
     }
-    
+
     pub fn cache_mut(&mut self) -> &mut IndexMap<I16Vec2, LoadedChunk, FxBuildHasher> {
         &mut self.chunk_cache
     }

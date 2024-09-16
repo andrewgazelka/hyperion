@@ -1729,6 +1729,7 @@ dependencies = [
  "hyperion",
  "ndarray",
  "nom",
+ "rand",
  "serde_json",
  "tokio",
  "tracing",
