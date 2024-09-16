@@ -5,6 +5,7 @@ use hyperion::{
     egress::player_join::{PlayerListActions, PlayerListEntry, PlayerListS2c},
     net::{Compose, NetworkStreamRef},
     simulation::{
+        blocks::MinecraftWorld,
         command::{get_root_command, Command, Parser},
         event, InGameName, Uuid,
     },
@@ -17,7 +18,7 @@ use hyperion::{
         ident,
         packets::play::{self, player_abilities_s2c::PlayerAbilitiesFlags, PlayerAbilitiesS2c},
         text::IntoText,
-        GameMode, VarInt,
+        BlockPos, BlockState, GameMode, VarInt,
     },
 };
 use tracing::{debug, trace_span};
@@ -58,18 +59,36 @@ struct CommandContext<'a> {
     stream: NetworkStreamRef,
     team: &'a mut Team,
     compose: &'a Compose,
+    mc: &'a mut MinecraftWorld,
     world: &'a World,
     system_id: SystemId,
     uuid: uuid::Uuid,
     name: &'a InGameName,
 }
 
-fn process_command(command: &ParsedCommand, context: &CommandContext<'_>) {
+fn process_command(command: &ParsedCommand, context: &mut CommandContext<'_>) {
     match command {
         ParsedCommand::Speed(amount) => handle_speed_command(*amount, context),
         ParsedCommand::Team => handle_team_command(context),
         ParsedCommand::Zombie => handle_zombie_command(context),
+        ParsedCommand::Dirt { x, y, z } => handle_dirt_command(*x, *y, *z, context),
     }
+}
+
+fn handle_dirt_command(x: i32, y: i32, z: i32, context: &mut CommandContext<'_>) {
+    let msg = format!("Setting dirt at {x} {y} {z}");
+    let pkt = play::GameMessageS2c {
+        chat: msg.into_cow_text(),
+        overlay: false,
+    };
+
+    context
+        .compose
+        .unicast(&pkt, context.stream, context.system_id, context.world)
+        .unwrap();
+
+    let pos = BlockPos::new(x, y, z);
+    context.mc.try_set_block_delta(pos, BlockState::DIRT);
 }
 
 fn handle_speed_command(amount: f32, context: &CommandContext<'_>) {
@@ -205,9 +224,9 @@ impl Module for CommandModule {
 
         let system_id = SystemId(8);
 
-        system!("handle_infection_events_player", world, &Compose($), &mut EventQueue<event::Command>)
+        system!("handle_infection_events_player", world, &Compose($), &mut EventQueue<event::Command>($), &mut MinecraftWorld($))
             .multi_threaded()
-            .each_iter(move |it: TableIter<'_, false>, _, (compose, event_queue)| {
+            .each_iter(move |it: TableIter<'_, false>, _, (compose, event_queue, mc)| {
                 let span = trace_span!("handle_infection_events_player");
                 let _enter = span.enter();
 
@@ -228,16 +247,17 @@ impl Module for CommandModule {
                         &InGameName,
                     )>(
                         |(stream, team, uuid, name)| {
-                            let context = CommandContext {
+                            let mut context = CommandContext {
                                 stream: *stream,
                                 team,
                                 compose,
                                 world: &world,
+                                mc,
                                 system_id,
                                 uuid: uuid.0,
                                 name,
                             };
-                            process_command(&command, &context);
+                            process_command(&command, &mut context);
                         },
                     );
                 }

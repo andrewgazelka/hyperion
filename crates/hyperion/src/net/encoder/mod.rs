@@ -8,9 +8,9 @@ use std::{
 
 use anyhow::ensure;
 use tracing::trace;
-use valence_protocol::{CompressionThreshold, Encode, Packet, VarInt};
+use valence_protocol::{CompressionThreshold, Encode, VarInt};
 
-use crate::{net::MAX_PACKET_SIZE, storage::Buf, ScratchBuffer};
+use crate::{net::MAX_PACKET_SIZE, storage::Buf, PacketBundle, ScratchBuffer};
 
 mod util;
 
@@ -30,11 +30,11 @@ impl Debug for PacketEncoder {
 
 /// Append a packet to the buffer without compression.
 pub fn append_packet_without_compression<P, B: Buf>(
-    pkt: &P,
+    pkt: P,
     buf: &mut B,
 ) -> anyhow::Result<B::Output>
 where
-    P: valence_protocol::Packet + Encode,
+    P: PacketBundle,
 {
     let data_write_start = VarInt::MAX_SIZE as u64;
     let slice = buf.get_contiguous(MAX_PACKET_SIZE);
@@ -42,7 +42,7 @@ where
     let mut cursor = Cursor::new(slice);
     cursor.set_position(data_write_start);
 
-    pkt.encode_with_id(&mut cursor)?;
+    pkt.encode_including_ids(&mut cursor)?;
 
     let data_len = cursor.position() as usize - data_write_start as usize;
 
@@ -90,13 +90,13 @@ impl PacketEncoder {
     /// Appends a packet to the buffer with compression.
     pub fn append_packet_with_compression<P, B: Buf>(
         &self,
-        pkt: &P,
+        packet: P,
         buf: &mut B,
         scratch: &mut impl ScratchBuffer,
         compressor: &mut libdeflater::Compressor,
     ) -> anyhow::Result<B::Output>
     where
-        P: valence_protocol::Packet + Encode,
+        P: PacketBundle,
     {
         const DATA_LEN_0_SIZE: usize = 1;
 
@@ -107,7 +107,7 @@ impl PacketEncoder {
         let mut cursor = Cursor::new(&mut slice[..]);
         cursor.set_position(data_write_start);
 
-        pkt.encode_with_id(&mut cursor)?;
+        packet.encode_including_ids(&mut cursor)?;
 
         let end_data_position_exclusive = cursor.position();
 
@@ -177,13 +177,13 @@ impl PacketEncoder {
     /// Appends a packet to the buffer which may or may not be compressed.
     pub fn append_packet<P, B: Buf>(
         &self,
-        pkt: &P,
+        pkt: P,
         buf: &mut B,
         scratch: &mut impl ScratchBuffer,
         compressor: &mut libdeflater::Compressor,
     ) -> anyhow::Result<B::Output>
     where
-        P: Packet + Encode,
+        P: PacketBundle,
     {
         let has_compression = self.threshold.0 >= 0;
 

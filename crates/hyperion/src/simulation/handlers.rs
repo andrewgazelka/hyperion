@@ -299,50 +299,46 @@ pub fn player_interact_block(
     let position = packet.position;
     let chunk_position = I16Vec2::new((position.x >> 4) as i16, (position.z >> 4) as i16);
 
-    let Some(entity) = query
-        .blocks
-        .get_loaded_chunk_entity(chunk_position, query.world)
-    else {
-        warn!("player_interact_block: chunk not found");
-        return Ok(());
-    };
-
-    if let Some(item) = query.inventory.get_held()
-        && !item.is_empty()
-    {
-        let item = item.item;
-
-        let Some(block) = BlockKind::from_item_kind(item) else {
-            warn!("invalid item kind to place: {item:?}");
-            return Ok(());
-        };
-
-        let block = BlockState::from_kind(block);
-
-        let position = position.get_in_direction(packet.face);
-
-        query.blocks.set_block(position, block, query.world);
-
-        info!("placed block at {position:?}");
-        return Ok(());
-    }
-
-    let chunk_start: IVec2 = chunk_position.as_ivec2() << 4;
-
-    let x = position.x - chunk_start[0];
-    let z = position.z - chunk_start[1];
-
-    let y = position.y - START_Y;
-
-    let x = u8::try_from(x).unwrap();
-    let z = u8::try_from(z).unwrap();
-    let y = u16::try_from(y).unwrap();
-
-    query.confirm_block_sequences.push(packet.sequence.0);
-
-    entity.get::<&LoadedChunk>(|chunk| {
-        chunk.interact(x, y, z, query.blocks, query.world);
-    });
+    // let Some(entity) = query
+    //     .blocks
+    //     .get_loaded_chunk_entity(chunk_position, query.world)
+    // else {
+    //     warn!("player_interact_block: chunk not found");
+    //     return Ok(());
+    // };
+    // 
+    // if let Some(item) = query.inventory.get_held()
+    //     && !item.is_empty()
+    // {
+    //     let item = item.item;
+    // 
+    //     let Some(block) = BlockKind::from_item_kind(item) else {
+    //         warn!("invalid item kind to place: {item:?}");
+    //         return Ok(());
+    //     };
+    // 
+    //     let block = BlockState::from_kind(block);
+    // 
+    //     let position = position.get_in_direction(packet.face);
+    // 
+    //     // query.blocks.try_set_block_delta(position, block, query.world);
+    // 
+    //     info!("placed block at {position:?}");
+    //     return Ok(());
+    // }
+    // 
+    // let chunk_start: IVec2 = chunk_position.as_ivec2() << 4;
+    // 
+    // let x = position.x - chunk_start[0];
+    // let z = position.z - chunk_start[1];
+    // 
+    // let y = position.y - START_Y;
+    // 
+    // let x = u8::try_from(x).unwrap();
+    // let z = u8::try_from(z).unwrap();
+    // let y = u16::try_from(y).unwrap();
+    // 
+    // query.confirm_block_sequences.push(packet.sequence.0);
 
     Ok(())
 }

@@ -15,7 +15,7 @@ use crate::{
     config::CONFIG,
     net::{Compose, NetworkStreamRef},
     simulation::{
-        blocks::{GetChunkBytes, MinecraftWorld},
+        blocks::{chunk::LoadedChunk, GetChunkBytes, MinecraftWorld},
         ChunkPosition, Play, Position,
     },
     system_registry::{GENERATE_CHUNK_CHANGES, LOCAL_STATS, SEND_FULL_LOADED_CHUNKS},
@@ -181,7 +181,7 @@ impl Module for SyncChunksModule {
                             break;
                         }
 
-                        match chunks.get_cached_or_load(elem, &world) {
+                        match chunks.get_cached_or_load(elem) {
                             GetChunkBytes::Loaded(chunk) => {
                                 compose
                                     .io_buf()
@@ -199,6 +199,27 @@ impl Module for SyncChunksModule {
             );
 
         let system_id = LOCAL_STATS;
+
+        system!(
+            "broadcast_chunk_deltas",
+            world,
+            &Compose($),
+            &mut MinecraftWorld($),
+        )
+        .multi_threaded()
+        .kind::<flecs::pipeline::OnUpdate>()
+        .each_iter(move |it: TableIter<'_, false>, _, (compose, mc)| {
+            let span = trace_span!("broadcast_chunk_deltas");
+            let _enter = span.enter();
+
+            let world = it.world();
+
+            for chunk in mc.cache_mut().values_mut() {
+                for packet in chunk.delta_packets() {
+                    compose.broadcast(packet, system_id).send(&world).unwrap();
+                }
+            }
+        });
 
         system!(
             "local_stats",

@@ -20,18 +20,7 @@ pub struct EgressModule;
 
 impl Module for EgressModule {
     fn module(world: &World) {
-        // ByteMut::with_capacity(1024);
-        // ByteMut [----------------------------------------------------------------------] ALLOC [A]
-        // we write 30 bytes to the buffer
-        // BytesMut [ 30 bytes here ] [ ------------------------------------------------- ] ALLOC [A]
-        // .split(&mut self)
-        // returned: BytesMut [ 30 bytes here ] ALLOC [A]
-        //
-        //                                             start ptr
-        //                                               v
-        // left in previous bytesMut [ UNUSED 30 bytes ] [ ----------------------------- ] ALLOC [A]
-
-        static FLUSH: once_cell::sync::Lazy<bytes::Bytes> = once_cell::sync::Lazy::new(|| {
+        let flush = {
             let mut data = Vec::new();
             hyperion_proto::ServerToProxy::from(Flush {})
                 .encode_length_delimited(&mut data)
@@ -42,7 +31,7 @@ impl Module for EgressModule {
             let data = data.into_boxed_slice();
             let data = Box::leak(data);
             bytes::Bytes::from_static(data)
-        });
+        };
 
         let pipeline = world
             .entity()
@@ -61,7 +50,7 @@ impl Module for EgressModule {
             &mut EgressComm($),
         )
         .kind_id(pipeline)
-        .each(|(compose, egress)| {
+        .each(move |(compose, egress)| {
             let span = tracing::trace_span!("egress");
             let _enter = span.enter();
             let io = compose.io_buf_mut();
@@ -72,7 +61,7 @@ impl Module for EgressModule {
                 egress.send(bytes.freeze()).unwrap();
             }
 
-            egress.send(FLUSH.clone()).unwrap();
+            egress.send(flush.clone()).unwrap();
         });
     }
 }

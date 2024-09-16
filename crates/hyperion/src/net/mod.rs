@@ -17,7 +17,7 @@ use crate::{
     net::encoder::{append_packet_without_compression, PacketEncoder},
     storage::ThreadLocal,
     system_registry::SystemId,
-    Global, Scratch, Scratches,
+    Global, PacketBundle, Scratch, Scratches,
 };
 
 mod decoder;
@@ -110,13 +110,9 @@ impl Compose {
     /// Broadcast globally to all players
     ///
     /// See <https://github.com/andrewgazelka/hyperion-proto/blob/main/src/server_to_proxy.proto#L17-L22>
-    pub const fn broadcast<'a, 'b, P>(
-        &'a self,
-        packet: &'b P,
-        system_id: SystemId,
-    ) -> Broadcast<'a, 'b, P>
+    pub const fn broadcast<P>(&self, packet: P, system_id: SystemId) -> Broadcast<'_, P>
     where
-        P: valence_protocol::Packet + valence_protocol::Encode,
+        P: PacketBundle,
     {
         Broadcast {
             packet,
@@ -270,8 +266,8 @@ impl IoBuf {
 
 /// A broadcast builder
 #[must_use]
-pub struct Broadcast<'a, 'b, P> {
-    packet: &'b P,
+pub struct Broadcast<'a, P> {
+    packet: P,
     optional: bool,
     compose: &'a Compose,
     exclude: u64,
@@ -280,19 +276,19 @@ pub struct Broadcast<'a, 'b, P> {
 
 /// A unicast builder
 #[must_use]
-struct Unicast<'a, 'b, P> {
-    packet: &'b P,
+struct Unicast<'a, P> {
+    packet: P,
     stream_id: NetworkStreamRef,
     compose: &'a Compose,
     compress: bool,
     system_id: SystemId,
 }
 
-impl<'a, 'b, P> Unicast<'a, 'b, P>
+impl<'a, P> Unicast<'a, P>
 where
-    P: valence_protocol::Packet + valence_protocol::Encode,
+    P: PacketBundle,
 {
-    fn send(&self, world: &World) -> anyhow::Result<()> {
+    fn send(self, world: &World) -> anyhow::Result<()> {
         self.compose.io_buf.unicast_private(
             self.packet,
             self.stream_id,
@@ -326,7 +322,7 @@ where
     }
 }
 
-impl<'a, 'b, P> Broadcast<'a, 'b, P> {
+impl<'a, P> Broadcast<'a, P> {
     /// If the packet is optional and can be dropped. An example is movement packets.
     pub const fn optional(mut self) -> Self {
         self.optional = true;
@@ -336,7 +332,7 @@ impl<'a, 'b, P> Broadcast<'a, 'b, P> {
     /// Send the packet to all players.
     pub fn send(self, world: &World) -> anyhow::Result<()>
     where
-        P: valence_protocol::Packet + valence_protocol::Encode,
+        P: PacketBundle,
     {
         let bytes = self
             .compose
@@ -355,7 +351,7 @@ impl<'a, 'b, P> Broadcast<'a, 'b, P> {
     }
 
     /// Exclude a certain player from the broadcast. This can only be called once.
-    pub const fn exclude(self, exclude: NetworkStreamRef) -> Self {
+    pub fn exclude(self, exclude: NetworkStreamRef) -> Self {
         Broadcast {
             packet: self.packet,
             optional: self.optional,
@@ -444,12 +440,12 @@ impl IoBuf {
 
     fn encode_packet<P>(
         &self,
-        packet: &P,
+        packet: P,
         compose: &Compose,
         world: &World,
     ) -> anyhow::Result<bytes::Bytes>
     where
-        P: valence_protocol::Packet + valence_protocol::Encode,
+        P: PacketBundle,
     {
         let temp_buffer = self.temp_buffer.get(world);
         let temp_buffer = &mut *temp_buffer.borrow_mut();
@@ -470,11 +466,11 @@ impl IoBuf {
 
     fn encode_packet_no_compression<P>(
         &self,
-        packet: &P,
+        packet: P,
         world: &World,
     ) -> anyhow::Result<bytes::Bytes>
     where
-        P: valence_protocol::Packet + valence_protocol::Encode,
+        P: PacketBundle,
     {
         let temp_buffer = self.temp_buffer.get(world);
         let temp_buffer = &mut *temp_buffer.borrow_mut();
@@ -486,7 +482,7 @@ impl IoBuf {
 
     fn unicast_private<P>(
         &self,
-        packet: &P,
+        packet: P,
         id: NetworkStreamRef,
         compose: &Compose,
         compress: bool,
@@ -494,7 +490,7 @@ impl IoBuf {
         world: &World,
     ) -> anyhow::Result<()>
     where
-        P: valence_protocol::Packet + valence_protocol::Encode,
+        P: PacketBundle,
     {
         let bytes = if compress {
             self.encode_packet(packet, compose, world)?

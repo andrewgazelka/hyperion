@@ -1,5 +1,10 @@
-use std::{borrow::Cow, collections::BTreeMap};
+use std::{
+    borrow::Cow,
+    collections::{BTreeMap, HashMap},
+};
 
+use indexmap::IndexSet;
+use roaring::RoaringBitmap;
 use thiserror::Error;
 use valence_anvil::RegionError;
 use valence_generated::block::{BlockKind, BlockState, PropName, PropValue};
@@ -9,6 +14,8 @@ use valence_registry::biome::BiomeId;
 use valence_server::layer::chunk::{
     check_biome_oob, check_block_oob, check_section_oob, BiomeContainer, BlockStateContainer, Chunk,
 };
+
+use crate::simulation::blocks::loader::parse::section::Section;
 
 #[derive(Debug, Error)]
 #[non_exhaustive]
@@ -75,9 +82,12 @@ pub enum ParseChunkError {
     InvalidSkyLight,
 }
 
+pub mod section;
+
 #[derive(Clone, Default, Debug)]
 pub struct UnloadedChunkWithMetadata {
     pub sections: Vec<Section>,
+
     pub block_entities: BTreeMap<u32, Compound>,
 }
 
@@ -88,6 +98,20 @@ impl UnloadedChunkWithMetadata {
             block_entities: BTreeMap::new(),
         }
     }
+
+    pub fn set_delta(&mut self, x: u32, y: u32, z: u32, block: BlockState) -> BlockState {
+        check_block_oob(self, x, y, z);
+
+        let idx = x + z * 16 + y % 16 * 16 * 16;
+
+        assert!(idx < 4096); // 2^12
+
+        // todo: remove try_unwrap when we show this is safe
+        let idx = u16::try_from(idx).unwrap();
+
+        self.sections[y as usize / 16].set_delta(idx, block)
+    }
+    
 }
 
 impl Chunk for UnloadedChunkWithMetadata {
@@ -108,9 +132,13 @@ impl Chunk for UnloadedChunkWithMetadata {
         check_block_oob(self, x, y, z);
 
         let idx = x + z * 16 + y % 16 * 16 * 16;
-        self.sections[y as usize / 16]
-            .block_states
-            .set(idx as usize, block)
+
+        assert!(idx < 4096); // 2^12
+
+        // todo: remove try_unwrap when we show this is safe
+        let idx = u16::try_from(idx).unwrap();
+
+        self.sections[y as usize / 16].set(idx, block)
     }
 
     fn fill_block_state_section(&mut self, sect_y: u32, block: BlockState) {
@@ -184,16 +212,6 @@ impl Chunk for UnloadedChunkWithMetadata {
     }
 }
 
-#[derive(Clone, Debug)]
-pub struct Section {
-    pub block_states: BlockStateContainer,
-    pub biomes: BiomeContainer,
-
-    // todo: maybe make stack array of 2048
-    pub block_light: [u8; 2048],
-    pub sky_light: [u8; 2048],
-}
-
 impl Default for Section {
     fn default() -> Self {
         Self {
@@ -201,6 +219,7 @@ impl Default for Section {
             biomes: BiomeContainer::default(),
             block_light: [0_u8; 2048],
             sky_light: [0_u8; 2048],
+            deltas_since_prev_tick: RoaringBitmap::new(),
         }
     }
 }

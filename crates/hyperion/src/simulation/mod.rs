@@ -334,7 +334,6 @@ impl Module for SimModule {
         world.component::<metadata::Metadata>();
         world.component::<animation::ActiveAnimation>();
 
-        world.component::<blocks::chunk::LoadedChunk>();
         world.component::<blocks::chunk::NeighborNotify>();
         world.component::<blocks::chunk::PendingChanges>();
 

@@ -1,21 +1,21 @@
 //! Constructs for working with blocks.
 
-use std::{collections::HashMap, ops::Try, sync::Arc};
+use std::{ops::Try, sync::Arc};
 
 use bytes::Bytes;
-use chunk::{Delta, LoadedChunk, NeighborNotify, PendingChanges};
-use compact_str::format_compact;
+use chunk::LoadedChunk;
 use flecs_ecs::{
-    core::{Entity, EntityView, EntityViewGet, IdOperations, World},
+    core::{EntityViewGet, IdOperations, World},
     macros::Component,
 };
-use fxhash::FxHashMap;
+use fxhash::FxBuildHasher;
 use glam::{I16Vec2, IVec2};
+use indexmap::IndexMap;
 use loader::{launch_manager, LaunchHandle, CHUNK_HEIGHT_SPAN};
 use shared::Shared;
-use tracing::{info, instrument};
-use valence_generated::block::{BlockKind, BlockState, PropName, PropValue};
-use valence_protocol::{BlockPos, Direction};
+use tracing::instrument;
+use valence_generated::block::BlockState;
+use valence_protocol::BlockPos;
 use valence_registry::BiomeRegistry;
 use valence_server::layer::chunk::Chunk;
 
@@ -27,7 +27,7 @@ mod loader;
 mod manager;
 
 mod region;
-
+pub mod frame;
 mod shared;
 
 pub enum GetChunkBytes {
@@ -39,7 +39,7 @@ pub enum GetChunkBytes {
 #[derive(Component)]
 pub struct MinecraftWorld {
     /// Map to a Chunk by Entity ID
-    chunk_cache: FxHashMap<I16Vec2, Entity>,
+    chunk_cache: IndexMap<I16Vec2, LoadedChunk, FxBuildHasher>,
 
     launch_manager: LaunchHandle,
 
@@ -55,23 +55,22 @@ impl MinecraftWorld {
         let (tx_loaded_chunks, rx_loaded_chunks) = tokio::sync::mpsc::unbounded_channel();
 
         Ok(Self {
-            chunk_cache: HashMap::default(),
+            chunk_cache: IndexMap::default(),
             launch_manager: launch_manager(shared, runtime),
             tx_loaded_chunks,
             rx_loaded_chunks,
         })
     }
+    
+    pub fn cache_mut(&mut self) -> &mut IndexMap<I16Vec2, LoadedChunk, FxBuildHasher> {
+        &mut self.chunk_cache
+    }
 
     /// get_and_wait can only be called if a chunk has not already been loaded
     #[allow(clippy::missing_panics_doc, reason = "todo use unwrap unchecked")]
     #[instrument(skip_all)]
-    pub unsafe fn get_and_wait(
-        &self,
-        position: I16Vec2,
-        tasks: &AsyncRuntime,
-        world: &World,
-    ) -> Bytes {
-        if let Some(cached) = self.get_cached(position, world) {
+    pub unsafe fn get_and_wait(&self, position: I16Vec2, tasks: &AsyncRuntime) -> Bytes {
+        if let Some(cached) = self.get_cached(position) {
             return cached;
         }
 
@@ -95,29 +94,8 @@ impl MinecraftWorld {
         while let Ok(chunk) = self.rx_loaded_chunks.try_recv() {
             let position = chunk.position;
 
-            let x = position[0];
-            let z = position[1];
-
-            let name = format_compact!("chunk_{x:03}_{z:03}");
-
-            let entity = world
-                .entity_named(&name)
-                .set(chunk)
-                .set(NeighborNotify::default())
-                .set(PendingChanges::default());
-
-            self.chunk_cache.insert(position, entity.id());
+            self.chunk_cache.insert(position, chunk);
         }
-    }
-
-    #[must_use]
-    pub fn get_loaded_chunk_entity<'a>(
-        &self,
-        chunk_position: I16Vec2,
-        world: &'a World,
-    ) -> Option<EntityView<'a>> {
-        let entity = self.chunk_cache.get(&chunk_position).copied()?;
-        Some(world.entity_from_id(entity))
     }
 
     /// Returns the unloaded chunk if it is loaded, otherwise `None`.
@@ -126,19 +104,12 @@ impl MinecraftWorld {
     // I wonder if we can just implement something, where we can return an `impl Deref`
     // and see if this would make more sense or not.
     #[must_use]
-    pub fn get_loaded_chunk<R>(
-        &self,
-        chunk_position: I16Vec2,
-        world: &World,
-        f: impl FnOnce(Option<&LoadedChunk>) -> R,
-    ) -> R {
-        let Some(entity) = self.get_loaded_chunk_entity(chunk_position, world) else {
-            return f(None);
-        };
+    pub fn get_loaded_chunk(&self, chunk_position: I16Vec2) -> Option<&LoadedChunk> {
+        self.chunk_cache.get(&chunk_position)
+    }
 
-        let entity = world.entity_from_id(entity);
-
-        entity.get::<&LoadedChunk>(|chunk| f(Some(chunk)))
+    pub fn get_loaded_chunk_mut(&mut self, chunk_position: I16Vec2) -> Option<&mut LoadedChunk> {
+        self.chunk_cache.get_mut(&chunk_position)
     }
 
     /// Returns all loaded blocks within the range from `start` to `end` (inclusive).
@@ -199,39 +170,34 @@ impl MinecraftWorld {
 
                 let chunk_pos = IVec2::new(cx, cz).as_i16vec2();
 
-                self.get_loaded_chunk(chunk_pos, world, |chunk| {
-                    let Some(chunk) = chunk else {
-                        return R::from_output(());
-                    };
+                let Some(chunk) = self.get_loaded_chunk(chunk_pos) else {
+                    continue;
+                };
 
-                    let chunk = &chunk.chunk;
-                    for x in start.x..=end.x {
-                        for z in start.y..=end.y {
-                            for y in y_start..=y_end {
-                                debug_assert!(x <= 15);
-                                debug_assert!(z <= 15);
+                let chunk = &chunk.chunk;
+                for x in start.x..=end.x {
+                    for z in start.y..=end.y {
+                        for y in y_start..=y_end {
+                            debug_assert!(x <= 15);
+                            debug_assert!(z <= 15);
 
-                                if y >= CHUNK_HEIGHT_SPAN {
-                                    continue;
-                                }
-
-                                let block = chunk.block_state(x, y, z);
-
-                                let y = y as i32 + START_Y;
-                                let pos = BlockPos::new(
-                                    x as i32 + chunk_start.x,
-                                    y,
-                                    z as i32 + chunk_start.y,
-                                );
-
-                                f(pos, block)?;
+                            if y >= CHUNK_HEIGHT_SPAN {
+                                continue;
                             }
+
+                            let block = chunk.block_state(x, y, z);
+
+                            let y = y as i32 + START_Y;
+                            let pos = BlockPos::new(
+                                x as i32 + chunk_start.x,
+                                y,
+                                z as i32 + chunk_start.y,
+                            );
+
+                            f(pos, block)?;
                         }
                     }
-
-                    // todo: pretty sure something is wrong here
-                    R::from_output(())
-                })?;
+                }
             }
         }
 
@@ -240,7 +206,7 @@ impl MinecraftWorld {
 
     /// Get a block
     #[must_use]
-    pub fn get_block(&self, position: BlockPos, world: &World) -> Option<BlockState> {
+    pub fn get_block(&self, position: BlockPos) -> Option<BlockState> {
         const START_Y: i32 = -64;
 
         if position.y < START_Y {
@@ -252,22 +218,20 @@ impl MinecraftWorld {
         let chunk_start_block: IVec2 = chunk_pos << 4;
         let chunk_pos = chunk_pos.as_i16vec2();
 
-        self.get_loaded_chunk(chunk_pos, world, |chunk| {
-            let chunk = chunk?;
+        let chunk = self.get_loaded_chunk(chunk_pos)?;
 
-            let chunk = &chunk.chunk;
-            // todo: is this right for negative numbers?
-            // I have no idea... let's test
-            // non-absolute difference should work as well, but we want a u32
-            let x = u32::try_from(position.x - chunk_start_block[0]).unwrap();
-            let y = u32::try_from(position.y - START_Y).unwrap();
-            let z = u32::try_from(position.z - chunk_start_block[1]).unwrap();
+        let chunk = &chunk.chunk;
+        // todo: is this right for negative numbers?
+        // I have no idea... let's test
+        // non-absolute difference should work as well, but we want a u32
+        let x = u32::try_from(position.x - chunk_start_block[0]).unwrap();
+        let y = u32::try_from(position.y - START_Y).unwrap();
+        let z = u32::try_from(position.z - chunk_start_block[1]).unwrap();
 
-            Some(chunk.block_state(x, y, z))
-        })
+        Some(chunk.block_state(x, y, z))
     }
 
-    pub fn set_block(&self, position: BlockPos, state: BlockState, world: &World) {
+    pub fn try_set_block_delta(&mut self, position: BlockPos, state: BlockState) {
         const START_Y: i32 = -64;
 
         if position.y < START_Y {
@@ -279,18 +243,15 @@ impl MinecraftWorld {
         let chunk_start_block: IVec2 = chunk_pos << 4;
         let chunk_pos = chunk_pos.as_i16vec2();
 
-        let chunk = self.get_loaded_chunk_entity(chunk_pos, world).unwrap();
+        let Some(chunk) = self.get_loaded_chunk_mut(chunk_pos) else {
+            return;
+        };
 
-        chunk.get::<&PendingChanges>(|changes| {
-            // non-absolute difference should work as well, but we want a u32
-            let x = u8::try_from(position.x - chunk_start_block[0]).unwrap();
-            let y = u16::try_from(position.y - START_Y).unwrap();
-            let z = u8::try_from(position.z - chunk_start_block[1]).unwrap();
+        let x = u32::try_from(position.x - chunk_start_block[0]).unwrap();
+        let y = u32::try_from(position.y - START_Y).unwrap();
+        let z = u32::try_from(position.z - chunk_start_block[1]).unwrap();
 
-            let delta = Delta::new(x, y, z, state);
-
-            changes.push(delta, world);
-        });
+        chunk.chunk.set_delta(x, y, z, state);
     }
 
     // todo: allow modifying the chunk. we will need to implement resending
@@ -300,12 +261,9 @@ impl MinecraftWorld {
     // If you want to implement this, I also recommend waiting until that's done.
     // That should be done in a couple of days, probably.
 
-    pub fn get_cached(&self, position: I16Vec2, world: &World) -> Option<Bytes> {
-        if let Some(&result) = self.chunk_cache.get(&position) {
-            let result = world.entity_from_id(result);
-            let result = result.get::<&LoadedChunk>(LoadedChunk::bytes);
-
-            return Some(result);
+    pub fn get_cached(&self, position: I16Vec2) -> Option<Bytes> {
+        if let Some(result) = self.chunk_cache.get(&position) {
+            return Some(result.bytes());
         }
 
         None
@@ -313,8 +271,8 @@ impl MinecraftWorld {
 
     /// get the cached chunk for the given position or load it if it is not cached.
     #[must_use]
-    pub fn get_cached_or_load(&self, position: I16Vec2, world: &World) -> GetChunkBytes {
-        if let Some(result) = self.get_cached(position, world) {
+    pub fn get_cached_or_load(&self, position: I16Vec2) -> GetChunkBytes {
+        if let Some(result) = self.get_cached(position) {
             return GetChunkBytes::Loaded(result);
         };
 
@@ -324,150 +282,3 @@ impl MinecraftWorld {
         GetChunkBytes::Loading
     }
 }
-
-struct Block {
-    on_block_interact:
-        fn(blocks: &MinecraftWorld, block_pos: BlockPos, state: BlockState, world: &World),
-    on_neighbor_block_change:
-        fn(blocks: &MinecraftWorld, block_pos: BlockPos, state: BlockState, world: &World),
-}
-
-impl Default for Block {
-    fn default() -> Self {
-        Self {
-            on_block_interact: |_, _, _, _| {},
-            on_neighbor_block_change: |_, _, _, _| {},
-        }
-    }
-}
-
-impl From<BlockState> for Block {
-    fn from(state: BlockState) -> Self {
-        match state.to_kind() {
-            BlockKind::OakDoor => DOOR,
-            _ => Self::default(),
-        }
-    }
-}
-
-trait BlockInfo {
-    fn on_block_interact(
-        blocks: &MinecraftWorld,
-        block_pos: BlockPos,
-        state: BlockState,
-        world: &World,
-    );
-    fn on_neighbor_block_change(
-        blocks: &MinecraftWorld,
-        block_pos: BlockPos,
-        state: BlockState,
-        world: &World,
-    );
-}
-
-struct Door;
-
-impl BlockInfo for Door {
-    fn on_block_interact(
-        blocks: &MinecraftWorld,
-        block_pos: BlockPos,
-        state: BlockState,
-        world: &World,
-    ) {
-        let value = state.get(PropName::Open).unwrap();
-
-        // toggle
-        let open_prop = match value {
-            PropValue::True => PropValue::False,
-            PropValue::False => PropValue::True,
-            _ => unreachable!(),
-        };
-
-        blocks.set_block(block_pos, state.set(PropName::Open, open_prop), world);
-
-        match state.get(PropName::Half).unwrap() {
-            PropValue::Upper => {
-                let below = block_pos.get_in_direction(Direction::Down);
-                let Some(below_state) = blocks.get_block(below, world) else {
-                    return;
-                };
-
-                blocks.set_block(below, below_state.set(PropName::Open, open_prop), world);
-            }
-            PropValue::Lower => {
-                let above = block_pos.get_in_direction(Direction::Up);
-                let Some(above_state) = blocks.get_block(above, world) else {
-                    return;
-                };
-
-                blocks.set_block(above, above_state.set(PropName::Open, open_prop), world);
-            }
-            _ => unreachable!(),
-        }
-    }
-
-    #[instrument(skip_all)]
-    fn on_neighbor_block_change(
-        blocks: &MinecraftWorld,
-        block_pos: BlockPos,
-        state: BlockState,
-        world: &World,
-    ) {
-        let value = state.get(PropName::Half).unwrap();
-
-        let open = state.get(PropName::Open).unwrap();
-
-        match value {
-            PropValue::Upper => {
-                let Some(below) =
-                    blocks.get_block(block_pos.get_in_direction(Direction::Down), world)
-                else {
-                    return;
-                };
-
-                if below.to_kind() == BlockKind::OakDoor {
-                    let below_open = below.get(PropName::Open).unwrap();
-
-                    if below_open != open {
-                        let state = state.set(PropName::Open, below_open);
-                        info!("adj to be same as below");
-                        blocks.set_block(block_pos, state, world);
-                    }
-
-                    return;
-                }
-
-                info!("set air at {block_pos}");
-                blocks.set_block(block_pos, BlockState::AIR, world);
-            }
-            PropValue::Lower => {
-                let Some(above) =
-                    blocks.get_block(block_pos.get_in_direction(Direction::Up), world)
-                else {
-                    return;
-                };
-
-                if above.to_kind() == BlockKind::OakDoor {
-                    let above_open = above.get(PropName::Open).unwrap();
-
-                    if above_open != open {
-                        let state = state.set(PropName::Open, above_open);
-                        info!("adj to be same as above");
-                        blocks.set_block(block_pos, state, world);
-                    }
-
-                    return;
-                }
-
-                info!("set air at {block_pos}");
-                blocks.set_block(block_pos, BlockState::AIR, world);
-            }
-            _ => unreachable!(),
-        }
-    }
-}
-
-const DOOR: Block = Block {
-    on_block_interact: Door::on_block_interact,
-    on_neighbor_block_change: Door::on_neighbor_block_change,
-};

@@ -26,7 +26,7 @@
     clippy::future_not_send
 )]
 
-use std::{alloc::Allocator, cell::RefCell, fmt::Debug, net::ToSocketAddrs, sync::Arc};
+use std::{alloc::Allocator, cell::RefCell, fmt::Debug, io::Write, net::ToSocketAddrs, sync::Arc};
 
 use anyhow::{bail, Context};
 use derive_more::{Deref, DerefMut};
@@ -44,7 +44,7 @@ use storage::{Db, Events, GlobalEventHandlers, SkinHandler, ThreadLocal};
 use tracing::info;
 pub use uuid;
 pub use valence_protocol;
-use valence_protocol::CompressionThreshold;
+use valence_protocol::{CompressionThreshold, Encode, Packet};
 
 use crate::{
     net::{proxy::init_proxy_comms, Compose, Compressors, IoBuf, MAX_PACKET_SIZE},
@@ -59,6 +59,24 @@ pub mod ingress;
 pub mod net;
 pub mod simulation;
 pub mod storage;
+
+pub trait PacketBundle {
+    fn encode_including_ids(self, w: impl Write) -> anyhow::Result<()>;
+}
+
+// impl<T: Packet + Encode> PacketBundle for T {
+//     fn encode_including_ids(self, w: impl Write) -> anyhow::Result<()> {
+//         self.encode_with_id(w)
+//     }
+// }
+
+impl<'a, T: Packet + Encode> PacketBundle for &'a T {
+    fn encode_including_ids(self, w: impl Write) -> anyhow::Result<()> {
+        self.encode_with_id(w)
+    }
+}
+
+
 
 /// on macOS, the soft limit for the number of open file descriptors is often 256. This is far too low
 /// to test 10k players with.
