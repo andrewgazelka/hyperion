@@ -66,7 +66,7 @@ pub fn player_join_world(
             info!(
                 "caching world data for new players with compression level {compression_level:?}"
             );
-            inner(&mut encoder, chunks, tasks, world).unwrap();
+            inner(&mut encoder, chunks, tasks).unwrap();
 
             let bytes = encoder.take();
             bytes.freeze()
@@ -361,7 +361,6 @@ fn inner(
     encoder: &mut PacketEncoder,
     chunks: &MinecraftWorld,
     tasks: &AsyncRuntime,
-    world: &World,
 ) -> anyhow::Result<()> {
     send_game_join_packet(encoder)?;
     send_sync_tags(encoder)?;

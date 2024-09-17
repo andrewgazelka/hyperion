@@ -4,9 +4,8 @@ use std::ops::ControlFlow;
 
 use bvh_region::aabb::Aabb;
 use flecs_ecs::core::{Entity, EntityView, EntityViewGet, World};
-use glam::{I16Vec2, IVec2, Vec3};
+use glam::Vec3;
 use tracing::{info, instrument, trace, warn};
-use valence_generated::block::{BlockKind, BlockState};
 use valence_protocol::{
     decode::PacketFrame,
     packets::play::{
@@ -18,10 +17,7 @@ use valence_protocol::{
 
 use super::{
     animation::{self, ActiveAnimation},
-    blocks::{
-        chunk::{LoadedChunk, START_Y},
-        MinecraftWorld,
-    },
+    blocks::MinecraftWorld,
     inventory::Inventory,
     metadata::{Metadata, Pose},
     ConfirmBlockSequences, Position,
@@ -59,7 +55,7 @@ fn full(query: &mut PacketSwitchQuery<'_>, mut data: &[u8]) -> anyhow::Result<()
 fn change_position_or_correct_client(query: &mut PacketSwitchQuery<'_>, proposed: Vec3) {
     let pose = &mut *query.pose;
 
-    if try_change_position(proposed, pose, query.blocks, query.world) {
+    if try_change_position(proposed, pose, query.blocks) {
         return;
     }
 
@@ -79,12 +75,7 @@ fn change_position_or_correct_client(query: &mut PacketSwitchQuery<'_>, proposed
 }
 
 /// Returns true if the position was changed, false if it was not.
-fn try_change_position(
-    proposed: Vec3,
-    pose: &mut Position,
-    blocks: &MinecraftWorld,
-    world: &World,
-) -> bool {
+fn try_change_position(proposed: Vec3, pose: &mut Position, blocks: &MinecraftWorld) -> bool {
     /// 100.0 m/tick; this is the same as the vanilla server
     const MAX_BLOCKS_PER_TICK: f32 = 100.0;
     let current = pose.position;
@@ -103,7 +94,7 @@ fn try_change_position(
     // so no improper collisions
     let shrunk = proposed_pose.bounding.shrink(0.01);
 
-    let res = blocks.get_blocks(min, max, world, |pos, block| {
+    let res = blocks.get_blocks(min, max, |pos, block| {
         let pos = Vec3::new(pos.x as f32, pos.y as f32, pos.z as f32);
 
         for aabb in block.collision_shapes() {
@@ -292,12 +283,12 @@ fn client_command(mut data: &[u8], query: &mut PacketSwitchQuery<'_>) -> anyhow:
 
 pub fn player_interact_block(
     mut data: &[u8],
-    query: &mut PacketSwitchQuery<'_>,
+    _query: &mut PacketSwitchQuery<'_>,
 ) -> anyhow::Result<()> {
-    let packet = play::PlayerInteractBlockC2s::decode(&mut data)?;
+    let _packet = play::PlayerInteractBlockC2s::decode(&mut data)?;
 
-    let position = packet.position;
-    let chunk_position = I16Vec2::new((position.x >> 4) as i16, (position.z >> 4) as i16);
+    // let position = packet.position;
+    // let chunk_position = I16Vec2::new((position.x >> 4) as i16, (position.z >> 4) as i16);
 
     // let Some(entity) = query
     //     .blocks
@@ -327,7 +318,6 @@ pub fn player_interact_block(
     //     return Ok(());
     // }
     //
-    // let chunk_start: IVec2 = chunk_position.as_ivec2() << 4;
     //
     // let x = position.x - chunk_start[0];
     // let z = position.z - chunk_start[1];

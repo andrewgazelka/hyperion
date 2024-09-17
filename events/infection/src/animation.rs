@@ -1,7 +1,3 @@
-use std::{
-    ops::{Coroutine, DerefMut},
-    pin::pin,
-};
 
 use flecs_ecs::{
     core::{QueryBuilderImpl, SystemAPI, TableIter, TermBuilderImpl, World},
@@ -9,22 +5,13 @@ use flecs_ecs::{
     prelude::Module,
 };
 use hyperion::{
-    net::{Compose, NetworkStreamRef},
-    simulation::{
-        blocks::{chunk::LoadedChunk, MinecraftWorld},
-        InGameName, Uuid,
-    },
-    system_registry::SystemId,
-    valence_protocol::{math::IVec3, BlockPos, BlockState},
+    simulation::blocks::MinecraftWorld,
+    valence_protocol::{math::IVec3, BlockState},
 };
 use ndarray::Array3;
-use rand::Rng;
-use tracing::{debug, trace_span};
+use tracing::trace_span;
 
-use crate::{
-    command::{add_to_tree, parse},
-    component::team::Team,
-};
+use crate::command::add_to_tree;
 
 #[derive(Component)]
 pub struct AnimationModule;
@@ -34,14 +21,10 @@ impl Module for AnimationModule {
     fn module(world: &World) {
         add_to_tree(world);
 
-        let mut tick = 0;
-
         let animate = #[coroutine]
         static move || {
             // use yield; to wait a tick
             let mut frame = Array3::from_elem((27, 40, 27), BlockState::AIR);
-
-            let air_block = BlockState::AIR;
 
             let blocks = [
                 BlockState::LAPIS_BLOCK,
@@ -60,7 +43,7 @@ impl Module for AnimationModule {
                 let center_z = frame.shape()[2] / 2;
 
                 // Build up, replacing previous blocks
-                for (&current_block) in blocks.iter() {
+                for &current_block in blocks.iter() {
                     for progress in 0..=height {
                         for y in 0..progress {
                             for x in 0..width {
@@ -99,7 +82,7 @@ impl Module for AnimationModule {
 
         system!("regular_animation", world, &mut MinecraftWorld($))
             .multi_threaded()
-            .each_iter(move |it: TableIter<'_, false>, _, (mc)| {
+            .each_iter(move |_it: TableIter<'_, false>, _, mc| {
                 let span = trace_span!("regular_animation");
                 let _enter = span.enter();
 

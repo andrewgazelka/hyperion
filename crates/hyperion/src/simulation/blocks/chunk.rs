@@ -1,52 +1,13 @@
 use std::fmt::Debug;
 
 use bytes::Bytes;
-use derive_more::{Deref, DerefMut};
-use flecs_ecs::{
-    core::{EntityViewGet, World},
-    macros::Component,
-};
 use glam::I16Vec2;
-use tracing::trace;
 use valence_generated::block::BlockState;
-use valence_protocol::{packets::play, BlockPos};
 use valence_server::layer::chunk::Chunk;
 
-use super::{loader::parse::UnloadedChunkWithMetadata, MinecraftWorld};
-use crate::{net::Compose, storage::ThreadLocalVec, system_registry::SystemId};
+use super::loader::parse::UnloadedChunkWithMetadata;
 
 pub const START_Y: i32 = -64;
-
-// 384 / 16 = 24
-// const CHUNK_HEIGHT: usize = 24;
-
-// todo: bench packed vs non-packed cause we can pack xy into u8
-// to get size_of::<Delta>() == 5
-#[derive(Copy, Clone, Debug)]
-pub struct Delta {
-    x: u8,                   // 1
-    z: u8,                   // 1
-    y: u16,                  // 2
-    block_state: BlockState, // 2
-}
-
-impl Delta {
-    #[must_use]
-    pub fn new(x: u8, y: u16, z: u8, block_state: BlockState) -> Self {
-        debug_assert!(x <= 15);
-        debug_assert!(z <= 15);
-        debug_assert!(y <= 384);
-
-        Self {
-            x,
-            z,
-            y,
-            block_state,
-        }
-    }
-}
-
-const _: () = assert!(size_of::<Delta>() == 6);
 
 #[repr(packed)]
 #[derive(Copy, Clone)]
@@ -92,12 +53,6 @@ impl OnChange {
 
 const _: () = assert!(size_of::<OnChange>() == 3);
 
-#[derive(Debug, Default, Deref, DerefMut, Component)]
-pub struct PendingChanges(ThreadLocalVec<Delta>);
-
-#[derive(Debug, Default, Deref, DerefMut, Component)]
-pub struct NeighborNotify(ThreadLocalVec<OnChange>);
-
 mod packet;
 
 /// A chunk which has been loaded into memory.
@@ -139,6 +94,7 @@ impl LoadedChunk {
         &mut self.chunk
     }
 
+    #[expect(unused, reason = "might be useful in the future")]
     fn set_block_internal(&mut self, x: u8, y: u16, z: u8, state: BlockState) {
         self.chunk
             .set_block(u32::from(x), u32::from(y), u32::from(z), state);
@@ -150,6 +106,7 @@ impl LoadedChunk {
             .to_raw()
     }
 
+    #[expect(unused, reason = "might be useful in the future")]
     fn get_block(&self, x: u8, y: u16, z: u8) -> BlockState {
         BlockState::from_raw(self.get_block_internal(x, y, z)).unwrap()
     }

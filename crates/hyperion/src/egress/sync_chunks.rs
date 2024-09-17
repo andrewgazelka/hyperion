@@ -15,7 +15,7 @@ use crate::{
     config::CONFIG,
     net::{Compose, NetworkStreamRef},
     simulation::{
-        blocks::{chunk::LoadedChunk, GetChunkBytes, MinecraftWorld},
+        blocks::{GetChunkBytes, MinecraftWorld},
         ChunkPosition, Play, Position,
     },
     system_registry::{GENERATE_CHUNK_CHANGES, LOCAL_STATS, SEND_FULL_LOADED_CHUNKS},
@@ -40,10 +40,10 @@ impl Module for SyncChunksModule {
             &mut MinecraftWorld($),
         )
         .kind::<flecs::pipeline::OnUpdate>()
-        .each_iter(|iter, _, blocks| {
+        .each_iter(|_iter, _, blocks| {
             let span = trace_span!("load_pending");
             let _enter = span.enter();
-            blocks.load_pending(&iter.world());
+            blocks.load_pending();
         });
 
         let radius = CONFIG.view_distance as i16;

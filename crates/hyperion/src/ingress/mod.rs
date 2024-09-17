@@ -28,15 +28,10 @@ use crate::{
     },
     runtime::AsyncRuntime,
     simulation::{
-        animation::ActiveAnimation,
-        blocks::{chunk::PendingChanges, MinecraftWorld},
-        handlers::PacketSwitchQuery,
-        inventory::PlayerInventory,
-        metadata::Metadata,
-        skin::PlayerSkin,
-        AiTargetable, ChunkPosition, Comms, ConfirmBlockSequences, EntityReaction, Health,
-        ImmuneStatus, InGameName, PacketState, Player, Position, StreamLookup, Uuid,
-        PLAYER_SPAWN_POSITION,
+        animation::ActiveAnimation, blocks::MinecraftWorld, handlers::PacketSwitchQuery,
+        inventory::PlayerInventory, metadata::Metadata, skin::PlayerSkin, AiTargetable,
+        ChunkPosition, Comms, ConfirmBlockSequences, EntityReaction, Health, ImmuneStatus,
+        InGameName, PacketState, Player, Position, StreamLookup, Uuid, PLAYER_SPAWN_POSITION,
     },
     storage::{Events, GlobalEventHandlers, PlayerJoinServer, SkinHandler},
     system_registry::{SystemId, RECV_DATA, REMOVE_PLAYER_FROM_VISIBILITY},
@@ -430,7 +425,6 @@ impl Module for IngressModule {
             &mut ActiveAnimation,
         )
         .kind::<flecs::pipeline::OnUpdate>()
-        .write::<PendingChanges>()
         .multi_threaded()
         .tracing_each_entity(
             trace_span!("recv_data"),

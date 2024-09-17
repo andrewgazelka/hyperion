@@ -27,7 +27,7 @@ impl PacketBundle for DeltaPacket<'_> {
 
         self.position.encode(&mut write)?;
 
-        let deltas = &mut self.section.deltas_since_prev_tick;
+        let deltas = &mut self.section.changed_since_last_tick;
         let len = deltas.len();
         VarInt(len as i32).encode(&mut write)?;
 
@@ -66,7 +66,7 @@ impl LoadedChunk {
             .sections
             .iter_mut()
             .enumerate()
-            .filter(|(_, section)| !section.deltas_since_prev_tick.is_empty())
+            .filter(|(_, section)| !section.changed_since_last_tick.is_empty())
             .map(move |(i, section)| {
                 let y = i as i32;
                 let y = y + (START_Y >> 4);

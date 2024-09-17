@@ -1,8 +1,4 @@
-use std::collections::{hash_map::Entry, HashMap};
-
-use fxhash::FxBuildHasher;
-use indexmap::IndexSet;
-use more_asserts::{debug_assert_le, debug_assert_lt};
+use more_asserts::debug_assert_lt;
 use roaring::RoaringBitmap;
 use valence_generated::block::BlockState;
 use valence_server::layer::chunk::{BiomeContainer, BlockStateContainer};
@@ -16,11 +12,8 @@ pub struct Section {
     pub block_light: [u8; 2048],
     pub sky_light: [u8; 2048],
 
-    // goes up to 2^15 in 1.20.1 vanilla mc we can use u16
-    // pub original: HashMap<u16, BlockState, FxBuildHasher>,
-
-    // index of the block that has changed
-    pub deltas_since_prev_tick: RoaringBitmap,
+    pub changed: RoaringBitmap,
+    pub changed_since_last_tick: RoaringBitmap,
 }
 
 impl Section {
@@ -35,14 +28,15 @@ impl Section {
         let before = self.block_states.set(idx as usize, new);
 
         if before != new {
-            self.deltas_since_prev_tick.insert(idx as u32);
+            self.changed_since_last_tick.insert(idx as u32);
+            self.changed.insert(idx as u32);
         }
 
         new
     }
 
     pub fn reset_tick_deltas(&mut self) {
-        self.deltas_since_prev_tick.clear();
+        self.changed_since_last_tick.clear();
     }
 }
 
@@ -57,7 +51,7 @@ mod tests {
             block_light: [0; 2048],
             sky_light: [0; 2048],
             original: HashMap::with_hasher(FxBuildHasher::default()),
-            deltas_since_prev_tick: FxHashSet::default(),
+            changed_since_last_tick: FxHashSet::default(),
         }
     }
 
@@ -70,7 +64,7 @@ mod tests {
         assert_eq!(result, BlockState::AIR);
         assert_eq!(section.block_states.get(0), new_state);
         assert_eq!(section.original.len(), 1);
-        assert!(section.deltas_since_prev_tick.contains(&0));
+        assert!(section.changed_since_last_tick.contains(&0));
     }
 
     #[test]
@@ -93,7 +87,7 @@ mod tests {
         let result = section.set(0, BlockState::AIR);
         assert_eq!(result, new_state);
         assert!(section.original.is_empty());
-        assert!(section.deltas_since_prev_tick.contains(&0));
+        assert!(section.changed_since_last_tick.contains(&0));
     }
 
     #[test]
@@ -106,7 +100,7 @@ mod tests {
         }
 
         assert_eq!(section.original.len(), 3);
-        assert_eq!(section.deltas_since_prev_tick.len(), 3);
+        assert_eq!(section.changed_since_last_tick.len(), 3);
 
         for (i, &state) in states.iter().enumerate() {
             assert_eq!(section.block_states.get(i), state);
@@ -133,10 +127,10 @@ mod tests {
 
         section.set(0, BlockState::STONE);
         section.set(1, BlockState::DIRT);
-        assert_eq!(section.deltas_since_prev_tick.len(), 2);
+        assert_eq!(section.changed_since_last_tick.len(), 2);
 
         section.reset_tick_deltas();
-        assert!(section.deltas_since_prev_tick.is_empty());
+        assert!(section.changed_since_last_tick.is_empty());
         assert_eq!(section.original.len(), 2);
     }
 

@@ -1,9 +1,5 @@
-use std::{
-    borrow::Cow,
-    collections::{BTreeMap, HashMap},
-};
+use std::{borrow::Cow, collections::BTreeMap};
 
-use indexmap::IndexSet;
 use roaring::RoaringBitmap;
 use thiserror::Error;
 use valence_anvil::RegionError;
@@ -218,7 +214,8 @@ impl Default for Section {
             biomes: BiomeContainer::default(),
             block_light: [0_u8; 2048],
             sky_light: [0_u8; 2048],
-            deltas_since_prev_tick: RoaringBitmap::new(),
+            changed: RoaringBitmap::new(),
+            changed_since_last_tick: RoaringBitmap::new(),
         }
     }
 }

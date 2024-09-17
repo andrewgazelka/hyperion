@@ -4,10 +4,7 @@ use std::{ops::Try, sync::Arc};
 
 use bytes::Bytes;
 use chunk::LoadedChunk;
-use flecs_ecs::{
-    core::{EntityViewGet, IdOperations, World},
-    macros::Component,
-};
+use flecs_ecs::macros::Component;
 use fxhash::FxBuildHasher;
 use glam::{I16Vec2, IVec2};
 use indexmap::IndexMap;
@@ -90,7 +87,7 @@ impl MinecraftWorld {
         bytes
     }
 
-    pub fn load_pending(&mut self, world: &World) {
+    pub fn load_pending(&mut self) {
         while let Ok(chunk) = self.rx_loaded_chunks.try_recv() {
             let position = chunk.position;
 
@@ -114,7 +111,7 @@ impl MinecraftWorld {
 
     /// Returns all loaded blocks within the range from `start` to `end` (inclusive).
     #[allow(clippy::excessive_nesting)]
-    pub fn get_blocks<F, R>(&self, start: BlockPos, end: BlockPos, world: &World, mut f: F) -> R
+    pub fn get_blocks<F, R>(&self, start: BlockPos, end: BlockPos, mut f: F) -> R
     where
         F: FnMut(BlockPos, BlockState) -> R,
         R: Try<Output = ()>,
