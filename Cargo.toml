@@ -9,7 +9,6 @@ members = [
     "crates/bvh-region",
     "crates/lunar-proto",
     "crates/hyperion",
-    "crates/persist",
     "crates/hyperion-proxy",
     "crates/hyperion-proto",
     "events/infection",
