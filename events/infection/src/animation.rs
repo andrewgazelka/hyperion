@@ -1,4 +1,3 @@
-
 use flecs_ecs::{
     core::{QueryBuilderImpl, SystemAPI, TableIter, TermBuilderImpl, World},
     macros::{system, Component},
