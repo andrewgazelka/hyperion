@@ -32,7 +32,7 @@ impl Section {
             self.changed.insert(idx as u32);
         }
 
-        new
+        before
     }
 
     pub fn reset_tick_deltas(&mut self) {
@@ -50,8 +50,8 @@ mod tests {
             biomes: BiomeContainer::new(),
             block_light: [0; 2048],
             sky_light: [0; 2048],
-            original: HashMap::with_hasher(FxBuildHasher::default()),
-            changed_since_last_tick: FxHashSet::default(),
+            changed: RoaringBitmap::default(),
+            changed_since_last_tick: RoaringBitmap::default(),
         }
     }
 
@@ -60,11 +60,11 @@ mod tests {
         let mut section = create_test_section();
         let new_state = BlockState::STONE;
 
-        let result = section.set(0, new_state);
+        let result = section.set_delta(0, new_state);
         assert_eq!(result, BlockState::AIR);
         assert_eq!(section.block_states.get(0), new_state);
-        assert_eq!(section.original.len(), 1);
-        assert!(section.changed_since_last_tick.contains(&0));
+        assert_eq!(section.changed.len(), 1);
+        assert!(section.changed_since_last_tick.contains(0));
     }
 
     #[test]
@@ -72,10 +72,10 @@ mod tests {
         let mut section = create_test_section();
         let state = BlockState::STONE;
 
-        section.set(0, state);
-        let result = section.set(0, state);
+        section.set_delta(0, state);
+        let result = section.set_delta(0, state);
         assert_eq!(result, state);
-        assert_eq!(section.original.len(), 1);
+        assert_eq!(section.changed.len(), 1);
     }
 
     #[test]
@@ -83,11 +83,11 @@ mod tests {
         let mut section = create_test_section();
         let new_state = BlockState::STONE;
 
-        section.set(0, new_state);
-        let result = section.set(0, BlockState::AIR);
+        section.set_delta(0, new_state);
+        let result = section.set_delta(0, BlockState::AIR);
         assert_eq!(result, new_state);
-        assert!(section.original.is_empty());
-        assert!(section.changed_since_last_tick.contains(&0));
+        assert!(section.changed.contains(0));
+        assert!(section.changed_since_last_tick.contains(0));
     }
 
     #[test]
@@ -96,10 +96,10 @@ mod tests {
         let states = [BlockState::STONE, BlockState::DIRT, BlockState::GRASS_BLOCK];
 
         for (i, &state) in states.iter().enumerate() {
-            section.set(i as u16, state);
+            section.set_delta(i as u16, state);
         }
 
-        assert_eq!(section.original.len(), 3);
+        assert_eq!(section.changed.len(), 3);
         assert_eq!(section.changed_since_last_tick.len(), 3);
 
         for (i, &state) in states.iter().enumerate() {
@@ -113,11 +113,11 @@ mod tests {
         let state = BlockState::STONE;
 
         // Test setting the first block
-        section.set(0, state);
+        section.set_delta(0, state);
         assert_eq!(section.block_states.get(0), state);
 
         // Test setting the last block (assuming 4096 blocks per section)
-        section.set(4095, state);
+        section.set_delta(4095, state);
         assert_eq!(section.block_states.get(4095), state);
     }
 
@@ -125,24 +125,24 @@ mod tests {
     fn test_reset_tick_deltas() {
         let mut section = create_test_section();
 
-        section.set(0, BlockState::STONE);
-        section.set(1, BlockState::DIRT);
+        section.set_delta(0, BlockState::STONE);
+        section.set_delta(1, BlockState::DIRT);
         assert_eq!(section.changed_since_last_tick.len(), 2);
 
         section.reset_tick_deltas();
         assert!(section.changed_since_last_tick.is_empty());
-        assert_eq!(section.original.len(), 2);
+        assert_eq!(section.changed.len(), 2);
     }
 
     #[test]
     fn test_section_set_multiple_changes() {
         let mut section = create_test_section();
 
-        section.set(0, BlockState::STONE);
-        section.set(0, BlockState::DIRT);
-        section.set(0, BlockState::GRASS_BLOCK);
+        section.set_delta(0, BlockState::STONE);
+        section.set_delta(0, BlockState::DIRT);
+        section.set_delta(0, BlockState::GRASS_BLOCK);
 
-        assert_eq!(section.original.len(), 1);
+        assert_eq!(section.changed.len(), 1);
         assert_eq!(section.block_states.get(0), BlockState::GRASS_BLOCK);
     }
 }

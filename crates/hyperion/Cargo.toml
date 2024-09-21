@@ -32,7 +32,6 @@ base64.workspace = true
 bitfield-struct = "0.8.0"
 bitvec.workspace = true
 bvh-region.workspace = true
-compact_str.workspace = true
 derive_more.workspace = true
 dirs-next.workspace = true
 fastrand.workspace = true
