@@ -224,6 +224,14 @@ impl Module for CommandModule {
 
         let system_id = SystemId(8);
 
+        system!("handle_infection_custom_messages", world, &mut EventQueue<event::PluginMessage<'static>>($))
+            .multi_threaded()
+            .each_iter(move |_it: TableIter<'_, false>, _, event_queue| {
+                for msg in event_queue.drain()   {
+                    println!("msg {msg:?}");
+                }
+            });
+
         system!("handle_infection_events_player", world, &Compose($), &mut EventQueue<event::Command>($), &mut MinecraftWorld($))
             .multi_threaded()
             .each_iter(move |it: TableIter<'_, false>, _, (compose, event_queue, mc)| {

@@ -1,12 +1,11 @@
 use std::marker::PhantomData;
 
-use derive_more::{Deref, DerefMut};
 use flecs_ecs::{
     core::{flecs, ComponentId, ComponentType, DataComponent, Struct, World, WorldGet},
     macros::Component,
 };
 
-use crate::{simulation::event, storage::ThreadLocalVec};
+use crate::simulation::event;
 
 pub mod event_queue;
 pub mod raw;
@@ -86,12 +85,12 @@ define_events! {
     event::PluginMessage<'static> => plugin_message
 }
 
-trait ReducedLifetime {
+pub trait ReducedLifetime {
     type Reduced<'a>
     where
         Self: 'a;
 
-    fn reduce(&self) -> Self::Reduced<'_>;
+    fn reduce<'a>(self) -> Self::Reduced<'a>;
 }
 
 macro_rules! simple_reduce {
@@ -100,11 +99,10 @@ macro_rules! simple_reduce {
 
         impl ReducedLifetime for $event {
             type Reduced<'a>
-            where
-                Self: 'a,
-            = &'a Self;
 
-            fn reduce(&self) -> Self::Reduced<'_> {
+            = Self where Self: 'a;
+
+            fn reduce<'a>(self) -> Self::Reduced<'a> {
                 self
             }
         }
@@ -123,11 +121,9 @@ simple_reduce!(
 
 impl ReducedLifetime for event::PluginMessage<'static> {
     type Reduced<'a>
-    where
-        Self: 'a,
-    = &'a event::PluginMessage<'a>;
+    = event::PluginMessage<'a> where Self: 'a;
 
-    fn reduce(&self) -> Self::Reduced<'_> {
+    fn reduce<'a>(self) -> Self::Reduced<'a> {
         self
     }
 }

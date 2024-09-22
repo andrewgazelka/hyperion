@@ -9,6 +9,7 @@ use fxhash::FxBuildHasher;
 use glam::{I16Vec2, IVec2};
 use indexmap::IndexMap;
 use loader::{launch_manager, LaunchHandle, CHUNK_HEIGHT_SPAN};
+use roaring::RoaringBitmap;
 use shared::Shared;
 use tracing::instrument;
 use valence_generated::block::BlockState;
@@ -37,6 +38,7 @@ pub enum GetChunkBytes {
 pub struct MinecraftWorld {
     /// Map to a Chunk by Entity ID
     chunk_cache: IndexMap<I16Vec2, LoadedChunk, FxBuildHasher>,
+    should_update: RoaringBitmap,
 
     launch_manager: LaunchHandle,
 
@@ -53,10 +55,26 @@ impl MinecraftWorld {
 
         Ok(Self {
             chunk_cache: IndexMap::default(),
+            should_update: RoaringBitmap::default(),
             launch_manager: launch_manager(shared, runtime),
             tx_loaded_chunks,
             rx_loaded_chunks,
         })
+    }
+
+    pub fn for_each_to_update(&mut self, mut f: impl FnMut(&mut LoadedChunk)) {
+        let should_update = &mut self.should_update;
+        let chunk_cache = &mut self.chunk_cache;
+
+        for idx in should_update.iter() {
+            let idx = idx as usize;
+            let (_, v) = chunk_cache.get_index_mut(idx).unwrap();
+            f(v);
+        }
+    }
+
+    pub fn clear_should_update(&mut self) {
+        self.should_update.clear();
     }
 
     pub fn cache_mut(&mut self) -> &mut IndexMap<I16Vec2, LoadedChunk, FxBuildHasher> {

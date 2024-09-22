@@ -25,6 +25,8 @@
     clippy::needless_pass_by_value,
     clippy::future_not_send
 )]
+#![feature(stmt_expr_attributes)]
+#![feature(coroutines)]
 
 use std::{alloc::Allocator, cell::RefCell, fmt::Debug, io::Write, net::ToSocketAddrs, sync::Arc};
 

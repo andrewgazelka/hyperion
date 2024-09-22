@@ -1,16 +1,16 @@
 //! <https://wiki.vg/index.php?title=Protocol&oldid=18375>
 
-use std::ops::ControlFlow;
+use std::{borrow::Cow, ops::ControlFlow};
 
+use anyhow::bail;
 use bvh_region::aabb::Aabb;
 use flecs_ecs::core::{Entity, EntityView, EntityViewGet, World};
 use glam::Vec3;
 use tracing::{info, instrument, trace, warn};
 use valence_protocol::{
-    decode::PacketFrame,
     packets::play::{
         self, client_command_c2s::ClientCommand, player_interact_entity_c2s::EntityInteraction,
-        player_position_look_s2c::PlayerPositionLookFlags,
+        player_position_look_s2c::PlayerPositionLookFlags, CustomPayloadC2s,
     },
     Decode, Hand, Packet, VarInt,
 };
@@ -390,27 +390,39 @@ pub fn creative_inventory_action(
     Ok(())
 }
 
-pub fn custom_payload(mut data: &[u8], query: &mut PacketSwitchQuery<'_>) -> anyhow::Result<()> {
-    let packet = play::CustomPayloadC2s::decode(&mut data)?;
+pub fn custom_payload(
+    mut data: &'static [u8],
+    query: &mut PacketSwitchQuery<'_>,
+) -> anyhow::Result<()> {
+    let packet: CustomPayloadC2s<'static> = play::CustomPayloadC2s::decode(&mut data)?;
+
+    let channel = packet.channel.into_inner();
+
+    let Cow::Borrowed(borrow) = channel else {
+        bail!("NO")
+    };
 
     let event = PluginMessage {
-        channel: packet.channel.as_str(),
+        channel: borrow,
         data: packet.data.0 .0,
     };
 
     // to static
-    let event: PluginMessage<'static> = unsafe { core::mem::transmute(event) };
+    // let event: PluginMessage<'static> = unsafe { core::mem::transmute(event) };
+
     query.events.push(event, query.world);
 
     Ok(())
 }
 
 pub fn packet_switch(
-    raw: &BorrowedPacketFrame<'_>,
+    raw: BorrowedPacketFrame<'_>,
     query: &mut PacketSwitchQuery<'_>,
 ) -> anyhow::Result<()> {
     let packet_id = raw.id;
     let data = raw.body;
+
+    let data: &'static [u8] = unsafe { core::mem::transmute(data) };
 
     match packet_id {
         play::HandSwingC2s::ID => hand_swing(data, query)?,

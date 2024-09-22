@@ -12,7 +12,6 @@ use serde_json::json;
 use sha2::Digest;
 use tracing::{error, info, trace, trace_span, warn};
 use valence_protocol::{
-    decode::PacketFrame,
     packets,
     packets::{
         handshaking::handshake_c2s::HandshakeNextState, login, login::LoginCompressionS2c, play,
@@ -514,7 +513,7 @@ impl Module for IngressModule {
 
                                 // trace_span!("ingress", ign = name).in_scope(|| {
                                 if let Err(err) =
-                                    crate::simulation::handlers::packet_switch(&frame, &mut query)
+                                    crate::simulation::handlers::packet_switch(frame, &mut query)
                                 {
                                     error!("failed to process packet {:?}: {err}", frame);
                                 }

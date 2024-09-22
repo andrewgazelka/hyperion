@@ -1,7 +1,7 @@
 use derive_more::{Deref, DerefMut};
 use flecs_ecs::macros::Component;
 
-use crate::storage::{event::queue::ReducedLifetime, Event, ThreadLocalVec};
+use crate::storage::{Event, ThreadLocalVec};
 
 #[derive(Component, Deref, DerefMut)]
 pub struct EventQueue<T>
@@ -24,10 +24,7 @@ where
 }
 
 impl<T: Event> EventQueue<T> {
-    pub fn iter(&mut self) -> impl Iterator<Item = T::Reduced<'_>> {
-        self.inner
-            .iter_mut()
-            .flat_map(|x| x.get_mut())
-            .map(|x| x.reduce())
+    pub fn drain(&mut self) -> impl Iterator<Item = T::Reduced<'_>> {
+        self.inner.drain().map(|x| x.reduce())
     }
 }
