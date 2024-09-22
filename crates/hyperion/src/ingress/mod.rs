@@ -23,8 +23,8 @@ use valence_protocol::{
 use crate::{
     egress::sync_chunks::ChunkSendQueue,
     net::{
-        proxy::ReceiveState, Compose, NetworkStreamRef, PacketDecoder, MINECRAFT_VERSION,
-        PROTOCOL_VERSION,
+        decoder::BorrowedPacketFrame, proxy::ReceiveState, Compose, NetworkStreamRef,
+        PacketDecoder, MINECRAFT_VERSION, PROTOCOL_VERSION,
     },
     runtime::AsyncRuntime,
     simulation::{
@@ -41,7 +41,10 @@ use crate::{
 #[derive(Component, Debug)]
 pub struct PendingRemove;
 
-fn process_handshake(login_state: &mut PacketState, packet: &PacketFrame) -> anyhow::Result<()> {
+fn process_handshake(
+    login_state: &mut PacketState,
+    packet: &BorrowedPacketFrame<'_>,
+) -> anyhow::Result<()> {
     debug_assert!(*login_state == PacketState::Handshake);
 
     let handshake: packets::handshaking::HandshakeC2s<'_> = packet.decode()?;
@@ -70,7 +73,7 @@ fn process_login(
     decoder: &mut PacketDecoder,
     comms: &Comms,
     skins_collection: SkinHandler,
-    packet: &PacketFrame,
+    packet: &BorrowedPacketFrame<'_>,
     stream_id: NetworkStreamRef,
     compose: &Compose,
     entity: &EntityView<'_>,
@@ -198,7 +201,7 @@ fn offline_uuid(username: &str) -> anyhow::Result<uuid::Uuid> {
 fn process_status(
     login_state: &mut PacketState,
     system_id: SystemId,
-    packet: &PacketFrame,
+    packet: &BorrowedPacketFrame<'_>,
     packets: NetworkStreamRef,
     compose: &Compose,
     world: &World,
@@ -355,6 +358,7 @@ impl Module for IngressModule {
                 let entity = world.entity_from_id(*entity_id);
 
                 entity.get::<&mut PacketDecoder>(|decoder| {
+                    // decoder.shift_excess();
                     decoder.queue_slice(bytes.as_ref());
                 });
             });
@@ -447,12 +451,10 @@ impl Module for IngressModule {
                 animation,
             )| {
                 let world = entity.world();
+                let bump = compose.bump.get(&world);
 
                 loop {
-                    let Some(frame) = decoder
-                        .try_next_packet(&mut *compose.scratch(&world).borrow_mut())
-                        .unwrap()
-                    else {
+                    let Some(frame) = decoder.try_next_packet(bump).unwrap() else {
                         break;
                     };
 

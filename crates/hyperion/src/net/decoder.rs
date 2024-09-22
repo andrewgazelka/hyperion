@@ -3,7 +3,7 @@ use bytes::{Buf, BytesMut};
 use flecs_ecs::macros::Component;
 use more_asserts::debug_assert_ge;
 use valence_protocol::{
-    decode::PacketFrame, var_int::VarIntDecodeError, CompressionThreshold, Decode, VarInt,
+    decode::PacketFrame, var_int::VarIntDecodeError, CompressionThreshold, Decode, Packet, VarInt,
     MAX_PACKET_SIZE,
 };
 
@@ -14,6 +14,45 @@ use crate::ScratchBuffer;
 pub struct PacketDecoder {
     buf: BytesMut,
     threshold: CompressionThreshold,
+}
+
+#[derive(Copy, Clone, Debug)]
+pub struct BorrowedPacketFrame<'a> {
+    /// The ID of the decoded packet.
+    pub id: i32,
+    /// The contents of the packet after the leading VarInt ID.
+    pub body: &'a [u8],
+}
+
+impl<'a> BorrowedPacketFrame<'a> {
+    /// Attempts to decode this packet as type `P`. An error is returned if the
+    /// packet ID does not match, the body of the packet failed to decode, or
+    /// some input was missed.
+    pub fn decode<P>(&self) -> anyhow::Result<P>
+    where
+        P: Packet + Decode<'a>,
+    {
+        ensure!(
+            P::ID == self.id,
+            "packet ID mismatch while decoding '{}': expected {}, got {}",
+            P::NAME,
+            P::ID,
+            self.id
+        );
+
+        let mut r = self.body;
+
+        let pkt = P::decode(&mut r)?;
+
+        ensure!(
+            r.is_empty(),
+            "missed {} bytes while decoding '{}'",
+            r.len(),
+            P::NAME
+        );
+
+        Ok(pkt)
+    }
 }
 
 impl PacketDecoder {
@@ -31,10 +70,10 @@ impl PacketDecoder {
 
     /// Tries to get the next packet from the buffer.
     /// If a new packet is found, the buffer will be truncated by the length of the packet.
-    pub fn try_next_packet(
-        &mut self,
-        scratch: &mut impl ScratchBuffer,
-    ) -> anyhow::Result<Option<PacketFrame>> {
+    pub fn try_next_packet<'b>(
+        &'b mut self,
+        bump: &'b bumpalo::Bump,
+    ) -> anyhow::Result<Option<BorrowedPacketFrame<'static>>> {
         let mut r = &self.buf[..];
 
         let packet_len = match VarInt::decode_partial(&mut r) {
@@ -78,15 +117,8 @@ impl PacketDecoder {
                     self.threshold.0
                 );
 
-                let decompression_buf = scratch.obtain();
-
-                debug_assert!(decompression_buf.is_empty());
-                debug_assert_ge!(decompression_buf.capacity(), MAX_PACKET_SIZE as usize);
-
-                // decompression_buf.put_bytes(0, data_len as usize);
-
-                // valid because scratch is always large enough
-                unsafe { decompression_buf.set_len(data_len as usize) };
+                // todo(perf): make uninit memory ...  MaybeUninit
+                let decompression_buf: &mut [u8] = bump.alloc_slice_fill_default(data_len as usize);
 
                 let written_len = {
                     // todo: does it make sense to cache ever?
@@ -101,7 +133,8 @@ impl PacketDecoder {
 
                 self.buf.advance(total_packet_len);
 
-                data = BytesMut::from(decompression_buf.as_slice());
+                data = BytesMut::new();
+                data.extend_from_slice(decompression_buf)
             } else {
                 debug_assert_eq!(data_len, 0);
 
@@ -131,7 +164,10 @@ impl PacketDecoder {
 
         data.advance(data.len() - r.len());
 
-        Ok(Some(PacketFrame {
+        let data = data.to_vec().into_boxed_slice();
+        let data = Box::leak(data);
+
+        Ok(Some(BorrowedPacketFrame {
             id: packet_id,
             body: data,
         }))

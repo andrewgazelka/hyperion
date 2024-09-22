@@ -1571,6 +1571,7 @@ dependencies = [
  "base64 0.22.1",
  "bitfield-struct 0.8.0",
  "bitvec",
+ "bumpalo",
  "bvh-region",
  "bytemuck",
  "byteorder",

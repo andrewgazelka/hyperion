@@ -8,27 +8,10 @@ use flecs_ecs::{
 
 use crate::{simulation::event, storage::ThreadLocalVec};
 
+pub mod event_queue;
 pub mod raw;
 
-#[derive(Component, Deref, DerefMut)]
-pub struct EventQueue<T>
-where
-    T: Send + Sync + 'static,
-{
-    // todo: maybe change to SOA vec
-    inner: ThreadLocalVec<T>,
-}
-
-impl<T> Default for EventQueue<T>
-where
-    T: Send + Sync + 'static,
-{
-    fn default() -> Self {
-        Self {
-            inner: ThreadLocalVec::default(),
-        }
-    }
-}
+pub use event_queue::EventQueue;
 
 impl Events {
     pub fn push<E: Event>(&self, event: E, world: &World) {
@@ -45,7 +28,7 @@ mod sealed {
     pub trait Sealed {}
 }
 
-pub trait Event: sealed::Sealed {
+pub trait Event: ReducedLifetime + sealed::Sealed + Send + Sync + 'static {
     fn input(elem: Self, events: &Events, world: &World);
 }
 
@@ -100,4 +83,51 @@ define_events! {
     event::AttackEntity => attack,
     event::Command => command,
     event::PostureUpdate => posture_update,
+    event::PluginMessage<'static> => plugin_message
+}
+
+trait ReducedLifetime {
+    type Reduced<'a>
+    where
+        Self: 'a;
+
+    fn reduce(&self) -> Self::Reduced<'_>;
+}
+
+macro_rules! simple_reduce {
+    ($($event:ty),+) => {
+        $(
+
+        impl ReducedLifetime for $event {
+            type Reduced<'a>
+            where
+                Self: 'a,
+            = &'a Self;
+
+            fn reduce(&self) -> Self::Reduced<'_> {
+                self
+            }
+        }
+
+    )+
+    }
+}
+
+simple_reduce!(
+    event::ItemDropEvent,
+    event::SwingArm,
+    event::AttackEntity,
+    event::Command,
+    event::PostureUpdate
+);
+
+impl ReducedLifetime for event::PluginMessage<'static> {
+    type Reduced<'a>
+    where
+        Self: 'a,
+    = &'a event::PluginMessage<'a>;
+
+    fn reduce(&self) -> Self::Reduced<'_> {
+        self
+    }
 }

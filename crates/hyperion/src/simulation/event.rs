@@ -27,6 +27,11 @@ pub struct SwingArm {
     pub hand: Hand,
 }
 
+pub struct PluginMessage<'a> {
+    pub channel: &'a str,
+    pub data: &'a [u8],
+}
+
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 #[repr(i32)]
 #[allow(missing_docs, reason = "self explanatory")]
