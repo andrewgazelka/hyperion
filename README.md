@@ -18,16 +18,16 @@ on [Overcast Network](https://oc.tc/) (we are not affiliated with them).
 |------------------------|----------------------------------------------|-------------------|------------------------------------------------------------------|
 | **Lighting**           | Pre-loaded lighting                          | ✅ Done            |                                                                  |
 |                        | Dynamic lighting updates                     | ❌ Not implemented | May be unnecessary for Overcast-like modes                       |
-| **Block Mechanics**    | Placing blocks                               | ❌ Not implemented |                                                                  |
+| **Block Mechanics**    | Placing blocks                               | ❌ Not implemented | Existed pre-rewrite                                                                 |
 |                        | Block breaking                               | ✅ Done            |                                                                  |
-|                        | Block drops                                  | ❌ Not implemented |                                                                  |
-|                        | Block physics (doors, liquid, torches, etc.) | ❌ Not implemented |                                                                  |
+|                        | Block drops                                  | ❌ Not implemented | Existed to some extent pre-rewrite                                                                 |
+|                        | Block physics (doors, liquid, torches, etc.) | ❌ Not implemented | Existed pre-rewrite                                                                 |
 | **World Generation**   | Pre-loaded chunks from Java world saves      | ✅ Done            | Uses pre-built maps                                              |
 | **Rendering**          | Block animation/Frame API                    | ✅ Done            |                                                                  |
-| **Inventory**          | Player inventory                             | ❌ Not implemented |                                                                  |
+| **Inventory**          | Player inventory                             | ❌ Not implemented | Existed to some extent pre-rewrite                                                                 |
 |                        | Block inventory (chests, etc.)               | ❌ Not implemented |                                                                  |
-| **Combat**             | PvP (Player vs. Player)                      | ❌ Not implemented |                                                                  |
-|                        | Arrows                                       | ❌ Not implemented |                                                                  |
+| **Combat**             | PvP (Player vs. Player)                      | ❌ Not implemented | Existed pre-rewrite                                                                 |
+|                        | Arrows                                       | ❌ Not implemented | Existed to some extent pre-rewrite                                                                 |
 |                        | Player health and hunger                     | ❌ Not implemented | Health is necessary; hunger less important                       |
 | **World Persistence**  | Saving world                                 | ❌ Not implemented | Most useful in case the event server crashes                     |
 | **Physics**            | Entity-block collisions (anti-cheat)         | ✅ Done            | Required for arrow-based combat                                  |
