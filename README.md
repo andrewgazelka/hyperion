@@ -4,11 +4,7 @@
 
 [![Discord invite link](https://dcbadge.vercel.app/api/server/PBfnDtj5Wb)](https://discord.gg/PBfnDtj5Wb)
 
-<img width="1529" alt="image" src="https://github.com/user-attachments/assets/180391a8-8d82-4d5e-8466-995a962ec643">
-
-https://github.com/user-attachments/assets/b5213cc7-1be4-4241-8cb0-375cd2a8e981
-
-
+[hyperion.webm](https://github.com/user-attachments/assets/5ea4bdec-25a8-4bb5-a670-0cb81bf88d7e)
 
 Hyperion aims to have 10k players PvP simultaneously on one Minecraft world to break the Guinness World Record ([8825 by
 EVE Online](https://www.guinnessworldrecords.com/world-records/105603-largest-videogame-pvp-battle)). The
