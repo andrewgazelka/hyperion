@@ -1,18 +1,53 @@
+use std::{
+    cell::Cell,
+    ops::{Index, RangeFull},
+};
+
 use anyhow::{bail, ensure, Context};
-use bytes::{Buf, BytesMut};
+use bytes::Buf;
 use flecs_ecs::macros::Component;
-use more_asserts::debug_assert_ge;
 use valence_protocol::{
-    decode::PacketFrame, var_int::VarIntDecodeError, CompressionThreshold, Decode, Packet, VarInt,
-    MAX_PACKET_SIZE,
+    var_int::VarIntDecodeError, CompressionThreshold, Decode, Packet, VarInt, MAX_PACKET_SIZE,
 };
 
 use crate::ScratchBuffer;
 
+#[derive(Default)]
+struct RefBytesMut {
+    cursor: Cell<usize>,
+    inner: Vec<u8>,
+}
+
+impl RefBytesMut {
+    pub fn advance(&self, amount: usize) {
+        let on = self.cursor.get();
+        self.cursor.set(on + amount);
+    }
+
+    pub fn split_to(&self, len: usize) -> &[u8] {
+        let before = self.cursor.get();
+        let after = before + len;
+        self.cursor.set(after);
+        &self.inner[before..after]
+    }
+}
+
+unsafe impl Sync for RefBytesMut {}
+unsafe impl Send for RefBytesMut {}
+
+impl Index<RangeFull> for RefBytesMut {
+    type Output = [u8];
+
+    fn index(&self, index: RangeFull) -> &Self::Output {
+        let on = self.cursor.get();
+        &self.inner[on..]
+    }
+}
+
 /// A buffer for saving bytes that are not yet decoded.
 #[derive(Default, Component)]
 pub struct PacketDecoder {
-    buf: BytesMut,
+    buf: RefBytesMut,
     threshold: CompressionThreshold,
 }
 
@@ -56,18 +91,6 @@ impl<'a> BorrowedPacketFrame<'a> {
 }
 
 impl PacketDecoder {
-    /// The current length of the buffer.
-    #[must_use]
-    pub fn len(&self) -> usize {
-        self.buf.len()
-    }
-
-    /// Returns `true` if the buffer is empty.
-    #[must_use]
-    pub fn is_empty(&self) -> bool {
-        self.buf.is_empty()
-    }
-
     /// Tries to get the next packet from the buffer.
     /// If a new packet is found, the buffer will be truncated by the length of the packet.
     pub fn try_next_packet<'b>(
@@ -133,8 +156,7 @@ impl PacketDecoder {
 
                 self.buf.advance(total_packet_len);
 
-                data = BytesMut::new();
-                data.extend_from_slice(decompression_buf)
+                data = &*decompression_buf
             } else {
                 debug_assert_eq!(data_len, 0);
 
@@ -184,24 +206,9 @@ impl PacketDecoder {
         self.threshold = threshold;
     }
 
-    /// Queues a [`BytesMut`] slice into the buffer.
-    pub fn queue_bytes(&mut self, bytes: BytesMut) {
-        self.buf.unsplit(bytes);
-    }
-
     /// Queues a slice of bytes into the buffer.
     pub fn queue_slice(&mut self, bytes: &[u8]) {
-        self.buf.extend_from_slice(bytes);
-    }
-
-    /// Takes the contents of the buffer and returns it.
-    pub fn take_capacity(&mut self) -> BytesMut {
-        self.buf.split_off(self.buf.len())
-    }
-
-    /// Reserves capacity for the buffer.
-    pub fn reserve(&mut self, additional: usize) {
-        self.buf.reserve(additional);
+        self.buf.inner.extend_from_slice(bytes);
     }
 }
 
