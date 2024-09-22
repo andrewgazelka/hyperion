@@ -10,8 +10,8 @@ https://github.com/user-attachments/assets/b5213cc7-1be4-4241-8cb0-375cd2a8e981
 
 
 
-Hyperion aims to have 10k players PvP simultaneously on one Minecraft world to break the Guinness World Record (8825 by
-EVE Online). The
+Hyperion aims to have 10k players PvP simultaneously on one Minecraft world to break the Guinness World Record ([8825 by
+EVE Online](https://www.guinnessworldrecords.com/world-records/105603-largest-videogame-pvp-battle)). The
 architecture is ECS-driven using [Flecs Rust](https://github.com/Indra-db/Flecs-Rust). To contribute,
 join [Hyperion's Discord](https://discord.gg/sTN8mdRQ) for the latest updates on development.
 
