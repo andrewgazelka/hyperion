@@ -32,7 +32,8 @@ on [Overcast Network](https://oc.tc/) (we are not affiliated with them).
 |                        | Arrows                                       | ❌ Not implemented | Existed to some extent pre-rewrite                                                                 |
 |                        | Player health and hunger                     | ❌ Not implemented | Health is necessary; hunger less important                       |
 | **World Persistence**  | Saving world                                 | ❌ Not implemented | Most useful in case the event server crashes                     |
-| **Physics**            | Entity-block collisions (anti-cheat)         | ✅ Done            | Required for arrow-based combat                                  |
+| **Physics**            | Entity-block collisions (anti-cheat)         | ✅ Done            |                               |
+|                        | Entity-entity collisions                     | ✅ Done            | Required for arrow-based combat                                  |
 | **Gameplay Mechanics** | Day/night cycle                              | ✅ Done            |                                                                  |
 | **Audio**              | Proximity voice chat                         | ✅ Done            | Not included in open-source repository                           |
 | **Modularity**         | Mod/Plugin API                               | 🌊 In progress    | We want to make events extensions on top of the core game engine |
