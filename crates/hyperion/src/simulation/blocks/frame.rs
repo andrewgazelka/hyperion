@@ -15,11 +15,14 @@ impl MinecraftWorld {
         let end_chunk = IVec3::new(end.x >> 4, end.y >> 4, end.z >> 4).as_i16vec3();
         for section_x in start_chunk.x..=end_chunk.x {
             for section_z in start_chunk.z..=end_chunk.z {
-                let Some(loaded_chunk) =
-                    self.get_loaded_chunk_mut(I16Vec2::new(section_x, section_z))
+                let Some((idx, _, loaded_chunk)) = self
+                    .chunk_cache
+                    .get_full_mut(&I16Vec2::new(section_x, section_z))
                 else {
                     continue;
                 };
+
+                self.should_update.insert(idx as u32);
 
                 let chunk = &mut loaded_chunk.chunk;
 

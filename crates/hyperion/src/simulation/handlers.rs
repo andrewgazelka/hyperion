@@ -1,16 +1,16 @@
 //! <https://wiki.vg/index.php?title=Protocol&oldid=18375>
 
-use std::ops::ControlFlow;
+use std::{borrow::Cow, ops::ControlFlow};
 
+use anyhow::bail;
 use bvh_region::aabb::Aabb;
 use flecs_ecs::core::{Entity, EntityView, EntityViewGet, World};
 use glam::Vec3;
 use tracing::{info, instrument, trace, warn};
 use valence_protocol::{
-    decode::PacketFrame,
     packets::play::{
         self, client_command_c2s::ClientCommand, player_interact_entity_c2s::EntityInteraction,
-        player_position_look_s2c::PlayerPositionLookFlags,
+        player_position_look_s2c::PlayerPositionLookFlags, CustomPayloadC2s,
     },
     Decode, Hand, Packet, VarInt,
 };
@@ -23,8 +23,8 @@ use super::{
     ConfirmBlockSequences, Position,
 };
 use crate::{
-    net::{Compose, NetworkStreamRef},
-    simulation::event,
+    net::{decoder::BorrowedPacketFrame, Compose, NetworkStreamRef},
+    simulation::{event, event::PluginMessage},
     storage::Events,
     system_registry::SystemId,
 };
@@ -390,9 +390,39 @@ pub fn creative_inventory_action(
     Ok(())
 }
 
-pub fn packet_switch(raw: &PacketFrame, query: &mut PacketSwitchQuery<'_>) -> anyhow::Result<()> {
+pub fn custom_payload(
+    mut data: &'static [u8],
+    query: &mut PacketSwitchQuery<'_>,
+) -> anyhow::Result<()> {
+    let packet: CustomPayloadC2s<'static> = play::CustomPayloadC2s::decode(&mut data)?;
+
+    let channel = packet.channel.into_inner();
+
+    let Cow::Borrowed(borrow) = channel else {
+        bail!("NO")
+    };
+
+    let event = PluginMessage {
+        channel: borrow,
+        data: packet.data.0 .0,
+    };
+
+    // to static
+    // let event: PluginMessage<'static> = unsafe { core::mem::transmute(event) };
+
+    query.events.push(event, query.world);
+
+    Ok(())
+}
+
+pub fn packet_switch(
+    raw: BorrowedPacketFrame<'_>,
+    query: &mut PacketSwitchQuery<'_>,
+) -> anyhow::Result<()> {
     let packet_id = raw.id;
-    let data = raw.body.as_ref();
+    let data = raw.body;
+
+    let data: &'static [u8] = unsafe { core::mem::transmute(data) };
 
     match packet_id {
         play::HandSwingC2s::ID => hand_swing(data, query)?,
@@ -406,6 +436,7 @@ pub fn packet_switch(raw: &PacketFrame, query: &mut PacketSwitchQuery<'_>) -> an
         play::CreativeInventoryActionC2s::ID => creative_inventory_action(data, query)?,
         play::LookAndOnGroundC2s::ID => look_and_on_ground(data, query.pose)?,
         play::PlayerInteractBlockC2s::ID => player_interact_block(data, query)?,
+        play::CustomPayloadC2s::ID => custom_payload(data, query)?,
         // play::UpdatePlayerAbilitiesC2s::ID => update_player_abilities(data)?,
         // play::UpdateSelectedSlotC2s::ID => update_selected_slot(data,
         // world, query.id)?,

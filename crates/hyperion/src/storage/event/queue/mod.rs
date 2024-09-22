@@ -1,34 +1,16 @@
 use std::marker::PhantomData;
 
-use derive_more::{Deref, DerefMut};
 use flecs_ecs::{
     core::{flecs, ComponentId, ComponentType, DataComponent, Struct, World, WorldGet},
     macros::Component,
 };
 
-use crate::{simulation::event, storage::ThreadLocalVec};
+use crate::simulation::event;
 
+pub mod event_queue;
 pub mod raw;
 
-#[derive(Component, Deref, DerefMut)]
-pub struct EventQueue<T>
-where
-    T: Send + Sync + 'static,
-{
-    // todo: maybe change to SOA vec
-    inner: ThreadLocalVec<T>,
-}
-
-impl<T> Default for EventQueue<T>
-where
-    T: Send + Sync + 'static,
-{
-    fn default() -> Self {
-        Self {
-            inner: ThreadLocalVec::default(),
-        }
-    }
-}
+pub use event_queue::EventQueue;
 
 impl Events {
     pub fn push<E: Event>(&self, event: E, world: &World) {
@@ -45,7 +27,7 @@ mod sealed {
     pub trait Sealed {}
 }
 
-pub trait Event: sealed::Sealed {
+pub trait Event: ReducedLifetime + sealed::Sealed + Send + Sync + 'static {
     fn input(elem: Self, events: &Events, world: &World);
 }
 
@@ -100,4 +82,48 @@ define_events! {
     event::AttackEntity => attack,
     event::Command => command,
     event::PostureUpdate => posture_update,
+    event::PluginMessage<'static> => plugin_message
+}
+
+pub trait ReducedLifetime {
+    type Reduced<'a>
+    where
+        Self: 'a;
+
+    fn reduce<'a>(self) -> Self::Reduced<'a>;
+}
+
+macro_rules! simple_reduce {
+    ($($event:ty),+) => {
+        $(
+
+        impl ReducedLifetime for $event {
+            type Reduced<'a>
+
+            = Self where Self: 'a;
+
+            fn reduce<'a>(self) -> Self::Reduced<'a> {
+                self
+            }
+        }
+
+    )+
+    }
+}
+
+simple_reduce!(
+    event::ItemDropEvent,
+    event::SwingArm,
+    event::AttackEntity,
+    event::Command,
+    event::PostureUpdate
+);
+
+impl ReducedLifetime for event::PluginMessage<'static> {
+    type Reduced<'a>
+    = event::PluginMessage<'a> where Self: 'a;
+
+    fn reduce<'a>(self) -> Self::Reduced<'a> {
+        self
+    }
 }

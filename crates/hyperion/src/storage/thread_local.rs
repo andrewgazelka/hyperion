@@ -5,7 +5,6 @@ use std::{
     ops::{Deref, DerefMut},
 };
 
-use derive_more::derive::{Deref, DerefMut};
 use flecs_ecs::core::World;
 
 const NUM_THREADS: usize = 8;
@@ -73,9 +72,19 @@ pub struct ThreadHeaplessVec<T, const N: usize = 32> {
     inner: ThreadLocal<SyncUnsafeCell<heapless::Vec<T, N>>>,
 }
 
-#[derive(Debug, Deref, DerefMut)]
+#[derive(Debug)]
 pub struct ThreadLocalVec<T> {
     inner: ThreadLocal<SyncUnsafeCell<Vec<T>>>,
+}
+
+impl<T> ThreadLocalVec<T> {
+    pub fn len(&mut self) -> usize {
+        self.inner
+            .iter_mut()
+            .map(|x| x.get_mut())
+            .map(|x| x.len())
+            .sum()
+    }
 }
 
 /// Structure of arrays

@@ -67,6 +67,7 @@ enumset = "1.1.5"
 indexmap = "2.5.0"
 roaring = { version = "0.10.6", features = ["simd"] }
 ndarray = "0.16.1"
+bumpalo.workspace = true
 
 
 [dev-dependencies]

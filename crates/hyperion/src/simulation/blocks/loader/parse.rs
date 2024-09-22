@@ -83,7 +83,6 @@ pub mod section;
 #[derive(Clone, Default, Debug)]
 pub struct UnloadedChunkWithMetadata {
     pub sections: Vec<Section>,
-
     pub block_entities: BTreeMap<u32, Compound>,
 }
 

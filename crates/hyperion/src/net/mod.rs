@@ -5,6 +5,7 @@ use std::{
     fmt::Debug,
 };
 
+use bumpalo::Bump;
 use bytes::BytesMut;
 pub use decoder::PacketDecoder;
 use derive_more::Deref;
@@ -20,7 +21,7 @@ use crate::{
     Global, PacketBundle, Scratch, Scratches,
 };
 
-mod decoder;
+pub mod decoder;
 pub mod encoder;
 pub mod packets;
 pub mod proxy;
@@ -78,21 +79,18 @@ pub struct Compose {
     scratch: Scratches,
     global: Global,
     io_buf: IoBuf,
+    pub bump: ThreadLocal<Bump>,
 }
 
 impl Compose {
     #[must_use]
-    pub(crate) const fn new(
-        compressor: Compressors,
-        scratch: Scratches,
-        global: Global,
-        io_buf: IoBuf,
-    ) -> Self {
+    pub fn new(compressor: Compressors, scratch: Scratches, global: Global, io_buf: IoBuf) -> Self {
         Self {
             compressor,
             scratch,
             global,
             io_buf,
+            bump: ThreadLocal::new_defaults(),
         }
     }
 

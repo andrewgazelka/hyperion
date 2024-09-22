@@ -15,7 +15,7 @@ mod command;
 mod component;
 mod handler;
 
-use animation::AnimationModule;
+pub use animation::AnimationModule;
 use command::CommandModule;
 
 #[derive(Component)]
@@ -26,7 +26,7 @@ impl Module for InfectionModule {
         world.component::<component::team::Team>();
 
         world.import::<CommandModule>();
-        world.import::<AnimationModule>();
+        // world.import::<AnimationModule>();
     }
 }
 

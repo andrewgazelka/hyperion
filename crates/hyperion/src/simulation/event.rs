@@ -5,7 +5,7 @@ use glam::{U16Vec3, Vec3};
 use valence_protocol::{Hand, VarInt};
 use valence_server::entity::item_frame::ItemStack;
 
-#[derive(Component, Default)]
+#[derive(Component, Default, Debug)]
 pub struct ItemDropEvent {
     pub item: ItemStack,
     pub location: Vec3,
@@ -25,6 +25,12 @@ pub struct AttackEntity {
 #[derive(Copy, Clone, Debug)]
 pub struct SwingArm {
     pub hand: Hand,
+}
+
+#[derive(Debug)]
+pub struct PluginMessage<'a> {
+    pub channel: &'a str,
+    pub data: &'a [u8],
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
@@ -63,6 +69,7 @@ pub struct BlockBreak {
     pub id: VarInt,
 }
 
+#[derive(Debug)]
 pub struct Command {
     pub raw: String,
     pub by: Entity,

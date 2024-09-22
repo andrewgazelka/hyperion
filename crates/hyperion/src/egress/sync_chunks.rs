@@ -214,11 +214,13 @@ impl Module for SyncChunksModule {
 
             let world = it.world();
 
-            for chunk in mc.cache_mut().values_mut() {
+            mc.for_each_to_update(|chunk| {
                 for packet in chunk.delta_packets() {
                     compose.broadcast(packet, system_id).send(&world).unwrap();
                 }
-            }
+            });
+
+            mc.clear_should_update();
         });
 
         system!(
