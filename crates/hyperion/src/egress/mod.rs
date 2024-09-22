@@ -63,5 +63,20 @@ impl Module for EgressModule {
 
             egress.send(flush.clone()).unwrap();
         });
+
+        system!(
+            "clear_bump",
+            world,
+            &mut Compose($),
+        )
+        .kind_id(pipeline)
+        .each(move |compose| {
+            let span = tracing::trace_span!("clear_bump");
+            let _enter = span.enter();
+
+            for bump in compose.bump.iter_mut() {
+                bump.reset();
+            }
+        });
     }
 }
