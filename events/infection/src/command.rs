@@ -228,7 +228,7 @@ impl Module for CommandModule {
             .multi_threaded()
             .each_iter(move |_it: TableIter<'_, false>, _, event_queue| {
                 for msg in event_queue.drain()   {
-                    println!("msg {msg:?}");
+                    debug!("msg {msg:?}");
                 }
             });
 

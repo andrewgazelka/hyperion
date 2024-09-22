@@ -5,9 +5,12 @@ use flecs_ecs::prelude::*;
 use glam::I16Vec2;
 use tracing::trace_span;
 use uuid::Uuid;
-use valence_protocol::packets::play::{
-    self,
-    boss_bar_s2c::{BossBarAction, BossBarColor, BossBarDivision, BossBarFlags},
+use valence_protocol::{
+    packets::play::{
+        self,
+        boss_bar_s2c::{BossBarAction, BossBarColor, BossBarDivision, BossBarFlags},
+    },
+    VarInt,
 };
 use valence_text::IntoText;
 
@@ -15,7 +18,7 @@ use crate::{
     config::CONFIG,
     net::{Compose, NetworkStreamRef},
     simulation::{
-        blocks::{GetChunkBytes, MinecraftWorld},
+        blocks::{GetChunk, MinecraftWorld},
         ChunkPosition, Play, Position,
     },
     system_registry::{GENERATE_CHUNK_CHANGES, LOCAL_STATS, SEND_FULL_LOADED_CHUNKS},
@@ -182,15 +185,19 @@ impl Module for SyncChunksModule {
                         }
 
                         match chunks.get_cached_or_load(elem) {
-                            GetChunkBytes::Loaded(chunk) => {
+                            GetChunk::Loaded(chunk) => {
                                 compose
                                     .io_buf()
-                                    .unicast_raw(chunk, stream_id, system_id, &world);
+                                    .unicast_raw(chunk.base_packet_bytes.clone(), stream_id, system_id, &world);
+
+                                for packet in chunk.original_delta_packets() {
+                                    compose.unicast(packet, stream_id, system_id, &world).unwrap();
+                                }
 
                                 iter_count += 1;
                                 queue.changes.swap_remove(idx as usize);
                             }
-                            GetChunkBytes::Loading => {}
+                            GetChunk::Loading => {}
                         }
 
                         idx -= 1;
@@ -215,12 +222,23 @@ impl Module for SyncChunksModule {
             let world = it.world();
 
             mc.for_each_to_update(|chunk| {
-                for packet in chunk.delta_packets() {
+                for packet in chunk.delta_drain_packets() {
                     compose.broadcast(packet, system_id).send(&world).unwrap();
                 }
             });
-
             mc.clear_should_update();
+
+            for to_confirm in mc.to_confirm.drain(..) {
+                let entity = world.entity_from_id(to_confirm.entity);
+
+                let pkt = play::PlayerActionResponseS2c {
+                    sequence: VarInt(to_confirm.sequence),
+                };
+
+                entity.get::<&NetworkStreamRef>(|stream| {
+                    compose.unicast(&pkt, *stream, system_id, &world).unwrap();
+                });
+            }
         });
 
         system!(

@@ -2,7 +2,7 @@
 
 use flecs_ecs::{core::Entity, macros::Component};
 use glam::{U16Vec3, Vec3};
-use valence_protocol::{Hand, VarInt};
+use valence_protocol::{BlockPos, Hand, VarInt};
 use valence_server::entity::item_frame::ItemStack;
 
 #[derive(Component, Default, Debug)]
@@ -20,6 +20,13 @@ pub struct AttackEntity {
     pub from: Entity,
     /// The damage dealt by the attack. This corresponds to the same unit as [`crate::simulation::Health`].
     pub damage: f32,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub struct DestroyBlock {
+    pub position: BlockPos,
+    pub from: Entity,
+    pub sequence: i32,
 }
 
 #[derive(Copy, Clone, Debug)]

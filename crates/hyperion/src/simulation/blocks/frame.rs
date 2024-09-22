@@ -1,10 +1,28 @@
 use glam::{I16Vec2, IVec3};
 use ndarray::ArrayView3;
 use valence_generated::block::BlockState;
+use valence_protocol::BlockPos;
 
 use crate::simulation::blocks::{chunk::START_Y, MinecraftWorld};
 
 impl MinecraftWorld {
+    pub fn mark_should_update(&mut self, position: BlockPos) {
+        let x = position.x;
+        let z = position.z;
+
+        let chunk_x = x >> 4;
+        let chunk_z = z >> 4;
+
+        let chunk_x = i16::try_from(chunk_x).unwrap();
+        let chunk_z = i16::try_from(chunk_z).unwrap();
+
+        let Some((index, ..)) = self.chunk_cache.get_full(&I16Vec2::new(chunk_x, chunk_z)) else {
+            return;
+        };
+
+        self.should_update.insert(index as u32);
+    }
+
     pub fn paste(&mut self, offset: IVec3, frame: ArrayView3<'_, BlockState>) {
         let (width, height, depth) = frame.dim();
         let start = offset;

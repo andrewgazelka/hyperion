@@ -4,7 +4,7 @@ use std::{ops::Try, sync::Arc};
 
 use bytes::Bytes;
 use chunk::LoadedChunk;
-use flecs_ecs::macros::Component;
+use flecs_ecs::{core::Entity, macros::Component};
 use fxhash::FxBuildHasher;
 use glam::{I16Vec2, IVec2};
 use indexmap::IndexMap;
@@ -28,9 +28,14 @@ pub mod frame;
 mod region;
 mod shared;
 
-pub enum GetChunkBytes {
-    Loaded(Bytes),
+pub enum GetChunk<'a> {
+    Loaded(&'a LoadedChunk),
     Loading,
+}
+
+pub struct EntityAndSequence {
+    pub entity: Entity,
+    pub sequence: i32,
 }
 
 /// Accessor of blocks.
@@ -44,6 +49,7 @@ pub struct MinecraftWorld {
 
     tx_loaded_chunks: tokio::sync::mpsc::UnboundedSender<LoadedChunk>,
     rx_loaded_chunks: tokio::sync::mpsc::UnboundedReceiver<LoadedChunk>,
+    pub to_confirm: Vec<EntityAndSequence>,
 }
 
 impl MinecraftWorld {
@@ -59,6 +65,7 @@ impl MinecraftWorld {
             launch_manager: launch_manager(shared, runtime),
             tx_loaded_chunks,
             rx_loaded_chunks,
+            to_confirm: vec![],
         })
     }
 
@@ -286,14 +293,14 @@ impl MinecraftWorld {
 
     /// get the cached chunk for the given position or load it if it is not cached.
     #[must_use]
-    pub fn get_cached_or_load(&self, position: I16Vec2) -> GetChunkBytes {
-        if let Some(result) = self.get_cached(position) {
-            return GetChunkBytes::Loaded(result);
+    pub fn get_cached_or_load(&self, position: I16Vec2) -> GetChunk<'_> {
+        if let Some(result) = self.chunk_cache.get(&position) {
+            return GetChunk::Loaded(result);
         };
 
         self.launch_manager
             .send(position, self.tx_loaded_chunks.clone());
 
-        GetChunkBytes::Loading
+        GetChunk::Loading
     }
 }

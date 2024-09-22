@@ -158,13 +158,13 @@ impl Compose {
     /// Send a packet to a single player.
     pub fn unicast<P>(
         &self,
-        packet: &P,
+        packet: P,
         stream_id: NetworkStreamRef,
         system_id: SystemId,
         world: &World,
     ) -> anyhow::Result<()>
     where
-        P: valence_protocol::Packet + valence_protocol::Encode,
+        P: PacketBundle,
     {
         Unicast {
             packet,

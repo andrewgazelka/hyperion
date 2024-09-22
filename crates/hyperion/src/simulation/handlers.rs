@@ -9,8 +9,9 @@ use glam::Vec3;
 use tracing::{info, instrument, trace, warn};
 use valence_protocol::{
     packets::play::{
-        self, client_command_c2s::ClientCommand, player_interact_entity_c2s::EntityInteraction,
-        player_position_look_s2c::PlayerPositionLookFlags, CustomPayloadC2s,
+        self, client_command_c2s::ClientCommand, player_action_c2s::PlayerAction,
+        player_interact_entity_c2s::EntityInteraction,
+        player_position_look_s2c::PlayerPositionLookFlags,
     },
     Decode, Hand, Packet, VarInt,
 };
@@ -239,9 +240,29 @@ pub struct PacketSwitchQuery<'a> {
     pub animation: &'a mut ActiveAnimation,
 }
 
-// i.e., shooting a bow
-fn player_action(mut data: &[u8], _query: &PacketSwitchQuery<'_>) -> anyhow::Result<()> {
-    let _packet = play::PlayerActionC2s::decode(&mut data)?;
+// i.e., shooting a bow, digging a block, etc
+fn player_action(mut data: &[u8], query: &PacketSwitchQuery<'_>) -> anyhow::Result<()> {
+    let packet = play::PlayerActionC2s::decode(&mut data)?;
+
+    let sequence = packet.sequence.0;
+
+    match packet.action {
+        PlayerAction::StartDestroyBlock => {}
+        PlayerAction::AbortDestroyBlock => {}
+        PlayerAction::StopDestroyBlock => {
+            let event = event::DestroyBlock {
+                position: packet.position,
+                from: query.id,
+                sequence,
+            };
+
+            query.events.push(event, query.world);
+        }
+        PlayerAction::DropAllItems => {}
+        PlayerAction::DropItem => {}
+        PlayerAction::ReleaseUseItem => {}
+        PlayerAction::SwapItemWithOffhand => {}
+    }
 
     // todo: implement
 
@@ -394,7 +415,7 @@ pub fn custom_payload(
     mut data: &'static [u8],
     query: &mut PacketSwitchQuery<'_>,
 ) -> anyhow::Result<()> {
-    let packet: CustomPayloadC2s<'static> = play::CustomPayloadC2s::decode(&mut data)?;
+    let packet: play::CustomPayloadC2s<'static> = play::CustomPayloadC2s::decode(&mut data)?;
 
     let channel = packet.channel.into_inner();
 

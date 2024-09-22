@@ -10,7 +10,10 @@ use std::net::ToSocketAddrs;
 use flecs_ecs::prelude::*;
 use hyperion::{storage::GlobalEventHandlers, Hyperion};
 
+use crate::block::BlockModule;
+
 mod animation;
+mod block;
 mod command;
 mod component;
 mod handler;
@@ -26,6 +29,7 @@ impl Module for InfectionModule {
         world.component::<component::team::Team>();
 
         world.import::<CommandModule>();
+        world.import::<BlockModule>();
         // world.import::<AnimationModule>();
     }
 }
