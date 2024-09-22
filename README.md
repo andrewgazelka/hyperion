@@ -4,6 +4,8 @@
 
 [![Discord invite link](https://dcbadge.vercel.app/api/server/PBfnDtj5Wb)](https://discord.gg/PBfnDtj5Wb)
 
+<img width="1529" alt="image" src="https://github.com/user-attachments/assets/180391a8-8d82-4d5e-8466-995a962ec643">
+
 https://github.com/user-attachments/assets/b5213cc7-1be4-4241-8cb0-375cd2a8e981
 
 
