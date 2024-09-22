@@ -358,7 +358,7 @@ impl Module for IngressModule {
                 let entity = world.entity_from_id(*entity_id);
 
                 entity.get::<&mut PacketDecoder>(|decoder| {
-                    // decoder.shift_excess();
+                    decoder.shift_excess();
                     decoder.queue_slice(bytes.as_ref());
                 });
             });

@@ -182,7 +182,7 @@ impl PacketDecoder {
         }
 
         // Decode the leading packet ID.
-        r = &data[..];
+        r = data;
         let packet_id = VarInt::decode(&mut r)
             .context("failed to decode packet ID")?
             .0;
@@ -193,6 +193,23 @@ impl PacketDecoder {
             id: packet_id,
             body: data,
         }))
+    }
+
+    pub fn shift_excess(&mut self) {
+        let read_position = self.buf.cursor.get();
+
+        if read_position == 0 {
+            return;
+        }
+
+        let excess_len = self.buf.inner.len() - read_position;
+
+        self.buf.inner.copy_within(read_position.., 0);
+        self.buf.inner.resize_with(excess_len, || unsafe {
+            core::hint::unreachable_unchecked()
+        });
+
+        self.buf.cursor.set(0);
     }
 
     /// Get the compression threshold.
