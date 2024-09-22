@@ -123,7 +123,9 @@ simple_reduce!(
 
 impl ReducedLifetime for event::PluginMessage<'static> {
     type Reduced<'a>
-    = event::PluginMessage<'a> where Self: 'a;
+        = event::PluginMessage<'a>
+    where
+        Self: 'a;
 
     fn reduce<'a>(self) -> Self::Reduced<'a> {
         self
