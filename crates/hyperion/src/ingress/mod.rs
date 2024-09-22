@@ -70,7 +70,7 @@ fn process_login(
     world: &WorldRef<'_>,
     tasks: &AsyncRuntime,
     login_state: &mut PacketState,
-    decoder: &mut PacketDecoder,
+    decoder: &PacketDecoder,
     comms: &Comms,
     skins_collection: SkinHandler,
     packet: &BorrowedPacketFrame<'_>,

@@ -48,8 +48,11 @@ impl Index<RangeFull> for RefBytesMut {
 #[derive(Default, Component)]
 pub struct PacketDecoder {
     buf: RefBytesMut,
-    threshold: CompressionThreshold,
+    threshold: Cell<CompressionThreshold>,
 }
+
+unsafe impl Send for PacketDecoder {}
+unsafe impl Sync for PacketDecoder {}
 
 #[derive(Copy, Clone, Debug)]
 pub struct BorrowedPacketFrame<'a> {
@@ -94,9 +97,9 @@ impl PacketDecoder {
     /// Tries to get the next packet from the buffer.
     /// If a new packet is found, the buffer will be truncated by the length of the packet.
     pub fn try_next_packet<'b>(
-        &'b mut self,
+        &'b self,
         bump: &'b bumpalo::Bump,
-    ) -> anyhow::Result<Option<BorrowedPacketFrame<'static>>> {
+    ) -> anyhow::Result<Option<BorrowedPacketFrame<'b>>> {
         let mut r = &self.buf[..];
 
         let packet_len = match VarInt::decode_partial(&mut r) {
@@ -121,7 +124,7 @@ impl PacketDecoder {
         let mut data;
 
         #[expect(clippy::cast_sign_loss, reason = "we are checking if < 0")]
-        if self.threshold.0 >= 0 {
+        if self.threshold.get().0 >= 0 {
             r = &r[..packet_len as usize];
 
             let data_len = VarInt::decode(&mut r)?.0;
@@ -134,10 +137,10 @@ impl PacketDecoder {
             // Is this packet compressed?
             if data_len > 0 {
                 ensure!(
-                    data_len > self.threshold.0,
+                    data_len > self.threshold.get().0,
                     "decompressed packet length of {data_len} is <= the compression threshold of \
                      {}",
-                    self.threshold.0
+                    self.threshold.get().0
                 );
 
                 // todo(perf): make uninit memory ...  MaybeUninit
@@ -161,10 +164,10 @@ impl PacketDecoder {
                 debug_assert_eq!(data_len, 0);
 
                 ensure!(
-                    r.len() <= self.threshold.0 as usize,
+                    r.len() <= self.threshold.get().0 as usize,
                     "uncompressed packet length of {} exceeds compression threshold of {}",
                     r.len(),
-                    self.threshold.0
+                    self.threshold.get().0
                 );
 
                 let remaining_len = r.len();
@@ -186,9 +189,6 @@ impl PacketDecoder {
 
         data.advance(data.len() - r.len());
 
-        let data = data.to_vec().into_boxed_slice();
-        let data = Box::leak(data);
-
         Ok(Some(BorrowedPacketFrame {
             id: packet_id,
             body: data,
@@ -197,13 +197,13 @@ impl PacketDecoder {
 
     /// Get the compression threshold.
     #[must_use]
-    pub const fn compression(&self) -> CompressionThreshold {
-        self.threshold
+    pub fn compression(&self) -> CompressionThreshold {
+        self.threshold.get()
     }
 
     /// Sets the compression threshold.
-    pub fn set_compression(&mut self, threshold: CompressionThreshold) {
-        self.threshold = threshold;
+    pub fn set_compression(&self, threshold: CompressionThreshold) {
+        self.threshold.set(threshold);
     }
 
     /// Queues a slice of bytes into the buffer.
