@@ -68,14 +68,6 @@ pub struct PostureUpdate {
     pub state: Posture,
 }
 
-// chunk event
-#[derive(Copy, Clone, Debug)]
-pub struct BlockBreak {
-    pub position: U16Vec3,
-    pub by: Entity,
-    pub id: VarInt,
-}
-
 #[derive(Debug)]
 pub struct Command {
     pub raw: String,

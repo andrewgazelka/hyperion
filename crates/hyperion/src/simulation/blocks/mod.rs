@@ -10,6 +10,7 @@ use glam::{I16Vec2, IVec2};
 use indexmap::IndexMap;
 use loader::{launch_manager, LaunchHandle, CHUNK_HEIGHT_SPAN};
 use roaring::RoaringBitmap;
+use snafu::Snafu;
 use shared::Shared;
 use tracing::instrument;
 use valence_generated::block::BlockState;
@@ -36,6 +37,12 @@ pub enum GetChunk<'a> {
 pub struct EntityAndSequence {
     pub entity: Entity,
     pub sequence: i32,
+}
+
+#[derive(Debug)]
+pub enum TrySetBlockDeltaError {
+    OutOfBounds,
+    ChunkNotLoaded,
 }
 
 /// Accessor of blocks.
@@ -253,12 +260,14 @@ impl MinecraftWorld {
         Some(chunk.block_state(x, y, z))
     }
 
-    pub fn try_set_block_delta(&mut self, position: BlockPos, state: BlockState) {
+    /// Returns the old block state
+    pub fn try_set_block_delta(&mut self, position: BlockPos, state: BlockState) -> Result<BlockState, TrySetBlockDeltaError> {
         const START_Y: i32 = -64;
 
         if position.y < START_Y {
             // This block is in the void.
-            return;
+            // todo: do we want this to be error?
+            return Err(TrySetBlockDeltaError::OutOfBounds);
         }
 
         let chunk_pos: IVec2 = IVec2::new(position.x, position.z) >> 4;
@@ -266,14 +275,15 @@ impl MinecraftWorld {
         let chunk_pos = chunk_pos.as_i16vec2();
 
         let Some(chunk) = self.get_loaded_chunk_mut(chunk_pos) else {
-            return;
+            return Err(TrySetBlockDeltaError::ChunkNotLoaded);
         };
 
         let x = u32::try_from(position.x - chunk_start_block[0]).unwrap();
         let y = u32::try_from(position.y - START_Y).unwrap();
         let z = u32::try_from(position.z - chunk_start_block[1]).unwrap();
 
-        chunk.chunk.set_delta(x, y, z, state);
+        let old_state = chunk.chunk.set_delta(x, y, z, state);
+        Ok(old_state)
     }
 
     // todo: allow modifying the chunk. we will need to implement resending
