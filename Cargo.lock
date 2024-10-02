@@ -1588,6 +1588,8 @@ dependencies = [
  "heapless",
  "heed",
  "hex",
+ "hyperion-crafting",
+ "hyperion-inventory",
  "hyperion-proto",
  "hyperion-text",
  "indexmap",
@@ -1626,6 +1628,30 @@ dependencies = [
  "valence_registry",
  "valence_server",
  "valence_text",
+]
+
+[[package]]
+name = "hyperion-crafting"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "flecs_ecs",
+ "heapless",
+ "serde",
+ "serde_json",
+ "slotmap",
+ "thiserror",
+ "uuid",
+ "valence_protocol",
+]
+
+[[package]]
+name = "hyperion-inventory"
+version = "0.1.0"
+dependencies = [
+ "flecs_ecs",
+ "snafu",
+ "valence_protocol",
 ]
 
 [[package]]
@@ -1739,6 +1765,7 @@ dependencies = [
  "dotenvy",
  "flecs_ecs",
  "hyperion",
+ "hyperion-inventory",
  "ndarray",
  "nom",
  "serde_json",

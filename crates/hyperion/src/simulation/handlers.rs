@@ -15,7 +15,7 @@ use valence_protocol::{
     },
     Decode, Hand, Packet, VarInt,
 };
-
+use valence_protocol::packets::play::click_slot_c2s::SlotChange;
 use super::{
     animation::{self, ActiveAnimation},
     blocks::MinecraftWorld,
@@ -24,7 +24,7 @@ use super::{
 };
 use crate::{
     net::{decoder::BorrowedPacketFrame, Compose, NetworkStreamRef},
-    simulation::{event, event::PluginMessage, inventory::PlayerInventory},
+    simulation::{event, event::PluginMessage},
     storage::Events,
     system_registry::SystemId,
 };
@@ -234,7 +234,7 @@ pub struct PacketSwitchQuery<'a> {
     pub blocks: &'a MinecraftWorld,
     pub confirm_block_sequences: &'a mut ConfirmBlockSequences,
     pub system_id: SystemId,
-    pub inventory: &'a mut PlayerInventory,
+    pub inventory: &'a mut hyperion_inventory::PlayerInventory,
     pub metadata: &'a mut Metadata,
     pub animation: &'a mut ActiveAnimation,
 }
@@ -424,13 +424,25 @@ pub fn custom_payload(
 
     let event = PluginMessage {
         channel: borrow,
-        data: packet.data.0 .0,
+        data: packet.data.0.0,
     };
 
     // to static
     // let event: PluginMessage<'static> = unsafe { core::mem::transmute(event) };
 
     query.events.push(event, query.world);
+
+    Ok(())
+}
+
+fn click_slot(mut data: &[u8], query: &mut PacketSwitchQuery<'_>) -> anyhow::Result<()> {
+    let pkt = play::ClickSlotC2s::decode(&mut data)?;
+
+    for SlotChange { idx, stack } in pkt.slot_changes.iter() {
+        println!("slot change: {idx:?} {stack:?}");
+        let idx = *idx as u16;
+        query.inventory.set_slot(idx, stack.clone())?;
+    }
 
     Ok(())
 }
@@ -457,6 +469,7 @@ pub fn packet_switch(
         play::LookAndOnGroundC2s::ID => look_and_on_ground(data, query.pose)?,
         play::PlayerInteractBlockC2s::ID => player_interact_block(data, query)?,
         play::CustomPayloadC2s::ID => custom_payload(data, query)?,
+        play::ClickSlotC2s::ID => click_slot(data, query)?,
         // play::UpdatePlayerAbilitiesC2s::ID => update_player_abilities(data)?,
         // play::UpdateSelectedSlotC2s::ID => update_selected_slot(data,
         // world, query.id)?,

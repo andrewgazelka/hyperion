@@ -4,20 +4,18 @@ use flecs_ecs::prelude::*;
 use glam::{I16Vec2, IVec3};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use tracing::{debug, info, instrument};
-use valence_protocol::{
-    game_mode::OptGameMode,
-    ident,
-    packets::play::{
-        self,
-        player_position_look_s2c::PlayerPositionLookFlags,
-        team_s2c::{CollisionRule, Mode, NameTagVisibility, TeamColor, TeamFlags},
-        GameJoinS2c,
-    },
-    ByteAngle, GameMode, Ident, PacketEncoder, RawBytes, VarInt, Velocity,
-};
+use valence_generated::item::ItemKind;
+use valence_protocol::{game_mode::OptGameMode, ident, packets::play::{
+    self,
+    player_position_look_s2c::PlayerPositionLookFlags,
+    team_s2c::{CollisionRule, Mode, NameTagVisibility, TeamColor, TeamFlags},
+    GameJoinS2c,
+}, ByteAngle, GameMode, Ident, ItemStack, PacketEncoder, RawBytes, VarInt, Velocity};
+use valence_protocol::packets::play::unlock_recipes_s2c::UpdateRecipeBookAction;
 use valence_registry::{BiomeRegistry, RegistryCodec};
 use valence_server::entity::EntityKind;
 use valence_text::IntoText;
+use hyperion_crafting::{Action, CraftingCategory, CraftingShapedData, CraftingShapelessData, Recipe, RecipeBookState};
 
 mod list;
 pub use list::*;
@@ -66,7 +64,7 @@ pub fn player_join_world(
             info!(
                 "caching world data for new players with compression level {compression_level:?}"
             );
-            inner(&mut encoder, chunks, tasks).unwrap();
+            generate_cached_packet_bytes(&mut encoder, chunks, tasks).unwrap();
 
             let bytes = encoder.take();
             bytes.freeze()
@@ -357,7 +355,7 @@ fn send_sync_tags(encoder: &mut PacketEncoder) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn inner(
+fn generate_cached_packet_bytes(
     encoder: &mut PacketEncoder,
     chunks: &MinecraftWorld,
     tasks: &AsyncRuntime,
@@ -461,6 +459,46 @@ fn inner(
     let show_all = show_all(0);
     encoder.append_packet(show_all.borrow_packet())?;
 
+
+    let recipes = [
+        Recipe::shapeless(
+            ident!("hyperion:what"),
+            CraftingShapelessData {
+                category: CraftingCategory::Misc,
+                group: Cow::Borrowed("abc"),
+                ingredients: Cow::Owned(vec![
+                    Cow::Owned(vec![
+                        ItemStack::new(ItemKind::Stone, 1, None),
+                    ]),
+                ]),
+                result: ItemStack::new(ItemKind::Dirt, 1, None),
+            },
+        ),
+    ];
+
+    let pkt = hyperion_crafting::SynchronizeRecipesS2c {
+        recipes: Cow::Borrowed(&recipes),
+    };
+
+    encoder.append_packet(&pkt)?;
+
+    // unlock
+    let pkt = hyperion_crafting::UnlockRecipesS2c {
+        action: Action::Init,
+        crafting_recipe_book: RecipeBookState::FALSE,
+        smelting_recipe_book: RecipeBookState::FALSE,
+        blast_furnace_recipe_book: RecipeBookState::FALSE,
+        smoker_recipe_book: RecipeBookState::FALSE,
+        recipe_ids_1: vec![
+            "hyperion:what".to_string(),
+        ],
+        recipe_ids_2: vec![
+            "hyperion:what".to_string(),
+        ],
+    };
+
+    encoder.append_packet(&pkt)?;
+
     Ok(())
 }
 
@@ -529,60 +567,60 @@ impl Module for PlayerJoinModule {
             &MinecraftWorld($),
             &Compose($),
         )
-        .kind::<flecs::pipeline::PreUpdate>()
-        .each(move |(tasks, comms, blocks, compose)| {
-            let span = tracing::trace_span!("joins");
-            let _enter = span.enter();
+            .kind::<flecs::pipeline::PreUpdate>()
+            .each(move |(tasks, comms, blocks, compose)| {
+                let span = tracing::trace_span!("joins");
+                let _enter = span.enter();
 
-            let mut skins = Vec::new();
+                let mut skins = Vec::new();
 
-            while let Ok(Some((entity, skin))) = comms.skins_rx.try_recv() {
-                skins.push((entity, skin.clone()));
-            }
-
-            // todo: par_iter but bugs...
-            // for (entity, skin) in skins {
-            skins.into_par_iter().for_each(|(entity, skin)| {
-                // if we are not in rayon context that means we are in a single-threaded context and 0 will work
-                let idx = rayon::current_thread_index().unwrap_or(0);
-
-                let world = &stages[idx];
-                let world = world.0;
-
-                if !world.is_alive(entity) {
-                    return;
+                while let Ok(Some((entity, skin))) = comms.skins_rx.try_recv() {
+                    skins.push((entity, skin.clone()));
                 }
 
-                let entity = world.entity_from_id(entity);
+                // todo: par_iter but bugs...
+                // for (entity, skin) in skins {
+                skins.into_par_iter().for_each(|(entity, skin)| {
+                    // if we are not in rayon context that means we are in a single-threaded context and 0 will work
+                    let idx = rayon::current_thread_index().unwrap_or(0);
 
-                entity.add::<Play>();
+                    let world = &stages[idx];
+                    let world = world.0;
 
-                entity.get::<(&Uuid, &InGameName, &Position, &NetworkStreamRef)>(
-                    |(uuid, name, pose, &stream_id)| {
-                        let query = &query;
-                        let query = &query.0;
+                    if !world.is_alive(entity) {
+                        return;
+                    }
 
-                        player_join_world(
-                            &entity,
-                            tasks,
-                            blocks,
-                            compose,
-                            uuid.0,
-                            name,
-                            stream_id,
-                            pose,
-                            &world,
-                            &skin,
-                            system_id,
-                            root_command,
-                            query,
-                        );
-                    },
-                );
+                    let entity = world.entity_from_id(entity);
 
-                let entity = world.entity_from_id(entity);
-                entity.set(skin);
+                    entity.add::<Play>();
+
+                    entity.get::<(&Uuid, &InGameName, &Position, &NetworkStreamRef)>(
+                        |(uuid, name, pose, &stream_id)| {
+                            let query = &query;
+                            let query = &query.0;
+
+                            player_join_world(
+                                &entity,
+                                tasks,
+                                blocks,
+                                compose,
+                                uuid.0,
+                                name,
+                                stream_id,
+                                pose,
+                                &world,
+                                &skin,
+                                system_id,
+                                root_command,
+                                query,
+                            );
+                        },
+                    );
+
+                    let entity = world.entity_from_id(entity);
+                    entity.set(skin);
+                });
             });
-        });
     }
 }

@@ -212,9 +212,8 @@ pub const OFFHAND_SLOT: u16 = 45;
 
 #[cfg(test)]
 mod tests {
-    use valence_generated::item::ItemKind;
-
     use super::*;
+    use valence_protocol::ItemKind;
 
     #[test]
     fn test_try_add_item_empty_inventory() {

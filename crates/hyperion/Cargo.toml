@@ -38,6 +38,8 @@ dirs-next.workspace = true
 fastrand.workspace = true
 flate2 = { workspace = true, features = ["zlib-ng"] }
 flecs_ecs.workspace = true
+hyperion-crafting.workspace = true
+hyperion-inventory.workspace = true
 thiserror.workspace = true
 fxhash.workspace = true
 glam = { workspace = true, features = ["serde"] }

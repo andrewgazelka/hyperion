@@ -8,6 +8,8 @@ resolver = "2"
 members = [
     "crates/bvh-region",
     "crates/hyperion",
+    "crates/hyperion-crafting",
+    "crates/hyperion-inventory",
     "crates/hyperion-proto",
     "crates/hyperion-proxy",
     "crates/hyperion-text",
@@ -34,6 +36,8 @@ debug = true
 #codegen-units = 1
 
 [workspace.dependencies]
+snafu = "0.8.5"
+hyperion-inventory = { path = "crates/hyperion-inventory" }
 anyhow = "1.0.86"
 arc-swap = "1.7.1"
 arrayvec = "0.7.4"
@@ -94,6 +98,7 @@ flecs_ecs = { git = "https://github.com/andrewgazelka/flecs-ecs-rs", branch = "a
 hyperion = { path = "crates/hyperion" }
 hyperion-text = { path = "crates/hyperion-text" }
 hyperion-proto = { path = "crates/hyperion-proto" }
+hyperion-crafting = { path = "crates/hyperion-crafting" }
 valence_text = { git = "https://github.com/andrewgazelka/valence", branch = "feat-open" }
 valence_protocol = { git = "https://github.com/andrewgazelka/valence", features = ["compression"], branch = "feat-open" }
 valence_registry = { git = "https://github.com/andrewgazelka/valence", branch = "feat-open" }
