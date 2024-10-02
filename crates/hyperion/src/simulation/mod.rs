@@ -17,7 +17,6 @@ pub mod blocks;
 pub mod command;
 pub mod event;
 pub mod handlers;
-pub mod inventory;
 pub mod metadata;
 pub mod skin;
 pub mod util;
@@ -334,6 +333,6 @@ impl Module for SimModule {
         world.component::<metadata::Metadata>();
         world.component::<animation::ActiveAnimation>();
 
-        world.component::<inventory::PlayerInventory>();
+        world.component::<hyperion_inventory::PlayerInventory>();
     }
 }

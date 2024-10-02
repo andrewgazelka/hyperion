@@ -1,5 +1,5 @@
 use flecs_ecs::macros::Component;
-use valence_protocol::ItemStack;
+use valence_protocol::{ItemKind, ItemStack};
 
 pub mod action;
 pub mod parser;
@@ -28,6 +28,7 @@ impl<const T: usize> Default for Inventory<T> {
     }
 }
 
+use hyperion_crafting::{Crafting2x2, CraftingRegistry};
 use snafu::prelude::*;
 
 #[derive(Debug, Snafu)]
@@ -114,20 +115,21 @@ impl<const T: usize> Inventory<T> {
         &mut self,
         slot: u16,
         to_add: &mut ItemStack,
+        can_add_to_empty: bool,
     ) -> Result<TryAddSlot, InventoryAccessError> {
         const MAX_STACK_SIZE: i8 = 64; // TODO: Make this variable based on item type
 
         let existing_stack = self.get_mut(slot)?;
 
-        if existing_stack.is_empty() {
+        if existing_stack.is_empty() && can_add_to_empty {
             *existing_stack = to_add.clone();
             to_add.count = 0;
             return Ok(TryAddSlot::Complete);
         }
 
-        let can_stack = existing_stack.item == to_add.item && existing_stack.nbt == to_add.nbt;
+        let stackable = existing_stack.item == to_add.item && existing_stack.nbt == to_add.nbt;
 
-        if can_stack && existing_stack.count < MAX_STACK_SIZE {
+        if stackable && existing_stack.count < MAX_STACK_SIZE {
             let space_left = MAX_STACK_SIZE - existing_stack.count;
 
             return if to_add.count <= space_left {
@@ -146,6 +148,38 @@ impl<const T: usize> Inventory<T> {
 }
 
 impl PlayerInventory {
+    pub fn crafting_item(&self, registry: &CraftingRegistry) -> ItemStack {
+        let indices = core::array::from_fn::<u16, 4, _>(|i| (i as u16 + 1));
+
+        let mut min_count = i8::MAX;
+
+        let items: Crafting2x2 = indices.map(|idx| {
+            let stack = self.get(idx).unwrap();
+
+            if stack.is_empty() {
+                return ItemKind::Air;
+            } else {
+                min_count = min_count.min(stack.count);
+                stack.item
+            }
+        });
+
+        let result = registry
+            .get_result_2x2(items)
+            .cloned()
+            .unwrap_or(ItemStack::EMPTY);
+
+        // if result.is_empty() {
+        //     return ItemStack::EMPTY;
+        // }
+        //
+        // let new_count = 64.min(min_count as i32 * result.count as i32);
+        //
+        // result.count = new_count as i8;
+
+        result
+    }
+
     pub fn set_hand_slot(&mut self, idx: u16, stack: ItemStack) {
         const HAND_START_SLOT: u16 = 36;
         const HAND_END_SLOT: u16 = 45;
@@ -166,8 +200,28 @@ impl PlayerInventory {
         };
 
         // Try to add to hand slots (36-45) first, then the rest of the inventory (0-35)
+        // try to stack first
         for slot in (36..=45).chain(0..36) {
-            let Ok(add_slot) = self.try_add_to_slot(slot, &mut item) else {
+            let Ok(add_slot) = self.try_add_to_slot(slot, &mut item, false) else {
+                unreachable!("try_add_item should always return Ok");
+            };
+
+            match add_slot {
+                TryAddSlot::Complete => {
+                    result.changed_slots.push(slot);
+                    return result;
+                }
+                TryAddSlot::Partial => {
+                    result.changed_slots.push(slot);
+                }
+                TryAddSlot::Skipped => {}
+            }
+        }
+
+        // Try to add to hand slots (36-45) first, then the rest of the inventory (0-35)
+        // now try to add to empty slots
+        for slot in (36..=45).chain(0..36) {
+            let Ok(add_slot) = self.try_add_to_slot(slot, &mut item, true) else {
                 unreachable!("try_add_item should always return Ok");
             };
 
@@ -212,7 +266,7 @@ pub const OFFHAND_SLOT: u16 = 45;
 
 #[cfg(test)]
 mod tests {
-    use valence_generated::item::ItemKind;
+    use valence_protocol::ItemKind;
 
     use super::*;
 

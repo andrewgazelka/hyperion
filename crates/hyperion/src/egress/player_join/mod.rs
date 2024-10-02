@@ -2,6 +2,7 @@ use std::{borrow::Cow, collections::BTreeSet};
 
 use flecs_ecs::prelude::*;
 use glam::{I16Vec2, IVec3};
+use hyperion_crafting::{Action, CraftingRegistry, RecipeBookState};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use tracing::{debug, info, instrument};
 use valence_protocol::{
@@ -54,6 +55,7 @@ pub fn player_join_world(
     system_id: SystemId,
     root_command: Entity,
     query: &Query<(&Uuid, &InGameName, &Position, &PlayerSkin)>,
+    crafting_registry: &CraftingRegistry,
 ) {
     static CACHED_DATA: once_cell::sync::OnceCell<bytes::Bytes> = once_cell::sync::OnceCell::new();
 
@@ -66,7 +68,7 @@ pub fn player_join_world(
             info!(
                 "caching world data for new players with compression level {compression_level:?}"
             );
-            inner(&mut encoder, chunks, tasks).unwrap();
+            generate_cached_packet_bytes(&mut encoder, chunks, tasks, crafting_registry).unwrap();
 
             let bytes = encoder.take();
             bytes.freeze()
@@ -357,10 +359,11 @@ fn send_sync_tags(encoder: &mut PacketEncoder) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn inner(
+fn generate_cached_packet_bytes(
     encoder: &mut PacketEncoder,
     chunks: &MinecraftWorld,
     tasks: &AsyncRuntime,
+    crafting_registry: &CraftingRegistry,
 ) -> anyhow::Result<()> {
     send_game_join_packet(encoder)?;
     send_sync_tags(encoder)?;
@@ -461,6 +464,23 @@ fn inner(
     let show_all = show_all(0);
     encoder.append_packet(show_all.borrow_packet())?;
 
+    if let Some(pkt) = crafting_registry.packet() {
+        encoder.append_packet(&pkt)?;
+    }
+
+    // unlock
+    let pkt = hyperion_crafting::UnlockRecipesS2c {
+        action: Action::Init,
+        crafting_recipe_book: RecipeBookState::FALSE,
+        smelting_recipe_book: RecipeBookState::FALSE,
+        blast_furnace_recipe_book: RecipeBookState::FALSE,
+        smoker_recipe_book: RecipeBookState::FALSE,
+        recipe_ids_1: vec!["hyperion:what".to_string()],
+        recipe_ids_2: vec!["hyperion:what".to_string()],
+    };
+
+    encoder.append_packet(&pkt)?;
+
     Ok(())
 }
 
@@ -528,9 +548,10 @@ impl Module for PlayerJoinModule {
             &Comms($),
             &MinecraftWorld($),
             &Compose($),
+            &CraftingRegistry($),
         )
         .kind::<flecs::pipeline::PreUpdate>()
-        .each(move |(tasks, comms, blocks, compose)| {
+        .each(move |(tasks, comms, blocks, compose, crafting_registry)| {
             let span = tracing::trace_span!("joins");
             let _enter = span.enter();
 
@@ -576,6 +597,7 @@ impl Module for PlayerJoinModule {
                             system_id,
                             root_command,
                             query,
+                            crafting_registry,
                         );
                     },
                 );

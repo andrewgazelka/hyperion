@@ -10,7 +10,6 @@ use hyperion::{
     simulation::{
         blocks::{EntityAndSequence, MinecraftWorld},
         event,
-        inventory::PlayerInventory,
     },
     storage::EventQueue,
     system_registry::SystemId,
@@ -34,7 +33,7 @@ impl Module for BlockModule {
         // todo: this is a hack. We want the system ID to be automatically assigned based on the location of the system.
         let system_id = SystemId(8);
 
-        system!("handle_blocks", world, &mut MinecraftWorld($), &mut EventQueue<event::DestroyBlock>($), &Compose($), &mut PlayerInventory)
+        system!("handle_blocks", world, &mut MinecraftWorld($), &mut EventQueue<event::DestroyBlock>($), &Compose($), &mut hyperion_inventory::PlayerInventory)
             .multi_threaded()
             .each_iter(move |it: TableIter<'_, false>, _, (mc, event_queue, compose, inventory)| {
                 let span = trace_span!("handle_blocks");

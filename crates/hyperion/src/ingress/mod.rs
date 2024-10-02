@@ -28,9 +28,9 @@ use crate::{
     runtime::AsyncRuntime,
     simulation::{
         animation::ActiveAnimation, blocks::MinecraftWorld, handlers::PacketSwitchQuery,
-        inventory::PlayerInventory, metadata::Metadata, skin::PlayerSkin, AiTargetable,
-        ChunkPosition, Comms, ConfirmBlockSequences, EntityReaction, Health, ImmuneStatus,
-        InGameName, PacketState, Player, Position, StreamLookup, Uuid, PLAYER_SPAWN_POSITION,
+        metadata::Metadata, skin::PlayerSkin, AiTargetable, ChunkPosition, Comms,
+        ConfirmBlockSequences, EntityReaction, Health, ImmuneStatus, InGameName, PacketState,
+        Player, Position, StreamLookup, Uuid, PLAYER_SPAWN_POSITION,
     },
     storage::{Events, GlobalEventHandlers, PlayerJoinServer, SkinHandler},
     system_registry::{SystemId, RECV_DATA, REMOVE_PLAYER_FROM_VISIBILITY},
@@ -297,7 +297,7 @@ impl Module for IngressModule {
                 let view = world
                     .entity()
                     .set(NetworkStreamRef::new(connect.stream))
-                    .set(PlayerInventory::default())
+                    .set(hyperion_inventory::PlayerInventory::default())
                     .set(ConfirmBlockSequences::default())
                     .set(PacketState::Handshake)
                     .set(Metadata::default())
@@ -423,9 +423,10 @@ impl Module for IngressModule {
             &Events($),
             ?&mut Position,
             &mut ConfirmBlockSequences,
-            &mut PlayerInventory,
+            &mut hyperion_inventory::PlayerInventory,
             &mut Metadata,
             &mut ActiveAnimation,
+            &hyperion_crafting::CraftingRegistry($),
         )
         .kind::<flecs::pipeline::OnUpdate>()
         .multi_threaded()
@@ -448,6 +449,7 @@ impl Module for IngressModule {
                 inventory,
                 metadata,
                 animation,
+                crafting_registry,
             )| {
                 let world = entity.world();
                 let bump = compose.bump.get(&world);
@@ -509,6 +511,7 @@ impl Module for IngressModule {
                                     inventory,
                                     metadata,
                                     animation,
+                                    crafting_registry,
                                 };
 
                                 // trace_span!("ingress", ign = name).in_scope(|| {

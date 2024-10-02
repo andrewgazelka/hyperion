@@ -1,0 +1,17 @@
+[package]
+name = "hyperion-crafting"
+version = "0.1.0"
+edition = "2021"
+authors = ["Andrew Gazelka <andrew.gazelka@gmail.com>"]
+readme = "README.md"
+publish = false
+
+[dependencies]
+valence_protocol.workspace = true
+anyhow = "1.0.89"
+flecs_ecs.workspace = true
+derive-build = "0.1.1"
+slotmap = "1.0.7"
+
+[lints]
+workspace = true

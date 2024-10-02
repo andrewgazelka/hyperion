@@ -9,8 +9,8 @@ use glam::Vec3;
 use tracing::{info, instrument, trace, warn};
 use valence_protocol::{
     packets::play::{
-        self, client_command_c2s::ClientCommand, player_action_c2s::PlayerAction,
-        player_interact_entity_c2s::EntityInteraction,
+        self, click_slot_c2s::SlotChange, client_command_c2s::ClientCommand,
+        player_action_c2s::PlayerAction, player_interact_entity_c2s::EntityInteraction,
         player_position_look_s2c::PlayerPositionLookFlags,
     },
     Decode, Hand, Packet, VarInt,
@@ -24,7 +24,7 @@ use super::{
 };
 use crate::{
     net::{decoder::BorrowedPacketFrame, Compose, NetworkStreamRef},
-    simulation::{event, event::PluginMessage, inventory::PlayerInventory},
+    simulation::{event, event::PluginMessage},
     storage::Events,
     system_registry::SystemId,
 };
@@ -234,9 +234,10 @@ pub struct PacketSwitchQuery<'a> {
     pub blocks: &'a MinecraftWorld,
     pub confirm_block_sequences: &'a mut ConfirmBlockSequences,
     pub system_id: SystemId,
-    pub inventory: &'a mut PlayerInventory,
+    pub inventory: &'a mut hyperion_inventory::PlayerInventory,
     pub metadata: &'a mut Metadata,
     pub animation: &'a mut ActiveAnimation,
+    pub crafting_registry: &'a hyperion_crafting::CraftingRegistry,
 }
 
 // i.e., shooting a bow, digging a block, etc
@@ -435,6 +436,31 @@ pub fn custom_payload(
     Ok(())
 }
 
+fn click_slot(mut data: &[u8], query: &mut PacketSwitchQuery<'_>) -> anyhow::Result<()> {
+    let pkt = play::ClickSlotC2s::decode(&mut data)?;
+
+    // todo(security): validate the player can do this. This is a MAJOR security issue.
+    // as players will be able to spawn items in their inventory wit current logic.
+    for SlotChange { idx, stack } in pkt.slot_changes.iter() {
+        let idx = *idx as u16;
+        query.inventory.set_slot(idx, stack.clone())?;
+    }
+
+    let item = query.inventory.crafting_item(query.crafting_registry);
+    let set_item_pkt = play::ScreenHandlerSlotUpdateS2c {
+        window_id: 0,
+        state_id: VarInt(0),
+        slot_idx: 0, // crafting result
+        slot_data: Cow::Owned(item),
+    };
+
+    query
+        .compose
+        .unicast(&set_item_pkt, query.io_ref, query.system_id, query.world)?;
+
+    Ok(())
+}
+
 pub fn packet_switch(
     raw: BorrowedPacketFrame<'_>,
     query: &mut PacketSwitchQuery<'_>,
@@ -442,34 +468,25 @@ pub fn packet_switch(
     let packet_id = raw.id;
     let data = raw.body;
 
+    // ideally we wouldn't have to do this. The lifetime is the same as the entire tick.
+    // as the data is bump-allocated and reset occurs at the end of the tick
     let data: &'static [u8] = unsafe { core::mem::transmute(data) };
 
     match packet_id {
-        play::HandSwingC2s::ID => hand_swing(data, query)?,
-        // play::PlayerInteractBlockC2s::ID => player_interact_block(data)?,
+        play::ClickSlotC2s::ID => click_slot(data, query)?,
         play::ClientCommandC2s::ID => client_command(data, query)?,
-        play::FullC2s::ID => full(query, data)?,
-        play::PlayerActionC2s::ID => player_action(data, query)?,
-        play::PositionAndOnGroundC2s::ID => position_and_on_ground(query, data)?,
-        // play::InventoryS2c::ID => inventory(data, query)?,
-        play::UpdateSelectedSlotC2s::ID => update_selected_slot(data, query)?,
-        play::CreativeInventoryActionC2s::ID => creative_inventory_action(data, query)?,
-        play::LookAndOnGroundC2s::ID => look_and_on_ground(data, query.pose)?,
-        play::PlayerInteractBlockC2s::ID => player_interact_block(data, query)?,
-        play::CustomPayloadC2s::ID => custom_payload(data, query)?,
-        // play::UpdatePlayerAbilitiesC2s::ID => update_player_abilities(data)?,
-        // play::UpdateSelectedSlotC2s::ID => update_selected_slot(data,
-        // world, query.id)?,
-        play::PlayerInteractEntityC2s::ID => {
-            player_interact_entity(data, query)?;
-        }
-        // play::PlayerInteractItemC2s::ID => player_interact_item(data, query, world)?,
-        // play::KeepAliveC2s::ID => keep_alive(query.keep_alive)?,
         play::CommandExecutionC2s::ID => chat_command(data, query)?,
-        // play::ClickSlotC2s::ID => inventory_action(data, world, query)?,
-        _ => {
-            trace!("unknown packet id: 0x{:02X}", packet_id);
-        }
+        play::CreativeInventoryActionC2s::ID => creative_inventory_action(data, query)?,
+        play::CustomPayloadC2s::ID => custom_payload(data, query)?,
+        play::FullC2s::ID => full(query, data)?,
+        play::HandSwingC2s::ID => hand_swing(data, query)?,
+        play::LookAndOnGroundC2s::ID => look_and_on_ground(data, query.pose)?,
+        play::PlayerActionC2s::ID => player_action(data, query)?,
+        play::PlayerInteractBlockC2s::ID => player_interact_block(data, query)?,
+        play::PlayerInteractEntityC2s::ID => player_interact_entity(data, query)?,
+        play::PositionAndOnGroundC2s::ID => position_and_on_ground(query, data)?,
+        play::UpdateSelectedSlotC2s::ID => update_selected_slot(data, query)?,
+        _ => trace!("unknown packet id: 0x{:02X}", packet_id),
     }
 
     Ok(())
