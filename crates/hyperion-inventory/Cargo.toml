@@ -10,6 +10,7 @@ publish = false
 valence_protocol.workspace = true
 flecs_ecs.workspace = true
 snafu.workspace = true
+hyperion-crafting.workspace = true
 
 [lints]
 workspace = true

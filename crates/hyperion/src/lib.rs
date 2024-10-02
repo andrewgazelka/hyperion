@@ -54,6 +54,7 @@ use crate::{
 
 mod common;
 pub use common::*;
+use hyperion_crafting::CraftingRegistry;
 
 pub mod egress;
 pub mod ingress;
@@ -220,6 +221,8 @@ impl Hyperion {
             global,
             IoBuf::default(),
         ));
+
+        world.set(CraftingRegistry::default());
 
         world.set(Comms::default());
 

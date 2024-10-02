@@ -1,13 +1,13 @@
-use std::borrow::Cow;
-use std::collections::HashMap;
-use std::io::Write;
+use std::{collections::HashMap, io::Write};
+
+use derive_build::Build;
 use flecs_ecs::macros::Component;
 use slotmap::{new_key_type, SecondaryMap, SlotMap};
-use valence_protocol::{ident, Encode, Ident, ItemKind, ItemStack, Packet};
+use valence_protocol::{Encode, ItemKind, ItemStack, Packet};
 
 /// Represents a packet sent from the server to the client to synchronize recipes.
 #[derive(Clone, Debug, Encode, Packet)]
-pub struct SynchronizeRecipesS2c<'a> {
+pub struct SynchronizeRecipesS2c {
     /// The list of recipes to synchronize.
     pub recipes: Vec<Recipe>,
 }
@@ -16,16 +16,11 @@ pub struct SynchronizeRecipesS2c<'a> {
 #[derive(Clone, Debug, Encode)]
 pub struct Recipe {
     /// The type of the recipe.
-    pub kind: String,
+    pub kind: &'static str,
     /// The unique identifier for this recipe.
     pub recipe_id: String,
     /// The specific data for this recipe, depending on its type.
     pub data: RecipeData,
-}
-
-struct RecipeIdentifier {
-    kind: String,
-    id: String,
 }
 
 /// Represents the different types of recipe data.
@@ -59,7 +54,7 @@ pub enum RecipeData {
 impl Encode for RecipeData {
     fn encode(&self, w: impl Write) -> anyhow::Result<()> {
         match self {
-            RecipeData::CraftingShapeless(data) => data.encode(w),
+            Self::CraftingShapeless(data) => data.encode(w),
             // RecipeData::CraftingShaped(data) => data.encode(w),
             // RecipeData::CraftingSpecialArmordye(data) => data.encode(w),
             // RecipeData::CraftingSpecialBookcloning(data) => data.encode(w),
@@ -87,16 +82,17 @@ impl Encode for RecipeData {
 }
 
 /// Represents data for a shapeless crafting recipe.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Build)]
 pub struct CraftingShapelessData {
     /// Used to group similar recipes together in the recipe book.
-    pub group: String,
+    group: String,
     /// The category of the recipe.
-    pub category: CraftingCategory,
+    category: CraftingCategory,
     /// The list of ingredients for the recipe.
-    pub ingredients: Vec<Ingredient>,
+    ingredients: Vec<Ingredient>,
     /// The result of the crafting recipe.
-    pub result: ItemStack,
+    #[required]
+    result: ItemStack,
 }
 
 // /// Represents data for a shaped crafting recipe.
@@ -117,7 +113,7 @@ pub struct CraftingShapelessData {
 //     /// Whether to show a notification when the recipe is added.
 //     pub show_notification: bool,
 // }
-// 
+//
 /// Represents data for special crafting recipes.
 #[derive(Clone, Debug)]
 pub struct CraftingSpecialData {
@@ -141,7 +137,7 @@ pub struct CraftingSpecialData {
 //     /// The time it takes to complete this recipe.
 //     pub cooking_time: u32,
 // }
-// 
+//
 // /// Represents data for a stonecutting recipe.
 // #[derive(Clone, Debug)]
 // pub struct StonecuttingData<'a> {
@@ -152,7 +148,7 @@ pub struct CraftingSpecialData {
 //     /// The result of the stonecutting recipe.
 //     pub result: ItemStack,
 // }
-// 
+//
 // /// Represents data for a smithing transform recipe.
 // #[derive(Clone, Debug)]
 // pub struct SmithingTransformData<'a> {
@@ -165,7 +161,7 @@ pub struct CraftingSpecialData {
 //     /// The result of the smithing transform.
 //     pub result: ItemStack,
 // }
-// 
+//
 // /// Represents data for a smithing trim recipe.
 // #[derive(Clone, Debug)]
 // pub struct SmithingTrimData<'a> {
@@ -178,11 +174,12 @@ pub struct CraftingSpecialData {
 // }
 
 /// Represents the categories for crafting recipes.
-#[derive(Copy, Clone, PartialEq, Eq, Debug, Encode)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Encode, Default)]
 pub enum CraftingCategory {
     Building,
     Redstone,
     Equipment,
+    #[default]
     Misc,
 }
 
@@ -195,7 +192,26 @@ pub enum SmeltingCategory {
 }
 
 /// Represents an ingredient in a recipe, which can be multiple possible items.
-pub type Ingredient = Vec<ItemStack>;
+#[derive(Encode, Clone, Debug)]
+struct Ingredient(Vec<ItemStack>);
+
+impl From<Vec<ItemStack>> for Ingredient {
+    fn from(value: Vec<ItemStack>) -> Self {
+        Self(value)
+    }
+}
+
+impl From<ItemStack> for Ingredient {
+    fn from(value: ItemStack) -> Self {
+        Self(vec![value])
+    }
+}
+
+impl From<ItemKind> for Ingredient {
+    fn from(value: ItemKind) -> Self {
+        Self(vec![ItemStack::new(value, 1, None)])
+    }
+}
 
 // Implement Encode for all structs
 impl Encode for CraftingShapelessData {
@@ -235,7 +251,7 @@ impl Encode for CraftingSpecialData {
 //         self.cooking_time.encode(w)
 //     }
 // }
-// 
+//
 // impl Encode for StonecuttingData<'_> {
 //     fn encode(&self, mut w: impl Write) -> anyhow::Result<()> {
 //         self.group.encode(&mut w)?;
@@ -243,7 +259,7 @@ impl Encode for CraftingSpecialData {
 //         self.result.encode(w)
 //     }
 // }
-// 
+//
 // impl Encode for SmithingTransformData<'_> {
 //     fn encode(&self, mut w: impl Write) -> anyhow::Result<()> {
 //         self.template.encode(&mut w)?;
@@ -252,7 +268,7 @@ impl Encode for CraftingSpecialData {
 //         self.result.encode(w)
 //     }
 // }
-// 
+//
 // impl Encode for SmithingTrimData<'_> {
 //     fn encode(&self, mut w: impl Write) -> anyhow::Result<()> {
 //         self.template.encode(&mut w)?;
@@ -260,7 +276,6 @@ impl Encode for CraftingSpecialData {
 //         self.addition.encode(w)
 //     }
 // }
-
 
 #[derive(Debug, Encode, Packet)]
 pub struct UnlockRecipesS2c {
@@ -293,10 +308,9 @@ impl RecipeBookState {
     };
 }
 
-
 // since 3x3 grid are max
-type Crafting3x3 = heapless::Vec<ItemKind, 9>;
-type Crafting2x2 = heapless::Vec<ItemKind, 4>;
+pub type Crafting3x3 = [ItemKind; 9];
+pub type Crafting2x2 = [ItemKind; 4];
 
 #[derive(Debug, Hash, PartialEq, Eq)]
 struct SortedItemList(Crafting3x3);
@@ -309,40 +323,88 @@ impl From<Crafting3x3> for SortedItemList {
 }
 
 impl FromIterator<ItemKind> for SortedItemList {
-    fn from_iter<T: IntoIterator<Item=ItemKind>>(iter: T) -> Self {
-        let list: Crafting3x3 = iter.into_iter().collect();
+    fn from_iter<T: IntoIterator<Item = ItemKind>>(iter: T) -> Self {
+        let mut list: Crafting3x3 = [ItemKind::Air; 9];
+
+        for (i, item) in iter.into_iter().enumerate() {
+            // todo: more idiomatic way to do this? also without panic?
+            list[i] = item;
+        }
+
         Self::from(list)
     }
 }
-
 
 // Define a custom key type
 new_key_type! { struct SortedItemId; }
 
 #[derive(Component)]
-struct CraftingRegistry {
+pub struct CraftingRegistry {
     // changes when the registry is updated
     epoch: u64,
-    
+
     shapeless_lookup: HashMap<SortedItemList, SortedItemId>,
     shapeless: SlotMap<SortedItemId, CraftingShapelessData>,
+    shapeless_ids: SecondaryMap<SortedItemId, String>,
 }
 
-struct ShapelessRecipe<'a> {
+impl Default for CraftingRegistry {
+    fn default() -> Self {
+        let mut result = Self {
+            epoch: 0,
+            shapeless_lookup: HashMap::default(),
+            shapeless: SlotMap::default(),
+            shapeless_ids: SecondaryMap::default(),
+        };
+
+        let shapeless = CraftingShapelessData::new(ItemStack::new(ItemKind::OakPlanks, 4, None))
+            .ingredient(ItemKind::OakLog);
+
+        result.register_shapeless("hyperion:plank".to_string(), shapeless);
+
+        result
+    }
+}
+
+pub struct ShapelessRecipe<'a> {
     // recipe_id: &'a RecipeIdentifier,
-    data: &'a CraftingShapelessData,
+    pub data: &'a CraftingShapelessData,
 }
 
 impl CraftingRegistry {
     fn mark_changed(&mut self) {
         self.epoch = self.epoch.wrapping_add(1);
     }
-    
-    pub fn packe
-    
-    
-    pub fn get_shapeless(&self, input: impl IntoIterator<Item=ItemKind>) -> Option<ShapelessRecipe<'_>> {
+
+    pub fn packet(&self) -> Option<SynchronizeRecipesS2c> {
+        if self.epoch == 0 {
+            // we have not added anything
+            return None;
+        }
+
+        let recipes: Vec<_> = self
+            .shapeless
+            .iter()
+            .map(|(id, data)| {
+                let recipe_id = self.shapeless_ids.get(id).unwrap();
+
+                Recipe {
+                    kind: "minecraft:crafting_shapeless",
+                    recipe_id: recipe_id.to_string(),
+                    data: RecipeData::CraftingShapeless(data.clone()),
+                }
+            })
+            .collect();
+
+        Some(SynchronizeRecipesS2c { recipes })
+    }
+
+    pub fn get_shapeless(
+        &self,
+        input: impl IntoIterator<Item = ItemKind>,
+    ) -> Option<ShapelessRecipe<'_>> {
         let list: SortedItemList = input.into_iter().collect();
+        println!("looking for {list:?}");
         let id = self.shapeless_lookup.get(&list).copied()?;
 
         // let recipe_id = self.shapeless_ids.get(id).unwrap();
@@ -351,12 +413,20 @@ impl CraftingRegistry {
         Some(ShapelessRecipe { data })
     }
 
-    fn register_shapeless(&mut self, recipe_id: RecipeIdentifier, data: CraftingShapelessData) {
-        let list: SortedItemList = data.ingredients.iter().flatten().map(|x| x.item).collect();
+    fn register_shapeless(&mut self, recipe_id: String, data: CraftingShapelessData) {
+        let list: SortedItemList = data
+            .ingredients
+            .iter()
+            .flat_map(|x| &x.0)
+            .map(|x| x.item)
+            .collect();
 
-        let recipe_id = self.shapeless.insert(data);
-        self.shapeless_lookup.insert(list, recipe_id);
-        
+        let entity_id = self.shapeless.insert(data);
+        self.shapeless_ids.insert(entity_id, recipe_id);
+
+        println!("inserted {list:?} with id {entity_id:?}");
+        self.shapeless_lookup.insert(list, entity_id);
+
         self.mark_changed();
     }
 
@@ -368,11 +438,3 @@ impl CraftingRegistry {
         None
     }
 }
-
-
-
-
-
-
-
-

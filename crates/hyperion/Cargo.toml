@@ -59,7 +59,6 @@ prost.workspace = true
 rayon.workspace = true
 reqwest = { workspace = true, features = ["blocking"] }
 serde = { workspace = true, features = ["derive"] }
-snafu = "0.8.4"
 tar.workspace = true
 tokio = { workspace = true, features = ["full"] }
 toml.workspace = true
@@ -95,4 +94,3 @@ workspace = true
 
 [build-dependencies]
 rustc_version.workspace = true
-

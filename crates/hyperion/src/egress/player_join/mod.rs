@@ -2,20 +2,23 @@ use std::{borrow::Cow, collections::BTreeSet};
 
 use flecs_ecs::prelude::*;
 use glam::{I16Vec2, IVec3};
+use hyperion_crafting::{Action, CraftingRegistry, RecipeBookState};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use tracing::{debug, info, instrument};
-use valence_generated::item::ItemKind;
-use valence_protocol::{game_mode::OptGameMode, ident, packets::play::{
-    self,
-    player_position_look_s2c::PlayerPositionLookFlags,
-    team_s2c::{CollisionRule, Mode, NameTagVisibility, TeamColor, TeamFlags},
-    GameJoinS2c,
-}, ByteAngle, GameMode, Ident, ItemStack, PacketEncoder, RawBytes, VarInt, Velocity};
-use valence_protocol::packets::play::unlock_recipes_s2c::UpdateRecipeBookAction;
+use valence_protocol::{
+    game_mode::OptGameMode,
+    ident,
+    packets::play::{
+        self,
+        player_position_look_s2c::PlayerPositionLookFlags,
+        team_s2c::{CollisionRule, Mode, NameTagVisibility, TeamColor, TeamFlags},
+        GameJoinS2c,
+    },
+    ByteAngle, GameMode, Ident, PacketEncoder, RawBytes, VarInt, Velocity,
+};
 use valence_registry::{BiomeRegistry, RegistryCodec};
 use valence_server::entity::EntityKind;
 use valence_text::IntoText;
-use hyperion_crafting::{Action, CraftingCategory, CraftingShapedData, CraftingShapelessData, Recipe, RecipeBookState};
 
 mod list;
 pub use list::*;
@@ -52,6 +55,7 @@ pub fn player_join_world(
     system_id: SystemId,
     root_command: Entity,
     query: &Query<(&Uuid, &InGameName, &Position, &PlayerSkin)>,
+    crafting_registry: &CraftingRegistry,
 ) {
     static CACHED_DATA: once_cell::sync::OnceCell<bytes::Bytes> = once_cell::sync::OnceCell::new();
 
@@ -64,7 +68,7 @@ pub fn player_join_world(
             info!(
                 "caching world data for new players with compression level {compression_level:?}"
             );
-            generate_cached_packet_bytes(&mut encoder, chunks, tasks).unwrap();
+            generate_cached_packet_bytes(&mut encoder, chunks, tasks, crafting_registry).unwrap();
 
             let bytes = encoder.take();
             bytes.freeze()
@@ -359,6 +363,7 @@ fn generate_cached_packet_bytes(
     encoder: &mut PacketEncoder,
     chunks: &MinecraftWorld,
     tasks: &AsyncRuntime,
+    crafting_registry: &CraftingRegistry,
 ) -> anyhow::Result<()> {
     send_game_join_packet(encoder)?;
     send_sync_tags(encoder)?;
@@ -459,28 +464,9 @@ fn generate_cached_packet_bytes(
     let show_all = show_all(0);
     encoder.append_packet(show_all.borrow_packet())?;
 
-
-    let recipes = [
-        Recipe::shapeless(
-            ident!("hyperion:what"),
-            CraftingShapelessData {
-                category: CraftingCategory::Misc,
-                group: Cow::Borrowed("abc"),
-                ingredients: Cow::Owned(vec![
-                    Cow::Owned(vec![
-                        ItemStack::new(ItemKind::Stone, 1, None),
-                    ]),
-                ]),
-                result: ItemStack::new(ItemKind::Dirt, 1, None),
-            },
-        ),
-    ];
-
-    let pkt = hyperion_crafting::SynchronizeRecipesS2c {
-        recipes: Cow::Borrowed(&recipes),
-    };
-
-    encoder.append_packet(&pkt)?;
+    if let Some(pkt) = crafting_registry.packet() {
+        encoder.append_packet(&pkt)?;
+    }
 
     // unlock
     let pkt = hyperion_crafting::UnlockRecipesS2c {
@@ -489,12 +475,8 @@ fn generate_cached_packet_bytes(
         smelting_recipe_book: RecipeBookState::FALSE,
         blast_furnace_recipe_book: RecipeBookState::FALSE,
         smoker_recipe_book: RecipeBookState::FALSE,
-        recipe_ids_1: vec![
-            "hyperion:what".to_string(),
-        ],
-        recipe_ids_2: vec![
-            "hyperion:what".to_string(),
-        ],
+        recipe_ids_1: vec!["hyperion:what".to_string()],
+        recipe_ids_2: vec!["hyperion:what".to_string()],
     };
 
     encoder.append_packet(&pkt)?;
@@ -566,61 +548,63 @@ impl Module for PlayerJoinModule {
             &Comms($),
             &MinecraftWorld($),
             &Compose($),
+            &CraftingRegistry($),
         )
-            .kind::<flecs::pipeline::PreUpdate>()
-            .each(move |(tasks, comms, blocks, compose)| {
-                let span = tracing::trace_span!("joins");
-                let _enter = span.enter();
+        .kind::<flecs::pipeline::PreUpdate>()
+        .each(move |(tasks, comms, blocks, compose, crafting_registry)| {
+            let span = tracing::trace_span!("joins");
+            let _enter = span.enter();
 
-                let mut skins = Vec::new();
+            let mut skins = Vec::new();
 
-                while let Ok(Some((entity, skin))) = comms.skins_rx.try_recv() {
-                    skins.push((entity, skin.clone()));
+            while let Ok(Some((entity, skin))) = comms.skins_rx.try_recv() {
+                skins.push((entity, skin.clone()));
+            }
+
+            // todo: par_iter but bugs...
+            // for (entity, skin) in skins {
+            skins.into_par_iter().for_each(|(entity, skin)| {
+                // if we are not in rayon context that means we are in a single-threaded context and 0 will work
+                let idx = rayon::current_thread_index().unwrap_or(0);
+
+                let world = &stages[idx];
+                let world = world.0;
+
+                if !world.is_alive(entity) {
+                    return;
                 }
 
-                // todo: par_iter but bugs...
-                // for (entity, skin) in skins {
-                skins.into_par_iter().for_each(|(entity, skin)| {
-                    // if we are not in rayon context that means we are in a single-threaded context and 0 will work
-                    let idx = rayon::current_thread_index().unwrap_or(0);
+                let entity = world.entity_from_id(entity);
 
-                    let world = &stages[idx];
-                    let world = world.0;
+                entity.add::<Play>();
 
-                    if !world.is_alive(entity) {
-                        return;
-                    }
+                entity.get::<(&Uuid, &InGameName, &Position, &NetworkStreamRef)>(
+                    |(uuid, name, pose, &stream_id)| {
+                        let query = &query;
+                        let query = &query.0;
 
-                    let entity = world.entity_from_id(entity);
+                        player_join_world(
+                            &entity,
+                            tasks,
+                            blocks,
+                            compose,
+                            uuid.0,
+                            name,
+                            stream_id,
+                            pose,
+                            &world,
+                            &skin,
+                            system_id,
+                            root_command,
+                            query,
+                            crafting_registry,
+                        );
+                    },
+                );
 
-                    entity.add::<Play>();
-
-                    entity.get::<(&Uuid, &InGameName, &Position, &NetworkStreamRef)>(
-                        |(uuid, name, pose, &stream_id)| {
-                            let query = &query;
-                            let query = &query.0;
-
-                            player_join_world(
-                                &entity,
-                                tasks,
-                                blocks,
-                                compose,
-                                uuid.0,
-                                name,
-                                stream_id,
-                                pose,
-                                &world,
-                                &skin,
-                                system_id,
-                                root_command,
-                                query,
-                            );
-                        },
-                    );
-
-                    let entity = world.entity_from_id(entity);
-                    entity.set(skin);
-                });
+                let entity = world.entity_from_id(entity);
+                entity.set(skin);
             });
+        });
     }
 }

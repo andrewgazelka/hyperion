@@ -28,9 +28,9 @@ use crate::{
     runtime::AsyncRuntime,
     simulation::{
         animation::ActiveAnimation, blocks::MinecraftWorld, handlers::PacketSwitchQuery,
-        metadata::Metadata, skin::PlayerSkin, AiTargetable,
-        ChunkPosition, Comms, ConfirmBlockSequences, EntityReaction, Health, ImmuneStatus,
-        InGameName, PacketState, Player, Position, StreamLookup, Uuid, PLAYER_SPAWN_POSITION,
+        metadata::Metadata, skin::PlayerSkin, AiTargetable, ChunkPosition, Comms,
+        ConfirmBlockSequences, EntityReaction, Health, ImmuneStatus, InGameName, PacketState,
+        Player, Position, StreamLookup, Uuid, PLAYER_SPAWN_POSITION,
     },
     storage::{Events, GlobalEventHandlers, PlayerJoinServer, SkinHandler},
     system_registry::{SystemId, RECV_DATA, REMOVE_PLAYER_FROM_VISIBILITY},
@@ -281,40 +281,40 @@ impl Module for IngressModule {
             &mut StreamLookup($),
             &ReceiveState($)
         )
-            .immediate(true)
-            .kind::<flecs::pipeline::OnLoad>()
-            .term_at(0)
-            .each_iter(move |it, _, (lookup, receive)| {
-                let span = trace_span!("generate_ingress_events");
-                let _enter = span.enter();
+        .immediate(true)
+        .kind::<flecs::pipeline::OnLoad>()
+        .term_at(0)
+        .each_iter(move |it, _, (lookup, receive)| {
+            let span = trace_span!("generate_ingress_events");
+            let _enter = span.enter();
 
-                let world = it.world();
+            let world = it.world();
 
-                let mut recv = receive.0.lock();
+            let mut recv = receive.0.lock();
 
-                for connect in recv.player_connect.drain(..) {
-                    info!("player_connect");
-                    let view = world
-                        .entity()
-                        .set(NetworkStreamRef::new(connect.stream))
-                        .set(hyperion_inventory::PlayerInventory::default())
-                        .set(ConfirmBlockSequences::default())
-                        .set(PacketState::Handshake)
-                        .set(Metadata::default())
-                        .set(ActiveAnimation::NONE)
-                        .set(PacketDecoder::default())
-                        .add::<Player>();
+            for connect in recv.player_connect.drain(..) {
+                info!("player_connect");
+                let view = world
+                    .entity()
+                    .set(NetworkStreamRef::new(connect.stream))
+                    .set(hyperion_inventory::PlayerInventory::default())
+                    .set(ConfirmBlockSequences::default())
+                    .set(PacketState::Handshake)
+                    .set(Metadata::default())
+                    .set(ActiveAnimation::NONE)
+                    .set(PacketDecoder::default())
+                    .add::<Player>();
 
-                    lookup.insert(connect.stream, view.id());
-                }
+                lookup.insert(connect.stream, view.id());
+            }
 
-                for disconnect in recv.player_disconnect.drain(..) {
-                    // will initiate the removal of entity
-                    info!("queue pending remove");
-                    let id = lookup.get(&disconnect.stream).copied().unwrap();
-                    world.entity_from_id(*id).add::<PendingRemove>();
-                }
-            });
+            for disconnect in recv.player_disconnect.drain(..) {
+                // will initiate the removal of entity
+                info!("queue pending remove");
+                let id = lookup.get(&disconnect.stream).copied().unwrap();
+                world.entity_from_id(*id).add::<PendingRemove>();
+            }
+        });
 
         let worlds = (0..rayon::current_num_threads() as i32)
             // SAFETY: promoting world to static lifetime, system won't outlive world
@@ -328,40 +328,40 @@ impl Module for IngressModule {
             &StreamLookup($),
             &ReceiveState($),
         )
-            .immediate(true)
-            .kind::<flecs::pipeline::PostLoad>()
-            .each(move |(lookup, receive)| {
-                use rayon::prelude::*;
+        .immediate(true)
+        .kind::<flecs::pipeline::PostLoad>()
+        .each(move |(lookup, receive)| {
+            use rayon::prelude::*;
 
-                // 134µs with par_iter
-                // 150-208µs with regular drain
-                let span = trace_span!("ingress_to_ecs");
-                let _enter = span.enter();
+            // 134µs with par_iter
+            // 150-208µs with regular drain
+            let span = trace_span!("ingress_to_ecs");
+            let _enter = span.enter();
 
-                let mut recv = receive.0.lock();
+            let mut recv = receive.0.lock();
 
-                recv.packets.par_drain().for_each(|(entity_id, bytes)| {
-                    let world = &worlds[rayon::current_thread_index().unwrap_or_default()];
-                    let world = &world.0;
+            recv.packets.par_drain().for_each(|(entity_id, bytes)| {
+                let world = &worlds[rayon::current_thread_index().unwrap_or_default()];
+                let world = &world.0;
 
-                    let Some(entity_id) = lookup.get(&entity_id) else {
-                        // this is not necessarily a bug; race conditions occur
-                        warn!("player_packets: entity for {entity_id:?}");
-                        return;
-                    };
+                let Some(entity_id) = lookup.get(&entity_id) else {
+                    // this is not necessarily a bug; race conditions occur
+                    warn!("player_packets: entity for {entity_id:?}");
+                    return;
+                };
 
-                    if !world.is_alive(*entity_id) {
-                        return;
-                    }
+                if !world.is_alive(*entity_id) {
+                    return;
+                }
 
-                    let entity = world.entity_from_id(*entity_id);
+                let entity = world.entity_from_id(*entity_id);
 
-                    entity.get::<&mut PacketDecoder>(|decoder| {
-                        decoder.shift_excess();
-                        decoder.queue_slice(bytes.as_ref());
-                    });
+                entity.get::<&mut PacketDecoder>(|decoder| {
+                    decoder.shift_excess();
+                    decoder.queue_slice(bytes.as_ref());
                 });
             });
+        });
 
         let system_id = REMOVE_PLAYER_FROM_VISIBILITY;
 
@@ -371,30 +371,30 @@ impl Module for IngressModule {
             &Uuid,
             &Compose($),
         )
-            .with::<&PendingRemove>()
-            .kind::<flecs::pipeline::PostLoad>()
-            .tracing_each_entity(
-                trace_span!("remove_player"),
-                move |entity, (uuid, compose)| {
-                    let uuids = &[uuid.0];
-                    let entity_ids = [VarInt(entity.id().0 as i32)];
+        .with::<&PendingRemove>()
+        .kind::<flecs::pipeline::PostLoad>()
+        .tracing_each_entity(
+            trace_span!("remove_player"),
+            move |entity, (uuid, compose)| {
+                let uuids = &[uuid.0];
+                let entity_ids = [VarInt(entity.id().0 as i32)];
 
-                    let world = entity.world();
+                let world = entity.world();
 
-                    // destroy
-                    let pkt = play::EntitiesDestroyS2c {
-                        entity_ids: Cow::Borrowed(&entity_ids),
-                    };
+                // destroy
+                let pkt = play::EntitiesDestroyS2c {
+                    entity_ids: Cow::Borrowed(&entity_ids),
+                };
 
-                    compose.broadcast(&pkt, system_id).send(&world).unwrap();
+                compose.broadcast(&pkt, system_id).send(&world).unwrap();
 
-                    let pkt = play::PlayerRemoveS2c {
-                        uuids: Cow::Borrowed(uuids),
-                    };
+                let pkt = play::PlayerRemoveS2c {
+                    uuids: Cow::Borrowed(uuids),
+                };
 
-                    compose.broadcast(&pkt, system_id).send(&world).unwrap();
-                },
-            );
+                compose.broadcast(&pkt, system_id).send(&world).unwrap();
+            },
+        );
 
         world
             .system_named::<()>("remove_player")
@@ -426,106 +426,109 @@ impl Module for IngressModule {
             &mut hyperion_inventory::PlayerInventory,
             &mut Metadata,
             &mut ActiveAnimation,
+            &hyperion_crafting::CraftingRegistry($),
         )
-            .kind::<flecs::pipeline::OnUpdate>()
-            .multi_threaded()
-            .tracing_each_entity(
-                trace_span!("recv_data"),
-                move |entity,
-                      (
-                          compose,
-                          blocks,
-                          tasks,
-                          comms,
-                          skins_collection,
-                          handlers,
-                          decoder,
-                          login_state,
-                          &io_ref,
-                          event_queue,
-                          mut pose,
-                          confirm_block_sequences,
-                          inventory,
-                          metadata,
-                          animation,
-                      )| {
-                    let world = entity.world();
-                    let bump = compose.bump.get(&world);
+        .kind::<flecs::pipeline::OnUpdate>()
+        .multi_threaded()
+        .tracing_each_entity(
+            trace_span!("recv_data"),
+            move |entity,
+                  (
+                compose,
+                blocks,
+                tasks,
+                comms,
+                skins_collection,
+                handlers,
+                decoder,
+                login_state,
+                &io_ref,
+                event_queue,
+                mut pose,
+                confirm_block_sequences,
+                inventory,
+                metadata,
+                animation,
+                crafting_registry,
+            )| {
+                let world = entity.world();
+                let bump = compose.bump.get(&world);
 
-                    loop {
-                        let Some(frame) = decoder.try_next_packet(bump).unwrap() else {
-                            break;
-                        };
+                loop {
+                    let Some(frame) = decoder.try_next_packet(bump).unwrap() else {
+                        break;
+                    };
 
-                        match *login_state {
-                            PacketState::Handshake => {
-                                if process_handshake(login_state, &frame).is_err() {
-                                    error!("failed to process handshake");
+                    match *login_state {
+                        PacketState::Handshake => {
+                            if process_handshake(login_state, &frame).is_err() {
+                                error!("failed to process handshake");
 
-                                    entity.destruct();
+                                entity.destruct();
 
-                                    break;
-                                }
-                            }
-                            PacketState::Status => {
-                                process_status(login_state, system_id, &frame, io_ref, compose, &world)
-                                    .unwrap();
-                            }
-                            PacketState::Login => process_login(
-                                &world,
-                                tasks,
-                                login_state,
-                                decoder,
-                                comms,
-                                skins_collection.clone(),
-                                &frame,
-                                io_ref,
-                                compose,
-                                &entity,
-                                system_id,
-                                handlers,
-                                &query,
-                            )
-                                .unwrap(),
-                            PacketState::Play => {
-                                // We call this code when you're in play.
-                                // Transitioning to play is just a way to make sure that the player is officially in play before we start sending them play packets.
-                                // We have a certain duration that we wait before doing this.
-                                // todo: better way?
-                                if let Some(pose) = &mut pose {
-                                    let world = &world;
-
-                                    let mut query = PacketSwitchQuery {
-                                        id: entity.id(),
-                                        view: entity,
-                                        compose,
-                                        io_ref,
-                                        pose,
-                                        events: event_queue,
-                                        world,
-                                        blocks,
-                                        system_id,
-                                        confirm_block_sequences,
-                                        inventory,
-                                        metadata,
-                                        animation,
-                                    };
-
-                                    // trace_span!("ingress", ign = name).in_scope(|| {
-                                    if let Err(err) =
-                                        crate::simulation::handlers::packet_switch(frame, &mut query)
-                                    {
-                                        error!("failed to process packet {:?}: {err}", frame);
-                                    }
-                                    // });
-                                }
-                            }
-                            PacketState::Terminate => {
-                                // todo
+                                break;
                             }
                         }
+                        PacketState::Status => {
+                            process_status(login_state, system_id, &frame, io_ref, compose, &world)
+                                .unwrap();
+                        }
+                        PacketState::Login => process_login(
+                            &world,
+                            tasks,
+                            login_state,
+                            decoder,
+                            comms,
+                            skins_collection.clone(),
+                            &frame,
+                            io_ref,
+                            compose,
+                            &entity,
+                            system_id,
+                            handlers,
+                            &query,
+                        )
+                        .unwrap(),
+                        PacketState::Play => {
+                            // We call this code when you're in play.
+                            // Transitioning to play is just a way to make sure that the player is officially in play before we start sending them play packets.
+                            // We have a certain duration that we wait before doing this.
+                            // todo: better way?
+                            if let Some(pose) = &mut pose {
+                                let world = &world;
+
+                                let mut query = PacketSwitchQuery {
+                                    id: entity.id(),
+                                    view: entity,
+                                    compose,
+                                    io_ref,
+                                    pose,
+                                    events: event_queue,
+                                    world,
+                                    blocks,
+                                    system_id,
+                                    confirm_block_sequences,
+                                    inventory,
+                                    metadata,
+                                    animation,
+                                    crafting_registry,
+                                };
+
+                                // trace_span!("ingress", ign = name).in_scope(|| {
+                                if let Err(err) =
+                                    crate::simulation::handlers::packet_switch(frame, &mut query)
+                                {
+                                    error!("failed to process packet {:?}: {err}", frame);
+                                }
+                                // });
+                            }
+                        }
+                        PacketState::Terminate => {
+                            // todo
+                        }
                     }
-                },
-            );
+                }
+            },
+        );
     }
 }

@@ -1,4 +1,5 @@
 use snafu::{ensure, ResultExt, Snafu};
+
 use super::action::{FullMouseButton, InventoryAction, MouseButton};
 
 #[derive(Debug, Snafu)]
@@ -112,7 +113,7 @@ fn handle_drag(button: u8, slot: i16) -> InventoryActionResult {
             button,
             slot,
         }
-            .fail(),
+        .fail(),
     }
 }
 

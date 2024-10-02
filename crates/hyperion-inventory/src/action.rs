@@ -1,4 +1,5 @@
 use valence_protocol::ItemStack;
+
 use super::{slot_index_from_hand, PlayerInventory, OFFHAND_SLOT};
 
 #[derive(Debug, PartialEq, Clone, Copy)]
