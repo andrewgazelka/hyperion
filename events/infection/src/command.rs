@@ -88,7 +88,10 @@ fn handle_dirt_command(x: i32, y: i32, z: i32, context: &mut CommandContext<'_>)
         .unwrap();
 
     let pos = BlockPos::new(x, y, z);
-    context.mc.try_set_block_delta(pos, BlockState::DIRT);
+    context
+        .mc
+        .try_set_block_delta(pos, BlockState::DIRT)
+        .unwrap();
 }
 
 fn handle_speed_command(amount: f32, context: &CommandContext<'_>) {

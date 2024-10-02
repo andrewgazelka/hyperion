@@ -1,8 +1,8 @@
 //! Flecs components which are used for events.
 
 use flecs_ecs::{core::Entity, macros::Component};
-use glam::{U16Vec3, Vec3};
-use valence_protocol::{BlockPos, Hand, VarInt};
+use glam::Vec3;
+use valence_protocol::{BlockPos, Hand};
 use valence_server::entity::item_frame::ItemStack;
 
 #[derive(Component, Default, Debug)]
@@ -66,14 +66,6 @@ pub enum Posture {
 pub struct PostureUpdate {
     /// The new posture of the entity.
     pub state: Posture,
-}
-
-// chunk event
-#[derive(Copy, Clone, Debug)]
-pub struct BlockBreak {
-    pub position: U16Vec3,
-    pub by: Entity,
-    pub id: VarInt,
 }
 
 #[derive(Debug)]

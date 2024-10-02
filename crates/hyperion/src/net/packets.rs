@@ -1,8 +1,12 @@
 use std::{borrow::Cow, io::Write};
 
+use uuid::Uuid;
 use valence_protocol::{
-    packets::play::entity_equipment_update_s2c::EquipmentEntry, Decode, Encode, ItemStack, Packet,
-    VarInt,
+    packets::play::{
+        boss_bar_s2c::{BossBarColor, BossBarDivision, BossBarFlags},
+        entity_equipment_update_s2c::EquipmentEntry,
+    },
+    Decode, Encode, ItemStack, Packet, VarInt,
 };
 
 #[derive(Clone, PartialEq, Debug, Packet)]
@@ -52,4 +56,26 @@ impl<'a> Decode<'a> for EntityEquipmentUpdateS2c<'static> {
             equipment: Cow::Owned(equipment),
         })
     }
+}
+
+#[derive(Clone, Debug, Encode, Packet)]
+pub struct BossBarS2c<'a> {
+    pub id: Uuid,
+    pub action: BossBarAction<'a>,
+}
+
+#[derive(Clone, PartialEq, Debug, Encode)]
+pub enum BossBarAction<'a> {
+    Add {
+        title: hyperion_text::Text<'a>,
+        health: f32,
+        color: BossBarColor,
+        division: BossBarDivision,
+        flags: BossBarFlags,
+    },
+    Remove,
+    UpdateHealth(f32),
+    UpdateTitle(hyperion_text::Text<'a>),
+    UpdateStyle(BossBarColor, BossBarDivision),
+    UpdateFlags(BossBarFlags),
 }

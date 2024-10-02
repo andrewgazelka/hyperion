@@ -38,6 +38,12 @@ pub struct EntityAndSequence {
     pub sequence: i32,
 }
 
+#[derive(Debug)]
+pub enum TrySetBlockDeltaError {
+    OutOfBounds,
+    ChunkNotLoaded,
+}
+
 /// Accessor of blocks.
 #[derive(Component)]
 pub struct MinecraftWorld {
@@ -69,13 +75,24 @@ impl MinecraftWorld {
         })
     }
 
-    pub fn for_each_to_update(&mut self, mut f: impl FnMut(&mut LoadedChunk)) {
+    pub fn for_each_to_update_mut(&mut self, mut f: impl FnMut(&mut LoadedChunk)) {
         let should_update = &mut self.should_update;
         let chunk_cache = &mut self.chunk_cache;
 
         for idx in should_update.iter() {
             let idx = idx as usize;
             let (_, v) = chunk_cache.get_index_mut(idx).unwrap();
+            f(v);
+        }
+    }
+
+    pub fn for_each_to_update(&self, mut f: impl FnMut(&LoadedChunk)) {
+        let should_update = &self.should_update;
+        let chunk_cache = &self.chunk_cache;
+
+        for idx in should_update.iter() {
+            let idx = idx as usize;
+            let (_, v) = chunk_cache.get_index(idx).unwrap();
             f(v);
         }
     }
@@ -253,12 +270,18 @@ impl MinecraftWorld {
         Some(chunk.block_state(x, y, z))
     }
 
-    pub fn try_set_block_delta(&mut self, position: BlockPos, state: BlockState) {
+    /// Returns the old block state
+    pub fn try_set_block_delta(
+        &mut self,
+        position: BlockPos,
+        state: BlockState,
+    ) -> Result<BlockState, TrySetBlockDeltaError> {
         const START_Y: i32 = -64;
 
         if position.y < START_Y {
             // This block is in the void.
-            return;
+            // todo: do we want this to be error?
+            return Err(TrySetBlockDeltaError::OutOfBounds);
         }
 
         let chunk_pos: IVec2 = IVec2::new(position.x, position.z) >> 4;
@@ -266,14 +289,15 @@ impl MinecraftWorld {
         let chunk_pos = chunk_pos.as_i16vec2();
 
         let Some(chunk) = self.get_loaded_chunk_mut(chunk_pos) else {
-            return;
+            return Err(TrySetBlockDeltaError::ChunkNotLoaded);
         };
 
         let x = u32::try_from(position.x - chunk_start_block[0]).unwrap();
         let y = u32::try_from(position.y - START_Y).unwrap();
         let z = u32::try_from(position.z - chunk_start_block[1]).unwrap();
 
-        chunk.chunk.set_delta(x, y, z, state);
+        let old_state = chunk.chunk.set_delta(x, y, z, state);
+        Ok(old_state)
     }
 
     // todo: allow modifying the chunk. we will need to implement resending

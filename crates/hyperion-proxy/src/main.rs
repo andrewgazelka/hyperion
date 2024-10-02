@@ -11,6 +11,10 @@ struct Params {
 }
 
 #[tokio::main]
+#[expect(
+    clippy::needless_return,
+    reason = "clippy bug with tokio macro I believe"
+)]
 async fn main() {
     tracing_subscriber::fmt::init();
 
@@ -42,7 +46,6 @@ async fn main() {
     //     .expect("setup tracing");
 
     let params = Params::parse();
-
     run_proxy(params.proxy_addr, params.server_addr)
         .await
         .unwrap();

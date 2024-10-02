@@ -1,22 +1,22 @@
 use std::cmp::Ordering;
 
+use compact_str::format_compact;
 use derive_more::derive::{Deref, DerefMut};
 use flecs_ecs::prelude::*;
 use glam::I16Vec2;
 use tracing::trace_span;
 use uuid::Uuid;
-use valence_protocol::{
-    packets::play::{
+use valence_protocol::packets::play::{
         self,
-        boss_bar_s2c::{BossBarAction, BossBarColor, BossBarDivision, BossBarFlags},
-    },
-    VarInt,
-};
-use valence_text::IntoText;
+        boss_bar_s2c::{BossBarColor, BossBarDivision, BossBarFlags},
+    };
 
 use crate::{
     config::CONFIG,
-    net::{Compose, NetworkStreamRef},
+    net::{
+        packets::{BossBarAction, BossBarS2c},
+        Compose, NetworkStreamRef,
+    },
     simulation::{
         blocks::{GetChunk, MinecraftWorld},
         ChunkPosition, Play, Position,
@@ -36,18 +36,6 @@ pub struct SyncChunksModule;
 impl Module for SyncChunksModule {
     fn module(world: &World) {
         world.component::<ChunkSendQueue>();
-
-        system!(
-            "load_pending",
-            world,
-            &mut MinecraftWorld($),
-        )
-        .kind::<flecs::pipeline::OnUpdate>()
-        .each_iter(|_iter, _, blocks| {
-            let span = trace_span!("load_pending");
-            let _enter = span.enter();
-            blocks.load_pending();
-        });
 
         let radius = CONFIG.view_distance as i16;
         let liberal_radius = radius + 2;
@@ -157,7 +145,6 @@ impl Module for SyncChunksModule {
             .kind::<flecs::pipeline::OnUpdate>()
             .multi_threaded()
             .each_entity(
-                // trace_span!("send_full_loaded_chunks"),
                 move |entity, (chunks, compose, &stream_id, queue)| {
                     const MAX_CHUNKS_PER_TICK: usize = 16;
 
@@ -207,39 +194,39 @@ impl Module for SyncChunksModule {
 
         let system_id = LOCAL_STATS;
 
-        system!(
-            "broadcast_chunk_deltas",
-            world,
-            &Compose($),
-            &mut MinecraftWorld($),
-        )
-        .multi_threaded()
-        .kind::<flecs::pipeline::OnUpdate>()
-        .each_iter(move |it: TableIter<'_, false>, _, (compose, mc)| {
-            let span = trace_span!("broadcast_chunk_deltas");
-            let _enter = span.enter();
-
-            let world = it.world();
-
-            mc.for_each_to_update(|chunk| {
-                for packet in chunk.delta_drain_packets() {
-                    compose.broadcast(packet, system_id).send(&world).unwrap();
-                }
-            });
-            mc.clear_should_update();
-
-            for to_confirm in mc.to_confirm.drain(..) {
-                let entity = world.entity_from_id(to_confirm.entity);
-
-                let pkt = play::PlayerActionResponseS2c {
-                    sequence: VarInt(to_confirm.sequence),
-                };
-
-                entity.get::<&NetworkStreamRef>(|stream| {
-                    compose.unicast(&pkt, *stream, system_id, &world).unwrap();
-                });
-            }
-        });
+        // system!(
+        //     "broadcast_chunk_deltas",
+        //     world,
+        //     &Compose($),
+        //     &mut MinecraftWorld($),
+        // )
+        //     .multi_threaded()
+        //     .kind::<flecs::pipeline::OnUpdate>()
+        //     .each_iter(move |it: TableIter<'_, false>, _, (compose, mc)| {
+        //         let span = trace_span!("broadcast_chunk_deltas");
+        //         let _enter = span.enter();
+        //
+        //         let world = it.world();
+        //
+        //         mc.for_each_to_update_mut(|chunk| {
+        //             for packet in chunk.delta_drain_packets() {
+        //                 compose.broadcast(packet, system_id).send(&world).unwrap();
+        //             }
+        //         });
+        //         mc.clear_should_update();
+        //
+        //         for to_confirm in mc.to_confirm.drain(..) {
+        //             let entity = world.entity_from_id(to_confirm.entity);
+        //
+        //             let pkt = play::PlayerActionResponseS2c {
+        //                 sequence: VarInt(to_confirm.sequence),
+        //             };
+        //
+        //             entity.get::<&NetworkStreamRef>(|stream| {
+        //                 compose.unicast(&pkt, *stream, system_id, &world).unwrap();
+        //             });
+        //         }
+        //     });
 
         system!(
             "local_stats",
@@ -258,12 +245,11 @@ impl Module for SyncChunksModule {
                 let world = entity.world();
                 let chunks_to_send = chunk_send_queue.len();
 
-                let title = format!("{chunks_to_send} chunks to send");
-                let title = title.into_cow_text();
-
+                let title = format_compact!("{chunks_to_send} chunks to send");
+                let title = hyperion_text::Text::new(&title);
                 let health = (chunks_to_send as f32 / FULL_BAR_CHUNKS as f32).min(1.0);
 
-                let pkt = valence_protocol::packets::play::BossBarS2c {
+                let pkt = BossBarS2c {
                     id: Uuid::from_u128(2),
                     action: BossBarAction::Add {
                         title,
