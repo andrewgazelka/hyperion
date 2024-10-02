@@ -6,7 +6,11 @@ use valence_protocol::{
     text::IntoText,
 };
 
-use crate::{net::Compose, simulation::Play, system_registry::GLOBAL_STATS};
+use crate::{
+    net::Compose,
+    simulation::{blocks::MinecraftWorld, Play},
+    system_registry::GLOBAL_STATS,
+};
 
 #[derive(Component)]
 pub struct StatsModule;
@@ -86,5 +90,17 @@ impl Module for StatsModule {
 
                 compose.broadcast(&pkt, system_id).send(&world).unwrap();
             });
+
+        system!(
+            "load_pending",
+            world,
+            &mut MinecraftWorld($),
+        )
+        .kind::<flecs::pipeline::OnUpdate>()
+        .each_iter(|_iter, _, blocks| {
+            let span = trace_span!("load_pending");
+            let _enter = span.enter();
+            blocks.load_pending();
+        });
     }
 }

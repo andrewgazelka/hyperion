@@ -1,22 +1,21 @@
+use std::borrow::Cow;
+
 use flecs_ecs::{
-    core::{QueryBuilderImpl, SystemAPI, TableIter, TermBuilderImpl, World},
+    core::{EntityViewGet, QueryBuilderImpl, SystemAPI, TableIter, TermBuilderImpl, World},
     macros::{system, Component},
     prelude::Module,
 };
-use flecs_ecs::core::EntityViewGet;
 use hyperion::{
+    net::{Compose, NetworkStreamRef},
     simulation::{
         blocks::{EntityAndSequence, MinecraftWorld},
         event,
     },
     storage::EventQueue,
-    valence_protocol::BlockState,
+    system_registry::SystemId,
+    valence_protocol::{packets::play, text::IntoText, BlockState, ItemStack, VarInt},
 };
 use tracing::trace_span;
-use hyperion::net::{Compose, NetworkStreamRef};
-use hyperion::system_registry::SystemId;
-use hyperion::valence_protocol::packets::play;
-use hyperion::valence_protocol::text::IntoText;
 
 #[derive(Component)]
 pub struct BlockModule;
@@ -60,6 +59,24 @@ impl Module for BlockModule {
                     };
 
                     // Send the message to the player
+                    compose.unicast(&pkt, net, system_id, &world).unwrap();
+
+                    // let pkt = play::InventoryS2c {
+                    //     window_id: 0,
+                    //     state_id: Default::default(),
+                    //     slots: Default::default(),
+                    //     carried_item: Default::default(),
+                    // }
+
+                    let previous = previous.to_kind().to_item_kind();
+
+                    let pkt = play::ScreenHandlerSlotUpdateS2c {
+                        window_id: 0, // the player's slot is always 0
+                        state_id: VarInt(0), // todo: probably not right
+                        slot_idx: 36,
+                        slot_data: Cow::Owned(ItemStack::new(previous, 1, None)),
+                    };
+
                     compose.unicast(&pkt, net, system_id, &world).unwrap();
                 }
             });

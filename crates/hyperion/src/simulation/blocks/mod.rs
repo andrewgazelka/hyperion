@@ -10,7 +10,6 @@ use glam::{I16Vec2, IVec2};
 use indexmap::IndexMap;
 use loader::{launch_manager, LaunchHandle, CHUNK_HEIGHT_SPAN};
 use roaring::RoaringBitmap;
-use snafu::Snafu;
 use shared::Shared;
 use tracing::instrument;
 use valence_generated::block::BlockState;
@@ -76,13 +75,24 @@ impl MinecraftWorld {
         })
     }
 
-    pub fn for_each_to_update(&mut self, mut f: impl FnMut(&mut LoadedChunk)) {
+    pub fn for_each_to_update_mut(&mut self, mut f: impl FnMut(&mut LoadedChunk)) {
         let should_update = &mut self.should_update;
         let chunk_cache = &mut self.chunk_cache;
 
         for idx in should_update.iter() {
             let idx = idx as usize;
             let (_, v) = chunk_cache.get_index_mut(idx).unwrap();
+            f(v);
+        }
+    }
+
+    pub fn for_each_to_update(&self, mut f: impl FnMut(&LoadedChunk)) {
+        let should_update = &self.should_update;
+        let chunk_cache = &self.chunk_cache;
+
+        for idx in should_update.iter() {
+            let idx = idx as usize;
+            let (_, v) = chunk_cache.get_index(idx).unwrap();
             f(v);
         }
     }
@@ -261,7 +271,11 @@ impl MinecraftWorld {
     }
 
     /// Returns the old block state
-    pub fn try_set_block_delta(&mut self, position: BlockPos, state: BlockState) -> Result<BlockState, TrySetBlockDeltaError> {
+    pub fn try_set_block_delta(
+        &mut self,
+        position: BlockPos,
+        state: BlockState,
+    ) -> Result<BlockState, TrySetBlockDeltaError> {
         const START_Y: i32 = -64;
 
         if position.y < START_Y {

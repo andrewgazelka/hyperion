@@ -29,6 +29,7 @@ itertools.workspace = true
 # todo: how much will adding "sync" wakers hurt performance?
 #rayon-local = { version = "0.1.0", path = "../rayon-local" }
 base64.workspace = true
+hyperion-text.workspace = true
 bitfield-struct = "0.8.0"
 bitvec.workspace = true
 bvh-region.workspace = true
@@ -68,6 +69,7 @@ indexmap = "2.5.0"
 roaring = { version = "0.10.6", features = ["simd"] }
 ndarray = "0.16.1"
 bumpalo.workspace = true
+compact_str.workspace = true
 
 
 [dev-dependencies]

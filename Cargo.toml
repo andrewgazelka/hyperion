@@ -7,10 +7,11 @@ resolver = "2"
 
 members = [
     "crates/bvh-region",
-    "crates/lunar-proto",
     "crates/hyperion",
-    "crates/hyperion-proxy",
     "crates/hyperion-proto",
+    "crates/hyperion-proxy",
+    "crates/hyperion-text",
+    "crates/lunar-proto",
     "events/infection",
     "examples",
 ]
@@ -91,6 +92,7 @@ uuid = "1.8.0"
 bvh = { git = "https://github.com/andrewgazelka/bvh-data" }
 flecs_ecs = { git = "https://github.com/Indra-db/Flecs-Rust" }
 hyperion = { path = "crates/hyperion" }
+hyperion-text = { path = "crates/hyperion-text" }
 hyperion-proto = { path = "crates/hyperion-proto" }
 valence_text = { git = "https://github.com/andrewgazelka/valence", branch = "feat-open" }
 valence_protocol = { git = "https://github.com/andrewgazelka/valence", features = ["compression"], branch = "feat-open" }
@@ -122,3 +124,4 @@ too_long_first_doc_paragraph = "allow"
 derive_partial_eq_without_eq = "allow"
 enum_variant_names = "allow"
 module_name_repetitions = "allow"
+needless_return = "allow" # seems to be a bug in 2024-10-01 nightly with macros (such as tokio)
