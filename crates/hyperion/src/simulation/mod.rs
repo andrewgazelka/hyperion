@@ -58,7 +58,7 @@ pub struct PlayerBoundingBoxes {
 impl PlayerBoundingBoxes {
     /// Get the closest player to the given position.
     #[must_use]
-    pub fn closest_to(&self, point: glam::Vec3) -> Option<&LookupData> {
+    pub fn closest_to(&self, point: Vec3) -> Option<&LookupData> {
         let (target, _) = self.query.get_closest(point)?;
         Some(target)
     }
@@ -81,7 +81,7 @@ pub struct Play;
 /// A component that represents a Player. In the future, this should be broken up into multiple components.
 ///
 /// Why should it be broken up? The more things are broken up, the more we can take advantage of Rust borrowing rules.
-#[derive(Component, Debug)]
+#[derive(Component, Debug, Default)]
 pub struct Player;
 
 /// The state of the login process.
@@ -334,6 +334,6 @@ impl Module for SimModule {
         world.component::<metadata::Metadata>();
         world.component::<animation::ActiveAnimation>();
 
-        world.component::<inventory::Inventory>();
+        world.component::<inventory::PlayerInventory>();
     }
 }

@@ -19,13 +19,12 @@ use valence_protocol::{
 use super::{
     animation::{self, ActiveAnimation},
     blocks::MinecraftWorld,
-    inventory::Inventory,
     metadata::{Metadata, Pose},
     ConfirmBlockSequences, Position,
 };
 use crate::{
     net::{decoder::BorrowedPacketFrame, Compose, NetworkStreamRef},
-    simulation::{event, event::PluginMessage},
+    simulation::{event, event::PluginMessage, inventory::PlayerInventory},
     storage::Events,
     system_registry::SystemId,
 };
@@ -235,7 +234,7 @@ pub struct PacketSwitchQuery<'a> {
     pub blocks: &'a MinecraftWorld,
     pub confirm_block_sequences: &'a mut ConfirmBlockSequences,
     pub system_id: SystemId,
-    pub inventory: &'a mut Inventory,
+    pub inventory: &'a mut PlayerInventory,
     pub metadata: &'a mut Metadata,
     pub animation: &'a mut ActiveAnimation,
 }
@@ -406,7 +405,7 @@ pub fn creative_inventory_action(
         return Ok(());
     };
 
-    query.inventory.set_slot(slot, clicked_item);
+    query.inventory.set_slot(slot, clicked_item)?;
 
     Ok(())
 }

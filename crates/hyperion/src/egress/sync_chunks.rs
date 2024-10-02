@@ -7,9 +7,9 @@ use glam::I16Vec2;
 use tracing::trace_span;
 use uuid::Uuid;
 use valence_protocol::packets::play::{
-        self,
-        boss_bar_s2c::{BossBarColor, BossBarDivision, BossBarFlags},
-    };
+    self,
+    boss_bar_s2c::{BossBarColor, BossBarDivision, BossBarFlags},
+};
 
 use crate::{
     config::CONFIG,

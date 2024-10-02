@@ -10,10 +10,18 @@ use hyperion::{
     simulation::{
         blocks::{EntityAndSequence, MinecraftWorld},
         event,
+        inventory::PlayerInventory,
     },
     storage::EventQueue,
     system_registry::SystemId,
-    valence_protocol::{packets::play, text::IntoText, BlockState, ItemStack, VarInt},
+    valence_protocol::{
+        ident,
+        math::IVec3,
+        packets::play,
+        sound::{SoundCategory, SoundId},
+        text::IntoText,
+        BlockState, ItemStack, VarInt,
+    },
 };
 use tracing::trace_span;
 
@@ -26,11 +34,12 @@ impl Module for BlockModule {
         // todo: this is a hack. We want the system ID to be automatically assigned based on the location of the system.
         let system_id = SystemId(8);
 
-        system!("handle_blocks", world, &mut MinecraftWorld($), &mut EventQueue<event::DestroyBlock>($), &Compose($))
+        system!("handle_blocks", world, &mut MinecraftWorld($), &mut EventQueue<event::DestroyBlock>($), &Compose($), &mut PlayerInventory)
             .multi_threaded()
-            .each_iter(move |it: TableIter<'_, false>, _, (mc, event_queue, compose)| {
+            .each_iter(move |it: TableIter<'_, false>, _, (mc, event_queue, compose, inventory)| {
                 let span = trace_span!("handle_blocks");
                 let _enter = span.enter();
+
 
                 let world = it.world();
 
@@ -61,21 +70,38 @@ impl Module for BlockModule {
                     // Send the message to the player
                     compose.unicast(&pkt, net, system_id, &world).unwrap();
 
-                    // let pkt = play::InventoryS2c {
-                    //     window_id: 0,
-                    //     state_id: Default::default(),
-                    //     slots: Default::default(),
-                    //     carried_item: Default::default(),
-                    // }
+                    let position = event.position;
+                    let position = IVec3::new(position.x << 3, position.y << 3, position.z << 3);
 
-                    let previous = previous.to_kind().to_item_kind();
 
-                    let pkt = play::ScreenHandlerSlotUpdateS2c {
-                        window_id: 0, // the player's slot is always 0
-                        state_id: VarInt(0), // todo: probably not right
-                        slot_idx: 36,
-                        slot_data: Cow::Owned(ItemStack::new(previous, 1, None)),
+                    let ident = ident!("minecraft:block.note_block.harp");
+                    // Send a note sound when breaking a block
+                    let pkt = play::PlaySoundS2c {
+                        id: SoundId::Direct { id: ident.into(), range: None },
+                        position,
+                        volume: 1.0,
+                        pitch: 1.0,
+                        seed: 0,
+                        category: SoundCategory::Block,
                     };
+                    compose.unicast(&pkt, net, system_id, &world).unwrap();
+
+
+                    let diff = ItemStack::new(previous.to_kind().to_item_kind(), 1, None);
+
+                    let added_slots = inventory.try_add_item(diff);
+
+                    for slot in added_slots.changed_slots {
+                        let item = inventory.get(slot).unwrap();
+
+                        let pkt = play::ScreenHandlerSlotUpdateS2c {
+                            window_id: 0, // the player's slot is always 0
+                            state_id: VarInt(0), // todo: probably not right
+                            slot_idx: slot as i16,
+                            slot_data: Cow::Borrowed(item),
+                        };
+                        compose.unicast(&pkt, net, system_id, &world).unwrap();
+                    }
 
                     compose.unicast(&pkt, net, system_id, &world).unwrap();
                 }
