@@ -442,7 +442,6 @@ fn click_slot(mut data: &[u8], query: &mut PacketSwitchQuery<'_>) -> anyhow::Res
     // todo(security): validate the player can do this. This is a MAJOR security issue.
     // as players will be able to spawn items in their inventory wit current logic.
     for SlotChange { idx, stack } in pkt.slot_changes.iter() {
-        println!("slot change: {idx:?} {stack:?}");
         let idx = *idx as u16;
         query.inventory.set_slot(idx, stack.clone())?;
     }

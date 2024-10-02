@@ -404,7 +404,6 @@ impl CraftingRegistry {
         input: impl IntoIterator<Item = ItemKind>,
     ) -> Option<ShapelessRecipe<'_>> {
         let list: SortedItemList = input.into_iter().collect();
-        println!("looking for {list:?}");
         let id = self.shapeless_lookup.get(&list).copied()?;
 
         // let recipe_id = self.shapeless_ids.get(id).unwrap();
@@ -424,7 +423,6 @@ impl CraftingRegistry {
         let entity_id = self.shapeless.insert(data);
         self.shapeless_ids.insert(entity_id, recipe_id);
 
-        println!("inserted {list:?} with id {entity_id:?}");
         self.shapeless_lookup.insert(list, entity_id);
 
         self.mark_changed();
