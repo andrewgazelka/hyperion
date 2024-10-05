@@ -33,7 +33,7 @@ impl Module for BlockModule {
         // todo: this is a hack. We want the system ID to be automatically assigned based on the location of the system.
         let system_id = SystemId(8);
 
-        system!("handle_blocks", world, &mut MinecraftWorld($), &mut EventQueue<event::DestroyBlock>($), &Compose($), &mut hyperion_inventory::PlayerInventory)
+        system!("handle_destroyed_blocks", world, &mut MinecraftWorld($), &mut EventQueue<event::DestroyBlock>($), &Compose($), &mut hyperion_inventory::PlayerInventory)
             .multi_threaded()
             .each_iter(move |it: TableIter<'_, false>, _, (mc, event_queue, compose, inventory)| {
                 let span = trace_span!("handle_blocks");
@@ -105,5 +105,23 @@ impl Module for BlockModule {
                     compose.unicast(&pkt, net, system_id, &world).unwrap();
                 }
             });
+
+        system!("handle_placed_blocks", world, &mut MinecraftWorld($), &mut EventQueue<event::PlaceBlock>($))
+            .multi_threaded()
+            .each_iter(move |_it: TableIter<'_, false>, _, (mc, event_queue)| {
+                let span = trace_span!("handle_placed_blocks");
+                let _enter = span.enter();
+                for event in event_queue.drain() {
+                    let position = event.position;
+
+                    mc.try_set_block_delta(position, event.block).unwrap();
+
+                    mc.to_confirm.push(EntityAndSequence {
+                        entity: event.from,
+                        sequence: event.sequence,
+                    });
+                }
+            }
+            );
     }
 }

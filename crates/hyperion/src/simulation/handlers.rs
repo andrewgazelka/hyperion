@@ -5,8 +5,9 @@ use std::{borrow::Cow, ops::ControlFlow};
 use anyhow::bail;
 use bvh_region::aabb::Aabb;
 use flecs_ecs::core::{Entity, EntityView, EntityViewGet, World};
-use glam::Vec3;
+use glam::{I16Vec2, Vec3};
 use tracing::{info, instrument, trace, warn};
+use valence_generated::block::{BlockKind, BlockState};
 use valence_protocol::{
     packets::play::{
         self, click_slot_c2s::SlotChange, client_command_c2s::ClientCommand,
@@ -24,7 +25,7 @@ use super::{
 };
 use crate::{
     net::{decoder::BorrowedPacketFrame, Compose, NetworkStreamRef},
-    simulation::{event, event::PluginMessage},
+    simulation::{blocks::chunk::START_Y, event, event::PluginMessage},
     storage::Events,
     system_registry::SystemId,
 };
@@ -304,77 +305,66 @@ fn client_command(mut data: &[u8], query: &mut PacketSwitchQuery<'_>) -> anyhow:
 
 pub fn player_interact_block(
     mut data: &[u8],
-    _query: &mut PacketSwitchQuery<'_>,
+    query: &mut PacketSwitchQuery<'_>,
 ) -> anyhow::Result<()> {
-    let _packet = play::PlayerInteractBlockC2s::decode(&mut data)?;
+    let packet = play::PlayerInteractBlockC2s::decode(&mut data)?;
 
-    // let position = packet.position;
-    // let chunk_position = I16Vec2::new((position.x >> 4) as i16, (position.z >> 4) as i16);
+    // PlayerInteractBlockC2s contains:
+    // - hand: Hand (enum: MainHand or OffHand)
+    // - position: BlockPos (x, y, z coordinates of the block)
+    // - face: Direction (enum: Down, Up, North, South, West, East)
+    // - cursor_position: Vec3 (x, y, z coordinates of cursor on the block face)
+    // - inside_block: bool (whether the player's head is inside a block)
+    // - sequence: VarInt (sequence number for this interaction)
 
-    // let Some(entity) = query
-    //     .blocks
-    //     .get_loaded_chunk_entity(chunk_position, query.world)
-    // else {
-    //     warn!("player_interact_block: chunk not found");
-    //     return Ok(());
-    // };
-    //
-    // if let Some(item) = query.inventory.get_held()
-    //     && !item.is_empty()
-    // {
-    //     let item = item.item;
-    //
-    //     let Some(block) = BlockKind::from_item_kind(item) else {
-    //         warn!("invalid item kind to place: {item:?}");
-    //         return Ok(());
-    //     };
-    //
-    //     let block = BlockState::from_kind(block);
-    //
-    //     let position = position.get_in_direction(packet.face);
-    //
-    //     // query.blocks.try_set_block_delta(position, block, query.world);
-    //
-    //     info!("placed block at {position:?}");
-    //     return Ok(());
-    // }
-    //
-    //
-    // let x = position.x - chunk_start[0];
-    // let z = position.z - chunk_start[1];
-    //
-    // let y = position.y - START_Y;
-    //
-    // let x = u8::try_from(x).unwrap();
-    // let z = u8::try_from(z).unwrap();
-    // let y = u16::try_from(y).unwrap();
-    //
-    // query.confirm_block_sequences.push(packet.sequence.0);
+    let position = packet.position;
+    let chunk_position = I16Vec2::new((position.x >> 4) as i16, (position.z >> 4) as i16);
+
+    let held = query.inventory.take_one_held();
+
+    if !held.is_empty() {
+        let item = held.item;
+
+        let Some(block) = BlockKind::from_item_kind(item) else {
+            warn!("invalid item kind to place: {item:?}");
+            return Ok(());
+        };
+
+        let block = BlockState::from_kind(block);
+
+        let position = position.get_in_direction(packet.face);
+
+        query.events.push(
+            event::PlaceBlock {
+                position,
+                from: query.id,
+                sequence: packet.sequence.0,
+                block,
+            },
+            query.world,
+        );
+
+        return Ok(());
+    }
+
+    let chunk_start = [
+        (i32::from(chunk_position.x) << 4),
+        (i32::from(chunk_position.y) << 4),
+    ];
+
+    let x = position.x - chunk_start[0];
+    let z = position.z - chunk_start[1];
+
+    let y = position.y - START_Y;
+
+    let x = u8::try_from(x)?;
+    let z = u8::try_from(z)?;
+    let y = u16::try_from(y)?;
+
+    query.confirm_block_sequences.push(packet.sequence.0);
 
     Ok(())
 }
-
-// pub  fn inventory(mut data: &[u8], query: &PacketSwitchQuery<'_>) -> anyhow::Result<()> {
-//     // "Set Container Content" packet (ID 0x12)
-//     let packet = play::InventoryS2c::decode(&mut data)?;
-//
-//     let play::InventoryS2c {
-//         window_id,
-//         state_id,
-//         slots,
-//         carried_item,
-//     } = packet;
-//
-//     if window_id != 0 {
-//         warn!("not player inventory");
-//         return Ok(());
-//     };
-//
-//     info!("inventory packet: {window_id} {state_id:?} {slots:?} {carried_item:?}");
-//
-//
-//     Ok(())
-// }
 
 pub fn update_selected_slot(
     mut data: &[u8],
@@ -427,9 +417,6 @@ pub fn custom_payload(
         channel: borrow,
         data: packet.data.0 .0,
     };
-
-    // to static
-    // let event: PluginMessage<'static> = unsafe { core::mem::transmute(event) };
 
     query.events.push(event, query.world);
 

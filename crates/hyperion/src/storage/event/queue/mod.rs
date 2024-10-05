@@ -83,6 +83,7 @@ define_events! {
     event::Command => command,
     event::PostureUpdate => posture_update,
     event::DestroyBlock => destroy_block,
+    event::PlaceBlock => place_block,
     event::PluginMessage<'static> => plugin_message
 }
 
@@ -118,7 +119,8 @@ simple_reduce!(
     event::AttackEntity,
     event::Command,
     event::PostureUpdate,
-    event::DestroyBlock
+    event::DestroyBlock,
+    event::PlaceBlock
 );
 
 impl ReducedLifetime for event::PluginMessage<'static> {

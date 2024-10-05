@@ -59,6 +59,23 @@ impl<const T: usize> Inventory<T> {
         self.get_hand_slot(self.hand_slot).unwrap()
     }
 
+    pub fn get_held_mut(&mut self) -> &mut ItemStack {
+        self.get_hand_slot_mut(self.hand_slot).unwrap()
+    }
+
+    pub fn take_one_held(&mut self) -> ItemStack {
+        // decrement the held item
+        let held_item = self.get_held_mut();
+
+        if held_item.is_empty() {
+            return ItemStack::EMPTY;
+        }
+
+        held_item.count -= 1;
+
+        ItemStack::new(held_item.item, 1, held_item.nbt.clone())
+    }
+
     pub fn get(&self, index: u16) -> Result<&ItemStack, InventoryAccessError> {
         self.slots
             .get(usize::from(index))
