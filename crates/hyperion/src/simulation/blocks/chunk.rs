@@ -69,11 +69,7 @@ pub struct LoadedChunk {
 }
 
 impl LoadedChunk {
-    pub const fn new(
-        base_packet_bytes: Bytes,
-        chunk: ChunkData,
-        position: I16Vec2,
-    ) -> Self {
+    pub const fn new(base_packet_bytes: Bytes, chunk: ChunkData, position: I16Vec2) -> Self {
         Self {
             base_packet_bytes,
             chunk,

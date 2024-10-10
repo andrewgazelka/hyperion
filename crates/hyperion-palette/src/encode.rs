@@ -94,7 +94,7 @@ impl PalettedContainer {
                     encode_compact_u64s(
                         writer,
                         ind.indices()
-                            .flat_map(|byte| [byte & 0b1111, byte >> 4])
+                            // .flat_map(|byte| [byte & 0b1111, byte >> 4])
                             .map(u64::from)
                             .take(LEN),
                         bits_per_entry,

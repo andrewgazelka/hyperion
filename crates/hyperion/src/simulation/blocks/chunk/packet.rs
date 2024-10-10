@@ -75,7 +75,8 @@ impl PacketBundle for DeltaPacket<'_> {
         VarInt(len as i32).encode(&mut write)?;
 
         for delta_idx in deltas.iter() {
-            let block_state = unsafe { self.section.block_states.get_unchecked(delta_idx as usize) };
+            let block_state =
+                unsafe { self.section.block_states.get_unchecked(delta_idx as usize) };
 
             // Convert delta (u16) to y, z, x
             let y = (delta_idx >> 8) & 0xF;

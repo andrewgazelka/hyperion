@@ -1,4 +1,9 @@
-use std::simd::{cmp::SimdPartialEq, Simd};
+use std::{
+    collections::HashSet,
+    simd::{cmp::SimdPartialEq, Simd},
+};
+
+use proptest::{prelude::prop, prop_assert_eq, prop_assume, proptest};
 
 use crate::{Data, HALF_LEN, LEN};
 
