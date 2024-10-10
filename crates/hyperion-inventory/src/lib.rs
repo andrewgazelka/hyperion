@@ -135,11 +135,15 @@ impl<const T: usize> Inventory<T> {
 
         let existing_stack = self.get_mut(slot)?;
 
-        if existing_stack.is_empty() && can_add_to_empty {
-            *existing_stack = to_add.clone();
-            to_add.count = 0;
-            self.should_update.insert(slot as u32);
-            return Ok(TryAddSlot::Complete);
+        if existing_stack.is_empty() {
+            return if can_add_to_empty {
+                *existing_stack = to_add.clone();
+                to_add.count = 0;
+                self.should_update.insert(slot as u32);
+                Ok(TryAddSlot::Complete)
+            } else {
+                Ok(TryAddSlot::Skipped)
+            };
         }
 
         let stackable = existing_stack.item == to_add.item && existing_stack.nbt == to_add.nbt;
