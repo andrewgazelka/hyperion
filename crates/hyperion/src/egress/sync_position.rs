@@ -3,7 +3,10 @@ use std::borrow::Cow;
 use flecs_ecs::prelude::*;
 use hyperion_inventory::PlayerInventory;
 use tracing::trace_span;
-use valence_protocol::{packets::play, ByteAngle, RawBytes, VarInt};
+use valence_protocol::{
+    packets::{play, play::entity_equipment_update_s2c::EquipmentEntry},
+    ByteAngle, RawBytes, VarInt,
+};
 
 use crate::{
     net::{Compose, NetworkStreamRef},
@@ -77,7 +80,7 @@ impl Module for SyncPositionModule {
 
                     animation.clear();
 
-                    for slot in inventory.should_update.iter() {
+                    for slot in inventory.updated_since_last_tick.iter() {
                         let slot = slot as u16;
                         let item = inventory.get(slot).unwrap();
                         let pkt = play::ScreenHandlerSlotUpdateS2c {
@@ -89,7 +92,27 @@ impl Module for SyncPositionModule {
                         compose.unicast(&pkt, io, system_id, &world).unwrap();
                     }
 
-                    inventory.should_update.clear();
+                    let cursor = inventory.get_cursor_index();
+
+                    if inventory.updated_since_last_tick.contains(cursor as u32) || inventory.hand_slot_updated_since_last_tick {
+                        let item = inventory.get_cursor();
+                        let pkt = play::EntityEquipmentUpdateS2c {
+                            entity_id,
+                            equipment: vec![EquipmentEntry {
+                                slot: 0,
+                                item: inventory.get_cursor().clone(),
+                            }],
+                        };
+
+                        compose
+                            .broadcast(&pkt, system_id)
+                            .exclude(io)
+                            .send(&world)
+                            .unwrap();
+                    }
+
+                    inventory.updated_since_last_tick.clear();
+                    inventory.hand_slot_updated_since_last_tick = false;
                 },
             );
     }

@@ -11,7 +11,8 @@ use valence_generated::block::{BlockKind, BlockState};
 use valence_protocol::{
     packets::play::{
         self, click_slot_c2s::SlotChange, client_command_c2s::ClientCommand,
-        player_action_c2s::PlayerAction, player_interact_entity_c2s::EntityInteraction,
+        entity_equipment_update_s2c::EquipmentEntry, player_action_c2s::PlayerAction,
+        player_interact_entity_c2s::EntityInteraction,
         player_position_look_s2c::PlayerPositionLookFlags,
     },
     Decode, Hand, Packet, VarInt,

@@ -12,7 +12,8 @@ pub type PlayerInventory = Inventory<46>;
 pub struct Inventory<const T: usize> {
     slots: [ItemStack; T],
     hand_slot: u16,
-    pub should_update: RoaringBitmap,
+    pub updated_since_last_tick: RoaringBitmap,
+    pub hand_slot_updated_since_last_tick: bool,
 }
 
 #[derive(Debug)]
@@ -25,7 +26,8 @@ impl<const T: usize> Default for Inventory<T> {
         Self {
             slots: [ItemStack::EMPTY; T],
             hand_slot: 0,
-            should_update: RoaringBitmap::new(),
+            updated_since_last_tick: RoaringBitmap::new(),
+            hand_slot_updated_since_last_tick: false,
         }
     }
 }
@@ -45,30 +47,41 @@ enum TryAddSlot {
     Skipped,
 }
 
+const HAND_START_SLOT: u16 = 36;
+
 impl<const T: usize> Inventory<T> {
     pub fn set(&mut self, index: u16, stack: ItemStack) -> Result<(), InventoryAccessError> {
         let item = self.get_mut(index)?;
         *item = stack;
-        self.should_update.insert(index as u32);
+        self.updated_since_last_tick.insert(index as u32);
         Ok(())
     }
 
     pub fn set_cursor(&mut self, index: u16) {
+        if self.hand_slot == index {
+            return;
+        }
+
         self.hand_slot = index;
+        self.hand_slot_updated_since_last_tick = true;
     }
 
     #[must_use]
-    pub fn get_held(&self) -> &ItemStack {
+    pub fn get_cursor(&self) -> &ItemStack {
         self.get_hand_slot(self.hand_slot).unwrap()
     }
 
-    pub fn get_held_mut(&mut self) -> &mut ItemStack {
+    pub const fn get_cursor_index(&self) -> u16 {
+        self.hand_slot + HAND_START_SLOT
+    }
+
+    pub fn get_cursor_mut(&mut self) -> &mut ItemStack {
         self.get_hand_slot_mut(self.hand_slot).unwrap()
     }
 
     pub fn take_one_held(&mut self) -> ItemStack {
         // decrement the held item
-        let held_item = self.get_held_mut();
+        let held_item = self.get_cursor_mut();
 
         if held_item.is_empty() {
             return ItemStack::EMPTY;
@@ -86,9 +99,14 @@ impl<const T: usize> Inventory<T> {
     }
 
     pub fn get_mut(&mut self, index: u16) -> Result<&mut ItemStack, InventoryAccessError> {
-        self.slots
-            .get_mut(usize::from(index))
-            .ok_or(InventoryAccessError::InvalidSlot { index })
+        let Some(slot) = self.slots.get_mut(index as usize) else {
+            return Err(InventoryAccessError::InvalidSlot { index });
+        };
+
+        // assume that the slot is updated
+        self.updated_since_last_tick.insert(u32::from(index));
+
+        Ok(slot)
     }
 
     pub fn swap(&mut self, index_a: u16, index_b: u16) {
@@ -99,7 +117,6 @@ impl<const T: usize> Inventory<T> {
     }
 
     pub fn get_hand_slot(&self, idx: u16) -> Result<&ItemStack, InventoryAccessError> {
-        const HAND_START_SLOT: u16 = 36;
         const HAND_END_SLOT: u16 = 45;
 
         let idx = idx + HAND_START_SLOT;
@@ -139,7 +156,7 @@ impl<const T: usize> Inventory<T> {
             return if can_add_to_empty {
                 *existing_stack = to_add.clone();
                 to_add.count = 0;
-                self.should_update.insert(slot as u32);
+                self.updated_since_last_tick.insert(slot as u32);
                 Ok(TryAddSlot::Complete)
             } else {
                 Ok(TryAddSlot::Skipped)
@@ -154,12 +171,12 @@ impl<const T: usize> Inventory<T> {
             return if to_add.count <= space_left {
                 existing_stack.count += to_add.count;
                 *to_add = ItemStack::EMPTY;
-                self.should_update.insert(slot as u32);
+                self.updated_since_last_tick.insert(slot as u32);
                 Ok(TryAddSlot::Complete)
             } else {
                 existing_stack.count = MAX_STACK_SIZE;
                 to_add.count -= space_left;
-                self.should_update.insert(slot as u32);
+                self.updated_since_last_tick.insert(slot as u32);
                 Ok(TryAddSlot::Partial)
             };
         }
