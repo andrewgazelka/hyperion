@@ -1,6 +1,8 @@
 use flecs_ecs::prelude::*;
 use hyperion_proto::Flush;
 use prost::Message;
+use tracing::trace_span;
+use valence_protocol::{packets::play, VarInt};
 
 use crate::{net::Compose, simulation::EgressComm};
 
@@ -14,6 +16,8 @@ use player_join::PlayerJoinModule;
 use stats::StatsModule;
 use sync_chunks::SyncChunksModule;
 use sync_position::SyncPositionModule;
+
+use crate::{net::NetworkStreamRef, simulation::blocks::MinecraftWorld, system_registry::SystemId};
 
 #[derive(Component)]
 pub struct EgressModule;
@@ -42,6 +46,45 @@ impl Module for EgressModule {
         world.import::<PlayerJoinModule>();
         world.import::<SyncChunksModule>();
         world.import::<SyncPositionModule>();
+
+        system!(
+            "broadcast_chunk_deltas",
+            world,
+            &Compose($),
+            &mut MinecraftWorld($),
+        )
+        .multi_threaded()
+        .kind::<flecs::pipeline::OnUpdate>()
+        .each_iter(move |it: TableIter<'_, false>, _, (compose, mc)| {
+            let span = trace_span!("broadcast_chunk_deltas");
+            let _enter = span.enter();
+
+            let world = it.world();
+
+            mc.for_each_to_update_mut(|chunk| {
+                for packet in chunk.delta_drain_packets() {
+                    compose
+                        .broadcast(packet, SystemId(99))
+                        .send(&world)
+                        .unwrap();
+                }
+            });
+            mc.clear_should_update();
+
+            for to_confirm in mc.to_confirm.drain(..) {
+                let entity = world.entity_from_id(to_confirm.entity);
+
+                let pkt = play::PlayerActionResponseS2c {
+                    sequence: VarInt(to_confirm.sequence),
+                };
+
+                entity.get::<&NetworkStreamRef>(|stream| {
+                    compose
+                        .unicast(&pkt, *stream, SystemId(99), &world)
+                        .unwrap();
+                });
+            }
+        });
 
         system!(
             "egress",

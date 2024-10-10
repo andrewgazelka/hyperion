@@ -90,31 +90,31 @@ fn try_change_position(proposed: Vec3, pose: &mut Position, blocks: &MinecraftWo
     let mut proposed_pose = *pose;
     proposed_pose.move_to(proposed);
 
-    let (min, max) = proposed_pose.block_pose_range();
-
-    // so no improper collisions
-    let shrunk = proposed_pose.bounding.shrink(0.01);
-
-    let res = blocks.get_blocks(min, max, |pos, block| {
-        let pos = Vec3::new(pos.x as f32, pos.y as f32, pos.z as f32);
-
-        for aabb in block.collision_shapes() {
-            // convert to our aabb
-            let aabb = Aabb::new(aabb.min().as_vec3(), aabb.max().as_vec3());
-            let aabb = aabb.move_by(pos);
-
-            if shrunk.collides(&aabb) {
-                return ControlFlow::Break(false);
-            }
-        }
-
-        ControlFlow::Continue(())
-    });
-
-    if res.is_break() {
-        return false;
-    }
-
+    // let (min, max) = proposed_pose.block_pose_range();
+    //
+    // // so no improper collisions
+    // let shrunk = proposed_pose.bounding.shrink(0.01);
+    //
+    // let res = blocks.get_blocks(min, max, |pos, block| {
+    //     let pos = Vec3::new(pos.x as f32, pos.y as f32, pos.z as f32);
+    //
+    //     for aabb in block.collision_shapes() {
+    //         // convert to our aabb
+    //         let aabb = Aabb::new(aabb.min().as_vec3(), aabb.max().as_vec3());
+    //         let aabb = aabb.move_by(pos);
+    //
+    //         if shrunk.collides(&aabb) {
+    //             return ControlFlow::Break(false);
+    //         }
+    //     }
+    //
+    //     ControlFlow::Continue(())
+    // });
+    //
+    // if res.is_break() {
+    //     return false;
+    // }
+    //
     *pose = proposed_pose;
 
     true

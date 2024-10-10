@@ -288,7 +288,7 @@ impl MinecraftWorld {
         let chunk_start_block: IVec2 = chunk_pos << 4;
         let chunk_pos = chunk_pos.as_i16vec2();
 
-        let Some(chunk) = self.get_loaded_chunk_mut(chunk_pos) else {
+        let Some((chunk_idx, _, chunk)) = self.chunk_cache.get_full_mut(&chunk_pos) else {
             return Err(TrySetBlockDeltaError::ChunkNotLoaded);
         };
 
@@ -297,6 +297,11 @@ impl MinecraftWorld {
         let z = u32::try_from(position.z - chunk_start_block[1]).unwrap();
 
         let old_state = chunk.chunk.set_delta(x, y, z, state);
+
+        if old_state != state {
+            self.should_update.insert(chunk_idx as u32);
+        }
+
         Ok(old_state)
     }
 

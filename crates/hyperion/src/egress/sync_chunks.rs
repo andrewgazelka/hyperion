@@ -6,9 +6,12 @@ use flecs_ecs::prelude::*;
 use glam::I16Vec2;
 use tracing::trace_span;
 use uuid::Uuid;
-use valence_protocol::packets::play::{
-    self,
-    boss_bar_s2c::{BossBarColor, BossBarDivision, BossBarFlags},
+use valence_protocol::{
+    packets::play::{
+        self,
+        boss_bar_s2c::{BossBarColor, BossBarDivision, BossBarFlags},
+    },
+    VarInt,
 };
 
 use crate::{
@@ -193,40 +196,6 @@ impl Module for SyncChunksModule {
             );
 
         let system_id = LOCAL_STATS;
-
-        // system!(
-        //     "broadcast_chunk_deltas",
-        //     world,
-        //     &Compose($),
-        //     &mut MinecraftWorld($),
-        // )
-        //     .multi_threaded()
-        //     .kind::<flecs::pipeline::OnUpdate>()
-        //     .each_iter(move |it: TableIter<'_, false>, _, (compose, mc)| {
-        //         let span = trace_span!("broadcast_chunk_deltas");
-        //         let _enter = span.enter();
-        //
-        //         let world = it.world();
-        //
-        //         mc.for_each_to_update_mut(|chunk| {
-        //             for packet in chunk.delta_drain_packets() {
-        //                 compose.broadcast(packet, system_id).send(&world).unwrap();
-        //             }
-        //         });
-        //         mc.clear_should_update();
-        //
-        //         for to_confirm in mc.to_confirm.drain(..) {
-        //             let entity = world.entity_from_id(to_confirm.entity);
-        //
-        //             let pkt = play::PlayerActionResponseS2c {
-        //                 sequence: VarInt(to_confirm.sequence),
-        //             };
-        //
-        //             entity.get::<&NetworkStreamRef>(|stream| {
-        //                 compose.unicast(&pkt, *stream, system_id, &world).unwrap();
-        //             });
-        //         }
-        //     });
 
         system!(
             "local_stats",
