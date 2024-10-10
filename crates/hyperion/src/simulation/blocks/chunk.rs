@@ -5,7 +5,7 @@ use glam::I16Vec2;
 use valence_generated::block::BlockState;
 use valence_server::layer::chunk::Chunk;
 
-use super::loader::parse::UnloadedChunkWithMetadata;
+use super::loader::parse::ChunkData;
 
 pub const START_Y: i32 = -64;
 
@@ -63,17 +63,13 @@ pub struct LoadedChunk {
 
     /// The actual chunk data that is "uncompressed". It uses a palette to store the actual data. This is usually used
     /// for obtaining the actual data from the chunk such as getting the block state of a block at a given position.
-    pub chunk: UnloadedChunkWithMetadata,
+    pub chunk: ChunkData,
 
     pub position: I16Vec2,
 }
 
 impl LoadedChunk {
-    pub const fn new(
-        base_packet_bytes: Bytes,
-        chunk: UnloadedChunkWithMetadata,
-        position: I16Vec2,
-    ) -> Self {
+    pub const fn new(base_packet_bytes: Bytes, chunk: ChunkData, position: I16Vec2) -> Self {
         Self {
             base_packet_bytes,
             chunk,
@@ -86,11 +82,11 @@ impl LoadedChunk {
     }
 
     #[must_use]
-    pub const fn chunk(&self) -> &UnloadedChunkWithMetadata {
+    pub const fn chunk(&self) -> &ChunkData {
         &self.chunk
     }
 
-    pub fn chunk_mut(&mut self) -> &mut UnloadedChunkWithMetadata {
+    pub fn chunk_mut(&mut self) -> &mut ChunkData {
         &mut self.chunk
     }
 

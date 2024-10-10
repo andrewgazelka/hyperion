@@ -81,12 +81,12 @@ pub enum ParseChunkError {
 pub mod section;
 
 #[derive(Clone, Default, Debug)]
-pub struct UnloadedChunkWithMetadata {
+pub struct ChunkData {
     pub sections: Vec<Section>,
     pub block_entities: BTreeMap<u32, Compound>,
 }
 
-impl UnloadedChunkWithMetadata {
+impl ChunkData {
     pub fn with_height(height: u32) -> Self {
         Self {
             sections: vec![Section::default(); height as usize / 16],
@@ -108,7 +108,7 @@ impl UnloadedChunkWithMetadata {
     }
 }
 
-impl Chunk for UnloadedChunkWithMetadata {
+impl Chunk for ChunkData {
     fn height(&self) -> u32 {
         self.sections.len() as u32 * 16
     }
@@ -117,9 +117,13 @@ impl Chunk for UnloadedChunkWithMetadata {
         check_block_oob(self, x, y, z);
 
         let idx = x + z * 16 + y % 16 * 16 * 16;
-        self.sections[y as usize / 16]
-            .block_states
-            .get(idx as usize)
+        let state = unsafe {
+            self.sections[y as usize / 16]
+                .block_states
+                .get_unchecked(idx as usize)
+        };
+
+        unsafe { BlockState::from_raw(state).unwrap_unchecked() }
     }
 
     fn set_block_state(&mut self, x: u32, y: u32, z: u32, block: BlockState) -> BlockState {
@@ -138,7 +142,9 @@ impl Chunk for UnloadedChunkWithMetadata {
     fn fill_block_state_section(&mut self, sect_y: u32, block: BlockState) {
         check_section_oob(self, sect_y);
 
-        self.sections[sect_y as usize].block_states.fill(block);
+        self.sections[sect_y as usize]
+            .block_states
+            .fill(block.to_raw());
     }
 
     fn block_entity(&self, x: u32, y: u32, z: u32) -> Option<&Compound> {
@@ -200,7 +206,7 @@ impl Chunk for UnloadedChunkWithMetadata {
 
     fn shrink_to_fit(&mut self) {
         for sect in &mut self.sections {
-            sect.block_states.shrink_to_fit();
+            // sect.block_states.shrink_to_fit(); todo:
             sect.biomes.shrink_to_fit();
         }
     }
@@ -209,7 +215,7 @@ impl Chunk for UnloadedChunkWithMetadata {
 impl Default for Section {
     fn default() -> Self {
         Self {
-            block_states: BlockStateContainer::default(),
+            block_states: hyperion_palette::PalettedContainer::Single(0),
             biomes: BiomeContainer::default(),
             block_light: [0_u8; 2048],
             sky_light: [0_u8; 2048],
@@ -223,16 +229,15 @@ impl Default for Section {
 pub fn parse_chunk(
     mut nbt: Compound,
     biome_map: &BTreeMap<Ident<String>, BiomeId>, // TODO: replace with biome registry arg.
-) -> Result<UnloadedChunkWithMetadata, ParseChunkError> {
+) -> Result<ChunkData, ParseChunkError> {
     let Some(Value::List(List::Compound(nbt_sections))) = nbt.remove("sections") else {
         return Err(ParseChunkError::MissingSections);
     };
 
     assert!(!nbt_sections.is_empty(), "empty sections");
 
-    let mut chunk = UnloadedChunkWithMetadata::with_height(
-        (nbt_sections.len() * 16).try_into().unwrap_or(u32::MAX),
-    );
+    let mut chunk =
+        ChunkData::with_height((nbt_sections.len() * 16).try_into().unwrap_or(u32::MAX));
 
     let min_sect_y = nbt_sections
         .iter()
