@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 
 use flecs_ecs::prelude::*;
-use hyperion_inventory::{Inventory, PlayerInventory};
+use hyperion_inventory::PlayerInventory;
 use tracing::trace_span;
 use valence_protocol::{packets::play, ByteAngle, RawBytes, VarInt};
 

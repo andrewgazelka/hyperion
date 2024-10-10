@@ -271,7 +271,7 @@ impl MinecraftWorld {
     }
 
     /// Returns the old block state
-    pub fn try_set_block_delta(
+    pub fn set_block(
         &mut self,
         position: BlockPos,
         state: BlockState,
