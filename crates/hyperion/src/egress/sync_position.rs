@@ -1,4 +1,7 @@
+use std::borrow::Cow;
+
 use flecs_ecs::prelude::*;
+use hyperion_inventory::{Inventory, PlayerInventory};
 use tracing::trace_span;
 use valence_protocol::{packets::play, ByteAngle, RawBytes, VarInt};
 
@@ -16,12 +19,12 @@ impl Module for SyncPositionModule {
     fn module(world: &World) {
         let system_id = SYNC_ENTITY_POSITION;
 
-        system!("sync_position", world, &Compose($), &Position, &NetworkStreamRef, &mut Metadata, &mut ActiveAnimation)
+        system!("sync_position", world, &Compose($), &Position, &NetworkStreamRef, &mut Metadata, &mut ActiveAnimation, &mut PlayerInventory)
             .multi_threaded()
             .kind::<flecs::pipeline::OnStore>()
             .tracing_each_entity(
                 trace_span!("sync_position"),
-                move |entity, (compose, pose, &io, metadata, animation)| {
+                move |entity, (compose, pose, &io, metadata, animation, inventory)| {
                     let entity_id = VarInt(entity.id().0 as i32);
 
                     let world = entity.world();
@@ -73,6 +76,20 @@ impl Module for SyncPositionModule {
                     }
 
                     animation.clear();
+
+                    for slot in inventory.should_update.iter() {
+                        let slot = slot as u16;
+                        let item = inventory.get(slot).unwrap();
+                        let pkt = play::ScreenHandlerSlotUpdateS2c {
+                            window_id: 0,
+                            state_id: Default::default(),
+                            slot_idx: slot as i16,
+                            slot_data: Cow::Borrowed(item),
+                        };
+                        compose.unicast(&pkt, io, system_id, &world).unwrap();
+                    }
+
+                    inventory.should_update.clear();
                 },
             );
     }

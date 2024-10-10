@@ -396,7 +396,7 @@ pub fn creative_inventory_action(
         return Ok(());
     };
 
-    query.inventory.set_slot(slot, clicked_item)?;
+    query.inventory.set(slot, clicked_item)?;
 
     Ok(())
 }
@@ -430,7 +430,7 @@ fn click_slot(mut data: &[u8], query: &mut PacketSwitchQuery<'_>) -> anyhow::Res
     // as players will be able to spawn items in their inventory wit current logic.
     for SlotChange { idx, stack } in pkt.slot_changes.iter() {
         let idx = *idx as u16;
-        query.inventory.set_slot(idx, stack.clone())?;
+        query.inventory.set(idx, stack.clone())?;
     }
 
     let item = query.inventory.crafting_item(query.crafting_registry);

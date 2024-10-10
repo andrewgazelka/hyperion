@@ -1,4 +1,5 @@
 use flecs_ecs::macros::Component;
+use roaring::RoaringBitmap;
 use valence_protocol::{ItemKind, ItemStack};
 
 pub mod action;
@@ -11,11 +12,11 @@ pub type PlayerInventory = Inventory<46>;
 pub struct Inventory<const T: usize> {
     slots: [ItemStack; T],
     hand_slot: u16,
+    pub should_update: RoaringBitmap,
 }
 
 #[derive(Debug)]
 pub struct AddItemResult {
-    pub changed_slots: Vec<u16>,
     pub remaining: Option<ItemStack>,
 }
 
@@ -24,6 +25,7 @@ impl<const T: usize> Default for Inventory<T> {
         Self {
             slots: [ItemStack::EMPTY; T],
             hand_slot: 0,
+            should_update: RoaringBitmap::new(),
         }
     }
 }
@@ -47,6 +49,7 @@ impl<const T: usize> Inventory<T> {
     pub fn set(&mut self, index: u16, stack: ItemStack) -> Result<(), InventoryAccessError> {
         let item = self.get_mut(index)?;
         *item = stack;
+        self.should_update.insert(index as u32);
         Ok(())
     }
 
@@ -86,12 +89,6 @@ impl<const T: usize> Inventory<T> {
         self.slots
             .get_mut(usize::from(index))
             .ok_or(InventoryAccessError::InvalidSlot { index })
-    }
-
-    pub fn set_slot(&mut self, index: u16, stack: ItemStack) -> Result<(), InventoryAccessError> {
-        let item = self.get_mut(index)?;
-        *item = stack;
-        Ok(())
     }
 
     pub fn swap(&mut self, index_a: u16, index_b: u16) {
@@ -141,6 +138,7 @@ impl<const T: usize> Inventory<T> {
         if existing_stack.is_empty() && can_add_to_empty {
             *existing_stack = to_add.clone();
             to_add.count = 0;
+            self.should_update.insert(slot as u32);
             return Ok(TryAddSlot::Complete);
         }
 
@@ -152,10 +150,12 @@ impl<const T: usize> Inventory<T> {
             return if to_add.count <= space_left {
                 existing_stack.count += to_add.count;
                 *to_add = ItemStack::EMPTY;
+                self.should_update.insert(slot as u32);
                 Ok(TryAddSlot::Complete)
             } else {
                 existing_stack.count = MAX_STACK_SIZE;
                 to_add.count -= space_left;
+                self.should_update.insert(slot as u32);
                 Ok(TryAddSlot::Partial)
             };
         }
@@ -211,10 +211,7 @@ impl PlayerInventory {
     }
 
     pub fn try_add_item(&mut self, mut item: ItemStack) -> AddItemResult {
-        let mut result = AddItemResult {
-            changed_slots: Vec::new(),
-            remaining: None,
-        };
+        let mut result = AddItemResult { remaining: None };
 
         // Try to add to hand slots (36-45) first, then the rest of the inventory (0-35)
         // try to stack first
@@ -225,12 +222,9 @@ impl PlayerInventory {
 
             match add_slot {
                 TryAddSlot::Complete => {
-                    result.changed_slots.push(slot);
                     return result;
                 }
-                TryAddSlot::Partial => {
-                    result.changed_slots.push(slot);
-                }
+                TryAddSlot::Partial => {}
                 TryAddSlot::Skipped => {}
             }
         }
@@ -244,12 +238,9 @@ impl PlayerInventory {
 
             match add_slot {
                 TryAddSlot::Complete => {
-                    result.changed_slots.push(slot);
                     return result;
                 }
-                TryAddSlot::Partial => {
-                    result.changed_slots.push(slot);
-                }
+                TryAddSlot::Partial => {}
                 TryAddSlot::Skipped => {}
             }
         }

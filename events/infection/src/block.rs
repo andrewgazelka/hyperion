@@ -90,19 +90,19 @@ impl Module for BlockModule {
 
                     let added_slots = inventory.try_add_item(diff);
 
-                    for slot in added_slots.changed_slots {
-                        let item = inventory.get(slot).unwrap();
+                    // for slot in added_slots.changed_slots {
+                    //     let item = inventory.get(slot).unwrap();
+                    // 
+                    //     let pkt = play::ScreenHandlerSlotUpdateS2c {
+                    //         window_id: 0, // the player's slot is always 0
+                    //         state_id: VarInt(0), // todo: probably not right
+                    //         slot_idx: slot as i16,
+                    //         slot_data: Cow::Borrowed(item),
+                    //     };
+                    //     compose.unicast(&pkt, net, system_id, &world).unwrap();
+                    // }
 
-                        let pkt = play::ScreenHandlerSlotUpdateS2c {
-                            window_id: 0, // the player's slot is always 0
-                            state_id: VarInt(0), // todo: probably not right
-                            slot_idx: slot as i16,
-                            slot_data: Cow::Borrowed(item),
-                        };
-                        compose.unicast(&pkt, net, system_id, &world).unwrap();
-                    }
-
-                    compose.unicast(&pkt, net, system_id, &world).unwrap();
+                    // compose.unicast(&pkt, net, system_id, &world).unwrap();
                 }
             });
 

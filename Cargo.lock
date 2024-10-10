@@ -1684,6 +1684,7 @@ version = "0.1.0"
 dependencies = [
  "flecs_ecs",
  "hyperion-crafting",
+ "roaring",
  "snafu",
  "valence_protocol",
 ]
