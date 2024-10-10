@@ -1612,6 +1612,7 @@ dependencies = [
  "hex",
  "hyperion-crafting",
  "hyperion-inventory",
+ "hyperion-palette",
  "hyperion-proto",
  "hyperion-text",
  "indexmap",
@@ -1675,6 +1676,10 @@ dependencies = [
 [[package]]
 name = "hyperion-palette"
 version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "valence_protocol",
+]
 
 [[package]]
 name = "hyperion-proto"

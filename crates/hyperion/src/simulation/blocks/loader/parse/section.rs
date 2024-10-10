@@ -5,7 +5,7 @@ use valence_server::layer::chunk::{BiomeContainer, BlockStateContainer};
 
 #[derive(Clone, Debug)]
 pub struct Section {
-    pub block_states: BlockStateContainer,
+    pub block_states: hyperion_palette::PalettedContainer,
     pub biomes: BiomeContainer,
 
     // todo: maybe make stack array of 2048
@@ -18,21 +18,23 @@ pub struct Section {
 
 impl Section {
     pub fn set(&mut self, idx: u16, new: BlockState) -> BlockState {
-        self.block_states.set(idx as usize, new)
+        let prev = unsafe { self.block_states.set_unchecked(idx as usize, new.to_raw()) };
+        unsafe { BlockState::from_raw(prev).unwrap_unchecked() }
     }
 
     // returns true if the block state was changed
     pub fn set_delta(&mut self, idx: u16, new: BlockState) -> BlockState {
         debug_assert_lt!(idx, 4096);
 
-        let before = self.block_states.set(idx as usize, new);
+        let new = new.to_raw();
+        let before = unsafe { self.block_states.set_unchecked(idx as usize, new) };
 
         if before != new {
             self.changed_since_last_tick.insert(idx as u32);
             self.changed.insert(idx as u32);
         }
 
-        before
+        unsafe { BlockState::from_raw(before).unwrap_unchecked() }
     }
 
     pub fn reset_tick_deltas(&mut self) {
@@ -46,7 +48,7 @@ mod tests {
 
     fn create_test_section() -> Section {
         Section {
-            block_states: BlockStateContainer::new(),
+            block_states: hyperion_palette::PalettedContainer::Single(0), // air (probably)
             biomes: BiomeContainer::new(),
             block_light: [0; 2048],
             sky_light: [0; 2048],

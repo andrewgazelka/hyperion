@@ -32,7 +32,8 @@ impl PacketBundle for DeltaDrainPacket<'_> {
         VarInt(len as i32).encode(&mut write)?;
 
         for delta_idx in deltas.iter() {
-            let block_state = self.section.block_states.get(delta_idx as usize);
+            let block_state =
+                unsafe { self.section.block_states.get_unchecked(delta_idx as usize) };
 
             // Convert delta (u16) to y, z, x
             let y = (delta_idx >> 8) & 0xF;
@@ -43,7 +44,7 @@ impl PacketBundle for DeltaDrainPacket<'_> {
                 .with_off_x(x as u8)
                 .with_off_y(y as u8)
                 .with_off_z(z as u8)
-                .with_block_state(block_state.to_raw() as u32);
+                .with_block_state(block_state as u32);
 
             entry.encode(&mut write)?;
         }
@@ -74,7 +75,7 @@ impl PacketBundle for DeltaPacket<'_> {
         VarInt(len as i32).encode(&mut write)?;
 
         for delta_idx in deltas.iter() {
-            let block_state = self.section.block_states.get(delta_idx as usize);
+            let block_state = unsafe { self.section.block_states.get_unchecked(delta_idx as usize) };
 
             // Convert delta (u16) to y, z, x
             let y = (delta_idx >> 8) & 0xF;
@@ -85,7 +86,7 @@ impl PacketBundle for DeltaPacket<'_> {
                 .with_off_x(x as u8)
                 .with_off_y(y as u8)
                 .with_off_z(z as u8)
-                .with_block_state(block_state.to_raw() as u32);
+                .with_block_state(block_state as u32);
 
             entry.encode(&mut write)?;
         }

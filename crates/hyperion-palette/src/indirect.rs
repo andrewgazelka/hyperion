@@ -2,15 +2,28 @@ use std::simd::{cmp::SimdPartialEq, Simd};
 
 use crate::{Data, HALF_LEN, LEN};
 
+#[derive(Clone, Debug)]
 pub struct Indirect {
-    palette: [Data; 16],
-    palette_len: u8,
-    data: [u8; HALF_LEN],
+    pub palette: [Data; 16],
+    pub palette_len: u8,
+    data: Box<[u8; HALF_LEN]>,
 }
 
-struct Full;
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub struct Full;
 
 impl Indirect {
+    pub fn from_single(data: Data) -> Self {
+        let mut palette = [Data::default(); 16];
+        palette[0] = data;
+
+        Self {
+            palette,
+            palette_len: 1,
+            data: Box::new([0; HALF_LEN]),
+        }
+    }
+
     pub fn index_of(&self, data: Data) -> Option<u8> {
         // Create a SIMD vector filled with the search element
         let search_simd: Simd<u16, 16> = Simd::splat(data);
@@ -48,7 +61,7 @@ impl Indirect {
         }
     }
 
-    pub unsafe fn set_unchecked(&mut self, index: usize, value: Data) -> Result<(), Full> {
+    pub unsafe fn set_unchecked(&mut self, index: usize, value: Data) -> Result<Data, Full> {
         debug_assert!(index < LEN);
 
         let palette_index = match self.index_of(value) {
@@ -58,7 +71,7 @@ impl Indirect {
                     return Err(Full);
                 };
                 let new_index = self.palette_len;
-                self.palette[new_index] = value;
+                self.palette[new_index as usize] = value;
                 self.palette_len += 1;
                 new_index
             }
@@ -67,7 +80,32 @@ impl Indirect {
         let packed_byte_index = index / 2;
         let shift = (index & 1) << 2;
         let mask = 0xF << shift;
-        self.data[packed_byte_index] =
-            (self.data[packed_byte_index] & !mask) | ((palette_index) << shift);
+
+        let ptr = unsafe { self.data.get_unchecked_mut(packed_byte_index) };
+
+        let other_part = (*ptr & !mask);
+        let previous = (*ptr & mask) >> shift;
+
+        *ptr = other_part | ((palette_index) << shift);
+
+        let previous = self.palette[previous as usize];
+
+        Ok(previous)
+    }
+
+    pub fn indices(&self) -> impl Iterator<Item = u8> + '_ {
+        (0..LEN).map(|i| self.index_of(unsafe { self.get_unchecked(i) }).unwrap())
+    }
+
+    pub fn to_direct(&self) -> Box<[Data]> {
+        let mut direct = Box::new_uninit_slice(LEN);
+
+        for i in 0..LEN {
+            unsafe {
+                direct[i].write(self.get_unchecked(i));
+            }
+        }
+
+        unsafe { direct.assume_init() }
     }
 }

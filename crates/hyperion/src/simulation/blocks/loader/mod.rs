@@ -273,10 +273,13 @@ fn encode_chunk_packet(
     Ok(Some(result))
 }
 
-fn write_block_states(states: &BlockStateContainer, writer: &mut impl Write) -> anyhow::Result<()> {
+fn write_block_states(
+    states: &hyperion_palette::PalettedContainer,
+    writer: &mut impl Write,
+) -> anyhow::Result<()> {
     states.encode_mc_format(
         writer,
-        |b| b.to_raw().into(),
+        |b| b.into(),
         4,
         8,
         bit_width(BlockState::max_raw().into()),
