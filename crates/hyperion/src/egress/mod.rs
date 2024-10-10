@@ -17,7 +17,7 @@ use stats::StatsModule;
 use sync_chunks::SyncChunksModule;
 use sync_position::SyncPositionModule;
 
-use crate::{net::NetworkStreamRef, simulation::blocks::MinecraftWorld, system_registry::SystemId};
+use crate::{net::NetworkStreamRef, simulation::blocks::Blocks, system_registry::SystemId};
 
 #[derive(Component)]
 pub struct EgressModule;
@@ -51,7 +51,7 @@ impl Module for EgressModule {
             "broadcast_chunk_deltas",
             world,
             &Compose($),
-            &mut MinecraftWorld($),
+            &mut Blocks($),
         )
         .multi_threaded()
         .kind::<flecs::pipeline::OnUpdate>()

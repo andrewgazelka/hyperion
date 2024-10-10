@@ -1,9 +1,4 @@
-use std::{
-    collections::HashSet,
-    simd::{cmp::SimdPartialEq, Simd},
-};
-
-use proptest::{prelude::prop, prop_assert_eq, prop_assume, proptest};
+use std::simd::{cmp::SimdPartialEq, Simd};
 
 use crate::{Data, HALF_LEN, LEN};
 
@@ -88,7 +83,7 @@ impl Indirect {
 
         let ptr = unsafe { self.data.get_unchecked_mut(packed_byte_index) };
 
-        let other_part = (*ptr & !mask);
+        let other_part = *ptr & !mask;
         let previous = (*ptr & mask) >> shift;
 
         *ptr = other_part | ((palette_index) << shift);

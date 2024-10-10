@@ -29,7 +29,7 @@ use crate::{
     net::{Compose, NetworkStreamRef},
     runtime::AsyncRuntime,
     simulation::{
-        blocks::MinecraftWorld,
+        blocks::Blocks,
         command::{get_command_packet, Command, ROOT_COMMAND},
         skin::PlayerSkin,
         util::registry_codec_raw,
@@ -44,7 +44,7 @@ use crate::{
 pub fn player_join_world(
     entity: &EntityView<'_>,
     tasks: &AsyncRuntime,
-    chunks: &MinecraftWorld,
+    chunks: &Blocks,
     compose: &Compose,
     uuid: uuid::Uuid,
     name: &str,
@@ -361,7 +361,7 @@ fn send_sync_tags(encoder: &mut PacketEncoder) -> anyhow::Result<()> {
 
 fn generate_cached_packet_bytes(
     encoder: &mut PacketEncoder,
-    chunks: &MinecraftWorld,
+    chunks: &Blocks,
     tasks: &AsyncRuntime,
     crafting_registry: &CraftingRegistry,
 ) -> anyhow::Result<()> {
@@ -546,7 +546,7 @@ impl Module for PlayerJoinModule {
             world,
             &AsyncRuntime($),
             &Comms($),
-            &MinecraftWorld($),
+            &Blocks($),
             &Compose($),
             &CraftingRegistry($),
         )

@@ -8,7 +8,7 @@ use flecs_ecs::{
 use hyperion::{
     net::{Compose, NetworkStreamRef},
     simulation::{
-        blocks::{EntityAndSequence, MinecraftWorld},
+        blocks::{Blocks, EntityAndSequence},
         event,
     },
     storage::EventQueue,
@@ -34,9 +34,9 @@ impl Module for BlockModule {
         // todo: this is a hack. We want the system ID to be automatically assigned based on the location of the system.
         let system_id = SystemId(8);
 
-        system!("handle_destroyed_blocks", world, &mut MinecraftWorld($), &mut EventQueue<event::DestroyBlock>($), &Compose($))
+        system!("handle_destroyed_blocks", world, &mut Blocks($), &mut EventQueue<event::DestroyBlock>($), &Compose($))
             .multi_threaded()
-            .each_iter(move |it: TableIter<'_, false>, _, (mc, event_queue, compose): (&mut MinecraftWorld, &mut EventQueue<event::DestroyBlock>, &Compose)| {
+            .each_iter(move |it: TableIter<'_, false>, _, (mc, event_queue, compose): (&mut Blocks, &mut EventQueue<event::DestroyBlock>, &Compose)| {
                 let span = trace_span!("handle_blocks");
                 let _enter = span.enter();
                 let world = it.world();
@@ -91,9 +91,9 @@ impl Module for BlockModule {
                 }
             });
 
-        system!("handle_placed_blocks", world, &mut MinecraftWorld($), &mut EventQueue<event::PlaceBlock>($))
+        system!("handle_placed_blocks", world, &mut Blocks($), &mut EventQueue<event::PlaceBlock>($))
             .multi_threaded()
-            .each_iter(move |_it: TableIter<'_, false>, _, (mc, event_queue): (&mut MinecraftWorld, &mut EventQueue<event::PlaceBlock>)| {
+            .each_iter(move |_it: TableIter<'_, false>, _, (mc, event_queue): (&mut Blocks, &mut EventQueue<event::PlaceBlock>)| {
                 let span = trace_span!("handle_placed_blocks");
                 let _enter = span.enter();
                 for event in event_queue.drain() {

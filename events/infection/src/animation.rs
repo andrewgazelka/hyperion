@@ -4,7 +4,7 @@ use flecs_ecs::{
     prelude::Module,
 };
 use hyperion::{
-    simulation::blocks::MinecraftWorld,
+    simulation::blocks::Blocks,
     valence_protocol::{math::IVec3, BlockState},
 };
 use ndarray::Array3;
@@ -79,7 +79,7 @@ impl Module for AnimationModule {
         let animate = Box::pin(animate);
         let mut iter = core::iter::from_coroutine(animate);
 
-        system!("regular_animation", world, &mut MinecraftWorld($))
+        system!("regular_animation", world, &mut Blocks($))
             .multi_threaded()
             .each_iter(move |_it: TableIter<'_, false>, _, mc| {
                 let span = trace_span!("regular_animation");

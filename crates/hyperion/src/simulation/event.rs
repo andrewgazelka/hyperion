@@ -1,7 +1,7 @@
 //! Flecs components which are used for events.
 
 use flecs_ecs::{core::Entity, macros::Component};
-use glam::Vec3;
+use glam::{IVec3, Vec3};
 use valence_generated::block::BlockState;
 use valence_protocol::{BlockPos, Hand};
 use valence_server::entity::item_frame::ItemStack;
@@ -25,14 +25,14 @@ pub struct AttackEntity {
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct DestroyBlock {
-    pub position: BlockPos,
+    pub position: IVec3,
     pub from: Entity,
     pub sequence: i32,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct PlaceBlock {
-    pub position: BlockPos,
+    pub position: IVec3,
     pub block: BlockState,
     pub from: Entity,
     pub sequence: i32,

@@ -3,10 +3,10 @@ use ndarray::ArrayView3;
 use valence_generated::block::BlockState;
 use valence_protocol::BlockPos;
 
-use crate::simulation::blocks::{chunk::START_Y, MinecraftWorld};
+use crate::simulation::blocks::{chunk::START_Y, Blocks};
 
-impl MinecraftWorld {
-    pub fn mark_should_update(&mut self, position: BlockPos) {
+impl Blocks {
+    pub fn mark_should_update(&mut self, position: IVec3) {
         let x = position.x;
         let z = position.z;
 

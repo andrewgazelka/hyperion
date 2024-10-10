@@ -27,7 +27,7 @@ use crate::{
     },
     runtime::AsyncRuntime,
     simulation::{
-        animation::ActiveAnimation, blocks::MinecraftWorld, handlers::PacketSwitchQuery,
+        animation::ActiveAnimation, blocks::Blocks, handlers::PacketSwitchQuery,
         metadata::Metadata, skin::PlayerSkin, AiTargetable, ChunkPosition, Comms,
         ConfirmBlockSequences, EntityReaction, Health, ImmuneStatus, InGameName, PacketState,
         Player, Position, StreamLookup, Uuid, PLAYER_SPAWN_POSITION,
@@ -412,7 +412,7 @@ impl Module for IngressModule {
             "recv_data",
             world,
             &Compose($),
-            &MinecraftWorld($),
+            &Blocks($),
             &AsyncRuntime($),
             &Comms($),
             &SkinHandler($),

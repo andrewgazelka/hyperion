@@ -5,7 +5,7 @@ use hyperion::{
     egress::player_join::{PlayerListActions, PlayerListEntry, PlayerListS2c},
     net::{Compose, NetworkStreamRef},
     simulation::{
-        blocks::MinecraftWorld,
+        blocks::Blocks,
         command::{get_root_command, Command, Parser},
         event, InGameName, Uuid,
     },
@@ -16,6 +16,7 @@ use hyperion::{
         self,
         game_mode::OptGameMode,
         ident,
+        math::IVec3,
         packets::play::{self, player_abilities_s2c::PlayerAbilitiesFlags, PlayerAbilitiesS2c},
         text::IntoText,
         BlockPos, BlockState, GameMode, VarInt,
@@ -59,7 +60,7 @@ struct CommandContext<'a> {
     stream: NetworkStreamRef,
     team: &'a mut Team,
     compose: &'a Compose,
-    mc: &'a mut MinecraftWorld,
+    mc: &'a mut Blocks,
     world: &'a World,
     system_id: SystemId,
     uuid: uuid::Uuid,
@@ -88,6 +89,7 @@ fn handle_dirt_command(x: i32, y: i32, z: i32, context: &mut CommandContext<'_>)
         .unwrap();
 
     let pos = BlockPos::new(x, y, z);
+    let pos = IVec3::new(x, y, z);
     context.mc.set_block(pos, BlockState::DIRT).unwrap();
 }
 
@@ -232,7 +234,7 @@ impl Module for CommandModule {
                 }
             });
 
-        system!("handle_infection_events_player", world, &Compose($), &mut EventQueue<event::Command>($), &mut MinecraftWorld($))
+        system!("handle_infection_events_player", world, &Compose($), &mut EventQueue<event::Command>($), &mut Blocks($))
             .multi_threaded()
             .each_iter(move |it: TableIter<'_, false>, _, (compose, event_queue, mc)| {
                 let span = trace_span!("handle_infection_events_player");

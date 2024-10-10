@@ -5,7 +5,7 @@ use std::{borrow::Cow, ops::ControlFlow};
 use anyhow::bail;
 use bvh_region::aabb::Aabb;
 use flecs_ecs::core::{Entity, EntityView, EntityViewGet, World};
-use glam::{I16Vec2, Vec3};
+use glam::{I16Vec2, IVec3, Vec3};
 use tracing::{info, instrument, trace, warn};
 use valence_generated::block::{BlockKind, BlockState};
 use valence_protocol::{
@@ -20,7 +20,7 @@ use valence_protocol::{
 
 use super::{
     animation::{self, ActiveAnimation},
-    blocks::MinecraftWorld,
+    blocks::Blocks,
     metadata::{Metadata, Pose},
     ConfirmBlockSequences, Position,
 };
@@ -77,7 +77,7 @@ fn change_position_or_correct_client(query: &mut PacketSwitchQuery<'_>, proposed
 }
 
 /// Returns true if the position was changed, false if it was not.
-fn try_change_position(proposed: Vec3, pose: &mut Position, blocks: &MinecraftWorld) -> bool {
+fn try_change_position(proposed: Vec3, pose: &mut Position, blocks: &Blocks) -> bool {
     /// 100.0 m/tick; this is the same as the vanilla server
     const MAX_BLOCKS_PER_TICK: f32 = 100.0;
     let current = pose.position;
@@ -233,7 +233,7 @@ pub struct PacketSwitchQuery<'a> {
     pub pose: &'a mut Position,
     pub events: &'a Events,
     pub world: &'a World,
-    pub blocks: &'a MinecraftWorld,
+    pub blocks: &'a Blocks,
     pub confirm_block_sequences: &'a mut ConfirmBlockSequences,
     pub system_id: SystemId,
     pub inventory: &'a mut hyperion_inventory::PlayerInventory,
@@ -247,13 +247,14 @@ fn player_action(mut data: &[u8], query: &PacketSwitchQuery<'_>) -> anyhow::Resu
     let packet = play::PlayerActionC2s::decode(&mut data)?;
 
     let sequence = packet.sequence.0;
+    let position = IVec3::new(packet.position.x, packet.position.y, packet.position.z);
 
     match packet.action {
         PlayerAction::StartDestroyBlock => {}
         PlayerAction::AbortDestroyBlock => {}
         PlayerAction::StopDestroyBlock => {
             let event = event::DestroyBlock {
-                position: packet.position,
+                position,
                 from: query.id,
                 sequence,
             };
@@ -334,6 +335,7 @@ pub fn player_interact_block(
         let block = BlockState::from_kind(block);
 
         let position = position.get_in_direction(packet.face);
+        let position = IVec3::new(position.x, position.y, position.z);
 
         query.events.push(
             event::PlaceBlock {

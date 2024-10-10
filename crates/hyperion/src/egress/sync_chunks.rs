@@ -21,7 +21,7 @@ use crate::{
         Compose, NetworkStreamRef,
     },
     simulation::{
-        blocks::{GetChunk, MinecraftWorld},
+        blocks::{Blocks, GetChunk},
         ChunkPosition, Play, Position,
     },
     system_registry::{GENERATE_CHUNK_CHANGES, LOCAL_STATS, SEND_FULL_LOADED_CHUNKS},
@@ -144,7 +144,7 @@ impl Module for SyncChunksModule {
 
         let system_id = SEND_FULL_LOADED_CHUNKS;
 
-        system!("send_full_loaded_chunks", world, &MinecraftWorld($), &Compose($), &NetworkStreamRef, &mut ChunkSendQueue, Play)
+        system!("send_full_loaded_chunks", world, &Blocks($), &Compose($), &NetworkStreamRef, &mut ChunkSendQueue, Play)
             .kind::<flecs::pipeline::OnUpdate>()
             .multi_threaded()
             .each_entity(

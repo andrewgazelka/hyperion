@@ -38,9 +38,7 @@ use ingress::IngressModule;
 use libc::{getrlimit, setrlimit, RLIMIT_NOFILE};
 use libdeflater::CompressionLvl;
 use once_cell::sync::Lazy;
-use simulation::{
-    blocks::MinecraftWorld, util::generate_biome_registry, Comms, SimModule, StreamLookup,
-};
+use simulation::{blocks::Blocks, util::generate_biome_registry, Comms, SimModule, StreamLookup};
 use storage::{Db, Events, GlobalEventHandlers, SkinHandler, ThreadLocal};
 use tracing::info;
 pub use uuid;
@@ -234,7 +232,7 @@ impl Hyperion {
         let biome_registry =
             generate_biome_registry().context("failed to generate biome registry")?;
 
-        let minecraft_world = MinecraftWorld::new(&biome_registry, runtime.clone())?;
+        let minecraft_world = Blocks::new(&biome_registry, runtime.clone())?;
 
         world.set(minecraft_world);
         world.set(runtime);

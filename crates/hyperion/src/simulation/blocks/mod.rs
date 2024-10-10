@@ -6,7 +6,7 @@ use bytes::Bytes;
 use chunk::LoadedChunk;
 use flecs_ecs::{core::Entity, macros::Component};
 use fxhash::FxBuildHasher;
-use glam::{I16Vec2, IVec2};
+use glam::{I16Vec2, IVec2, IVec3};
 use indexmap::IndexMap;
 use loader::{launch_manager, LaunchHandle, CHUNK_HEIGHT_SPAN};
 use roaring::RoaringBitmap;
@@ -46,7 +46,7 @@ pub enum TrySetBlockDeltaError {
 
 /// Accessor of blocks.
 #[derive(Component)]
-pub struct MinecraftWorld {
+pub struct Blocks {
     /// Map to a Chunk by Entity ID
     chunk_cache: IndexMap<I16Vec2, LoadedChunk, FxBuildHasher>,
     should_update: RoaringBitmap,
@@ -58,7 +58,7 @@ pub struct MinecraftWorld {
     pub to_confirm: Vec<EntityAndSequence>,
 }
 
-impl MinecraftWorld {
+impl Blocks {
     pub(crate) fn new(registry: &BiomeRegistry, runtime: AsyncRuntime) -> anyhow::Result<Self> {
         let shared = Shared::new(registry, &runtime)?;
         let shared = Arc::new(shared);
@@ -153,9 +153,9 @@ impl MinecraftWorld {
 
     /// Returns all loaded blocks within the range from `start` to `end` (inclusive).
     #[allow(clippy::excessive_nesting)]
-    pub fn get_blocks<F, R>(&self, start: BlockPos, end: BlockPos, mut f: F) -> R
+    pub fn get_blocks<F, R>(&self, start: IVec3, end: IVec3, mut f: F) -> R
     where
-        F: FnMut(BlockPos, BlockState) -> R,
+        F: FnMut(IVec3, BlockState) -> R,
         R: Try<Output = ()>,
     {
         const START_Y: i32 = -64;
@@ -227,11 +227,8 @@ impl MinecraftWorld {
                             let block = chunk.block_state(x, y, z);
 
                             let y = y as i32 + START_Y;
-                            let pos = BlockPos::new(
-                                x as i32 + chunk_start.x,
-                                y,
-                                z as i32 + chunk_start.y,
-                            );
+                            let pos =
+                                IVec3::new(x as i32 + chunk_start.x, y, z as i32 + chunk_start.y);
 
                             f(pos, block)?;
                         }
@@ -245,7 +242,7 @@ impl MinecraftWorld {
 
     /// Get a block
     #[must_use]
-    pub fn get_block(&self, position: BlockPos) -> Option<BlockState> {
+    pub fn get_block(&self, position: IVec3) -> Option<BlockState> {
         const START_Y: i32 = -64;
 
         if position.y < START_Y {
@@ -273,7 +270,7 @@ impl MinecraftWorld {
     /// Returns the old block state
     pub fn set_block(
         &mut self,
-        position: BlockPos,
+        position: IVec3,
         state: BlockState,
     ) -> Result<BlockState, TrySetBlockDeltaError> {
         const START_Y: i32 = -64;

@@ -8,7 +8,7 @@ use valence_protocol::{
 
 use crate::{
     net::Compose,
-    simulation::{blocks::MinecraftWorld, Play},
+    simulation::{blocks::Blocks, Play},
     system_registry::GLOBAL_STATS,
 };
 
@@ -94,7 +94,7 @@ impl Module for StatsModule {
         system!(
             "load_pending",
             world,
-            &mut MinecraftWorld($),
+            &mut Blocks($),
         )
         .kind::<flecs::pipeline::OnUpdate>()
         .each_iter(|_iter, _, blocks| {

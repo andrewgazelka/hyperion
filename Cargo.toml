@@ -13,6 +13,7 @@ members = [
     "crates/hyperion-palette",
     "crates/hyperion-proto",
     "crates/hyperion-proxy",
+    "crates/hyperion-scheduled",
     "crates/hyperion-text",
     "crates/lunar-proto",
     "events/infection",

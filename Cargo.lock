@@ -1726,6 +1726,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "hyperion-scheduled"
+version = "0.1.0"
+
+[[package]]
 name = "hyperion-text"
 version = "0.1.0"
 dependencies = [
