@@ -10,6 +10,7 @@ members = [
     "crates/hyperion",
     "crates/hyperion-crafting",
     "crates/hyperion-inventory",
+    "crates/hyperion-palette",
     "crates/hyperion-proto",
     "crates/hyperion-proxy",
     "crates/hyperion-text",

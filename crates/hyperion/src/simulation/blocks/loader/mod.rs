@@ -6,7 +6,7 @@ use fxhash::FxHashSet;
 use glam::I16Vec2;
 use itertools::Itertools;
 use libdeflater::{CompressionLvl, Compressor};
-use parse::UnloadedChunkWithMetadata;
+use parse::ChunkData;
 use tracing::warn;
 use valence_generated::block::BlockState;
 use valence_nbt::{compound, List};
@@ -137,7 +137,7 @@ impl LaunchManager {
 
 fn empty_chunk(position: I16Vec2) -> LoadedChunk {
     // height: 24
-    let unloaded = UnloadedChunkWithMetadata::with_height(CHUNK_HEIGHT_SPAN);
+    let unloaded = ChunkData::with_height(CHUNK_HEIGHT_SPAN);
 
     let bytes = STATE.with_borrow_mut(|state| {
         encode_chunk_packet(&unloaded, position, state)
@@ -187,7 +187,7 @@ async fn load_chunk(position: I16Vec2, shared: &Shared) -> anyhow::Result<Loaded
 
 // #[instrument(skip_all, level = "trace", fields(location = ?location))]
 fn encode_chunk_packet(
-    chunk: &UnloadedChunkWithMetadata,
+    chunk: &ChunkData,
     location: I16Vec2,
     state: &mut TasksState,
 ) -> anyhow::Result<Option<BytesMut>> {

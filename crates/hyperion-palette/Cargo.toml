@@ -1,0 +1,17 @@
+[package]
+name = "hyperion-palette"
+version = "0.1.0"
+edition = "2021"
+authors = ["Andrew Gazelka <andrew.gazelka@gmail.com>"]
+readme = "README.md"
+publish = false
+
+[dependencies]
+
+[lints.clippy]
+complexity = { level = "deny", priority = -1 }
+nursery = { level = "deny", priority = -1 }
+pedantic = { level = "deny", priority = -1 }
+perf = { level = "deny", priority = -1 }
+style = { level = "deny", priority = -1 }
+suspicious = { level = "deny", priority = -1 }

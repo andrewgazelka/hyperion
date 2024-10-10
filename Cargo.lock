@@ -1673,6 +1673,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "hyperion-palette"
+version = "0.1.0"
+
+[[package]]
 name = "hyperion-proto"
 version = "0.1.0"
 dependencies = [
