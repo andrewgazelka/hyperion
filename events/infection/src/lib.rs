@@ -13,6 +13,7 @@ use hyperion::{storage::GlobalEventHandlers, Hyperion};
 use crate::block::BlockModule;
 
 mod animation;
+mod attack;
 mod block;
 mod command;
 mod component;
@@ -20,6 +21,8 @@ mod handler;
 
 pub use animation::AnimationModule;
 use command::CommandModule;
+
+use crate::attack::AttackModule;
 
 #[derive(Component)]
 pub struct InfectionModule;
@@ -30,6 +33,7 @@ impl Module for InfectionModule {
 
         world.import::<CommandModule>();
         world.import::<BlockModule>();
+        world.import::<AttackModule>();
         // world.import::<AnimationModule>();
     }
 }

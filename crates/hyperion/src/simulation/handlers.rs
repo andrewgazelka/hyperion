@@ -208,18 +208,17 @@ fn player_interact_entity(mut data: &[u8], query: &PacketSwitchQuery<'_>) -> any
     let target = u64::try_from(target).unwrap();
 
     info!("enqueue attack");
-    let target = query.world.entity_from_id(target);
+    let target = Entity(target);
 
-    target.get::<&Events>(|event_queue| {
-        event_queue.push(
-            event::AttackEntity {
-                from_pos,
-                from: query.id,
-                damage: 0.0,
-            },
-            query.world,
-        );
-    });
+    query.events.push(
+        event::AttackEntity {
+            from_pos,
+            origin: query.id,
+            target,
+            damage: 0.0,
+        },
+        query.world,
+    );
 
     Ok(())
 }

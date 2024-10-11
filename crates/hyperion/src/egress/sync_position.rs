@@ -58,6 +58,7 @@ impl Module for SyncPositionModule {
                         .unwrap();
 
                     if let Some(view) = metadata.get_and_clear() {
+                        println!("view: {view:?}");
                         let pkt = play::EntityTrackerUpdateS2c {
                             entity_id,
                             tracked_values: RawBytes(&view),

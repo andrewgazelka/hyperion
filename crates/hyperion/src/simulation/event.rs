@@ -18,7 +18,8 @@ pub struct AttackEntity {
     /// The location of the player that is attacking.
     pub from_pos: Vec3,
     /// The entity that is performing the attack.
-    pub from: Entity,
+    pub origin: Entity,
+    pub target: Entity,
     /// The damage dealt by the attack. This corresponds to the same unit as [`crate::simulation::Health`].
     pub damage: f32,
 }

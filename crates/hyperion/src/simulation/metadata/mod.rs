@@ -5,6 +5,7 @@ use valence_protocol::{Encode, VarInt};
 
 #[derive(Component, Debug, Default)]
 // index (u8), type (varint), value (varies)
+/// <https://wiki.vg/Entity_metadata>
 pub struct Metadata(Vec<u8>);
 
 mod status;
@@ -15,6 +16,7 @@ mod kind {
     use valence_protocol::VarInt;
 
     pub const BYTE: VarInt = VarInt(0);
+    pub const FLOAT: VarInt = VarInt(3);
     pub const POSE: VarInt = VarInt(20);
 }
 
@@ -56,6 +58,12 @@ impl Metadata {
         self.index(6);
         self.kind(kind::POSE);
         pose.encode(&mut self.0).unwrap();
+    }
+
+    pub fn health(&mut self, health: f32) {
+        self.index(9);
+        self.kind(kind::FLOAT);
+        health.encode(&mut self.0).unwrap();
     }
 
     pub fn get_and_clear(&mut self) -> Option<MetadataView<'_>> {
