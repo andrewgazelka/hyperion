@@ -1,7 +1,7 @@
 use more_asserts::debug_assert_lt;
 use roaring::RoaringBitmap;
 use valence_generated::block::BlockState;
-use valence_server::layer::chunk::{BiomeContainer, BlockStateContainer};
+use valence_server::layer::chunk::BiomeContainer;
 
 #[derive(Clone, Debug)]
 pub struct Section {
@@ -64,7 +64,7 @@ mod tests {
 
         let result = section.set_delta(0, new_state);
         assert_eq!(result, BlockState::AIR);
-        assert_eq!(section.block_states.get(0), new_state);
+        assert_eq!(section.block_states.get_unchecked(0), new_state);
         assert_eq!(section.changed.len(), 1);
         assert!(section.changed_since_last_tick.contains(0));
     }

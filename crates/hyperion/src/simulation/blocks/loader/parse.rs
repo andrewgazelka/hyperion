@@ -8,7 +8,7 @@ use valence_nbt::{Compound, List, Value};
 use valence_protocol::Ident;
 use valence_registry::biome::BiomeId;
 use valence_server::layer::chunk::{
-    check_biome_oob, check_block_oob, check_section_oob, BiomeContainer, BlockStateContainer, Chunk,
+    check_biome_oob, check_block_oob, check_section_oob, BiomeContainer, Chunk,
 };
 
 use crate::simulation::blocks::loader::parse::section::Section;

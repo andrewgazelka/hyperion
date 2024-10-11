@@ -1810,10 +1810,13 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
+ "derive_more",
  "dotenvy",
+ "fastrand 1.9.0",
  "flecs_ecs",
  "hyperion",
  "hyperion-inventory",
+ "hyperion-scheduled",
  "ndarray",
  "nom",
  "serde_json",
@@ -1821,6 +1824,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "tracing-tracy",
+ "valence_nbt",
 ]
 
 [[package]]

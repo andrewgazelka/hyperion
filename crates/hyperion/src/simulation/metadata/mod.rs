@@ -71,7 +71,7 @@ impl Metadata {
 #[derive(Debug)]
 pub struct MetadataView<'a>(&'a mut Metadata);
 
-impl<'a> Deref for MetadataView<'a> {
+impl Deref for MetadataView<'_> {
     type Target = [u8];
 
     fn deref(&self) -> &Self::Target {
@@ -79,7 +79,7 @@ impl<'a> Deref for MetadataView<'a> {
     }
 }
 
-impl<'a> Drop for MetadataView<'a> {
+impl Drop for MetadataView<'_> {
     fn drop(&mut self) {
         self.0 .0.clear();
     }

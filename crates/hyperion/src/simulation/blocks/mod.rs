@@ -13,7 +13,6 @@ use roaring::RoaringBitmap;
 use shared::Shared;
 use tracing::instrument;
 use valence_generated::block::BlockState;
-use valence_protocol::BlockPos;
 use valence_registry::BiomeRegistry;
 use valence_server::layer::chunk::Chunk;
 

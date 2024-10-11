@@ -256,7 +256,7 @@ pub struct BitStorageIter<'a> {
     index: usize,
 }
 
-impl<'a> Iterator for BitStorageIter<'a> {
+impl Iterator for BitStorageIter<'_> {
     type Item = u64;
 
     fn next(&mut self) -> Option<Self::Item> {

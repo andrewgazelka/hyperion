@@ -250,14 +250,14 @@ struct PlayerChunkPosRef<'a> {
     idx: usize,
 }
 
-impl<'a> Point for PlayerChunkPosRef<'a> {
+impl Point for PlayerChunkPosRef<'_> {
     fn point(&self) -> I16Vec2 {
         let position = &self.parent.positions[self.idx].clone();
         I16Vec2::new(position.x as i16, position.z as i16)
     }
 }
 
-impl<'a> Data for PlayerChunkPosRef<'a> {
+impl Data for PlayerChunkPosRef<'_> {
     type Unit = u64;
 
     fn data(&self) -> &[Self::Unit] {

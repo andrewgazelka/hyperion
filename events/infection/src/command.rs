@@ -17,11 +17,13 @@ use hyperion::{
         game_mode::OptGameMode,
         ident,
         math::IVec3,
+        nbt,
         packets::play::{self, player_abilities_s2c::PlayerAbilitiesFlags, PlayerAbilitiesS2c},
         text::IntoText,
-        BlockPos, BlockState, GameMode, VarInt,
+        BlockPos, BlockState, GameMode, ItemKind, ItemStack, VarInt,
     },
 };
+use hyperion_inventory::PlayerInventory;
 use tracing::{debug, trace_span};
 
 use crate::{command::parse::ParsedCommand, component::team::Team};
@@ -40,6 +42,11 @@ pub fn add_to_tree(world: &World) {
     world
         .entity()
         .set(Command::literal("zombie"))
+        .child_of_id(root_command);
+
+    world
+        .entity()
+        .set(Command::literal("give"))
         .child_of_id(root_command);
 
     let speed = world
@@ -65,6 +72,7 @@ struct CommandContext<'a> {
     system_id: SystemId,
     uuid: uuid::Uuid,
     name: &'a InGameName,
+    inventory: &'a mut PlayerInventory,
 }
 
 fn process_command(command: &ParsedCommand, context: &mut CommandContext<'_>) {
@@ -73,7 +81,28 @@ fn process_command(command: &ParsedCommand, context: &mut CommandContext<'_>) {
         ParsedCommand::Team => handle_team_command(context),
         ParsedCommand::Zombie => handle_zombie_command(context),
         ParsedCommand::Dirt { x, y, z } => handle_dirt_command(*x, *y, *z, context),
+        ParsedCommand::Give => handle_give_command(context),
     }
+}
+
+fn handle_give_command(context: &mut CommandContext<'_>) {
+    let mut blue_wool_nbt = nbt::Compound::new();
+
+    let can_place_on = [
+        "minecraft:stone",
+        "minecraft:dirt",
+        "minecraft:grass_block",
+        "minecraft:blue_wool",
+    ]
+    .into_iter()
+    .map(|s| s.into())
+    .collect();
+
+    blue_wool_nbt.insert("CanPlaceOn", nbt::List::String(can_place_on));
+
+    context
+        .inventory
+        .try_add_item(ItemStack::new(ItemKind::BlueWool, 4, Some(blue_wool_nbt)));
 }
 
 fn handle_dirt_command(x: i32, y: i32, z: i32, context: &mut CommandContext<'_>) {
@@ -173,7 +202,7 @@ fn handle_zombie_command(context: &CommandContext<'_>) {
         chat_data: None,
         listed: true,
         ping: 20,
-        game_mode: GameMode::Survival,
+        game_mode: GameMode::Adventure,
         display_name: Some(context.name.to_string().into_cow_text()),
     }];
 
@@ -255,8 +284,9 @@ impl Module for CommandModule {
                         &mut Team,
                         &Uuid,
                         &InGameName,
+                        &mut PlayerInventory,
                     )>(
-                        |(stream, team, uuid, name)| {
+                        |(stream, team, uuid, name, inventory)| {
                             let mut context = CommandContext {
                                 stream: *stream,
                                 team,
@@ -266,6 +296,7 @@ impl Module for CommandModule {
                                 system_id,
                                 uuid: uuid.0,
                                 name,
+                                inventory,
                             };
                             process_command(&command, &mut context);
                         },

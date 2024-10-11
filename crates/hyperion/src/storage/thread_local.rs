@@ -194,7 +194,7 @@ struct Drain<'a, T, const N: usize> {
     idx: usize,
 }
 
-impl<'a, T, const N: usize> Iterator for Drain<'a, T, N> {
+impl<T, const N: usize> Iterator for Drain<'_, T, N> {
     type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -211,7 +211,7 @@ impl<'a, T, const N: usize> Iterator for Drain<'a, T, N> {
     }
 }
 
-impl<'a, T, const N: usize> Drop for Drain<'a, T, N> {
+impl<T, const N: usize> Drop for Drain<'_, T, N> {
     fn drop(&mut self) {
         unsafe { self.inner.set_len(0) };
     }

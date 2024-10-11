@@ -1,11 +1,11 @@
 use glam::{I16Vec2, IVec3};
 use ndarray::ArrayView3;
 use valence_generated::block::BlockState;
-use valence_protocol::BlockPos;
 
 use crate::simulation::blocks::{chunk::START_Y, Blocks};
 
 impl Blocks {
+    #[deprecated = "this is called automatically"]
     pub fn mark_should_update(&mut self, position: IVec3) {
         let x = position.x;
         let z = position.z;

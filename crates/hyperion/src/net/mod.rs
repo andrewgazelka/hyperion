@@ -282,7 +282,7 @@ struct Unicast<'a, P> {
     system_id: SystemId,
 }
 
-impl<'a, P> Unicast<'a, P>
+impl<P> Unicast<'_, P>
 where
     P: PacketBundle,
 {
@@ -305,7 +305,7 @@ struct Multicast<'a, 'b, P> {
     system_id: SystemId,
 }
 
-impl<'a, 'b, P> Multicast<'a, 'b, P>
+impl<P> Multicast<'_, '_, P>
 where
     P: valence_protocol::Packet + valence_protocol::Encode,
 {
@@ -320,7 +320,7 @@ where
     }
 }
 
-impl<'a, P> Broadcast<'a, P> {
+impl<P> Broadcast<'_, P> {
     /// If the packet is optional and can be dropped. An example is movement packets.
     pub const fn optional(mut self) -> Self {
         self.optional = true;
@@ -372,7 +372,7 @@ pub struct BroadcastLocal<'a, 'b, P> {
     system_id: SystemId,
 }
 
-impl<'a, 'b, P> BroadcastLocal<'a, 'b, P> {
+impl<P> BroadcastLocal<'_, '_, P> {
     /// The radius of the broadcast. The radius is measured by Chebyshev distance
     pub const fn radius(mut self, radius: u32) -> Self {
         self.radius = radius;

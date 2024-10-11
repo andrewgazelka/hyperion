@@ -70,7 +70,7 @@ pub trait PacketBundle {
 //     }
 // }
 
-impl<'a, T: Packet + Encode> PacketBundle for &'a T {
+impl<T: Packet + Encode> PacketBundle for &T {
     fn encode_including_ids(self, w: impl Write) -> anyhow::Result<()> {
         self.encode_with_id(w)
     }

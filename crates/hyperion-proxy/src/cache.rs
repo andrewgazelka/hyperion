@@ -101,7 +101,7 @@ impl<'a> ExclusionIterator<'a> {
     }
 }
 
-impl<'a> Iterator for ExclusionIterator<'a> {
+impl Iterator for ExclusionIterator<'_> {
     type Item = Range<usize>;
 
     fn next(&mut self) -> Option<Self::Item> {

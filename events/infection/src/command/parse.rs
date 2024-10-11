@@ -14,6 +14,7 @@ pub enum ParsedCommand {
     Team,
     Zombie,
     Dirt { x: i32, y: i32, z: i32 },
+    Give,
 }
 
 fn parse_speed(input: &str) -> IResult<&str, ParsedCommand> {
@@ -45,6 +46,16 @@ fn parse_dirt(input: &str) -> IResult<&str, ParsedCommand> {
     )(input)
 }
 
+fn parse_give(input: &str) -> IResult<&str, ParsedCommand> {
+    map(tag("give"), |_| ParsedCommand::Give)(input)
+}
+
 pub fn command(input: &str) -> IResult<&str, ParsedCommand> {
-    alt((parse_speed, parse_team, parse_zombie, parse_dirt))(input)
+    alt((
+        parse_speed,
+        parse_team,
+        parse_zombie,
+        parse_dirt,
+        parse_give,
+    ))(input)
 }

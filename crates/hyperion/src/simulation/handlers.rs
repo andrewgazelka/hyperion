@@ -1,9 +1,8 @@
 //! <https://wiki.vg/index.php?title=Protocol&oldid=18375>
 
-use std::{borrow::Cow, ops::ControlFlow};
+use std::borrow::Cow;
 
 use anyhow::bail;
-use bvh_region::aabb::Aabb;
 use flecs_ecs::core::{Entity, EntityView, EntityViewGet, World};
 use glam::{I16Vec2, IVec3, Vec3};
 use tracing::{info, instrument, trace, warn};
@@ -11,8 +10,7 @@ use valence_generated::block::{BlockKind, BlockState};
 use valence_protocol::{
     packets::play::{
         self, click_slot_c2s::SlotChange, client_command_c2s::ClientCommand,
-        entity_equipment_update_s2c::EquipmentEntry, player_action_c2s::PlayerAction,
-        player_interact_entity_c2s::EntityInteraction,
+        player_action_c2s::PlayerAction, player_interact_entity_c2s::EntityInteraction,
         player_position_look_s2c::PlayerPositionLookFlags,
     },
     Decode, Hand, Packet, VarInt,

@@ -98,6 +98,7 @@ bvh = { git = "https://github.com/andrewgazelka/bvh-data" }
 flecs_ecs = { git = "https://github.com/andrewgazelka/flecs-ecs-rs", branch = "andrew/terms-32" }
 hyperion = { path = "crates/hyperion" }
 hyperion-text = { path = "crates/hyperion-text" }
+hyperion-scheduled = { path = "crates/hyperion-scheduled" }
 hyperion-proto = { path = "crates/hyperion-proto" }
 hyperion-crafting = { path = "crates/hyperion-crafting" }
 hyperion-palette = { path = "crates/hyperion-palette" }

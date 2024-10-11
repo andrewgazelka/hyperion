@@ -12,7 +12,7 @@ use valence_generated::block::BlockState;
 use valence_nbt::{compound, List};
 use valence_protocol::{packets::play, ChunkPos, CompressionThreshold, FixedArray};
 use valence_registry::RegistryIdx;
-use valence_server::layer::chunk::{bit_width, BiomeContainer, BlockStateContainer, Chunk};
+use valence_server::layer::chunk::{bit_width, BiomeContainer, Chunk};
 
 pub mod parse;
 
