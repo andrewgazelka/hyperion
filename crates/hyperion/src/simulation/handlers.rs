@@ -8,6 +8,7 @@ use glam::{I16Vec2, IVec3, Vec3};
 use tracing::{info, instrument, trace, warn};
 use valence_generated::block::{BlockKind, BlockState};
 use valence_protocol::{
+    nbt,
     packets::play::{
         self, click_slot_c2s::SlotChange, client_command_c2s::ClientCommand,
         player_action_c2s::PlayerAction, player_interact_entity_c2s::EntityInteraction,
@@ -317,52 +318,86 @@ pub fn player_interact_block(
     // - inside_block: bool (whether the player's head is inside a block)
     // - sequence: VarInt (sequence number for this interaction)
 
-    let position = packet.position;
-    let chunk_position = I16Vec2::new((position.x >> 4) as i16, (position.z >> 4) as i16);
+    let placed_on = packet.position;
+    let chunk_position = I16Vec2::new((placed_on.x >> 4) as i16, (placed_on.z >> 4) as i16);
 
-    let held = query.inventory.take_one_held();
-
-    if !held.is_empty() {
-        let item = held.item;
-
-        let Some(block) = BlockKind::from_item_kind(item) else {
-            warn!("invalid item kind to place: {item:?}");
-            return Ok(());
-        };
-
-        let block = BlockState::from_kind(block);
-
-        let position = position.get_in_direction(packet.face);
-        let position = IVec3::new(position.x, position.y, position.z);
-
-        query.events.push(
-            event::PlaceBlock {
-                position,
-                from: query.id,
-                sequence: packet.sequence.0,
-                block,
-            },
-            query.world,
-        );
-
-        return Ok(());
-    }
-
+    // interact maybe
     let chunk_start = [
         (i32::from(chunk_position.x) << 4),
         (i32::from(chunk_position.y) << 4),
     ];
 
-    let x = position.x - chunk_start[0];
-    let z = position.z - chunk_start[1];
+    let x = placed_on.x - chunk_start[0];
+    let z = placed_on.z - chunk_start[1];
 
-    let y = position.y - START_Y;
+    let y = placed_on.y - START_Y;
 
     let x = u8::try_from(x)?;
     let z = u8::try_from(z)?;
     let y = u16::try_from(y)?;
 
     query.confirm_block_sequences.push(packet.sequence.0);
+
+    let held = query.inventory.get_cursor();
+
+    if held.is_empty() {
+        return Ok(());
+    }
+
+    let Some(nbt) = &held.nbt else {
+        return Ok(());
+    };
+
+    let Some(placed_on_block) =
+        query
+            .blocks
+            .get_block(IVec3::new(placed_on.x, placed_on.y, placed_on.z))
+    else {
+        return Ok(());
+    };
+
+    let Some(can_place_on) = nbt.get("CanPlaceOn") else {
+        return Ok(());
+    };
+
+    let nbt::Value::List(can_place_on) = can_place_on else {
+        return Ok(());
+    };
+
+    let nbt::list::List::String(can_place_on) = can_place_on else {
+        return Ok(());
+    };
+
+    let kind_name = placed_on_block.to_kind().to_str();
+    let kind_name = format!("minecraft:{kind_name}");
+
+    if !can_place_on.iter().any(|s| s == &kind_name) {
+        return Ok(());
+    }
+
+    let kind = held.item;
+
+    let Some(block) = BlockKind::from_item_kind(kind) else {
+        warn!("invalid item kind to place: {kind:?}");
+        return Ok(());
+    };
+
+    let block = BlockState::from_kind(block);
+
+    let position = placed_on.get_in_direction(packet.face);
+    let position = IVec3::new(position.x, position.y, position.z);
+
+    query.inventory.take_one_held();
+
+    query.events.push(
+        event::PlaceBlock {
+            position,
+            from: query.id,
+            sequence: packet.sequence.0,
+            block,
+        },
+        query.world,
+    );
 
     Ok(())
 }
