@@ -3,6 +3,7 @@
 use std::borrow::Cow;
 
 use anyhow::bail;
+use bvh_region::aabb::Aabb;
 use flecs_ecs::core::{Entity, EntityView, EntityViewGet, World};
 use glam::{I16Vec2, IVec3, Vec3};
 use tracing::{info, instrument, trace, warn};
@@ -377,15 +378,30 @@ pub fn player_interact_block(
 
     let kind = held.item;
 
-    let Some(block) = BlockKind::from_item_kind(kind) else {
+    let Some(block_kind) = BlockKind::from_item_kind(kind) else {
         warn!("invalid item kind to place: {kind:?}");
         return Ok(());
     };
 
-    let block = BlockState::from_kind(block);
+    let block_state = BlockState::from_kind(block_kind);
 
     let position = placed_on.get_in_direction(packet.face);
     let position = IVec3::new(position.x, position.y, position.z);
+
+    let position_dvec3 = position.as_vec3();
+
+    // todo(hack): technically players can do some crazy position stuff to abuse this probably
+    let player_aabb = query.pose.bounding.shrink(0.01);
+
+    let collides_player = block_state
+        .collision_shapes()
+        .map(|aabb| Aabb::new(aabb.min().as_vec3(), aabb.max().as_vec3()))
+        .map(|aabb| aabb.move_by(position_dvec3))
+        .any(|block_aabb| player_aabb.collides(&block_aabb));
+
+    if collides_player {
+        return Ok(());
+    }
 
     query.inventory.take_one_held();
 
@@ -394,7 +410,7 @@ pub fn player_interact_block(
             position,
             from: query.id,
             sequence: packet.sequence.0,
-            block,
+            block: block_state,
         },
         query.world,
     );
