@@ -195,12 +195,13 @@ impl<const T: usize> Inventory<T> {
     }
 }
 
-const HELMET_SLOT: u16 = 5;
-const CHESTPLATE_SLOT: u16 = 6;
-const LEGGINGS_SLOT: u16 = 7;
-const BOOTS_SLOT: u16 = 8;
-
 impl PlayerInventory {
+    pub const BOOTS_SLOT: u16 = 8;
+    pub const CHESTPLATE_SLOT: u16 = 6;
+    pub const HAND_START_SLOT: u16 = 36;
+    pub const HELMET_SLOT: u16 = 5;
+    pub const LEGGINGS_SLOT: u16 = 7;
+
     pub fn crafting_item(&self, registry: &CraftingRegistry) -> ItemStack {
         let indices = core::array::from_fn::<u16, 4, _>(|i| (i as u16 + 1));
 
@@ -234,7 +235,6 @@ impl PlayerInventory {
     }
 
     pub fn set_hand_slot(&mut self, idx: u16, stack: ItemStack) {
-        const HAND_START_SLOT: u16 = 36;
         const HAND_END_SLOT: u16 = 45;
 
         let idx = idx + HAND_START_SLOT;
@@ -247,19 +247,19 @@ impl PlayerInventory {
     }
 
     pub fn set_helmet(&mut self, stack: ItemStack) {
-        self.set(HELMET_SLOT, stack).unwrap();
+        self.set(Self::HELMET_SLOT, stack).unwrap();
     }
 
     pub fn set_chestplate(&mut self, stack: ItemStack) {
-        self.set(CHESTPLATE_SLOT, stack).unwrap();
+        self.set(Self::CHESTPLATE_SLOT, stack).unwrap();
     }
 
     pub fn set_leggings(&mut self, stack: ItemStack) {
-        self.set(LEGGINGS_SLOT, stack).unwrap();
+        self.set(Self::LEGGINGS_SLOT, stack).unwrap();
     }
 
     pub fn set_boots(&mut self, stack: ItemStack) {
-        self.set(BOOTS_SLOT, stack).unwrap();
+        self.set(Self::BOOTS_SLOT, stack).unwrap();
     }
 
     pub fn try_add_item(&mut self, mut item: ItemStack) -> AddItemResult {

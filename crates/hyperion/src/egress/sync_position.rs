@@ -114,7 +114,6 @@ impl Module for SyncPositionModule {
                     let cursor = inventory.get_cursor_index();
 
                     if inventory.updated_since_last_tick.contains(cursor as u32) || inventory.hand_slot_updated_since_last_tick {
-                        let item = inventory.get_cursor();
                         let pkt = play::EntityEquipmentUpdateS2c {
                             entity_id,
                             equipment: vec![EquipmentEntry {

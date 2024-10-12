@@ -4,8 +4,8 @@ use std::borrow::Cow;
 
 use anyhow::bail;
 use bvh_region::aabb::Aabb;
-use flecs_ecs::core::{Entity, EntityView, EntityViewGet, World};
-use glam::{I16Vec2, IVec3, Vec3};
+use flecs_ecs::core::{Entity, EntityView, World};
+use glam::{IVec3, Vec3};
 use tracing::{info, instrument, trace, warn};
 use valence_generated::block::{BlockKind, BlockState};
 use valence_protocol::{
@@ -26,7 +26,7 @@ use super::{
 };
 use crate::{
     net::{decoder::BorrowedPacketFrame, Compose, NetworkStreamRef},
-    simulation::{blocks::chunk::START_Y, event, event::PluginMessage},
+    simulation::{event, event::PluginMessage},
     storage::Events,
     system_registry::SystemId,
 };
@@ -77,7 +77,7 @@ fn change_position_or_correct_client(query: &mut PacketSwitchQuery<'_>, proposed
 }
 
 /// Returns true if the position was changed, false if it was not.
-fn try_change_position(proposed: Vec3, pose: &mut Position, blocks: &Blocks) -> bool {
+fn try_change_position(proposed: Vec3, pose: &mut Position, _blocks: &Blocks) -> bool {
     /// 100.0 m/tick; this is the same as the vanilla server
     const MAX_BLOCKS_PER_TICK: f32 = 100.0;
     let current = pose.position;
@@ -196,8 +196,6 @@ fn hand_swing(mut data: &[u8], query: &mut PacketSwitchQuery<'_>) -> anyhow::Res
 #[instrument(skip_all)]
 fn player_interact_entity(mut data: &[u8], query: &PacketSwitchQuery<'_>) -> anyhow::Result<()> {
     let packet = play::PlayerInteractEntityC2s::decode(&mut data)?;
-
-    let from_pos = query.pose.position;
 
     // attack
     if packet.interact != EntityInteraction::Attack {
@@ -318,22 +316,6 @@ pub fn player_interact_block(
     // - sequence: VarInt (sequence number for this interaction)
 
     let placed_on = packet.position;
-    let chunk_position = I16Vec2::new((placed_on.x >> 4) as i16, (placed_on.z >> 4) as i16);
-
-    // interact maybe
-    let chunk_start = [
-        (i32::from(chunk_position.x) << 4),
-        (i32::from(chunk_position.y) << 4),
-    ];
-
-    let x = placed_on.x - chunk_start[0];
-    let z = placed_on.z - chunk_start[1];
-
-    let y = placed_on.y - START_Y;
-
-    let x = u8::try_from(x)?;
-    let z = u8::try_from(z)?;
-    let y = u16::try_from(y)?;
 
     query.confirm_block_sequences.push(packet.sequence.0);
 

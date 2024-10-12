@@ -64,7 +64,7 @@ mod tests {
 
         let result = section.set_delta(0, new_state);
         assert_eq!(result, BlockState::AIR);
-        assert_eq!(section.block_states.get_unchecked(0), new_state);
+        assert_eq!(section.block_states.get(0), new_state.to_raw());
         assert_eq!(section.changed.len(), 1);
         assert!(section.changed_since_last_tick.contains(0));
     }
@@ -105,7 +105,7 @@ mod tests {
         assert_eq!(section.changed_since_last_tick.len(), 3);
 
         for (i, &state) in states.iter().enumerate() {
-            assert_eq!(section.block_states.get(i), state);
+            assert_eq!(section.block_states.get(i), state.to_raw());
         }
     }
 
@@ -116,11 +116,11 @@ mod tests {
 
         // Test setting the first block
         section.set_delta(0, state);
-        assert_eq!(section.block_states.get(0), state);
+        assert_eq!(section.block_states.get(0), state.to_raw());
 
         // Test setting the last block (assuming 4096 blocks per section)
         section.set_delta(4095, state);
-        assert_eq!(section.block_states.get(4095), state);
+        assert_eq!(section.block_states.get(4095), state.to_raw());
     }
 
     #[test]
@@ -145,6 +145,9 @@ mod tests {
         section.set_delta(0, BlockState::GRASS_BLOCK);
 
         assert_eq!(section.changed.len(), 1);
-        assert_eq!(section.block_states.get(0), BlockState::GRASS_BLOCK);
+        assert_eq!(
+            section.block_states.get(0),
+            BlockState::GRASS_BLOCK.to_raw()
+        );
     }
 }

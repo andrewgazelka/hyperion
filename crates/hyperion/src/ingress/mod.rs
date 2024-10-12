@@ -78,7 +78,6 @@ fn process_login(
     entity: &EntityView<'_>,
     system_id: SystemId,
     handlers: &GlobalEventHandlers,
-    query: &Query<(&Uuid, &InGameName, &Position)>,
 ) -> anyhow::Result<()> {
     static UUIDS: once_cell::sync::Lazy<Mutex<Vec<uuid::Uuid>>> =
         once_cell::sync::Lazy::new(|| {
@@ -384,8 +383,6 @@ impl Module for IngressModule {
                 entity.destruct();
             });
 
-        let query = query!(world, &Uuid, &InGameName, &Position).build();
-
         let system_id = RECV_DATA;
 
         system!(
@@ -466,7 +463,6 @@ impl Module for IngressModule {
                             &entity,
                             system_id,
                             handlers,
-                            &query,
                         )
                         .unwrap(),
                         PacketState::Play => {

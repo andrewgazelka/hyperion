@@ -1,21 +1,9 @@
 use flecs_ecs::{
-    core::{flecs, EntityViewGet, QueryBuilderImpl, SystemAPI, TableIter, TermBuilderImpl, World},
-    macros::{system, Component},
+    core::{flecs, World},
+    macros::Component,
     prelude::Module,
 };
-use hyperion::{
-    net::Compose,
-    simulation::{event, metadata::Metadata, EntityReaction, Health, Player, Position},
-    storage::EventQueue,
-    system_registry::SystemId,
-    valence_protocol::{
-        ident,
-        packets::play,
-        sound::{SoundCategory, SoundId},
-        VarInt,
-    },
-};
-use tracing::trace_span;
+use hyperion::simulation::Player;
 
 #[derive(Component)]
 pub struct LevelModule;

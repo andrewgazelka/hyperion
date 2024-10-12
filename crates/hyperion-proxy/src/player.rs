@@ -5,11 +5,7 @@ use std::{io::IoSlice, sync::Arc};
 use hyperion_proto::{PlayerConnect, PlayerDisconnect, PlayerPackets, ProxyToServerMessage};
 use prost::bytes;
 use slotmap::Key;
-use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt},
-    net::TcpStream,
-    task::JoinHandle,
-};
+use tokio::{io::AsyncReadExt, net::TcpStream, task::JoinHandle};
 use tracing::{debug, info, instrument, trace_span, warn, Instrument};
 
 use crate::{

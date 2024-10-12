@@ -34,6 +34,11 @@ impl PalettedContainer {
         }
     }
 
+    pub fn get(&self, index: usize) -> Data {
+        assert!(index < LEN);
+        unsafe { self.get_unchecked(index) }
+    }
+
     /// Returns the previous value
     #[allow(clippy::missing_safety_doc)]
     pub unsafe fn set_unchecked(&mut self, index: usize, value: Data) -> Data {
