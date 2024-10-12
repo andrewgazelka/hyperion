@@ -262,6 +262,22 @@ impl PlayerInventory {
         self.set(Self::BOOTS_SLOT, stack).unwrap();
     }
 
+    pub fn get_helmet(&self) -> &ItemStack {
+        self.get(Self::HELMET_SLOT).unwrap()
+    }
+
+    pub fn get_chestplate(&self) -> &ItemStack {
+        self.get(Self::CHESTPLATE_SLOT).unwrap()
+    }
+
+    pub fn get_leggings(&self) -> &ItemStack {
+        self.get(Self::LEGGINGS_SLOT).unwrap()
+    }
+
+    pub fn get_boots(&self) -> &ItemStack {
+        self.get(Self::BOOTS_SLOT).unwrap()
+    }
+
     pub fn try_add_item(&mut self, mut item: ItemStack) -> AddItemResult {
         let mut result = AddItemResult { remaining: None };
 
