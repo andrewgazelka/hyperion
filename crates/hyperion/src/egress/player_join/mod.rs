@@ -59,6 +59,43 @@ pub fn player_join_world(
 ) {
     static CACHED_DATA: once_cell::sync::OnceCell<bytes::Bytes> = once_cell::sync::OnceCell::new();
 
+    let id = entity.id().0 as i32;
+
+    let registry_codec = registry_codec_raw();
+    let codec = RegistryCodec::default();
+
+    let dimension_names: BTreeSet<Ident<Cow<'_, str>>> = codec
+        .registry(BiomeRegistry::KEY)
+        .iter()
+        .map(|value| value.name.as_str_ident().into())
+        .collect();
+
+    let dimension_name = ident!("overworld");
+    // let dimension_name: Ident<Cow<str>> = chunk_layer.dimension_type_name().into();
+
+    let pkt = GameJoinS2c {
+        entity_id: id,
+        is_hardcore: false,
+        dimension_names: Cow::Owned(dimension_names),
+        registry_codec: Cow::Borrowed(registry_codec),
+        max_players: CONFIG.max_players.into(),
+        view_distance: CONFIG.view_distance.into(), // max view distance
+        simulation_distance: CONFIG.simulation_distance.into(),
+        reduced_debug_info: false,
+        enable_respawn_screen: false,
+        dimension_name: dimension_name.into(),
+        hashed_seed: 0,
+        game_mode: GameMode::Adventure,
+        is_flat: false,
+        last_death_location: None,
+        portal_cooldown: 60.into(),
+        previous_game_mode: OptGameMode(Some(GameMode::Adventure)),
+        dimension_type_name: ident!("minecraft:overworld").into(),
+        is_debug: false,
+    };
+
+    compose.unicast(&pkt, packets, system_id, world).unwrap();
+
     let cached_data = CACHED_DATA
         .get_or_init(|| {
             let compression_level = compose.global().shared.compression_threshold;
@@ -290,63 +327,6 @@ pub fn player_join_world(
     info!("{name} joined the world");
 }
 
-#[allow(dead_code, reason = "will re-enable")]
-pub fn send_keep_alive(
-    packets: NetworkStreamRef,
-    compose: &Compose,
-    system_id: SystemId,
-    world: &World,
-) -> anyhow::Result<()> {
-    let pkt = play::KeepAliveS2c {
-        // The ID can be set to zero because it doesn't matter
-        id: 0,
-    };
-
-    compose.unicast(&pkt, packets, system_id, world)?;
-    Ok(())
-}
-
-pub fn send_game_join_packet(encoder: &mut PacketEncoder) -> anyhow::Result<()> {
-    // recv ack
-
-    let registry_codec = registry_codec_raw()?;
-    let codec = RegistryCodec::default();
-
-    let dimension_names: BTreeSet<Ident<Cow<'_, str>>> = codec
-        .registry(BiomeRegistry::KEY)
-        .iter()
-        .map(|value| value.name.as_str_ident().into())
-        .collect();
-
-    let dimension_name = ident!("overworld");
-    // let dimension_name: Ident<Cow<str>> = chunk_layer.dimension_type_name().into();
-
-    let pkt = GameJoinS2c {
-        entity_id: 0,
-        is_hardcore: false,
-        dimension_names: Cow::Owned(dimension_names),
-        registry_codec: Cow::Borrowed(&registry_codec),
-        max_players: CONFIG.max_players.into(),
-        view_distance: CONFIG.view_distance.into(), // max view distance
-        simulation_distance: CONFIG.simulation_distance.into(),
-        reduced_debug_info: false,
-        enable_respawn_screen: false,
-        dimension_name: dimension_name.into(),
-        hashed_seed: 0,
-        game_mode: GameMode::Adventure,
-        is_flat: false,
-        last_death_location: None,
-        portal_cooldown: 60.into(),
-        previous_game_mode: OptGameMode(Some(GameMode::Adventure)),
-        dimension_type_name: "minecraft:overworld".try_into()?,
-        is_debug: false,
-    };
-
-    encoder.append_packet(&pkt)?;
-
-    Ok(())
-}
-
 fn send_sync_tags(encoder: &mut PacketEncoder) -> anyhow::Result<()> {
     let bytes = include_bytes!("data/tags.json");
 
@@ -365,7 +345,6 @@ fn generate_cached_packet_bytes(
     tasks: &AsyncRuntime,
     crafting_registry: &CraftingRegistry,
 ) -> anyhow::Result<()> {
-    send_game_join_packet(encoder)?;
     send_sync_tags(encoder)?;
 
     let mut buf: heapless::Vec<u8, 32> = heapless::Vec::new();
@@ -395,30 +374,6 @@ fn generate_cached_packet_bytes(
     // so they do not fall
     let chunk = unsafe { chunks.get_and_wait(center_chunk, tasks) };
     encoder.append_bytes(&chunk);
-
-    // let radius = 2;
-
-    // todo: right number?
-    // let number_chunks = (radius * 2 + 1) * (radius * 2 + 1);
-    //
-    // (0..number_chunks).into_par_iter().for_each(|i| {
-    //     let x = i % (radius * 2 + 1);
-    //     let z = i / (radius * 2 + 1);
-    //
-    //     let x = center_chunk.x + x - radius;
-    //     let z = center_chunk.z + z - radius;
-    //
-    //     let chunk = ChunkPos::new(x, z);
-    //     if let Ok(Some(chunk)) = chunks.get(chunk, compose) {
-    //         bytes_to_append.push(chunk).unwrap();
-    //     }
-    // });
-    //
-    // for elem in bytes_to_append {
-    //     encoder.append_bytes(&elem);
-    // }
-
-    // send_commands(encoder)?;
 
     encoder.append_packet(&play::PlayerSpawnPositionS2c {
         position: PLAYER_SPAWN_POSITION.as_dvec3().into(),

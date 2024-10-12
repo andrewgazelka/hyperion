@@ -59,7 +59,7 @@ impl Module for AttackModule {
             .each_iter(
                 move |it: TableIter<'_, false>,
                       _,
-                      (mut event_queue, compose): (
+                      (event_queue, compose): (
                     &mut EventQueue<event::AttackEntity>,
                     &Compose,
                 )| {

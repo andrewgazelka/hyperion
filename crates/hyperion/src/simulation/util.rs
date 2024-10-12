@@ -1,4 +1,4 @@
-use std::{io::BufReader, path::PathBuf};
+use std::{io::BufReader, ops::Deref, path::PathBuf, sync::LazyLock};
 
 use anyhow::{bail, Context};
 use flate2::bufread::GzDecoder;
@@ -14,16 +14,20 @@ use valence_server::Ident;
 
 use crate::storage::BitStorage;
 
-pub fn registry_codec_raw() -> anyhow::Result<Compound> {
-    let bytes = include_bytes!("data/registries.nbt");
-    let mut bytes = &bytes[..];
-    let bytes_reader = &mut bytes;
-    let (compound, _) = valence_nbt::from_binary(bytes_reader)?;
-    Ok(compound)
+pub fn registry_codec_raw() -> &'static Compound {
+    static CACHED: LazyLock<Compound> = LazyLock::new(|| {
+        let bytes = include_bytes!("data/registries.nbt");
+        let mut bytes = &bytes[..];
+        let bytes_reader = &mut bytes;
+        let (compound, _) = valence_nbt::from_binary(bytes_reader).unwrap();
+        compound
+    });
+
+    &CACHED
 }
 
 pub fn generate_biome_registry() -> anyhow::Result<BiomeRegistry> {
-    let registry_codec = registry_codec_raw()?;
+    let registry_codec = registry_codec_raw();
 
     // minecraft:worldgen/biome
     let biomes = registry_codec.get("minecraft:worldgen/biome").unwrap();

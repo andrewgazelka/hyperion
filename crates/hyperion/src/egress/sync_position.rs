@@ -64,7 +64,7 @@ impl Module for SyncPositionModule {
                     if reaction.velocity != Vec3::ZERO {
                         let velocity = Velocity(reaction.velocity.to_array().map(|a| (a * 8000.0) as i16));
                         let pkt = play::EntityVelocityUpdateS2c {
-                            entity_id: VarInt(0),
+                            entity_id,
                             velocity,
                         };
 
@@ -85,15 +85,6 @@ impl Module for SyncPositionModule {
                             .broadcast(&pkt, system_id)
                             .exclude(io)
                             .send(&world)
-                            .unwrap();
-
-                        let pkt2 = play::EntityTrackerUpdateS2c {
-                            entity_id: VarInt(0),
-                            tracked_values: RawBytes(&view),
-                        };
-
-                        compose
-                            .unicast(&pkt2, io, system_id, &world)
                             .unwrap();
                     }
 
