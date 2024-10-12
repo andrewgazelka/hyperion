@@ -3,7 +3,7 @@ use std::sync::{atomic::AtomicBool, Arc, RwLock};
 use bytes::Bytes;
 use slotmap::{new_key_type, KeyData};
 
-use crate::cache::GlobalExclusions;
+use crate::cache::ExclusionManager;
 
 new_key_type! {
     pub struct PlayerId;
@@ -22,7 +22,18 @@ pub struct OrderedBytes {
     /// todo: handle wrapping around
     pub order: u32,
     pub data: Bytes,
-    pub exclusions: Option<Arc<GlobalExclusions>>,
+    pub exclusions: Option<Arc<ExclusionManager>>,
+}
+
+use std::fmt;
+
+impl fmt::Debug for OrderedBytes {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("OrderedBytes")
+            .field("order", &self.order)
+            .field("data", &self.data)
+            .finish()
+    }
 }
 
 impl OrderedBytes {
@@ -33,7 +44,7 @@ impl OrderedBytes {
     };
 
     pub fn is_flush(&self) -> bool {
-        self.data.as_ref() == b"flush"
+        self.data.as_ref() == b"flush" // todo: this is REALLY jank let's maybe not do this
     }
 
     pub const fn no_order(data: Bytes) -> Self {
@@ -44,9 +55,13 @@ impl OrderedBytes {
         }
     }
 
-    pub const fn with_exclusions(data: Bytes, exclusions: Arc<GlobalExclusions>) -> Self {
+    pub const fn with_exclusions(
+        order: u32,
+        data: Bytes,
+        exclusions: Arc<ExclusionManager>,
+    ) -> Self {
         Self {
-            order: 0,
+            order,
             data,
             exclusions: Some(exclusions),
         }

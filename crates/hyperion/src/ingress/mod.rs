@@ -16,7 +16,7 @@ use valence_protocol::{
     packets::{
         handshaking::handshake_c2s::HandshakeNextState, login, login::LoginCompressionS2c, play,
     },
-    Bounded, ByteAngle, Packet, VarInt,
+    Bounded, Packet, VarInt,
 };
 
 use crate::{
@@ -136,6 +136,7 @@ fn process_login(
             .await
             .unwrap()
             .unwrap();
+
         skins.send((id, skin)).unwrap();
     });
 
@@ -147,28 +148,7 @@ fn process_login(
 
     compose.unicast(&pkt, stream_id, system_id, world).unwrap();
 
-    // todo: impl rest
     *login_state = PacketState::Play;
-
-    query
-        .iter_stage(world)
-        .each_iter(|it, idx, (uuid, _, pose)| {
-            let query_entity = it.entity(idx);
-
-            if entity.id() == query_entity.id() {
-                return;
-            }
-
-            let pkt = play::PlayerSpawnS2c {
-                entity_id: VarInt(query_entity.id().0 as i32),
-                player_uuid: uuid.0,
-                position: pose.position.as_dvec3(),
-                yaw: ByteAngle::from_degrees(pose.yaw),
-                pitch: ByteAngle::from_degrees(pose.pitch),
-            };
-
-            compose.unicast(&pkt, stream_id, system_id, world).unwrap();
-        });
 
     entity
         .set(pose)

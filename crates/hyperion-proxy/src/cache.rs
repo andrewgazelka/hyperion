@@ -6,49 +6,52 @@ use slotmap::{KeyData, SecondaryMap};
 
 use crate::{data::PlayerId, egress::Egress};
 
+/// Represents a node in the exclusion list, containing information about the previous node
+/// and the range of the exclusion.
 #[derive(Default, Copy, Clone)]
-pub struct ExcludeNode {
-    pub prev: u32,
-    pub exclusion_start: u32,
-    pub exclusion_end: u32,
+pub struct ExclusionNode {
+    /// Index of the previous node in the exclusion list.
+    pub prev_index: u32,
+    /// Start of the exclusion range.
+    pub range_start: u32,
+    /// End of the exclusion range.
+    pub range_end: u32,
 }
 
-impl ExcludeNode {
+impl ExclusionNode {
+    /// A placeholder node used as the initial element in the exclusion list.
     const PLACEHOLDER: Self = Self {
-        prev: 0,
-        exclusion_start: 0,
-        exclusion_end: 0,
+        prev_index: 0,
+        range_start: 0,
+        range_end: 0,
     };
 }
 
-pub struct GlobalExclusions {
-    pub nodes: Vec<ExcludeNode>,
-    pub player_to_end_node: SecondaryMap<PlayerId, u32>,
+/// Manages global exclusions for players.
+pub struct ExclusionManager {
+    /// List of exclusion nodes.
+    pub nodes: Vec<ExclusionNode>,
+    /// Maps player IDs to their last exclusion node index.
+    pub player_to_last_node: SecondaryMap<PlayerId, u32>,
 }
 
-impl Default for GlobalExclusions {
+impl Default for ExclusionManager {
     fn default() -> Self {
         Self {
-            nodes: vec![ExcludeNode::PLACEHOLDER],
-            player_to_end_node: SecondaryMap::new(),
+            nodes: vec![ExclusionNode::PLACEHOLDER],
+            player_to_last_node: SecondaryMap::new(),
         }
     }
 }
 
-impl GlobalExclusions {
+impl ExclusionManager {
+    /// Takes ownership of the current exclusion data and resets the manager.
     #[must_use]
     pub fn take(&mut self) -> Self {
-        // todo: probably a better way to do this
-        let result = Self {
-            nodes: self.nodes.clone(),
-            player_to_end_node: self.player_to_end_node.clone(),
-        };
-
-        *self = Self::default();
-
-        result
+        std::mem::take(self)
     }
 
+    /// Returns an iterator over the exclusions for a specific player.
     pub fn exclusions_for_player(
         &self,
         player_id: PlayerId,
@@ -56,47 +59,44 @@ impl GlobalExclusions {
         ExclusionIterator::new(self, player_id)
     }
 
+    /// Appends a new exclusion range for a player.
     pub fn append(&mut self, player_id: PlayerId, range: Range<usize>) {
-        let exclusion_start = u32::try_from(range.start).expect("Exclusion start is too large");
-        let exclusion_end = u32::try_from(range.end).expect("Exclusion end is too large");
+        let range_start = u32::try_from(range.start).expect("Exclusion start is too large");
+        let range_end = u32::try_from(range.end).expect("Exclusion end is too large");
 
-        if let Some(current_end) = self.player_to_end_node.get(player_id) {
-            let idx = self.nodes.len();
-            self.nodes.push(ExcludeNode {
-                prev: *current_end,
-                exclusion_start,
-                exclusion_end,
-            });
-            self.player_to_end_node.insert(player_id, idx as u32);
-            return;
-        }
+        let new_node = ExclusionNode {
+            prev_index: self
+                .player_to_last_node
+                .get(player_id)
+                .copied()
+                .unwrap_or(0),
+            range_start,
+            range_end,
+        };
 
-        let idx = self.nodes.len();
-        self.nodes.push(ExcludeNode {
-            prev: 0,
-            exclusion_start,
-            exclusion_end,
-        });
-        self.player_to_end_node.insert(player_id, idx as u32);
+        let new_index = self.nodes.len() as u32;
+        self.nodes.push(new_node);
+        self.player_to_last_node.insert(player_id, new_index);
     }
 }
 
+/// Iterator for traversing exclusions for a specific player.
 struct ExclusionIterator<'a> {
-    exclusions: &'a GlobalExclusions,
-    current: u32,
+    exclusions: &'a ExclusionManager,
+    current_index: u32,
 }
 
 impl<'a> ExclusionIterator<'a> {
-    fn new(exclusions: &'a GlobalExclusions, player_id: PlayerId) -> Self {
-        let end = exclusions
-            .player_to_end_node
+    fn new(exclusions: &'a ExclusionManager, player_id: PlayerId) -> Self {
+        let start_index = exclusions
+            .player_to_last_node
             .get(player_id)
             .copied()
             .unwrap_or_default();
 
         Self {
             exclusions,
-            current: end,
+            current_index: start_index,
         }
     }
 }
@@ -105,142 +105,103 @@ impl Iterator for ExclusionIterator<'_> {
     type Item = Range<usize>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.current == 0 {
+        if self.current_index == 0 {
             return None;
         }
 
-        let node = self.exclusions.nodes.get(self.current as usize)?;
-        let start = usize::try_from(node.exclusion_start).expect("Exclusion start is too large");
-        let end = usize::try_from(node.exclusion_end).expect("Exclusion end is too large");
+        let node = self.exclusions.nodes.get(self.current_index as usize)?;
+        let start = usize::try_from(node.range_start).expect("Exclusion start is too large");
+        let end = usize::try_from(node.range_end).expect("Exclusion end is too large");
 
-        self.current = node.prev;
+        self.current_index = node.prev_index;
 
         Some(start..end)
     }
 }
 
+/// Buffers egress operations for optimized processing.
 pub struct BufferedEgress {
-    broadcast_required: BytesMut,
-
-    exclusions: GlobalExclusions,
-
-    update_chunk_positions: Option<UpdatePlayerChunkPositions>,
-
+    /// Buffer for required broadcast data.
+    broadcast_buffer: BytesMut,
+    /// Manages player-specific exclusions.
+    exclusion_manager: ExclusionManager,
+    /// Stores pending chunk position updates.
+    pending_chunk_update: Option<UpdatePlayerChunkPositions>,
+    /// Reference to the underlying egress handler.
     egress: Arc<Egress>,
-
-    broadcast_order: Option<u32>,
+    /// Tracks the current broadcast order.
+    current_broadcast_order: Option<u32>,
 }
 
 impl BufferedEgress {
+    /// Creates a new `BufferedEgress` instance.
     pub fn new(egress: Arc<Egress>) -> Self {
         Self {
-            broadcast_required: BytesMut::new(),
-            update_chunk_positions: None,
-            exclusions: GlobalExclusions::default(),
+            broadcast_buffer: BytesMut::new(),
+            exclusion_manager: ExclusionManager::default(),
+            pending_chunk_update: None,
             egress,
-            broadcast_order: None,
+            current_broadcast_order: None,
         }
     }
 
+    /// Handles incoming server-to-proxy messages.
     // #[instrument(skip_all)]
     pub fn handle_packet(&mut self, message: ServerToProxyMessage) {
         match message {
             ServerToProxyMessage::UpdatePlayerChunkPositions(packet) => {
-                self.update_chunk_positions = Some(packet);
+                self.pending_chunk_update = Some(packet);
             }
             ServerToProxyMessage::BroadcastGlobal(packet) => {
-                if let Some(order) = self.broadcast_order
+                if let Some(order) = self.current_broadcast_order
                     && order != packet.order
                 {
-                    // todo: remove packet
-                    let pkt = BroadcastGlobal {
-                        data: self.broadcast_required.split().freeze(),
-                        optional: false,
-                        exclude: 0,
-                        order,
-                    };
-
-                    self.egress
-                        .handle_broadcast_global(pkt, self.exclusions.take());
+                    self.flush_broadcast(order);
                 }
 
-                self.broadcast_order = Some(packet.order);
+                self.current_broadcast_order = Some(packet.order);
 
-                // // todo: care about optional
-                let current_len = self.broadcast_required.len();
-                self.broadcast_required.extend_from_slice(&packet.data);
+                let current_len = self.broadcast_buffer.len();
+                self.broadcast_buffer.extend_from_slice(&packet.data);
 
                 if packet.exclude != 0 {
-                    let new_len = self.broadcast_required.len();
-                    // todo: there might be a case where entity id is 0 but I am pretty sure it is
-                    // NonZero
+                    let new_len = self.broadcast_buffer.len();
                     let key = KeyData::from_ffi(packet.exclude);
-                    let key = PlayerId::from(key);
-                    self.exclusions.append(key, current_len..new_len);
+                    let player_id = PlayerId::from(key);
+                    self.exclusion_manager
+                        .append(player_id, current_len..new_len);
                 }
 
-                // todo: If we can, let's try to flush before the flush packet is called, if it
-                // is useful. Let's make it so if we get beyond L1 and L2
-                // cache limits, we automatically send the bytes buffer.
-                // I think this makes sense to do; perhaps it doesn't, but I'm pretty sure it
-                // does. Because if we have a giant amount of bytes that we
-                // want to send, we'll have to be getting data from the L3
-                // cache. If it's over a certain size, then that's not good,
-                // and the cache would be invalid for every single player probably.
-
-                // self.egress
-                //     .handle_broadcast_global(packet, self.exclusions.take());
-                //
-                // if let Some(update_chunk_positions) = self.update_chunk_positions.take() {
-                //     self.egress
-                //         .handle_packet(ServerToProxyMessage::UpdatePlayerChunkPositions(
-                //             update_chunk_positions,
-                //         ));
-                // }
+                // TODO: Consider implementing auto-flush based on buffer size
+                // to optimize cache usage.
             }
-            // todo: impl
-            ServerToProxyMessage::BroadcastLocal(_) | ServerToProxyMessage::Multicast(_) => {}
+            ServerToProxyMessage::BroadcastLocal(_) | ServerToProxyMessage::Multicast(_) => {
+                // TODO: Implement handling for these message types
+            }
             pkt @ ServerToProxyMessage::Unicast(_) => self.egress.handle_packet(pkt),
             pkt @ ServerToProxyMessage::SetReceiveBroadcasts(..) => {
                 self.egress.handle_packet(pkt);
             }
             ServerToProxyMessage::Flush(_) => {
-                if let Some(order) = self.broadcast_order {
-                    let pkt = BroadcastGlobal {
-                        data: self.broadcast_required.split().freeze(),
-                        optional: false,
-                        exclude: 0,
-                        order,
-                    };
-
-                    self.egress
-                        .handle_broadcast_global(pkt, self.exclusions.take());
+                if let Some(order) = self.current_broadcast_order.take() {
+                    self.flush_broadcast(order);
                 }
 
-                self.broadcast_order = None;
-
                 self.egress.handle_flush();
-
-                // let pkt = BroadcastGlobal {
-                //     data: self.broadcast_required.split().freeze(),
-                //     optional: false,
-                //     exclude: 0,
-                //     order : 0,
-                // };
-
-                // todo!("order");
-
-                // todo: Properly handle exclude.
-                // self.egress
-                //     .handle_broadcast_global(pkt, self.exclusions.take());
-                //
-                // if let Some(update_chunk_positions) = self.update_chunk_positions.take() {
-                //     self.egress
-                //         .handle_packet(ServerToProxyMessage::UpdatePlayerChunkPositions(
-                //             update_chunk_positions,
-                //         ));
-                // }
             }
         }
+    }
+
+    /// Flushes the current broadcast buffer.
+    fn flush_broadcast(&mut self, order: u32) {
+        let pkt = BroadcastGlobal {
+            data: self.broadcast_buffer.split().freeze(),
+            optional: false,
+            exclude: 0,
+            order,
+        };
+
+        self.egress
+            .handle_broadcast_global(pkt, self.exclusion_manager.take());
     }
 }

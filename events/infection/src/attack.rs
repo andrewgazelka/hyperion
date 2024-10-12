@@ -1,37 +1,20 @@
-use std::{
-    borrow::Cow,
-    time::{Duration, Instant},
-};
-
 use flecs_ecs::{
-    core::{
-        flecs, EntityViewGet, IdOperations, QueryBuilderImpl, SystemAPI, TableIter,
-        TermBuilderImpl, World,
-    },
-    macros::{observer, system, Component},
+    core::{flecs, EntityViewGet, QueryBuilderImpl, SystemAPI, TableIter, TermBuilderImpl, World},
+    macros::{system, Component},
     prelude::Module,
 };
 use hyperion::{
-    net::{Compose, NetworkStreamRef},
-    simulation::{
-        blocks::{Blocks, EntityAndSequence},
-        event,
-        metadata::Metadata,
-        EntityReaction, Health, Player, Position,
-    },
+    net::Compose,
+    simulation::{event, metadata::Metadata, EntityReaction, Health, Player, Position},
     storage::EventQueue,
     system_registry::SystemId,
     valence_protocol::{
         ident,
-        math::{DVec3, IVec3},
-        packets::{play, play::entity_attributes_s2c::AttributeProperty},
+        packets::play,
         sound::{SoundCategory, SoundId},
-        text::IntoText,
-        BlockPos, BlockState, ItemStack, Particle, VarInt,
+        VarInt,
     },
 };
-use hyperion_inventory::PlayerInventory;
-use hyperion_scheduled::Scheduled;
 use tracing::trace_span;
 
 #[derive(Component)]
@@ -45,8 +28,6 @@ pub struct ImmuneUntil {
 impl Module for AttackModule {
     #[allow(clippy::excessive_nesting)]
     fn module(world: &World) {
-        // world.set(PendingDestruction::default());
-
         world
             .observer::<flecs::OnAdd, ()>()
             .with::<Player>()

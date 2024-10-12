@@ -241,7 +241,7 @@ impl ChunkPosition {
 }
 
 /// The initial player spawn position. todo: this should not be a constant
-pub const PLAYER_SPAWN_POSITION: Vec3 = Vec3::new(-464.0, 120.0, -60.0);
+pub const PLAYER_SPAWN_POSITION: Vec3 = Vec3::new(-464.0, -16.0, -60.0);
 
 impl Position {
     // todo: possible have separate field for head yaw

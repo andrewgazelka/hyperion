@@ -1,4 +1,4 @@
-use std::{io::BufReader, ops::Deref, path::PathBuf, sync::LazyLock};
+use std::{io::BufReader, path::PathBuf, sync::LazyLock};
 
 use anyhow::{bail, Context};
 use flate2::bufread::GzDecoder;

@@ -9,7 +9,7 @@ publish = false
 [dependencies]
 anyhow.workspace = true
 prost.workspace = true
-tokio = {workspace = true, features = ["full"]}
+tokio = { workspace = true, features = ["full"] }
 bvh.workspace = true
 glam.workspace = true
 arc-swap.workspace = true

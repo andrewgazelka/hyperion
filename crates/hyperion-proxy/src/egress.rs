@@ -1,7 +1,4 @@
-use std::{
-    sync::{atomic::Ordering, Arc},
-    time::Duration,
-};
+use std::sync::{atomic::Ordering, Arc};
 
 use arc_swap::ArcSwap;
 use bvh::{Aabb, Bvh, Data, Point};
@@ -11,7 +8,7 @@ use slotmap::KeyData;
 use tracing::{debug, error, info, instrument, warn};
 
 use crate::{
-    cache::GlobalExclusions,
+    cache::ExclusionManager,
     data::{OrderedBytes, PlayerId, PlayerRegistry},
 };
 
@@ -80,7 +77,7 @@ impl Egress {
     pub fn handle_broadcast_global(
         &self,
         pkt: hyperion_proto::BroadcastGlobal,
-        exclusions: GlobalExclusions,
+        exclusions: ExclusionManager,
     ) {
         let data = pkt.data;
 
@@ -95,7 +92,8 @@ impl Egress {
                 continue;
             }
 
-            let to_send = OrderedBytes::with_exclusions(data.clone(), exclusions.clone());
+            let to_send =
+                OrderedBytes::with_exclusions(pkt.order, data.clone(), exclusions.clone());
 
             if let Err(e) = player.writer.try_send(to_send) {
                 debug!("Failed to send data to player: {:?}", e);
@@ -119,9 +117,9 @@ impl Egress {
         let center = pkt.center.expect("center is required");
         let radius = pkt.taxicab_radius as i16;
 
-        let center = glam::I16Vec2::new(center.x as i16, center.z as i16);
-        let min = center - glam::I16Vec2::splat(radius);
-        let max = center + glam::I16Vec2::splat(radius);
+        let center = I16Vec2::new(center.x as i16, center.z as i16);
+        let min = center - I16Vec2::splat(radius);
+        let max = center + I16Vec2::splat(radius);
 
         let aabb = Aabb::new(min, max);
         let data = pkt.data;
@@ -211,37 +209,19 @@ impl Egress {
     }
 
     pub fn handle_set_receive_broadcasts(&self, pkt: hyperion_proto::SetReceiveBroadcasts) {
-        // delay a second
-
         let registry = self.registry.clone();
-        tokio::spawn(async move {
-            tokio::time::sleep(Duration::from_secs(1)).await;
-            let players = registry.read().unwrap();
-            let stream = pkt.stream;
-            let stream = KeyData::from_ffi(stream);
-            let stream = PlayerId::from(stream);
+        let players = registry.read().unwrap();
+        let stream = pkt.stream;
+        let stream = KeyData::from_ffi(stream);
+        let stream = PlayerId::from(stream);
 
-            let Some(player) = players.get(stream) else {
-                drop(players);
-                error!("Player not found for stream {stream:?}");
-                return;
-            };
+        let Some(player) = players.get(stream) else {
+            drop(players);
+            error!("Player not found for stream {stream:?}");
+            return;
+        };
 
-            player.can_receive_broadcasts.store(true, Ordering::Relaxed);
-        });
-
-        // let players = self.registry.read().unwrap();
-        // let stream = pkt.stream;
-        // let stream = KeyData::from_ffi(stream);
-        // let stream = PlayerId::from(stream);
-        //
-        // let Some(player) = players.get(stream) else {
-        //     drop(players);
-        //     error!("Player not found for stream {stream:?}");
-        //     return;
-        // };
-        //
-        // player.can_receive_broadcasts.store(true, Ordering::Relaxed);
+        player.can_receive_broadcasts.store(true, Ordering::Relaxed);
     }
 }
 

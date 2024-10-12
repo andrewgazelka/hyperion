@@ -1,6 +1,9 @@
 #![feature(maybe_uninit_slice)]
 #![feature(allocator_api)]
 #![feature(let_chains)]
+#![feature(coroutines)]
+#![feature(iter_from_coroutine)]
+#![feature(stmt_expr_attributes)]
 #![allow(
     clippy::redundant_pub_crate,
     clippy::cast_possible_truncation,
@@ -32,7 +35,7 @@ use crate::{
     cache::BufferedEgress,
     data::{PlayerHandle, PlayerRegistry},
     egress::Egress,
-    player::launch_player,
+    player::initiate_player_connection,
     server_sender::launch_server_writer,
 };
 
@@ -43,6 +46,7 @@ pub mod data;
 pub mod egress;
 pub mod player;
 pub mod server_sender;
+pub mod util;
 
 #[tracing::instrument(skip_all)]
 pub async fn connect(addr: impl ToSocketAddrs + Debug + Clone) -> TcpStream {
@@ -130,7 +134,7 @@ async fn connect_to_server_and_run_proxy(
 
         info!("got player with id {id:?}");
 
-        launch_player(
+        initiate_player_connection(
             socket,
             shutdown_rx.clone(),
             id,

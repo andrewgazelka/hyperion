@@ -300,7 +300,6 @@ pub fn player_join_world(
     let show_all = show_all(entity.id().0 as i32);
     compose
         .broadcast(show_all.borrow_packet(), system_id)
-        .exclude(packets)
         .send(world)
         .unwrap();
 
@@ -415,9 +414,6 @@ fn generate_cached_packet_bytes(
             z_pos: f64::from(PLAYER_SPAWN_POSITION.z),
         })?;
     }
-
-    let show_all = show_all(0);
-    encoder.append_packet(show_all.borrow_packet())?;
 
     if let Some(pkt) = crafting_registry.packet() {
         encoder.append_packet(&pkt)?;
