@@ -4,15 +4,18 @@ use flecs_ecs::{
     prelude::Module,
 };
 use hyperion::{
-    net::Compose,
-    simulation::{event, metadata::Metadata, EntityReaction, Health, Player, Position},
+    net::{Compose, NetworkStreamRef},
+    simulation::{
+        event, metadata::Metadata, EntityReaction, Health, Player, Position, PLAYER_SPAWN_POSITION,
+    },
     storage::EventQueue,
     system_registry::SystemId,
     valence_protocol::{
+        game_mode::OptGameMode,
         ident,
-        packets::play,
+        packets::{play, play::player_position_look_s2c::PlayerPositionLookFlags},
         sound::{SoundCategory, SoundId},
-        VarInt,
+        GameMode, VarInt,
     },
 };
 use tracing::trace_span;
@@ -45,7 +48,7 @@ impl Module for AttackModule {
                     &Compose,
                 )| {
                     const IMMUNE_TICK_DURATION: i64 = 10;
-                    const DAMAGE: f32 = 1.0;
+                    const DAMAGE: f32 = 10.0;
 
                     let span = trace_span!("handle_attacks");
                     let _enter = span.enter();
@@ -64,17 +67,40 @@ impl Module for AttackModule {
                             &mut ImmuneUntil,
                             &mut Health,
                             &mut Metadata,
-                            &Position,
+                            &mut Position,
                             &mut EntityReaction,
+                            &NetworkStreamRef,
                         )>(
-                            |(immune_until, health, metadata, position, reaction)| {
+                            |(immune_until, health, metadata, position, reaction, io)| {
                                 if immune_until.tick > current_tick {
                                     return;
                                 }
 
                                 immune_until.tick = current_tick + IMMUNE_TICK_DURATION;
                                 health.normal -= DAMAGE;
+                                if health.normal <= 0.0 {
+                                    // send respawn packet
 
+                                    let pkt = play::PlayerRespawnS2c {
+                                        dimension_type_name: ident!("minecraft:overworld").into(),
+                                        dimension_name: ident!("minecraft:overworld").into(),
+                                        hashed_seed: 0,
+                                        game_mode: GameMode::Adventure,
+                                        previous_game_mode: OptGameMode::default(),
+                                        is_debug: false,
+                                        is_flat: false,
+                                        copy_metadata: false,
+                                        last_death_location: None,
+                                        portal_cooldown: VarInt::default(),
+                                    };
+                                    position.position = PLAYER_SPAWN_POSITION;
+                                    compose
+                                        .unicast(&pkt, *io, SystemId(99), &world)
+                                        .unwrap();
+                                    health.normal = 20.0;
+                                    metadata.health(20.0);
+                                    return;
+                                }
                                 metadata.health(health.normal);
 
                                 let entity_id = VarInt(event.target.0 as i32);
