@@ -2,7 +2,6 @@ package dev._00a.extractor;
 
 import net.minecraft.block.Block;
 import net.minecraft.block.BlockState;
-import net.minecraft.component.type.MapIdComponent;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.fluid.Fluid;
@@ -33,8 +32,8 @@ import net.minecraft.world.entity.EntityLookup;
 import net.minecraft.world.event.GameEvent;
 import net.minecraft.world.event.GameEvent.Emitter;
 import net.minecraft.world.tick.QueryableTickScheduler;
-import net.minecraft.world.tick.TickManager;
 import org.jetbrains.annotations.Nullable;
+
 import java.util.List;
 import java.util.function.Supplier;
 
@@ -43,7 +42,22 @@ public class DummyWorld extends World {
     public DynamicRegistryManager registryManager;
 
     private static class DummyMutableWorldProperties implements MutableWorldProperties {
-        
+
+        @Override
+        public int getSpawnX() {
+            return 0;
+        }
+
+        @Override
+        public int getSpawnY() {
+            return 0;
+        }
+
+        @Override
+        public int getSpawnZ() {
+            return 0;
+        }
+
         @Override
         public float getSpawnAngle() {
             return 0;
@@ -95,9 +109,23 @@ public class DummyWorld extends World {
         }
 
         @Override
-        public BlockPos getSpawnPos() {
-            // TODO Auto-generated method stub
-            throw new UnsupportedOperationException("Unimplemented method 'getSpawnPos'");
+        public void setSpawnX(int spawnX) {
+
+        }
+
+        @Override
+        public void setSpawnY(int spawnY) {
+
+        }
+
+        @Override
+        public void setSpawnZ(int spawnZ) {
+
+        }
+
+        @Override
+        public void setSpawnAngle(float spawnAngle) {
+
         }
 
         @Override
@@ -162,8 +190,18 @@ public class DummyWorld extends World {
     }
 
     @Override
-    public TickManager getTickManager() {
+    public @Nullable MapState getMapState(String id) {
         return null;
+    }
+
+    @Override
+    public void putMapState(String id, MapState state) {
+
+    }
+
+    @Override
+    public int getNextMapId() {
+        return 0;
     }
 
     @Override
@@ -197,6 +235,11 @@ public class DummyWorld extends World {
     }
 
     @Override
+    public void emitGameEvent(GameEvent event, Vec3d emitterPos, Emitter emitter) {
+
+    }
+
+    @Override
     public DynamicRegistryManager getRegistryManager() {
         return registryManager;
     }
@@ -221,26 +264,6 @@ public class DummyWorld extends World {
         return null;
     }
 
-    @Override
-    public void emitGameEvent(RegistryEntry<GameEvent> event, Vec3d emitterPos, Emitter emitter) {}
-
-    @Override
-    public MapState getMapState(MapIdComponent id) {
-        return null;
-    }
-
-    @Override
-    public void putMapState(MapIdComponent id, MapState state) {}
-
-    @Override
-    public MapIdComponent increaseAndGetMapId() {
-        return null;
-    }
-
-    @Override
-    public BrewingRecipeRegistry getBrewingRecipeRegistry() {
-        return null;
-    }
 
     @Override
     public RecipeManager getRecipeManager() {
