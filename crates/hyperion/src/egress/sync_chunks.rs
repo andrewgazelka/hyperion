@@ -194,40 +194,40 @@ impl Module for SyncChunksModule {
 
         let system_id = LOCAL_STATS;
 
-        system!(
-            "local_stats",
-            world,
-            &Compose($),
-            &ChunkSendQueue,
-            &NetworkStreamRef,
-        )
-        .multi_threaded()
-        .kind::<flecs::pipeline::OnUpdate>()
-        .tracing_each_entity(
-            trace_span!("local_chunk_stats"),
-            move |entity, (compose, chunk_send_queue, stream)| {
-                const FULL_BAR_CHUNKS: usize = 4096;
-
-                let world = entity.world();
-                let chunks_to_send = chunk_send_queue.len();
-
-                let title = format_compact!("{chunks_to_send} chunks to send");
-                let title = hyperion_text::Text::new(&title);
-                let health = (chunks_to_send as f32 / FULL_BAR_CHUNKS as f32).min(1.0);
-
-                let pkt = BossBarS2c {
-                    id: Uuid::from_u128(2),
-                    action: BossBarAction::Add {
-                        title,
-                        health,
-                        color: BossBarColor::Red,
-                        division: BossBarDivision::NoDivision,
-                        flags: BossBarFlags::default(),
-                    },
-                };
-
-                compose.unicast(&pkt, *stream, system_id, &world).unwrap();
-            },
-        );
+        // system!(
+        //     "local_stats",
+        //     world,
+        //     &Compose($),
+        //     &ChunkSendQueue,
+        //     &NetworkStreamRef,
+        // )
+        // .multi_threaded()
+        // .kind::<flecs::pipeline::OnUpdate>()
+        // .tracing_each_entity(
+        //     trace_span!("local_chunk_stats"),
+        //     move |entity, (compose, chunk_send_queue, stream)| {
+        //         const FULL_BAR_CHUNKS: usize = 4096;
+        //
+        //         let world = entity.world();
+        //         let chunks_to_send = chunk_send_queue.len();
+        //
+        //         let title = format_compact!("{chunks_to_send} chunks to send");
+        //         let title = hyperion_text::Text::new(&title);
+        //         let health = (chunks_to_send as f32 / FULL_BAR_CHUNKS as f32).min(1.0);
+        //
+        //         let pkt = BossBarS2c {
+        //             id: Uuid::from_u128(2),
+        //             action: BossBarAction::Add {
+        //                 title,
+        //                 health,
+        //                 color: BossBarColor::Red,
+        //                 division: BossBarDivision::NoDivision,
+        //                 flags: BossBarFlags::default(),
+        //             },
+        //         };
+        //
+        //         compose.unicast(&pkt, *stream, system_id, &world).unwrap();
+        //     },
+        // );
     }
 }

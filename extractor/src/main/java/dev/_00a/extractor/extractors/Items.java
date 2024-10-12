@@ -7,7 +7,6 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 
 import dev._00a.extractor.Main;
-import net.minecraft.component.DataComponentTypes;
 import net.minecraft.registry.Registries;
 import net.minecraft.server.MinecraftServer;
 
@@ -32,30 +31,32 @@ public class Items implements Main.Extractor {
             itemJson.addProperty("max_stack", item.getMaxCount());
             itemJson.addProperty("enchantability", item.getEnchantability());
 
-            var food = item.getComponents().get(DataComponentTypes.FOOD);
-            if (food != null) {
-                var foodJson = new JsonObject();
+            item.dam
 
-                foodJson.addProperty("nutrition", food.nutrition());
-                foodJson.addProperty("saturation", food.saturation());
-                foodJson.addProperty("can_always_eat", food.canAlwaysEat());
-                foodJson.addProperty("eat_seconds", food.eatSeconds());
-
-                var effectsJson = new JsonArray();
-
-                for (var effect : food.effects()) {
-                    var effectJson = new JsonObject();
-
-                    effectJson.addProperty("probability", effect.probability());
-                    effectJson.addProperty("translation_key", effect.effect().getTranslationKey());
-
-                    effectsJson.add(effectJson);
-                }
-
-                foodJson.add("effects", effectsJson);
-
-                itemJson.add("food", foodJson);
-            }
+//            var food = item.getComponents().get(DataComponentTypes.FOOD);
+//            if (food != null) {
+//                var foodJson = new JsonObject();
+//
+//                foodJson.addProperty("nutrition", food.nutrition());
+//                foodJson.addProperty("saturation", food.saturation());
+//                foodJson.addProperty("can_always_eat", food.canAlwaysEat());
+//                foodJson.addProperty("eat_seconds", food.eatSeconds());
+//
+//                var effectsJson = new JsonArray();
+//
+//                for (var effect : food.effects()) {
+//                    var effectJson = new JsonObject();
+//
+//                    effectJson.addProperty("probability", effect.probability());
+//                    effectJson.addProperty("translation_key", effect.effect().getTranslationKey());
+//
+//                    effectsJson.add(effectJson);
+//                }
+//
+//                foodJson.add("effects", effectsJson);
+//
+//                itemJson.add("food", foodJson);
+//            }
 
             itemsJson.add(itemJson);
         }

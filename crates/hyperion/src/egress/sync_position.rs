@@ -83,7 +83,6 @@ impl Module for SyncPositionModule {
 
                         compose
                             .broadcast(&pkt, system_id)
-                            .exclude(io)
                             .send(&world)
                             .unwrap();
                     }

@@ -1,21 +1,36 @@
+use compact_str::format_compact;
 use flecs_ecs::{
-    core::{flecs, EntityViewGet, QueryBuilderImpl, SystemAPI, TableIter, TermBuilderImpl, World},
+    core::{
+        flecs, EntityViewGet, QueryBuilderImpl, SystemAPI, TableIter, TermBuilderImpl, World,
+        WorldProvider,
+    },
     macros::{system, Component},
     prelude::Module,
 };
 use hyperion::{
-    net::{Compose, NetworkStreamRef},
-    simulation::{event, metadata::Metadata, EntityReaction, Health, Player, Position},
+    net::{
+        packets::{BossBarAction, BossBarS2c},
+        Compose, NetworkStreamRef,
+    },
+    simulation::{
+        event, metadata::Metadata, EntityReaction, Health, Player, Position, PLAYER_SPAWN_POSITION,
+    },
     storage::EventQueue,
     system_registry::SystemId,
+    util::TracingExt,
+    uuid::Uuid,
     valence_protocol::{
+        game_mode::OptGameMode,
         ident,
-        packets::play,
+        packets::{
+            play,
+            play::boss_bar_s2c::{BossBarColor, BossBarDivision, BossBarFlags},
+        },
         sound::{SoundCategory, SoundId},
-        ItemKind, ItemStack, VarInt,
+        GameMode, ItemKind, ItemStack, VarInt,
     },
 };
-use hyperion_inventory::{Inventory, PlayerInventory};
+use hyperion_inventory::PlayerInventory;
 use tracing::trace_span;
 
 #[derive(Component)]
@@ -26,6 +41,7 @@ pub struct ImmuneUntil {
     tick: i64,
 }
 
+// Used as a component only for commands, does not include armor or weapons
 #[derive(Component, Default, Copy, Clone, Debug)]
 pub struct CombatStats {
     pub armor: f32,
@@ -34,13 +50,59 @@ pub struct CombatStats {
     pub protection: f32,
 }
 
+#[derive(Component, Default, Copy, Clone, Debug)]
+pub struct KillCount {
+    pub kill_count: u32,
+}
+
 impl Module for AttackModule {
     #[allow(clippy::excessive_nesting)]
     fn module(world: &World) {
         world
             .component::<Player>()
             .add_trait::<(flecs::With, ImmuneUntil)>()
-            .add_trait::<(flecs::With, CombatStats)>();
+            .add_trait::<(flecs::With, CombatStats)>()
+            .add_trait::<(flecs::With, KillCount)>();
+
+        let kill_count_uuid = Uuid::new_v4();
+
+        system!(
+            "kill_counts",
+            world,
+            &Compose($),
+            &KillCount,
+            &NetworkStreamRef,
+        )
+        .multi_threaded()
+        .kind::<flecs::pipeline::OnUpdate>()
+        .tracing_each_entity(
+            trace_span!("kill_counts"),
+            move |entity, (compose, kill_count, stream)| {
+                const MAX_KILLS: usize = 10;
+
+                let world = entity.world();
+
+                let kills = kill_count.kill_count;
+                let title = format_compact!("{kills} kills");
+                let title = hyperion_text::Text::new(&title);
+                let health = (kill_count.kill_count as f32 / MAX_KILLS as f32).min(1.0);
+
+                let pkt = BossBarS2c {
+                    id: kill_count_uuid,
+                    action: BossBarAction::Add {
+                        title,
+                        health,
+                        color: BossBarColor::Red,
+                        division: BossBarDivision::NoDivision,
+                        flags: BossBarFlags::default(),
+                    },
+                };
+
+                compose
+                    .unicast(&pkt, *stream, SystemId(99), &world)
+                    .unwrap();
+            },
+        );
 
         system!("handle_attacks", world, &mut EventQueue<event::AttackEntity>($), &Compose($))
             .multi_threaded()
@@ -63,20 +125,19 @@ impl Module for AttackModule {
                     for event in event_queue.drain() {
                         let target = world.entity_from_id(event.target);
                         let origin = world.entity_from_id(event.origin);
-
-                        let (damage, from_pos) = origin.get::<(&CombatStats, &Position, &PlayerInventory)>(|(stats, pos, inventory)| (stats.damage + calculate_stats(inventory).damage, pos.position));
-
-                        target.get::<(
-                            &NetworkStreamRef,
-                            &mut ImmuneUntil,
-                            &mut Health,
-                            &mut Metadata,
-                            &Position,
-                            &mut EntityReaction,
-                            &CombatStats,
-                            &PlayerInventory
-                        )>(
-                            |(network_ref, immune_until, health, metadata, position, reaction, stats, inventory)| {
+                        origin.get::<(&Position, &mut KillCount, &CombatStats, &PlayerInventory)>(|(from_pos, kill_count, from_stats, from_inventory)| {
+                            let damage = from_stats.damage + calculate_stats(from_inventory).damage;
+                            target.get::<(
+                                &mut ImmuneUntil,
+                                &mut Health,
+                                &mut Metadata,
+                                &mut Position,
+                                &mut EntityReaction,
+                                &NetworkStreamRef,
+                                &CombatStats,
+                                &PlayerInventory
+                            )>(
+                                |(immune_until, health, metadata, position, reaction, io, stats, inventory)| {
                                 if immune_until.tick > current_tick {
                                     return;
                                 }
@@ -92,75 +153,100 @@ impl Module for AttackModule {
                                 let damage_after_protection = get_inflicted_damage(damage_after_armor, protection);
 
                                 health.normal -= damage_after_protection;
+                                    if health.normal <= 0.0 {
+                                        // player died, increment kill count
+                                        kill_count.kill_count += 1;
 
-                                metadata.health(health.normal);
+                                        // send respawn packet
 
-                                let pkt = play::HealthUpdateS2c {
-                                    health: health.normal,
-                                    food: VarInt(10),
-                                    food_saturation: 10.0
-                                };
+                                        let pkt = play::PlayerRespawnS2c {
+                                            dimension_type_name: ident!("minecraft:overworld").into(),
+                                            dimension_name: ident!("minecraft:overworld").into(),
+                                            hashed_seed: 0,
+                                            game_mode: GameMode::Adventure,
+                                            previous_game_mode: OptGameMode::default(),
+                                            is_debug: false,
+                                            is_flat: false,
+                                            copy_metadata: false,
+                                            last_death_location: None,
+                                            portal_cooldown: VarInt::default(),
+                                        };
+                                        position.position = PLAYER_SPAWN_POSITION;
+                                        compose
+                                            .unicast(&pkt, *io, SystemId(99), &world)
+                                            .unwrap();
+                                        health.normal = 20.0;
+                                        metadata.health(20.0);
+                                        return;
+                                    }
+                                    metadata.health(health.normal);
 
-                                compose.unicast(&pkt, *network_ref, SystemId(999), &world).unwrap();
+                                    let pkt = play::HealthUpdateS2c {
+                                        health: health.normal,
+                                        food: VarInt(10),
+                                        food_saturation: 10.0
+                                    };
 
-                                let entity_id = VarInt(event.target.0 as i32);
+                                    compose.unicast(&pkt, *io, SystemId(999), &world).unwrap();
 
-                                let pkt = play::EntityDamageS2c {
-                                    entity_id,
-                                    source_type_id: Default::default(),
-                                    source_cause_id: Default::default(),
-                                    source_direct_id: Default::default(),
-                                    source_pos: None,
-                                };
+                                    let entity_id = VarInt(event.target.0 as i32);
+                                    let pkt = play::EntityDamageS2c {
+                                        entity_id,
+                                        source_type_id: Default::default(),
+                                        source_cause_id: Default::default(),
+                                        source_direct_id: Default::default(),
+                                        source_pos: None,
+                                    };
 
-                                compose.broadcast(&pkt, SystemId(999)).send(&world).unwrap();
+                                    compose.broadcast(&pkt, SystemId(999)).send(&world).unwrap();
 
-                                // let pkt = play::EntityAttributesS2c {
-                                //     entity_id,
-                                //     properties: vec![
-                                //         AttributeProperty {
-                                //             key: (),
-                                //             value: 0.0,
-                                //             modifiers: vec![],
-                                //         }
-                                //     ],
-                                // }
+                                    // let pkt = play::EntityAttributesS2c {
+                                    //     entity_id,
+                                    //     properties: vec![
+                                    //         AttributeProperty {
+                                    //             key: (),
+                                    //             value: 0.0,
+                                    //             modifiers: vec![],
+                                    //         }
+                                    //     ],
+                                    // }
 
-                                // Play a sound when an entity is damaged
-                                let ident = ident!("minecraft:entity.player.hurt");
-                                let pkt = play::PlaySoundS2c {
-                                    id: SoundId::Direct {
-                                        id: ident.into(),
-                                        range: None,
-                                    },
-                                    position: (position.position * 8.0).as_ivec3(),
-                                    volume: 1.0,
-                                    pitch: 1.0,
-                                    seed: fastrand::i64(..),
-                                    category: SoundCategory::Player,
-                                };
-                                compose.broadcast(&pkt, SystemId(999)).send(&world).unwrap();
+                                    // Play a sound when an entity is damaged
+                                    let ident = ident!("minecraft:entity.player.hurt");
+                                    let pkt = play::PlaySoundS2c {
+                                        id: SoundId::Direct {
+                                            id: ident.into(),
+                                            range: None,
+                                        },
+                                        position: (position.position * 8.0).as_ivec3(),
+                                        volume: 1.0,
+                                        pitch: 1.0,
+                                        seed: fastrand::i64(..),
+                                        category: SoundCategory::Player,
+                                    };
+                                    compose.broadcast(&pkt, SystemId(999)).send(&world).unwrap();
 
-                                // Calculate velocity change based on attack direction
-                                let this = position.position;
-                                let other = from_pos;
+                                    // Calculate velocity change based on attack direction
+                                    let this = position.position;
+                                    let other = from_pos.position;
 
-                                let delta_x = other.x - this.x;
-                                let delta_z = other.z - this.z;
+                                    let delta_x = other.x - this.x;
+                                    let delta_z = other.z - this.z;
 
-                                if delta_x.abs() >= 0.01 || delta_z.abs() >= 0.01 {
-                                    let dist_xz = delta_x.hypot(delta_z);
-                                    let multiplier = 0.4;
+                                    if delta_x.abs() >= 0.01 || delta_z.abs() >= 0.01 {
+                                        let dist_xz = delta_x.hypot(delta_z);
+                                        let multiplier = 0.4;
 
-                                    reaction.velocity /= 2.0;
-                                    reaction.velocity.x -= delta_x / dist_xz * multiplier;
-                                    reaction.velocity.y += multiplier;
-                                    reaction.velocity.z -= delta_z / dist_xz * multiplier;
+                                        reaction.velocity /= 2.0;
+                                        reaction.velocity.x -= delta_x / dist_xz * multiplier;
+                                        reaction.velocity.y += multiplier;
+                                        reaction.velocity.z -= delta_z / dist_xz * multiplier;
 
-                                    reaction.velocity.y = reaction.velocity.y.min(0.4);
-                                }
-                            },
-                        );
+                                        reaction.velocity.y = reaction.velocity.y.min(0.4);
+                                    }
+                                },
+                            );
+                        });
                     }
                 },
             );
@@ -258,6 +344,7 @@ fn calculate_stats(inventory: &PlayerInventory) -> CombatStats {
         armor,
         armor_toughness,
         damage,
+        // TODO
         protection: 0.0,
     }
 }
