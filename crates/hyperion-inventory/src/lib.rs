@@ -12,8 +12,8 @@ pub type PlayerInventory = Inventory<46>;
 pub struct Inventory<const T: usize> {
     slots: [ItemStack; T],
     hand_slot: u16,
-    pub updated_since_last_tick: RoaringBitmap,
-    pub hand_slot_updated_since_last_tick: bool,
+    pub updated_since_last_tick: RoaringBitmap, // todo: maybe make this private
+    pub hand_slot_updated_since_last_tick: bool, // todo: maybe make this private
 }
 
 #[derive(Debug)]
@@ -185,6 +185,11 @@ impl<const T: usize> Inventory<T> {
     }
 }
 
+const HELMET_SLOT: u16 = 5;
+const CHESTPLATE_SLOT: u16 = 6;
+const LEGGINGS_SLOT: u16 = 7;
+const BOOTS_SLOT: u16 = 8;
+
 impl PlayerInventory {
     pub fn crafting_item(&self, registry: &CraftingRegistry) -> ItemStack {
         let indices = core::array::from_fn::<u16, 4, _>(|i| (i as u16 + 1));
@@ -229,6 +234,22 @@ impl PlayerInventory {
         }
 
         self.set(idx, stack).unwrap();
+    }
+
+    pub fn set_helmet(&mut self, stack: ItemStack) {
+        self.set(HELMET_SLOT, stack).unwrap();
+    }
+
+    pub fn set_chestplate(&mut self, stack: ItemStack) {
+        self.set(CHESTPLATE_SLOT, stack).unwrap();
+    }
+
+    pub fn set_leggings(&mut self, stack: ItemStack) {
+        self.set(LEGGINGS_SLOT, stack).unwrap();
+    }
+
+    pub fn set_boots(&mut self, stack: ItemStack) {
+        self.set(BOOTS_SLOT, stack).unwrap();
     }
 
     pub fn try_add_item(&mut self, mut item: ItemStack) -> AddItemResult {

@@ -26,7 +26,7 @@ use hyperion::{
 use hyperion_inventory::PlayerInventory;
 use tracing::{debug, trace_span};
 
-use crate::{command::parse::ParsedCommand, component::team::Team};
+use crate::{command::parse::ParsedCommand, component::team::Team, level::Level};
 
 pub mod parse;
 
@@ -49,6 +49,11 @@ pub fn add_to_tree(world: &World) {
         .set(Command::literal("give"))
         .child_of_id(root_command);
 
+    world
+        .entity()
+        .set(Command::literal("upgrade"))
+        .child_of_id(root_command);
+
     let speed = world
         .entity()
         .set(Command::literal("speed"))
@@ -67,12 +72,13 @@ struct CommandContext<'a> {
     stream: NetworkStreamRef,
     team: &'a mut Team,
     compose: &'a Compose,
-    mc: &'a mut Blocks,
+    blocks: &'a mut Blocks,
     world: &'a World,
     system_id: SystemId,
     uuid: uuid::Uuid,
     name: &'a InGameName,
     inventory: &'a mut PlayerInventory,
+    level: &'a mut Level,
 }
 
 fn process_command(command: &ParsedCommand, context: &mut CommandContext<'_>) {
@@ -82,7 +88,60 @@ fn process_command(command: &ParsedCommand, context: &mut CommandContext<'_>) {
         ParsedCommand::Zombie => handle_zombie_command(context),
         ParsedCommand::Dirt { x, y, z } => handle_dirt_command(*x, *y, *z, context),
         ParsedCommand::Give => handle_give_command(context),
+        ParsedCommand::Upgrade => handle_upgrade_command(context),
     }
+}
+
+fn handle_upgrade_command(context: &mut CommandContext<'_>) {
+    // Upgrade level by 1
+    context.level.value += 1;
+
+    // Determine armor type based on level
+    let (helmet, chestplate, leggings, boots) = match context.level.value {
+        1 => (
+            ItemKind::LeatherHelmet,
+            ItemKind::LeatherChestplate,
+            ItemKind::LeatherLeggings,
+            ItemKind::LeatherBoots,
+        ),
+        2 => (
+            ItemKind::ChainmailHelmet,
+            ItemKind::ChainmailChestplate,
+            ItemKind::ChainmailLeggings,
+            ItemKind::ChainmailBoots,
+        ),
+        3 => (
+            ItemKind::IronHelmet,
+            ItemKind::IronChestplate,
+            ItemKind::IronLeggings,
+            ItemKind::IronBoots,
+        ),
+        4 => (
+            ItemKind::DiamondHelmet,
+            ItemKind::DiamondChestplate,
+            ItemKind::DiamondLeggings,
+            ItemKind::DiamondBoots,
+        ),
+        5.. => (
+            ItemKind::NetheriteHelmet,
+            ItemKind::NetheriteChestplate,
+            ItemKind::NetheriteLeggings,
+            ItemKind::NetheriteBoots,
+        ),
+        _ => return, // No upgrade for level 0 or negative levels
+    };
+
+    // Set the new armor
+    context
+        .inventory
+        .set_helmet(ItemStack::new(helmet, 1, None));
+    context
+        .inventory
+        .set_chestplate(ItemStack::new(chestplate, 1, None));
+    context
+        .inventory
+        .set_leggings(ItemStack::new(leggings, 1, None));
+    context.inventory.set_boots(ItemStack::new(boots, 1, None));
 }
 
 fn handle_give_command(context: &mut CommandContext<'_>) {
@@ -119,7 +178,7 @@ fn handle_dirt_command(x: i32, y: i32, z: i32, context: &mut CommandContext<'_>)
 
     let pos = BlockPos::new(x, y, z);
     let pos = IVec3::new(x, y, z);
-    context.mc.set_block(pos, BlockState::DIRT).unwrap();
+    context.blocks.set_block(pos, BlockState::DIRT).unwrap();
 }
 
 fn handle_speed_command(amount: f32, context: &CommandContext<'_>) {
@@ -258,7 +317,7 @@ impl Module for CommandModule {
         system!("handle_infection_custom_messages", world, &mut EventQueue<event::PluginMessage<'static>>($))
             .multi_threaded()
             .each_iter(move |_it: TableIter<'_, false>, _, event_queue| {
-                for msg in event_queue.drain()   {
+                for msg in event_queue.drain() {
                     debug!("msg {msg:?}");
                 }
             });
@@ -285,18 +344,20 @@ impl Module for CommandModule {
                         &Uuid,
                         &InGameName,
                         &mut PlayerInventory,
+                        &mut Level,
                     )>(
-                        |(stream, team, uuid, name, inventory)| {
+                        |(stream, team, uuid, name, inventory, level)| {
                             let mut context = CommandContext {
                                 stream: *stream,
                                 team,
                                 compose,
                                 world: &world,
-                                mc,
+                                blocks: mc,
                                 system_id,
                                 uuid: uuid.0,
                                 name,
                                 inventory,
+                                level,
                             };
                             process_command(&command, &mut context);
                         },

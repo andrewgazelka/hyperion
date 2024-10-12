@@ -15,6 +15,7 @@ pub enum ParsedCommand {
     Zombie,
     Dirt { x: i32, y: i32, z: i32 },
     Give,
+    Upgrade,
 }
 
 fn parse_speed(input: &str) -> IResult<&str, ParsedCommand> {
@@ -50,6 +51,10 @@ fn parse_give(input: &str) -> IResult<&str, ParsedCommand> {
     map(tag("give"), |_| ParsedCommand::Give)(input)
 }
 
+fn parse_upgrade(input: &str) -> IResult<&str, ParsedCommand> {
+    map(tag("upgrade"), |_| ParsedCommand::Upgrade)(input)
+}
+
 pub fn command(input: &str) -> IResult<&str, ParsedCommand> {
     alt((
         parse_speed,
@@ -57,5 +62,6 @@ pub fn command(input: &str) -> IResult<&str, ParsedCommand> {
         parse_zombie,
         parse_dirt,
         parse_give,
+        parse_upgrade,
     ))(input)
 }

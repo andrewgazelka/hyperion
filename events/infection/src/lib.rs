@@ -18,11 +18,12 @@ mod block;
 mod command;
 mod component;
 mod handler;
+mod level;
 
 pub use animation::AnimationModule;
 use command::CommandModule;
 
-use crate::attack::AttackModule;
+use crate::{attack::AttackModule, level::LevelModule};
 
 #[derive(Component)]
 pub struct InfectionModule;
@@ -34,6 +35,7 @@ impl Module for InfectionModule {
         world.import::<CommandModule>();
         world.import::<BlockModule>();
         world.import::<AttackModule>();
+        world.import::<LevelModule>();
         // world.import::<AnimationModule>();
     }
 }
