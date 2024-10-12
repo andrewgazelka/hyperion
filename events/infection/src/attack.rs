@@ -64,8 +64,6 @@ impl Module for AttackModule {
                         let target = world.entity_from_id(event.target);
                         let origin = world.entity_from_id(event.origin);
 
-                        println!("{:?}", event.origin);
-
                         let (damage, from_pos) = origin.get::<(&CombatStats, &Position, &PlayerInventory)>(|(stats, pos, inventory)| (stats.damage + calculate_stats(inventory).damage, pos.position));
 
                         target.get::<(
