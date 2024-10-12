@@ -17,7 +17,7 @@ use hyperion::{
         blocks::{Blocks, EntityAndSequence},
         event,
         metadata::Metadata,
-        Health, Player, Position,
+        EntityReaction, Health, Player, Position,
     },
     storage::EventQueue,
     system_registry::SystemId,
@@ -77,8 +77,16 @@ impl Module for AttackModule {
                         let target = world.entity_from_id(event.target);
                         let origin = world.entity_from_id(event.origin);
 
-                        target.get::<(&mut ImmuneUntil, &mut Health, &mut Metadata, &Position)>(
-                            |(immune_until, health, metadata, position)| {
+                        let from_pos = origin.get::<&Position>(|pos| pos.position);
+
+                        target.get::<(
+                            &mut ImmuneUntil,
+                            &mut Health,
+                            &mut Metadata,
+                            &Position,
+                            &mut EntityReaction,
+                        )>(
+                            |(immune_until, health, metadata, position, reaction)| {
                                 if immune_until.tick > current_tick {
                                     return;
                                 }
@@ -125,6 +133,25 @@ impl Module for AttackModule {
                                     category: SoundCategory::Player,
                                 };
                                 compose.broadcast(&pkt, SystemId(999)).send(&world).unwrap();
+
+                                // Calculate velocity change based on attack direction
+                                let this = position.position;
+                                let other = from_pos;
+
+                                let delta_x = other.x - this.x;
+                                let delta_z = other.z - this.z;
+
+                                if delta_x.abs() >= 0.01 || delta_z.abs() >= 0.01 {
+                                    let dist_xz = delta_x.hypot(delta_z);
+                                    let multiplier = 0.4;
+
+                                    reaction.velocity /= 2.0;
+                                    reaction.velocity.x -= delta_x / dist_xz * multiplier;
+                                    reaction.velocity.y += multiplier;
+                                    reaction.velocity.z -= delta_z / dist_xz * multiplier;
+
+                                    reaction.velocity.y = reaction.velocity.y.min(0.4);
+                                }
                             },
                         );
                     }

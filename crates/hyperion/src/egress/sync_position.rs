@@ -1,16 +1,17 @@
 use std::borrow::Cow;
 
 use flecs_ecs::prelude::*;
+use glam::Vec3;
 use hyperion_inventory::PlayerInventory;
 use tracing::trace_span;
 use valence_protocol::{
     packets::{play, play::entity_equipment_update_s2c::EquipmentEntry},
-    ByteAngle, RawBytes, VarInt,
+    ByteAngle, RawBytes, VarInt, Velocity,
 };
 
 use crate::{
     net::{Compose, NetworkStreamRef},
-    simulation::{animation::ActiveAnimation, metadata::Metadata, Position},
+    simulation::{animation::ActiveAnimation, metadata::Metadata, EntityReaction, Position},
     system_registry::SYNC_ENTITY_POSITION,
     util::TracingExt,
 };
@@ -22,13 +23,16 @@ impl Module for SyncPositionModule {
     fn module(world: &World) {
         let system_id = SYNC_ENTITY_POSITION;
 
-        system!("sync_position", world, &Compose($), &Position, &NetworkStreamRef, &mut Metadata, &mut ActiveAnimation, &mut PlayerInventory)
+        system!("sync_position", world, &Compose($), &Position, &NetworkStreamRef, &mut Metadata, &mut ActiveAnimation, &mut PlayerInventory, &mut EntityReaction)
             .multi_threaded()
             .kind::<flecs::pipeline::OnStore>()
             .tracing_each_entity(
                 trace_span!("sync_position"),
-                move |entity, (compose, pose, &io, metadata, animation, inventory)| {
+                move |entity, elems: (&Compose, &Position, &NetworkStreamRef, &mut Metadata, &mut ActiveAnimation, &mut PlayerInventory, &mut EntityReaction)| {
+                    let (compose, pose, io, metadata, animation, inventory, reaction) = elems;
                     let entity_id = VarInt(entity.id().0 as i32);
+
+                    let io = *io;
 
                     let world = entity.world();
 
@@ -57,8 +61,21 @@ impl Module for SyncPositionModule {
                         .send(&world)
                         .unwrap();
 
+                    if reaction.velocity != Vec3::ZERO {
+                        let velocity = Velocity(reaction.velocity.to_array().map(|a| (a * 8000.0) as i16));
+                        let pkt = play::EntityVelocityUpdateS2c {
+                            entity_id: VarInt(0),
+                            velocity,
+                        };
+
+                        compose
+                            .unicast(&pkt, io, system_id, &world)
+                            .unwrap();
+
+                        reaction.velocity = Vec3::ZERO;
+                    }
+
                     if let Some(view) = metadata.get_and_clear() {
-                        println!("view: {view:?}");
                         let pkt = play::EntityTrackerUpdateS2c {
                             entity_id,
                             tracked_values: RawBytes(&view),
@@ -68,6 +85,15 @@ impl Module for SyncPositionModule {
                             .broadcast(&pkt, system_id)
                             .exclude(io)
                             .send(&world)
+                            .unwrap();
+
+                        let pkt2 = play::EntityTrackerUpdateS2c {
+                            entity_id: VarInt(0),
+                            tracked_values: RawBytes(&view),
+                        };
+
+                        compose
+                            .unicast(&pkt2, io, system_id, &world)
                             .unwrap();
                     }
 
@@ -80,6 +106,7 @@ impl Module for SyncPositionModule {
                     }
 
                     animation.clear();
+
 
                     for slot in inventory.updated_since_last_tick.iter() {
                         let slot = slot as u16;

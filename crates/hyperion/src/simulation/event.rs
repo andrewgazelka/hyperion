@@ -15,8 +15,6 @@ pub struct ItemDropEvent {
 /// Represents an attack action by an entity in the game.
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct AttackEntity {
-    /// The location of the player that is attacking.
-    pub from_pos: Vec3,
     /// The entity that is performing the attack.
     pub origin: Entity,
     pub target: Entity,

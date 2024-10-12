@@ -212,10 +212,9 @@ fn player_interact_entity(mut data: &[u8], query: &PacketSwitchQuery<'_>) -> any
 
     query.events.push(
         event::AttackEntity {
-            from_pos,
             origin: query.id,
             target,
-            damage: 0.0,
+            damage: 1.0,
         },
         query.world,
     );
