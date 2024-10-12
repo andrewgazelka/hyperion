@@ -96,52 +96,139 @@ fn handle_upgrade_command(context: &mut CommandContext<'_>) {
     // Upgrade level by 1
     context.level.value += 1;
 
-    // Determine armor type based on level
-    let (helmet, chestplate, leggings, boots) = match context.level.value {
-        1 => (
-            ItemKind::LeatherHelmet,
-            ItemKind::LeatherChestplate,
-            ItemKind::LeatherLeggings,
-            ItemKind::LeatherBoots,
-        ),
-        2 => (
-            ItemKind::ChainmailHelmet,
-            ItemKind::ChainmailChestplate,
-            ItemKind::ChainmailLeggings,
-            ItemKind::ChainmailBoots,
-        ),
-        3 => (
-            ItemKind::IronHelmet,
-            ItemKind::IronChestplate,
-            ItemKind::IronLeggings,
-            ItemKind::IronBoots,
-        ),
-        4 => (
-            ItemKind::DiamondHelmet,
-            ItemKind::DiamondChestplate,
-            ItemKind::DiamondLeggings,
-            ItemKind::DiamondBoots,
-        ),
-        5.. => (
-            ItemKind::NetheriteHelmet,
-            ItemKind::NetheriteChestplate,
-            ItemKind::NetheriteLeggings,
-            ItemKind::NetheriteBoots,
-        ),
-        _ => return, // No upgrade for level 0 or negative levels
+    // Determine upgrade based on level
+    match context.level.value {
+        1 => {
+            context
+                .inventory
+                .set_hand_slot(0, ItemStack::new(ItemKind::WoodenSword, 1, None));
+        }
+        2 => {
+            context
+                .inventory
+                .set_boots(ItemStack::new(ItemKind::LeatherBoots, 1, None));
+        }
+        3 => {
+            context
+                .inventory
+                .set_leggings(ItemStack::new(ItemKind::LeatherLeggings, 1, None));
+        }
+        4 => {
+            context
+                .inventory
+                .set_chestplate(ItemStack::new(ItemKind::LeatherChestplate, 1, None));
+        }
+        5 => {
+            context
+                .inventory
+                .set_helmet(ItemStack::new(ItemKind::LeatherHelmet, 1, None));
+        }
+        6 => {
+            context
+                .inventory
+                .set_hand_slot(0, ItemStack::new(ItemKind::StoneSword, 1, None));
+        }
+        7 => {
+            context
+                .inventory
+                .set_boots(ItemStack::new(ItemKind::ChainmailBoots, 1, None));
+        }
+        8 => {
+            context
+                .inventory
+                .set_leggings(ItemStack::new(ItemKind::ChainmailLeggings, 1, None));
+        }
+        9 => {
+            context.inventory.set_chestplate(ItemStack::new(
+                ItemKind::ChainmailChestplate,
+                1,
+                None,
+            ));
+        }
+        10 => {
+            context
+                .inventory
+                .set_helmet(ItemStack::new(ItemKind::ChainmailHelmet, 1, None));
+        }
+        11 => {
+            context
+                .inventory
+                .set_hand_slot(0, ItemStack::new(ItemKind::IronSword, 1, None));
+        }
+        12 => {
+            context
+                .inventory
+                .set_boots(ItemStack::new(ItemKind::IronBoots, 1, None));
+        }
+        13 => {
+            context
+                .inventory
+                .set_leggings(ItemStack::new(ItemKind::IronLeggings, 1, None));
+        }
+        14 => {
+            context
+                .inventory
+                .set_chestplate(ItemStack::new(ItemKind::IronChestplate, 1, None));
+        }
+        15 => {
+            context
+                .inventory
+                .set_helmet(ItemStack::new(ItemKind::IronHelmet, 1, None));
+        }
+        16 => {
+            context
+                .inventory
+                .set_hand_slot(0, ItemStack::new(ItemKind::DiamondSword, 1, None));
+        }
+        17 => {
+            context
+                .inventory
+                .set_boots(ItemStack::new(ItemKind::DiamondBoots, 1, None));
+        }
+        18 => {
+            context
+                .inventory
+                .set_leggings(ItemStack::new(ItemKind::DiamondLeggings, 1, None));
+        }
+        19 => {
+            context
+                .inventory
+                .set_chestplate(ItemStack::new(ItemKind::DiamondChestplate, 1, None));
+        }
+        20 => {
+            context
+                .inventory
+                .set_helmet(ItemStack::new(ItemKind::DiamondHelmet, 1, None));
+        }
+        21 => {
+            context
+                .inventory
+                .set_hand_slot(0, ItemStack::new(ItemKind::NetheriteSword, 1, None));
+        }
+        22 => {
+            context
+                .inventory
+                .set_boots(ItemStack::new(ItemKind::NetheriteBoots, 1, None));
+        }
+        23 => {
+            context
+                .inventory
+                .set_leggings(ItemStack::new(ItemKind::NetheriteLeggings, 1, None));
+        }
+        24 => {
+            context.inventory.set_chestplate(ItemStack::new(
+                ItemKind::NetheriteChestplate,
+                1,
+                None,
+            ));
+        }
+        25 => {
+            context
+                .inventory
+                .set_helmet(ItemStack::new(ItemKind::NetheriteHelmet, 1, None));
+        }
+        _ => return, // No more upgrades after full Netherite
     };
-
-    // Set the new armor
-    context
-        .inventory
-        .set_helmet(ItemStack::new(helmet, 1, None));
-    context
-        .inventory
-        .set_chestplate(ItemStack::new(chestplate, 1, None));
-    context
-        .inventory
-        .set_leggings(ItemStack::new(leggings, 1, None));
-    context.inventory.set_boots(ItemStack::new(boots, 1, None));
 }
 
 fn handle_give_command(context: &mut CommandContext<'_>) {

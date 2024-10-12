@@ -57,6 +57,16 @@ impl<const T: usize> Inventory<T> {
         Ok(())
     }
 
+    pub fn clear(&mut self) {
+        for (idx, slot) in self.slots.iter_mut().enumerate() {
+            if slot.is_empty() {
+                continue;
+            }
+            *slot = ItemStack::EMPTY;
+            self.updated_since_last_tick.insert(idx as u32);
+        }
+    }
+
     pub fn set_cursor(&mut self, index: u16) {
         if self.hand_slot == index {
             return;
