@@ -1,12 +1,21 @@
 use nom::{
     branch::alt,
-    bytes::complete::tag,
+    bytes::complete::{tag, take_until},
     character::complete::space1,
-    combinator::map,
+    combinator::{map, map_res},
+    error::{Error, ErrorKind},
     number::complete::float,
     sequence::{preceded, tuple},
-    IResult,
+    Err, IResult,
 };
+
+#[derive(Debug, PartialEq, Copy, Clone)]
+pub enum Stat {
+    Armor,
+    Toughness,
+    Damage,
+    Protection,
+}
 
 #[derive(Debug, PartialEq)]
 pub enum ParsedCommand {
@@ -16,6 +25,7 @@ pub enum ParsedCommand {
     Dirt { x: i32, y: i32, z: i32 },
     Give,
     Upgrade,
+    Stats(Stat, f32),
 }
 
 fn parse_speed(input: &str) -> IResult<&str, ParsedCommand> {
@@ -55,6 +65,22 @@ fn parse_upgrade(input: &str) -> IResult<&str, ParsedCommand> {
     map(tag("upgrade"), |_| ParsedCommand::Upgrade)(input)
 }
 
+fn parse_stat(input: &str) -> IResult<&str, ParsedCommand> {
+    map_res(
+        preceded(
+            preceded(tag("stat"), space1),
+            tuple((take_until(" "), preceded(space1, float))),
+        ),
+        |(stat, amount)| match stat {
+            "armor" => Ok(ParsedCommand::Stats(Stat::Armor, amount)),
+            "toughness" => Ok(ParsedCommand::Stats(Stat::Toughness, amount)),
+            "damage" => Ok(ParsedCommand::Stats(Stat::Damage, amount)),
+            "protection" => Ok(ParsedCommand::Stats(Stat::Protection, amount)),
+            _ => Err(Err::Error(("Invalid stat", ErrorKind::MapRes))),
+        },
+    )(input)
+}
+
 pub fn command(input: &str) -> IResult<&str, ParsedCommand> {
     alt((
         parse_speed,
@@ -63,5 +89,6 @@ pub fn command(input: &str) -> IResult<&str, ParsedCommand> {
         parse_dirt,
         parse_give,
         parse_upgrade,
+        parse_stat,
     ))(input)
 }

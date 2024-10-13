@@ -18,15 +18,21 @@ use hyperion::{
         ident,
         math::IVec3,
         nbt,
-        packets::play::{self, player_abilities_s2c::PlayerAbilitiesFlags, PlayerAbilitiesS2c},
+        packets::play::{
+            self, command_tree_s2c::StringArg, player_abilities_s2c::PlayerAbilitiesFlags,
+            PlayerAbilitiesS2c,
+        },
         text::IntoText,
         BlockState, GameMode, ItemKind, ItemStack, VarInt,
     },
 };
 use hyperion_inventory::PlayerInventory;
+use parse::Stat;
 use tracing::{debug, trace_span};
 
-use crate::{command::parse::ParsedCommand, component::team::Team, level::Level};
+use crate::{
+    attack::CombatStats, command::parse::ParsedCommand, component::team::Team, level::Level,
+};
 
 pub mod parse;
 
@@ -66,9 +72,31 @@ pub fn add_to_tree(world: &World) {
             max: Some(1024.0),
         }))
         .child_of_id(speed);
+
+    let stat = world
+        .entity()
+        .set(Command::literal("stat"))
+        .child_of_id(root_command);
+
+    let stat_child = world
+        .entity()
+        .set(Command::argument(
+            "type",
+            Parser::String(StringArg::SingleWord),
+        ))
+        .child_of_id(stat);
+
+    world
+        .entity()
+        .set(Command::argument("amount", Parser::Float {
+            min: Some(0.0),
+            max: Some(1024.0),
+        }))
+        .child_of_id(stat_child);
 }
 
 struct CommandContext<'a> {
+    entity: Entity,
     stream: NetworkStreamRef,
     team: &'a mut Team,
     compose: &'a Compose,
@@ -89,6 +117,7 @@ fn process_command(command: &ParsedCommand, context: &mut CommandContext<'_>) {
         ParsedCommand::Dirt { x, y, z } => handle_dirt_command(*x, *y, *z, context),
         ParsedCommand::Give => handle_give_command(context),
         ParsedCommand::Upgrade => handle_upgrade_command(context),
+        ParsedCommand::Stats(stat, amount) => handle_stats(*stat, *amount, context),
     }
 }
 
@@ -305,6 +334,18 @@ fn handle_upgrade_command(context: &mut CommandContext<'_>) {
     }
 }
 
+fn handle_stats(stat: Stat, amount: f32, context: &mut CommandContext<'_>) {
+    context
+        .world
+        .entity_from_id(context.entity)
+        .get::<&mut CombatStats>(|stats| match stat {
+            Stat::Armor => stats.armor = amount,
+            Stat::Toughness => stats.armor_toughness = amount,
+            Stat::Damage => stats.damage = amount,
+            Stat::Protection => stats.protection = amount,
+        });
+}
+
 fn handle_give_command(context: &mut CommandContext<'_>) {
     let mut blue_wool_nbt = nbt::Compound::new();
 
@@ -508,6 +549,7 @@ impl Module for CommandModule {
                     )>(
                         |(stream, team, uuid, name, inventory, level)| {
                             let mut context = CommandContext {
+                                entity: event.by,
                                 stream: *stream,
                                 team,
                                 compose,
@@ -519,6 +561,7 @@ impl Module for CommandModule {
                                 inventory,
                                 level,
                             };
+                            println!("{:?}", event.by);
                             process_command(&command, &mut context);
                         },
                     );

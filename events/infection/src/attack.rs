@@ -54,6 +54,15 @@ pub struct Armor {
     pub armor: f32,
 }
 
+// Used as a component only for commands, does not include armor or weapons
+#[derive(Component, Default, Copy, Clone, Debug)]
+pub struct CombatStats {
+    pub armor: f32,
+    pub armor_toughness: f32,
+    pub damage: f32,
+    pub protection: f32,
+}
+
 #[derive(Component, Default, Copy, Clone, Debug)]
 pub struct KillCount {
     pub kill_count: u32,
@@ -65,6 +74,7 @@ impl Module for AttackModule {
         world
             .component::<Player>()
             .add_trait::<(flecs::With, ImmuneUntil)>()
+            .add_trait::<(flecs::With, CombatStats)>()
             .add_trait::<(flecs::With, KillCount)>()
             .add_trait::<(flecs::With, Armor)>();
 
@@ -118,7 +128,6 @@ impl Module for AttackModule {
                     &Compose,
                 )| {
                     const IMMUNE_TICK_DURATION: i64 = 10;
-                    const DAMAGE: f32 = 10.0;
 
                     let span = trace_span!("handle_attacks");
                     let _enter = span.enter();
@@ -130,7 +139,8 @@ impl Module for AttackModule {
                     for event in event_queue.drain() {
                         let target = world.entity_from_id(event.target);
                         let origin = world.entity_from_id(event.origin);
-                        origin.get::<(&Position, &mut KillCount, &mut PlayerInventory, &mut Armor)>(|(origin_pos, kill_count, inventory, origin_armor)| {
+                        origin.get::<(&Position, &mut KillCount, &mut PlayerInventory, &mut Armor, &CombatStats, &PlayerInventory)>(|(origin_pos, kill_count, inventory, origin_armor, from_stats, from_inventory)| {
+                            let damage = from_stats.damage + calculate_stats(from_inventory).damage;
                             target.get::<(
                                 &mut ImmuneUntil,
                                 &mut Health,
@@ -138,14 +148,25 @@ impl Module for AttackModule {
                                 &mut Position,
                                 &mut EntityReaction,
                                 &NetworkStreamRef,
+                                &CombatStats,
+                                &PlayerInventory
                             )>(
-                                |(immune_until, health, metadata, target_position, reaction, io)| {
-                                    if immune_until.tick > current_tick {
-                                        return;
-                                    }
+                                |(immune_until, health, metadata, target_position, reaction, io, stats, target_inventory)| {
+                                if immune_until.tick > current_tick {
+                                    return;
+                                }
 
-                                    immune_until.tick = current_tick + IMMUNE_TICK_DURATION;
-                                    health.normal -= DAMAGE;
+                                immune_until.tick = current_tick + IMMUNE_TICK_DURATION;
+
+                                let calculated_stats = calculate_stats(target_inventory);
+                                let armor = stats.armor + calculated_stats.armor;
+                                let toughness = stats.armor_toughness + calculated_stats.armor_toughness;
+                                let protection = stats.protection + calculated_stats.protection;
+
+                                let damage_after_armor = get_damage_left(damage, armor, toughness);
+                                let damage_after_protection = get_inflicted_damage(damage_after_armor, protection);
+
+                                health.normal -= damage_after_protection;
                                     if health.normal <= 0.0 {
 
                                         // Play a sound at the attacker's position
@@ -402,8 +423,15 @@ impl Module for AttackModule {
                                     }
                                     metadata.health(health.normal);
 
-                                    let entity_id = VarInt(event.target.0 as i32);
+                                    let pkt = play::HealthUpdateS2c {
+                                        health: health.normal,
+                                        food: VarInt(10),
+                                        food_saturation: 10.0
+                                    };
 
+                                    compose.unicast(&pkt, *io, SystemId(999), &world).unwrap();
+
+                                    let entity_id = VarInt(event.target.0 as i32);
                                     let pkt = play::EntityDamageS2c {
                                         entity_id,
                                         source_type_id: Default::default(),
@@ -454,5 +482,101 @@ impl Module for AttackModule {
                     }
                 },
             );
+    }
+}
+
+// From minecraft source
+fn get_damage_left(damage: f32, armor: f32, armor_toughness: f32) -> f32 {
+    let f: f32 = 2.0 + armor_toughness / 4.0;
+    let g: f32 = (armor - damage / f).clamp(armor * 0.2, 20.0);
+    return damage * (1.0 - g / 25.0);
+}
+
+fn get_inflicted_damage(damage: f32, protection: f32) -> f32 {
+    let f: f32 = protection.clamp(0.0, 20.0);
+    return damage * (1.0 - f / 25.0);
+}
+
+const fn calculate_damage(item: &ItemStack) -> f32 {
+    match item.item {
+        ItemKind::WoodenSword => 4.0,
+        ItemKind::GoldenSword => 4.0,
+        ItemKind::StoneSword => 5.0,
+        ItemKind::IronSword => 6.0,
+        ItemKind::DiamondSword => 7.0,
+        ItemKind::NetheriteSword => 8.0,
+        _ => 1.0,
+    }
+}
+
+const fn calculate_armor(item: &ItemStack) -> f32 {
+    match item.item {
+        ItemKind::LeatherHelmet => 1.0,
+        ItemKind::LeatherChestplate => 3.0,
+        ItemKind::LeatherLeggings => 2.0,
+        ItemKind::LeatherBoots => 1.0,
+
+        ItemKind::GoldenHelmet => 2.0,
+        ItemKind::GoldenChestplate => 5.0,
+        ItemKind::GoldenLeggings => 3.0,
+        ItemKind::GoldenBoots => 1.0,
+
+        ItemKind::ChainmailHelmet => 2.0,
+        ItemKind::ChainmailChestplate => 5.0,
+        ItemKind::ChainmailLeggings => 4.0,
+        ItemKind::ChainmailBoots => 1.0,
+
+        ItemKind::IronHelmet => 2.0,
+        ItemKind::IronChestplate => 6.0,
+        ItemKind::IronLeggings => 5.0,
+        ItemKind::IronBoots => 2.0,
+
+        ItemKind::DiamondHelmet => 3.0,
+        ItemKind::DiamondChestplate => 8.0,
+        ItemKind::DiamondLeggings => 6.0,
+        ItemKind::DiamondBoots => 3.0,
+
+        ItemKind::NetheriteHelmet => 3.0,
+        ItemKind::NetheriteChestplate => 8.0,
+        ItemKind::NetheriteLeggings => 6.0,
+        ItemKind::NetheriteBoots => 3.0,
+        _ => 0.0,
+    }
+}
+
+const fn calculate_toughness(item: &ItemStack) -> f32 {
+    match item.item {
+        ItemKind::DiamondHelmet => 2.0,
+        ItemKind::DiamondChestplate => 2.0,
+        ItemKind::DiamondLeggings => 2.0,
+        ItemKind::DiamondBoots => 2.0,
+
+        ItemKind::NetheriteHelmet => 3.0,
+        ItemKind::NetheriteChestplate => 3.0,
+        ItemKind::NetheriteLeggings => 3.0,
+        ItemKind::NetheriteBoots => 3.0,
+        _ => 0.0,
+    }
+}
+
+fn calculate_stats(inventory: &PlayerInventory) -> CombatStats {
+    let hand = inventory.get_hand_slot(0).unwrap();
+    let damage = calculate_damage(hand);
+    let armor = calculate_armor(inventory.get_helmet())
+        + calculate_armor(inventory.get_chestplate())
+        + calculate_armor(inventory.get_leggings())
+        + calculate_armor(inventory.get_boots());
+
+    let armor_toughness = calculate_toughness(inventory.get_helmet())
+        + calculate_toughness(inventory.get_chestplate())
+        + calculate_toughness(inventory.get_leggings())
+        + calculate_toughness(inventory.get_boots());
+
+    CombatStats {
+        armor,
+        armor_toughness,
+        damage,
+        // TODO
+        protection: 0.0,
     }
 }
