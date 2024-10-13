@@ -1,4 +1,4 @@
-pub const REMOVE_PLAYER_FROM_VISIBILITY: SystemId = SystemId(0);
+pub const REMOVE_PLAYER_FROM_VISIBILITY: SystemId = SystemId(1);
 pub const GLOBAL_STATS: SystemId = SystemId(1);
 pub const PLAYER_JOINS: SystemId = SystemId(2);
 pub const GENERATE_CHUNK_CHANGES: SystemId = SystemId(3);
