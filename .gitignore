@@ -21,3 +21,4 @@ perf.data
 /extractor/bin
 db/
 .trigger-debug
+.trigger-release
