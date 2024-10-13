@@ -1,27 +1,19 @@
 use std::cmp::Ordering;
 
-use compact_str::format_compact;
 use derive_more::derive::{Deref, DerefMut};
 use flecs_ecs::prelude::*;
 use glam::I16Vec2;
 use tracing::trace_span;
-use uuid::Uuid;
-use valence_protocol::packets::play::{
-    self,
-    boss_bar_s2c::{BossBarColor, BossBarDivision, BossBarFlags},
-};
+use valence_protocol::packets::play::{self};
 
 use crate::{
     config::CONFIG,
-    net::{
-        packets::{BossBarAction, BossBarS2c},
-        Compose, NetworkStreamRef,
-    },
+    net::{Compose, NetworkStreamRef},
     simulation::{
         blocks::{Blocks, GetChunk},
         ChunkPosition, Play, Position,
     },
-    system_registry::{GENERATE_CHUNK_CHANGES, LOCAL_STATS, SEND_FULL_LOADED_CHUNKS},
+    system_registry::{GENERATE_CHUNK_CHANGES, SEND_FULL_LOADED_CHUNKS},
     util::TracingExt,
 };
 
@@ -157,11 +149,13 @@ impl Module for SyncChunksModule {
                     let mut idx = (queue.changes.len() as isize) - 1;
 
                     while idx >= 0 {
+                        #[allow(clippy::cast_sign_loss, reason = "we are checking if < 0")]
                         let elem = queue.changes[idx as usize];
 
                         // de-duplicate. todo: there are cases where duplicate will not be removed properly
                         // since sort is unstable
                         if last == Some(elem) {
+                            #[allow(clippy::cast_sign_loss, reason = "we are checking if < 0")]
                             queue.changes.swap_remove(idx as usize);
                             idx -= 1;
                             continue;
@@ -182,6 +176,7 @@ impl Module for SyncChunksModule {
                                 }
 
                                 iter_count += 1;
+                                #[allow(clippy::cast_sign_loss, reason = "we are checking if < 0")]
                                 queue.changes.swap_remove(idx as usize);
                             }
                             GetChunk::Loading => {}
@@ -191,8 +186,6 @@ impl Module for SyncChunksModule {
                     }
                 },
             );
-
-        let system_id = LOCAL_STATS;
 
         // system!(
         //     "local_stats",

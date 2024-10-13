@@ -25,6 +25,6 @@ where
 
 impl<T: Event> EventQueue<T> {
     pub fn drain(&mut self) -> impl Iterator<Item = T::Reduced<'_>> {
-        self.inner.drain().map(|x| x.reduce())
+        self.inner.drain().map(super::ReducedLifetime::reduce)
     }
 }

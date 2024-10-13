@@ -25,17 +25,6 @@ pub struct OrderedBytes {
     pub exclusions: Option<Arc<ExclusionManager>>,
 }
 
-use std::fmt;
-
-impl fmt::Debug for OrderedBytes {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("OrderedBytes")
-            .field("order", &self.order)
-            .field("data", &self.data)
-            .finish()
-    }
-}
-
 impl OrderedBytes {
     pub const FLUSH: Self = Self {
         order: 0,

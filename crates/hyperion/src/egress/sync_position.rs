@@ -3,6 +3,7 @@ use std::borrow::Cow;
 use flecs_ecs::prelude::*;
 use glam::Vec3;
 use hyperion_inventory::PlayerInventory;
+use hyperion_utils::EntityExt;
 use tracing::trace_span;
 use valence_protocol::{
     packets::{play, play::entity_equipment_update_s2c::EquipmentEntry},
@@ -30,7 +31,7 @@ impl Module for SyncPositionModule {
                 trace_span!("sync_position"),
                 move |entity, elems: (&Compose, &Position, &NetworkStreamRef, &mut Metadata, &mut ActiveAnimation, &mut PlayerInventory, &mut EntityReaction)| {
                     let (compose, pose, io, metadata, animation, inventory, reaction) = elems;
-                    let entity_id = VarInt(entity.id().0 as i32);
+                    let entity_id = VarInt(entity.minecraft_id());
 
                     let io = *io;
 
@@ -98,12 +99,12 @@ impl Module for SyncPositionModule {
                     animation.clear();
 
 
-                    for slot in inventory.updated_since_last_tick.iter() {
+                    for slot in &inventory.updated_since_last_tick {
                         let slot = slot as u16;
                         let item = inventory.get(slot).unwrap();
                         let pkt = play::ScreenHandlerSlotUpdateS2c {
                             window_id: 0,
-                            state_id: Default::default(),
+                            state_id: VarInt::default(),
                             slot_idx: slot as i16,
                             slot_data: Cow::Borrowed(item),
                         };
@@ -112,7 +113,7 @@ impl Module for SyncPositionModule {
 
                     let cursor = inventory.get_cursor_index();
 
-                    if inventory.updated_since_last_tick.contains(cursor as u32) || inventory.hand_slot_updated_since_last_tick {
+                    if inventory.updated_since_last_tick.contains(u32::from(cursor)) || inventory.hand_slot_updated_since_last_tick {
                         let pkt = play::EntityEquipmentUpdateS2c {
                             entity_id,
                             equipment: vec![EquipmentEntry {

@@ -1,3 +1,4 @@
+#![allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
 use glam::{I16Vec2, IVec3};
 use ndarray::ArrayView3;
 use valence_generated::block::BlockState;
@@ -53,9 +54,9 @@ impl Blocks {
                     // todo: section.set_delta(idx, block)
                     // Calculate the bounds for this section
                     let section_start = IVec3::new(
-                        section_x as i32 * 16,
-                        section_y as i32 * 16,
-                        section_z as i32 * 16,
+                        i32::from(section_x) * 16,
+                        i32::from(section_y) * 16,
+                        i32::from(section_z) * 16,
                     );
                     let section_end = section_start + IVec3::new(15, 15, 15);
 

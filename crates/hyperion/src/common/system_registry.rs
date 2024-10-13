@@ -11,6 +11,7 @@ pub const SYNC_ENTITY_POSITION: SystemId = SystemId(7);
 pub struct SystemId(pub u16);
 
 impl SystemId {
+    #[must_use]
     pub const fn id(self) -> u16 {
         self.0
     }

@@ -14,6 +14,7 @@ use valence_server::Ident;
 
 use crate::storage::BitStorage;
 
+#[must_use]
 pub fn registry_codec_raw() -> &'static Compound {
     static CACHED: LazyLock<Compound> = LazyLock::new(|| {
         let bytes = include_bytes!("data/registries.nbt");
@@ -159,11 +160,13 @@ pub fn get_nyc_save() -> anyhow::Result<PathBuf> {
 }
 
 /// Returns the minimum number of bits needed to represent the integer `n`.
+#[must_use]
 pub const fn ceil_log2(x: u32) -> u32 {
     u32::BITS - x.leading_zeros()
 }
 
 /// Create a heightmap for the highest solid block at each position in the chunk.
+#[must_use]
 pub fn heightmap(max_height: u32, current_height: u32) -> Vec<u64> {
     let bits = ceil_log2(max_height + 1);
     let mut data = BitStorage::new(bits as usize, 16 * 16, None).unwrap();

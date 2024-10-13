@@ -44,7 +44,7 @@ impl PacketBundle for DeltaDrainPacket<'_> {
                 .with_off_x(x as u8)
                 .with_off_y(y as u8)
                 .with_off_z(z as u8)
-                .with_block_state(block_state as u32);
+                .with_block_state(u32::from(block_state));
 
             entry.encode(&mut write)?;
         }
@@ -74,7 +74,7 @@ impl PacketBundle for DeltaPacket<'_> {
         let len = deltas.len();
         VarInt(len as i32).encode(&mut write)?;
 
-        for delta_idx in deltas.iter() {
+        for delta_idx in deltas {
             let block_state =
                 unsafe { self.section.block_states.get_unchecked(delta_idx as usize) };
 
@@ -87,7 +87,7 @@ impl PacketBundle for DeltaPacket<'_> {
                 .with_off_x(x as u8)
                 .with_off_y(y as u8)
                 .with_off_z(z as u8)
-                .with_block_state(block_state as u32);
+                .with_block_state(u32::from(block_state));
 
             entry.encode(&mut write)?;
         }

@@ -57,7 +57,7 @@ pub struct Text<'a> {
     pub extra: Vec<Text<'a>>,
 }
 
-const MAX_TEXT_CHARS: usize = 262144;
+const MAX_TEXT_CHARS: usize = 262_144;
 
 impl Encode for Text<'_> {
     fn encode(&self, w: impl Write) -> anyhow::Result<()> {

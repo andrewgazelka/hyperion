@@ -117,7 +117,7 @@ impl Module for EgressModule {
             let span = tracing::trace_span!("clear_bump");
             let _enter = span.enter();
 
-            for bump in compose.bump.iter_mut() {
+            for bump in &mut compose.bump {
                 bump.reset();
             }
         });

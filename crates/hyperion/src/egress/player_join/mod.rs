@@ -3,6 +3,7 @@ use std::{borrow::Cow, collections::BTreeSet};
 use flecs_ecs::prelude::*;
 use glam::{I16Vec2, IVec3};
 use hyperion_crafting::{Action, CraftingRegistry, RecipeBookState};
+use hyperion_utils::EntityExt;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use tracing::{debug, info, instrument};
 use valence_protocol::{
@@ -59,7 +60,7 @@ pub fn player_join_world(
 ) {
     static CACHED_DATA: once_cell::sync::OnceCell<bytes::Bytes> = once_cell::sync::OnceCell::new();
 
-    let id = entity.id().0 as i32;
+    let id = entity.minecraft_id();
 
     let registry_codec = registry_codec_raw();
     let codec = RegistryCodec::default();
@@ -216,7 +217,7 @@ pub fn player_join_world(
                 }
 
                 let pkt = play::PlayerSpawnS2c {
-                    entity_id: VarInt(query_entity.id().0 as i32),
+                    entity_id: VarInt(query_entity.minecraft_id()),
                     player_uuid: uuid.0,
                     position: pose.position.as_dvec3(),
                     yaw: ByteAngle::from_degrees(pose.yaw),
@@ -225,7 +226,7 @@ pub fn player_join_world(
 
                 compose.unicast(&pkt, packets, system_id, world).unwrap();
 
-                let show_all = show_all(query_entity.id().0 as i32);
+                let show_all = show_all(query_entity.minecraft_id());
                 compose
                     .unicast(show_all.borrow_packet(), packets, system_id, world)
                     .unwrap();
@@ -282,7 +283,7 @@ pub fn player_join_world(
         .send(world)
         .unwrap();
 
-    let current_entity_id = VarInt(entity.id().0 as i32);
+    let current_entity_id = VarInt(entity.minecraft_id());
 
     let spawn_player = play::PlayerSpawnS2c {
         entity_id: current_entity_id,
@@ -297,7 +298,7 @@ pub fn player_join_world(
         .send(world)
         .unwrap();
 
-    let show_all = show_all(entity.id().0 as i32);
+    let show_all = show_all(entity.minecraft_id());
     compose
         .broadcast(show_all.borrow_packet(), system_id)
         .send(world)
@@ -444,7 +445,7 @@ pub fn spawn_entity_packet(
 ) -> play::EntitySpawnS2c {
     info!("spawning entity");
 
-    let entity_id = VarInt(id.0 as i32);
+    let entity_id = VarInt(id.minecraft_id());
 
     play::EntitySpawnS2c {
         entity_id,

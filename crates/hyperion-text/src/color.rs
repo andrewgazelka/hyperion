@@ -297,7 +297,7 @@ impl TryFrom<&str> for RgbColor {
 
 impl Serialize for Color {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        format!("{}", self).serialize(serializer)
+        format!("{self}").serialize(serializer)
     }
 }
 

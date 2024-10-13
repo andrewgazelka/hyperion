@@ -34,6 +34,10 @@ impl Indirect {
         // Compare the chunk with the search element
         let mask = chunk_simd.simd_eq(search_simd);
 
+        #[allow(
+            clippy::cast_possible_truncation,
+            reason = "idx is [0, 16) which is a valid u8"
+        )]
         mask.first_set().map(|idx| idx as u8)
     }
 

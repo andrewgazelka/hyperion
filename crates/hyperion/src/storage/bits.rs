@@ -107,6 +107,7 @@ impl fmt::Display for BitStorageError {
 impl Error for BitStorageError {}
 
 impl BitStorage {
+    #[must_use]
     pub fn into_data(self) -> Vec<u64> {
         self.data
     }
@@ -166,6 +167,7 @@ impl BitStorage {
         })
     }
 
+    #[must_use]
     pub const fn cell_index(&self, index: u64) -> usize {
         // as unsigned wrap
         let first = self.divide_mul;
@@ -180,6 +182,7 @@ impl BitStorage {
     ///
     /// This function will panic if the given index is greater than or equal to
     /// the size of this storage.
+    #[must_use]
     pub fn get(&self, index: usize) -> u64 {
         assert!(
             index < self.size,
@@ -230,10 +233,12 @@ impl BitStorage {
 
     /// The number of entries.
     #[inline]
+    #[must_use]
     pub const fn size(&self) -> usize {
         self.size
     }
 
+    #[must_use]
     pub const fn iter(&self) -> BitStorageIter<'_> {
         BitStorageIter {
             storage: self,

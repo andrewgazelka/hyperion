@@ -2,7 +2,7 @@ use std::io::IoSlice;
 
 use tokio::io::{AsyncWrite, AsyncWriteExt};
 
-/// Extension trait for AsyncWrite to write all data from given IO vectors.
+/// Extension trait for [`AsyncWrite`] to write all data from given IO vectors.
 pub trait AsyncWriteVectoredExt: AsyncWrite + Unpin {
     /// Writes all data from the given IO vectors to the writer.
     fn write_vectored_all(

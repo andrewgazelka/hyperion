@@ -56,7 +56,7 @@ unsafe impl Sync for PacketDecoder {}
 pub struct BorrowedPacketFrame<'a> {
     /// The ID of the decoded packet.
     pub id: i32,
-    /// The contents of the packet after the leading VarInt ID.
+    /// The contents of the packet after the leading [`VarInt`] ID.
     pub body: &'a [u8],
 }
 
@@ -157,7 +157,7 @@ impl PacketDecoder {
 
                 self.buf.advance(total_packet_len);
 
-                data = &*decompression_buf
+                data = &*decompression_buf;
             } else {
                 debug_assert_eq!(data_len, 0);
 

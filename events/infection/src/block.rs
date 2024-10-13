@@ -18,7 +18,7 @@ use hyperion::{
     system_registry::SystemId,
     valence_protocol::{
         ident,
-        math::{DVec3, IVec3},
+        math::{DVec3, IVec3, Vec3},
         packets::play,
         sound::{SoundCategory, SoundId},
         text::IntoText,
@@ -47,6 +47,8 @@ pub struct PendingDestruction {
 impl Module for BlockModule {
     #[allow(clippy::excessive_nesting)]
     fn module(world: &World) {
+        const TOTAL_DESTRUCTION_TIME: Duration = Duration::from_secs(30);
+
         world.set(PendingDestruction::default());
 
         system!("handle_pending_air", world, &mut PendingDestruction($), &mut Blocks($), &Compose($))
@@ -74,7 +76,7 @@ impl Module for BlockModule {
                             id: SoundId::Direct { id: ident.into(), range: None },
                             position: (center_block * 8.0).as_ivec3(),
                             volume: 0.35,
-                            pitch: (stage as f32).mul_add(0.1, 1.0),
+                            pitch: f32::from(stage).mul_add(0.1, 1.0),
                             seed: 0,
                             category: SoundCategory::Block,
                         };
@@ -90,7 +92,7 @@ impl Module for BlockModule {
                             particle: Cow::Owned(Particle::Explosion),
                             long_distance: false,
                             position: center_block,
-                            offset: Default::default(),
+                            offset: Vec3::default(),
                             max_speed: 0.0,
                             count: 0,
                         };
@@ -176,8 +178,6 @@ impl Module for BlockModule {
                 }
             });
 
-        const TOTAL_DESTRUCTION_TIME: Duration = Duration::from_secs(30);
-
         system!("handle_placed_blocks", world, &mut Blocks($), &mut EventQueue<event::PlaceBlock>($), &mut PendingDestruction($))
             .multi_threaded()
             .each_iter(move |_it: TableIter<'_, false>, _, (mc, event_queue, pending_air): (&mut Blocks, &mut EventQueue<event::PlaceBlock>, &mut PendingDestruction)| {
@@ -194,7 +194,7 @@ impl Module for BlockModule {
                         let sequence = fastrand::i32(..);
                         // Schedule destruction stages 0 through 9
                         for stage in 0_u8..=10 { // 10 represents no animation
-                            let delay = TOTAL_DESTRUCTION_TIME / 10 * stage as u32;
+                            let delay = TOTAL_DESTRUCTION_TIME / 10 * u32::from(stage);
                             pending_air.set_level_at.schedule(
                                 Instant::now() + delay,
                                 SetLevel {

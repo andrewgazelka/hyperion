@@ -81,7 +81,7 @@ impl<T> ThreadLocalVec<T> {
     pub fn len(&mut self) -> usize {
         self.inner
             .iter_mut()
-            .map(|x| x.get_mut())
+            .map(std::cell::SyncUnsafeCell::get_mut)
             .map(|x| x.len())
             .sum()
     }

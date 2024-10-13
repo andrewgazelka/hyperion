@@ -26,6 +26,7 @@ impl PalettedContainer {
     }
 
     #[allow(clippy::missing_safety_doc)]
+    #[must_use]
     pub unsafe fn get_unchecked(&self, index: usize) -> Data {
         match self {
             Self::Single(data) => *data,
@@ -34,6 +35,7 @@ impl PalettedContainer {
         }
     }
 
+    #[must_use]
     pub fn get(&self, index: usize) -> Data {
         assert!(index < LEN);
         unsafe { self.get_unchecked(index) }

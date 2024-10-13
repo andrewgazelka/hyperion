@@ -3,8 +3,8 @@ use std::borrow::Cow;
 use compact_str::format_compact;
 use flecs_ecs::{
     core::{
-        flecs, EntityViewGet, IdOperations, QueryBuilderImpl, SystemAPI, TableIter,
-        TermBuilderImpl, World, WorldProvider,
+        flecs, EntityViewGet, QueryBuilderImpl, SystemAPI, TableIter, TermBuilderImpl, World,
+        WorldProvider,
     },
     macros::{system, Component},
     prelude::Module,
@@ -31,7 +31,6 @@ use hyperion::{
             play::{
                 boss_bar_s2c::{BossBarColor, BossBarDivision, BossBarFlags},
                 entity_attributes_s2c::AttributeProperty,
-                player_position_look_s2c::PlayerPositionLookFlags,
             },
         },
         sound::{SoundCategory, SoundId},
@@ -39,6 +38,7 @@ use hyperion::{
     },
 };
 use hyperion_inventory::PlayerInventory;
+use hyperion_utils::EntityExt;
 use tracing::trace_span;
 
 #[derive(Component)]
@@ -202,11 +202,11 @@ impl Module for AttackModule {
                                             count: 75,
                                             offset: Vec3::new(0.3, 0.3, 0.3),
                                         };
-                                        let origin_entity_id = VarInt(origin.id().0 as i32);
+                                        let origin_entity_id = origin.minecraft_id();
 
                                         origin_armor.armor += 1.0;
                                         let pkt = play::EntityAttributesS2c {
-                                            entity_id: origin_entity_id,
+                                            entity_id: VarInt(origin_entity_id),
                                             properties: vec![
                                                 AttributeProperty {
                                                     key: ident!("minecraft:generic.armor").into(),
@@ -431,12 +431,12 @@ impl Module for AttackModule {
 
                                     compose.unicast(&pkt, *io, SystemId(999), &world).unwrap();
 
-                                    let entity_id = VarInt(event.target.0 as i32);
+                                    let entity_id = event.target.minecraft_id();
                                     let pkt = play::EntityDamageS2c {
-                                        entity_id,
-                                        source_type_id: Default::default(),
-                                        source_cause_id: Default::default(),
-                                        source_direct_id: Default::default(),
+                                        entity_id: VarInt(entity_id),
+                                        source_type_id: VarInt::default(),
+                                        source_cause_id: VarInt::default(),
+                                        source_direct_id: VarInt::default(),
                                         source_pos: None,
                                     };
 

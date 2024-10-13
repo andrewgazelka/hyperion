@@ -30,8 +30,8 @@ impl Section {
         let before = unsafe { self.block_states.set_unchecked(idx as usize, new) };
 
         if before != new {
-            self.changed_since_last_tick.insert(idx as u32);
-            self.changed.insert(idx as u32);
+            self.changed_since_last_tick.insert(u32::from(idx));
+            self.changed.insert(u32::from(idx));
         }
 
         unsafe { BlockState::from_raw(before).unwrap_unchecked() }

@@ -15,6 +15,7 @@ members = [
     "crates/hyperion-proxy",
     "crates/hyperion-scheduled",
     "crates/hyperion-text",
+    "crates/hyperion-utils",
     "crates/lunar-proto",
     "events/infection",
     "examples",
@@ -38,8 +39,6 @@ debug = true
 #codegen-units = 1
 
 [workspace.dependencies]
-snafu = "0.8.5"
-hyperion-inventory = { path = "crates/hyperion-inventory" }
 anyhow = "1.0.86"
 arc-swap = "1.7.1"
 arrayvec = "0.7.4"
@@ -47,6 +46,7 @@ base64 = "0.22.1"
 bitfield-struct = "0.8.0"
 bitvec = "1.0.1"
 bumpalo = "3.16"
+bvh = { git = "https://github.com/andrewgazelka/bvh-data" }
 bvh-region = { path = "crates/bvh-region" }
 bytes = "1.6.0"
 clap = { version = "4.5.7", features = ["derive"] }
@@ -57,11 +57,20 @@ dirs-next = "2.0.0"
 divan = "0.1.14"
 fastrand = "2.1.0"
 flate2 = { version = "1.0.30", default-features = false }
+flecs_ecs = { git = "https://github.com/andrewgazelka/flecs-ecs-rs", branch = "andrew/terms-32" }
 fxhash = "0.2.1"
 glam = "0.26.0"
 heapless = "0.8.0"
 heed = "0.20.5"
 hex = "0.4.3"
+hyperion = { path = "crates/hyperion" }
+hyperion-crafting = { path = "crates/hyperion-crafting" }
+hyperion-inventory = { path = "crates/hyperion-inventory" }
+hyperion-palette = { path = "crates/hyperion-palette" }
+hyperion-proto = { path = "crates/hyperion-proto" }
+hyperion-scheduled = { path = "crates/hyperion-scheduled" }
+hyperion-text = { path = "crates/hyperion-text" }
+hyperion-utils = { path = "crates/hyperion-utils" }
 itertools = "0.13.0"
 kanal = "0.1.0-pre8"
 libc = "0.2.155"
@@ -80,11 +89,13 @@ prost-types = "0.13.1"
 rand = "0.8.5"
 rayon = "1.10.0"
 reqwest = "0.12.5"
+roaring = { version = "0.10.6", features = ["simd"] }
 rustc_version = "0.4.0"
 serde = "1.0.203"
 serde_json = "1.0.117"
 sha2 = "0.10.8"
 slotmap = "1.0.7"
+snafu = "0.8.5"
 tango-bench = "0.5.0"
 tar = "0.4.41"
 thiserror = "1.0.63"
@@ -94,25 +105,13 @@ tracing = { version = "0.1.40" }
 tracing-subscriber = "0.3.18"
 tracing-tracy = "0.11.0"
 uuid = "1.8.0"
-bvh = { git = "https://github.com/andrewgazelka/bvh-data" }
-flecs_ecs = { git = "https://github.com/andrewgazelka/flecs-ecs-rs", branch = "andrew/terms-32" }
-hyperion = { path = "crates/hyperion" }
-hyperion-text = { path = "crates/hyperion-text" }
-hyperion-scheduled = { path = "crates/hyperion-scheduled" }
-hyperion-proto = { path = "crates/hyperion-proto" }
-hyperion-crafting = { path = "crates/hyperion-crafting" }
-hyperion-palette = { path = "crates/hyperion-palette" }
-roaring = { version = "0.10.6", features = ["simd"] }
-valence_text = { git = "https://github.com/andrewgazelka/valence", branch = "feat-open" }
+valence_anvil = { git = "https://github.com/andrewgazelka/valence", features = ["parsing"], branch = "feat-open" }
+valence_generated = { git = "https://github.com/andrewgazelka/valence", branch = "feat-open" }
+valence_nbt = { git = "https://github.com/andrewgazelka/valence", features = ["serde"], branch = "feat-open" }
 valence_protocol = { git = "https://github.com/andrewgazelka/valence", features = ["compression"], branch = "feat-open" }
 valence_registry = { git = "https://github.com/andrewgazelka/valence", branch = "feat-open" }
-valence_anvil = { git = "https://github.com/andrewgazelka/valence", features = ["parsing"], branch = "feat-open" }
 valence_server = { git = "https://github.com/andrewgazelka/valence", branch = "feat-open" }
-valence_nbt = { git = "https://github.com/andrewgazelka/valence", features = ["serde"], branch = "feat-open" }
-valence_generated = { git = "https://github.com/andrewgazelka/valence", branch = "feat-open" }
-
-# todo: re-enable rayon
-#evenio = { git = "https://github.com/andrewgazelka/evenio", features = ["rayon"], branch = "feat-sender-state-public"}
+valence_text = { git = "https://github.com/andrewgazelka/valence", branch = "feat-open" }
 
 [workspace.lints.rust]
 future_incompatible = { level = "deny", priority = -1 }
@@ -129,8 +128,17 @@ nursery = { level = "deny", priority = -1 }
 perf = { level = "deny", priority = -1 }
 style = { level = "deny", priority = -1 }
 suspicious = { level = "deny", priority = -1 }
+pedantic = { level = "deny", priority = -1 }
+
 too_long_first_doc_paragraph = "allow"
 derive_partial_eq_without_eq = "allow"
 enum_variant_names = "allow"
 module_name_repetitions = "allow"
 needless_return = "allow" # seems to be a bug in 2024-10-01 nightly with macros (such as tokio)
+single_match_else = "allow"
+missing_panics_doc = "allow"
+missing_errors_doc = "allow"
+similar_names = "allow"
+match_same_arms = "allow"
+too_many_lines = "allow"
+cast_precision_loss = "allow"

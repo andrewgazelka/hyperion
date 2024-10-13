@@ -147,7 +147,7 @@ struct PlayerPacketWriter {
 }
 
 impl PlayerPacketWriter {
-    /// Creates a new PlayerPacketWriter instance.
+    /// Creates a new [`PlayerPacketWriter`] instance.
     const fn new(tcp_writer: tokio::net::tcp::OwnedWriteHalf, player_id: PlayerId) -> Self {
         Self {
             tcp_writer,

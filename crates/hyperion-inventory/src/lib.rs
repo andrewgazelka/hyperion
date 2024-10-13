@@ -53,7 +53,7 @@ impl<const T: usize> Inventory<T> {
     pub fn set(&mut self, index: u16, stack: ItemStack) -> Result<(), InventoryAccessError> {
         let item = self.get_mut(index)?;
         *item = stack;
-        self.updated_since_last_tick.insert(index as u32);
+        self.updated_since_last_tick.insert(u32::from(index));
         Ok(())
     }
 
@@ -63,7 +63,8 @@ impl<const T: usize> Inventory<T> {
                 continue;
             }
             *slot = ItemStack::EMPTY;
-            self.updated_since_last_tick.insert(idx as u32);
+            self.updated_since_last_tick
+                .insert(u32::try_from(idx).unwrap());
         }
     }
 
@@ -81,6 +82,7 @@ impl<const T: usize> Inventory<T> {
         self.get_hand_slot(self.hand_slot).unwrap()
     }
 
+    #[must_use]
     pub const fn get_cursor_index(&self) -> u16 {
         self.hand_slot + HAND_START_SLOT
     }
@@ -151,7 +153,7 @@ impl<const T: usize> Inventory<T> {
         self.get_mut(idx)
     }
 
-    /// Returns remaining ItemStack if not all of the item was added to the slot
+    /// Returns remaining [`ItemStack`] if not all of the item was added to the slot
     fn try_add_to_slot(
         &mut self,
         slot: u16,
@@ -166,7 +168,7 @@ impl<const T: usize> Inventory<T> {
             return if can_add_to_empty {
                 *existing_stack = to_add.clone();
                 to_add.count = 0;
-                self.updated_since_last_tick.insert(slot as u32);
+                self.updated_since_last_tick.insert(u32::from(slot));
                 Ok(TryAddSlot::Complete)
             } else {
                 Ok(TryAddSlot::Skipped)
@@ -181,12 +183,12 @@ impl<const T: usize> Inventory<T> {
             return if to_add.count <= space_left {
                 existing_stack.count += to_add.count;
                 *to_add = ItemStack::EMPTY;
-                self.updated_since_last_tick.insert(slot as u32);
+                self.updated_since_last_tick.insert(u32::from(slot));
                 Ok(TryAddSlot::Complete)
             } else {
                 existing_stack.count = MAX_STACK_SIZE;
                 to_add.count -= space_left;
-                self.updated_since_last_tick.insert(slot as u32);
+                self.updated_since_last_tick.insert(u32::from(slot));
                 Ok(TryAddSlot::Partial)
             };
         }
@@ -202,8 +204,9 @@ impl PlayerInventory {
     pub const HELMET_SLOT: u16 = 5;
     pub const LEGGINGS_SLOT: u16 = 7;
 
+    #[must_use]
     pub fn crafting_item(&self, registry: &CraftingRegistry) -> ItemStack {
-        let indices = core::array::from_fn::<u16, 4, _>(|i| (i as u16 + 1));
+        let indices = core::array::from_fn::<u16, 4, _>(|i| (u16::try_from(i).unwrap() + 1));
 
         let mut min_count = i8::MAX;
 
@@ -212,10 +215,10 @@ impl PlayerInventory {
 
             if stack.is_empty() {
                 return ItemKind::Air;
-            } else {
-                min_count = min_count.min(stack.count);
-                stack.item
             }
+
+            min_count = min_count.min(stack.count);
+            stack.item
         });
 
         let result = registry
@@ -262,18 +265,22 @@ impl PlayerInventory {
         self.set(Self::BOOTS_SLOT, stack).unwrap();
     }
 
+    #[must_use]
     pub fn get_helmet(&self) -> &ItemStack {
         self.get(Self::HELMET_SLOT).unwrap()
     }
 
+    #[must_use]
     pub fn get_chestplate(&self) -> &ItemStack {
         self.get(Self::CHESTPLATE_SLOT).unwrap()
     }
 
+    #[must_use]
     pub fn get_leggings(&self) -> &ItemStack {
         self.get(Self::LEGGINGS_SLOT).unwrap()
     }
 
+    #[must_use]
     pub fn get_boots(&self) -> &ItemStack {
         self.get(Self::BOOTS_SLOT).unwrap()
     }
@@ -292,8 +299,7 @@ impl PlayerInventory {
                 TryAddSlot::Complete => {
                     return result;
                 }
-                TryAddSlot::Partial => {}
-                TryAddSlot::Skipped => {}
+                TryAddSlot::Partial | TryAddSlot::Skipped => {}
             }
         }
 
@@ -308,8 +314,7 @@ impl PlayerInventory {
                 TryAddSlot::Complete => {
                     return result;
                 }
-                TryAddSlot::Partial => {}
-                TryAddSlot::Skipped => {}
+                TryAddSlot::Partial | TryAddSlot::Skipped => {}
             }
         }
 

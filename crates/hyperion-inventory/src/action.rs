@@ -15,7 +15,7 @@ pub enum MouseButton {
     Right,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub enum InventoryAction {
     NormalClick {
         button: MouseButton,
@@ -69,6 +69,7 @@ pub struct InventoryAndCursor {
     pub cursor: ItemStack,
 }
 
+#[derive(Debug, PartialEq, Clone, Copy)]
 enum Amount {
     TrySingle,
     All,

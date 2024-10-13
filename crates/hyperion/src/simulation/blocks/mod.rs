@@ -89,7 +89,7 @@ impl Blocks {
         let should_update = &self.should_update;
         let chunk_cache = &self.chunk_cache;
 
-        for idx in should_update.iter() {
+        for idx in should_update {
             let idx = idx as usize;
             let (_, v) = chunk_cache.get_index(idx).unwrap();
             f(v);
@@ -308,6 +308,7 @@ impl Blocks {
     // If you want to implement this, I also recommend waiting until that's done.
     // That should be done in a couple of days, probably.
 
+    #[must_use]
     pub fn get_cached(&self, position: I16Vec2) -> Option<Bytes> {
         if let Some(result) = self.chunk_cache.get(&position) {
             return Some(result.bytes());

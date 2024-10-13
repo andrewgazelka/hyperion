@@ -1626,6 +1626,7 @@ dependencies = [
  "hyperion-palette",
  "hyperion-proto",
  "hyperion-text",
+ "hyperion-utils",
  "indexmap",
  "itertools 0.13.0",
  "kanal",
@@ -1736,6 +1737,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "hyperion-utils"
+version = "0.1.0"
+dependencies = [
+ "flecs_ecs",
+]
+
+[[package]]
 name = "iana-time-zone"
 version = "0.1.61"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1813,6 +1821,7 @@ dependencies = [
  "hyperion-inventory",
  "hyperion-scheduled",
  "hyperion-text",
+ "hyperion-utils",
  "ndarray",
  "nom",
  "serde_json",

@@ -42,7 +42,7 @@ impl Module for AnimationModule {
                 let center_z = frame.shape()[2] / 2;
 
                 // Build up, replacing previous blocks
-                for &current_block in blocks.iter() {
+                for &current_block in &blocks {
                     for progress in 0..=height {
                         for y in 0..progress {
                             for x in 0..width {

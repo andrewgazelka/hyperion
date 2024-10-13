@@ -2,10 +2,11 @@
 
 use std::borrow::Cow;
 
-use anyhow::bail;
+use anyhow::{bail, Context};
 use bvh_region::aabb::Aabb;
 use flecs_ecs::core::{Entity, EntityView, World};
 use glam::{IVec3, Vec3};
+use hyperion_utils::EntityExt;
 use tracing::{info, instrument, trace, warn};
 use valence_generated::block::{BlockKind, BlockState};
 use valence_protocol::{
@@ -203,10 +204,7 @@ fn player_interact_entity(mut data: &[u8], query: &PacketSwitchQuery<'_>) -> any
     }
 
     let target = packet.entity_id.0;
-    let target = u64::try_from(target).unwrap();
-
-    info!("enqueue attack");
-    let target = Entity(target);
+    let target = Entity::from_minecraft_id(target);
 
     query.events.push(
         event::AttackEntity {
@@ -461,7 +459,7 @@ fn click_slot(mut data: &[u8], query: &mut PacketSwitchQuery<'_>) -> anyhow::Res
     // todo(security): validate the player can do this. This is a MAJOR security issue.
     // as players will be able to spawn items in their inventory wit current logic.
     for SlotChange { idx, stack } in pkt.slot_changes.iter() {
-        let idx = *idx as u16;
+        let idx = u16::try_from(*idx).context("slot index is negative")?;
         query.inventory.set(idx, stack.clone())?;
     }
 

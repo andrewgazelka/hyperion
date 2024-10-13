@@ -7,6 +7,7 @@ use std::{
 use anyhow::Context;
 use base64::{engine::general_purpose, Engine};
 use flecs_ecs::prelude::*;
+use hyperion_utils::EntityExt;
 use parking_lot::Mutex;
 use serde_json::json;
 use sha2::Digest;
@@ -356,7 +357,7 @@ impl Module for IngressModule {
             trace_span!("remove_player"),
             move |entity, (uuid, compose)| {
                 let uuids = &[uuid.0];
-                let entity_ids = [VarInt(entity.id().0 as i32)];
+                let entity_ids = [VarInt(entity.minecraft_id())];
 
                 let world = entity.world();
 

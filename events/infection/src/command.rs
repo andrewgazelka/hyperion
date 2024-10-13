@@ -165,9 +165,11 @@ fn handle_upgrade_command(context: &mut CommandContext<'_>) {
             .inventory
             .set_leggings(ItemStack::new(ItemKind::ChainmailLeggings, 1, None)),
         9 => {
-            context
-                .inventory
-                .set_chestplate(ItemStack::new(ItemKind::ChainmailChestplate, 1, None))
+            context.inventory.set_chestplate(ItemStack::new(
+                ItemKind::ChainmailChestplate,
+                1,
+                None,
+            ));
         }
         10 => context
             .inventory
@@ -199,7 +201,7 @@ fn handle_upgrade_command(context: &mut CommandContext<'_>) {
         19 => {
             context
                 .inventory
-                .set_chestplate(ItemStack::new(ItemKind::DiamondChestplate, 1, None))
+                .set_chestplate(ItemStack::new(ItemKind::DiamondChestplate, 1, None));
         }
         20 => context
             .inventory
@@ -214,9 +216,11 @@ fn handle_upgrade_command(context: &mut CommandContext<'_>) {
             .inventory
             .set_leggings(ItemStack::new(ItemKind::NetheriteLeggings, 1, None)),
         24 => {
-            context
-                .inventory
-                .set_chestplate(ItemStack::new(ItemKind::NetheriteChestplate, 1, None))
+            context.inventory.set_chestplate(ItemStack::new(
+                ItemKind::NetheriteChestplate,
+                1,
+                None,
+            ));
         }
         25 => context
             .inventory
@@ -334,7 +338,7 @@ fn handle_upgrade_command(context: &mut CommandContext<'_>) {
     }
 }
 
-fn handle_stats(stat: Stat, amount: f32, context: &mut CommandContext<'_>) {
+fn handle_stats(stat: Stat, amount: f32, context: &CommandContext<'_>) {
     context
         .world
         .entity_from_id(context.entity)
@@ -356,7 +360,7 @@ fn handle_give_command(context: &mut CommandContext<'_>) {
         "minecraft:blue_wool",
     ]
     .into_iter()
-    .map(|s| s.into())
+    .map(std::convert::Into::into)
     .collect();
 
     blue_wool_nbt.insert("CanPlaceOn", nbt::List::String(can_place_on));

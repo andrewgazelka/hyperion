@@ -4,6 +4,7 @@ use crate::{Text, TextContent};
 
 impl<'a> Text<'a> {
     /// Creates a new `Text` instance from a string slice.
+    #[must_use]
     pub const fn new(s: &'a str) -> Self {
         Text {
             content: TextContent::Text {

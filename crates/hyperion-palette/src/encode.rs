@@ -1,3 +1,10 @@
+#![allow(
+    clippy::cast_possible_truncation,
+    clippy::missing_errors_doc,
+    clippy::cast_possible_wrap,
+    reason = "this is code from valence; we plan to improve it in the future"
+)]
+
 use std::io::Write;
 
 use valence_protocol::{Encode, VarInt};
@@ -107,7 +114,7 @@ impl PalettedContainer {
                 // Number of longs in data array.
                 VarInt(compact_u64s_len(LEN, direct_bits) as _).encode(&mut writer)?;
                 // Data array
-                encode_compact_u64s(writer, dir.iter().cloned().map(&mut to_bits), direct_bits)?;
+                encode_compact_u64s(writer, dir.iter().copied().map(&mut to_bits), direct_bits)?;
             }
         }
         Ok(())

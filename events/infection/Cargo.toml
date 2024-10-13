@@ -23,6 +23,7 @@ tracing.workspace = true
 fastrand = "1.9.0"
 compact_str.workspace = true
 hyperion-text.workspace = true
+hyperion-utils.workspace = true
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["full"] }

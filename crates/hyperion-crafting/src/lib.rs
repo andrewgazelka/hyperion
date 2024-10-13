@@ -376,6 +376,7 @@ impl CraftingRegistry {
         self.epoch = self.epoch.wrapping_add(1);
     }
 
+    #[must_use]
     pub fn packet(&self) -> Option<SynchronizeRecipesS2c> {
         if self.epoch == 0 {
             // we have not added anything
@@ -428,6 +429,7 @@ impl CraftingRegistry {
         self.mark_changed();
     }
 
+    #[must_use]
     pub fn get_result_2x2(&self, grid: Crafting2x2) -> Option<&ItemStack> {
         if let Some(shapeless) = self.get_shapeless(grid) {
             return Some(&shapeless.data.result);
