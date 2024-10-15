@@ -17,6 +17,7 @@ use hyperion::{
     storage::EventQueue,
     system_registry::SystemId,
     valence_protocol::{
+        block::{PropName, PropValue},
         ident,
         math::{DVec3, IVec3, Vec3},
         packets::play,
@@ -27,7 +28,7 @@ use hyperion::{
 };
 use hyperion_inventory::PlayerInventory;
 use hyperion_scheduled::Scheduled;
-use tracing::trace_span;
+use tracing::{error, trace_span};
 
 #[derive(Component)]
 pub struct BlockModule;
@@ -205,6 +206,63 @@ impl Module for BlockModule {
                             );
                         }
                     }
+                    mc.to_confirm.push(EntityAndSequence {
+                        entity: event.from,
+                        sequence: event.sequence,
+                    });
+                }
+            });
+
+        system!("handle_toggled_doors", world, &mut Blocks($), &mut EventQueue<event::ToggleDoor>($))
+            .multi_threaded()
+            .each_iter(move |_it: TableIter<'_, false>, _, (mc, event_queue): (&mut Blocks, &mut EventQueue<event::ToggleDoor>)| {
+                let span = trace_span!("handle_toggled_doors");
+                let _enter = span.enter();
+                for event in event_queue.drain() {
+                    let position = event.position;
+
+                    // The block is fetched again instead of sending the expected block state
+                    // through the ToggleDoor event to avoid potential duplication bugs if the
+                    // ToggleDoor event is sent, the door is broken, and the ToggleDoor event is
+                    // processed
+                    let Some(door) = mc.get_block(position) else { continue };
+                    let Some(open) = door.get(PropName::Open) else { continue };
+
+                    // Toggle the door state
+                    let open = match open {
+                        PropValue::False => PropValue::True,
+                        PropValue::True => PropValue::False,
+                        _ => {
+                            error!("Door property 'Open' must be either 'True' or 'False'");
+                            continue;
+                        }
+                    };
+
+                    let door = door.set(PropName::Open, open);
+                    mc.set_block(position, door).unwrap();
+
+                    // Vertical doors (as in doors that are not trapdoors) need to have the other
+                    // half of the door updated.
+                    let other_half_position = match door.get(PropName::Half) {
+                        Some(PropValue::Upper) => Some(position - IVec3::new(0, 1, 0)),
+                        Some(PropValue::Lower) => Some(position + IVec3::new(0, 1, 0)),
+                        Some(_) => {
+                            error!("Door property 'Half' must be either 'Upper' or 'Lower'");
+                            continue;
+                        },
+                        None => None
+                    };
+
+                    if let Some(other_half_position) = other_half_position {
+                        let Some(other_half) = mc.get_block(other_half_position) else {
+                            error!("Could not find other half of door");
+                            continue;
+                        };
+
+                        let other_half = other_half.set(PropName::Open, open);
+                        mc.set_block(other_half_position, other_half).unwrap();
+                    }
+
                     mc.to_confirm.push(EntityAndSequence {
                         entity: event.from,
                         sequence: event.sequence,

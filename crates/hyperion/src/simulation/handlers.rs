@@ -8,7 +8,7 @@ use flecs_ecs::core::{Entity, EntityView, World};
 use glam::{IVec3, Vec3};
 use hyperion_utils::EntityExt;
 use tracing::{info, instrument, trace, warn};
-use valence_generated::block::{BlockKind, BlockState};
+use valence_generated::block::{BlockKind, BlockState, PropName};
 use valence_protocol::{
     nbt,
     packets::play::{
@@ -313,85 +313,103 @@ pub fn player_interact_block(
     // - inside_block: bool (whether the player's head is inside a block)
     // - sequence: VarInt (sequence number for this interaction)
 
-    let placed_on = packet.position;
-
     query.confirm_block_sequences.push(packet.sequence.0);
 
-    let held = query.inventory.get_cursor();
-
-    if held.is_empty() {
-        return Ok(());
-    }
-
-    let Some(nbt) = &held.nbt else {
-        return Ok(());
-    };
-
-    let Some(placed_on_block) =
-        query
-            .blocks
-            .get_block(IVec3::new(placed_on.x, placed_on.y, placed_on.z))
-    else {
-        return Ok(());
-    };
-
-    let Some(can_place_on) = nbt.get("CanPlaceOn") else {
-        return Ok(());
-    };
-
-    let nbt::Value::List(can_place_on) = can_place_on else {
-        return Ok(());
-    };
-
-    let nbt::list::List::String(can_place_on) = can_place_on else {
-        return Ok(());
-    };
-
-    let kind_name = placed_on_block.to_kind().to_str();
-    let kind_name = format!("minecraft:{kind_name}");
-
-    if !can_place_on.iter().any(|s| s == &kind_name) {
-        return Ok(());
-    }
-
-    let kind = held.item;
-
-    let Some(block_kind) = BlockKind::from_item_kind(kind) else {
-        warn!("invalid item kind to place: {kind:?}");
-        return Ok(());
-    };
-
-    let block_state = BlockState::from_kind(block_kind);
-
-    let position = placed_on.get_in_direction(packet.face);
-    let position = IVec3::new(position.x, position.y, position.z);
-
-    let position_dvec3 = position.as_vec3();
-
-    // todo(hack): technically players can do some crazy position stuff to abuse this probably
-    let player_aabb = query.pose.bounding.shrink(0.01);
-
-    let collides_player = block_state
-        .collision_shapes()
-        .map(|aabb| Aabb::new(aabb.min().as_vec3(), aabb.max().as_vec3()))
-        .map(|aabb| aabb.move_by(position_dvec3))
-        .any(|block_aabb| player_aabb.collides(&block_aabb));
-
-    if collides_player {
-        return Ok(());
-    }
-
-    query.inventory.take_one_held();
-
-    query.events.push(
-        event::PlaceBlock {
-            position,
-            from: query.id,
-            sequence: packet.sequence.0,
-            block: block_state,
-        },
-        query.world,
+    let interacted_block_pos = packet.position;
+    let interacted_block_pos_vec = IVec3::new(
+        interacted_block_pos.x,
+        interacted_block_pos.y,
+        interacted_block_pos.z,
     );
+
+    let Some(interacted_block) = query.blocks.get_block(interacted_block_pos_vec) else {
+        return Ok(());
+    };
+
+    if interacted_block.get(PropName::Open).is_some() {
+        // Toggle the open state of a door
+        // todo: place block instead of toggling door if the player is crouching and holding a
+        // block
+
+        query.events.push(
+            event::ToggleDoor {
+                position: interacted_block_pos_vec,
+                from: query.id,
+                sequence: packet.sequence.0,
+            },
+            query.world,
+        );
+    } else {
+        // Attempt to place a block
+
+        let held = query.inventory.get_cursor();
+
+        if held.is_empty() {
+            return Ok(());
+        }
+
+        let Some(nbt) = &held.nbt else {
+            return Ok(());
+        };
+
+        let Some(can_place_on) = nbt.get("CanPlaceOn") else {
+            return Ok(());
+        };
+
+        let nbt::Value::List(can_place_on) = can_place_on else {
+            return Ok(());
+        };
+
+        let nbt::list::List::String(can_place_on) = can_place_on else {
+            return Ok(());
+        };
+
+        let kind_name = interacted_block.to_kind().to_str();
+        let kind_name = format!("minecraft:{kind_name}");
+
+        if !can_place_on.iter().any(|s| s == &kind_name) {
+            return Ok(());
+        }
+
+        let kind = held.item;
+
+        let Some(block_kind) = BlockKind::from_item_kind(kind) else {
+            warn!("invalid item kind to place: {kind:?}");
+            return Ok(());
+        };
+
+        let block_state = BlockState::from_kind(block_kind);
+
+        let position = interacted_block_pos.get_in_direction(packet.face);
+        let position = IVec3::new(position.x, position.y, position.z);
+
+        let position_dvec3 = position.as_vec3();
+
+        // todo(hack): technically players can do some crazy position stuff to abuse this probably
+        let player_aabb = query.pose.bounding.shrink(0.01);
+
+        let collides_player = block_state
+            .collision_shapes()
+            .map(|aabb| Aabb::new(aabb.min().as_vec3(), aabb.max().as_vec3()))
+            .map(|aabb| aabb.move_by(position_dvec3))
+            .any(|block_aabb| player_aabb.collides(&block_aabb));
+
+        if collides_player {
+            return Ok(());
+        }
+
+        query.inventory.take_one_held();
+
+        query.events.push(
+            event::PlaceBlock {
+                position,
+                from: query.id,
+                sequence: packet.sequence.0,
+                block: block_state,
+            },
+            query.world,
+        );
+    }
 
     Ok(())
 }
