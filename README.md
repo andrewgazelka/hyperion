@@ -26,6 +26,7 @@ on [Overcast Network](https://oc.tc/) (we are not affiliated with them).
 |                        | Block physics (doors, liquid, torches, etc.) | 📚 Backlogged | Not planning for MVP                                                                 |
 | **World Generation**   | Pre-loaded chunks from Java world saves      | ✅ Done            | Uses pre-built maps                                              |
 | **Rendering**          | Block animation/Frame API                    | ✅ Done            |                                                                  |
+|            | Distant Horizons LoD protocol support                    | 🤞 Not implemented            | Stretch goal for MVP; will not be in open-source repository.                                                                  |
 | **Inventory**          | Player inventory                             | ✅ Done | Existed to some extent pre-rewrite                                                                 |
 |                        | Block inventory (chests, etc.)               | 🤞 Not implemented | Stretch goal for MVP                                                                  |
 | **Combat**             | PvP                       | ✅ Done  |                                                                  |
