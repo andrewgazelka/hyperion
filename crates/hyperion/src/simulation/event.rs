@@ -37,6 +37,13 @@ pub struct PlaceBlock {
     pub sequence: i32,
 }
 
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub struct ToggleDoor {
+    pub position: IVec3,
+    pub from: Entity,
+    pub sequence: i32,
+}
+
 #[derive(Copy, Clone, Debug)]
 pub struct SwingArm {
     pub hand: Hand,
