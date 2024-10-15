@@ -20,23 +20,23 @@ on [Overcast Network](https://oc.tc/) (we are not affiliated with them).
 |------------------------|----------------------------------------------|-------------------|------------------------------------------------------------------|
 | **Lighting**           | Pre-loaded lighting                          | ✅ Done            |                                                                  |
 |                        | Dynamic lighting updates                     | ❌ Not implemented | May be unnecessary for Overcast-like modes                       |
-| **Block Mechanics**    | Placing blocks                               | ❌ Not implemented | Existed pre-rewrite                                                                 |
+| **Block Mechanics**    | Placing blocks                               | ✅ Done | Existed pre-rewrite                                                                 |
 |                        | Block breaking                               | ✅ Done            |                                                                  |
-|                        | Block drops                                  | ❌ Not implemented | Existed to some extent pre-rewrite                                                                 |
-|                        | Block physics (doors, liquid, torches, etc.) | ❌ Not implemented | Existed pre-rewrite                                                                 |
+|                        | Block drops                                  | ✅ Done |                                                                  |
+|                        | Block physics (doors, liquid, torches, etc.) | ❌ Not implemented | Not planning for MVP                                                                 |
 | **World Generation**   | Pre-loaded chunks from Java world saves      | ✅ Done            | Uses pre-built maps                                              |
 | **Rendering**          | Block animation/Frame API                    | ✅ Done            |                                                                  |
-| **Inventory**          | Player inventory                             | ❌ Not implemented | Existed to some extent pre-rewrite                                                                 |
-|                        | Block inventory (chests, etc.)               | ❌ Not implemented |                                                                  |
-| **Combat**             | PvP (Player vs. Player)                      | ❌ Not implemented | Existed pre-rewrite                                                                 |
-|                        | Arrows                                       | ❌ Not implemented | Existed to some extent pre-rewrite                                                                 |
-|                        | Player health and hunger                     | ❌ Not implemented | Health is necessary; hunger less important                       |
+| **Inventory**          | Player inventory                             | ✅ Done | Existed to some extent pre-rewrite                                                                 |
+|                        | Block inventory (chests, etc.)               | ❌ Not implemented | Stretch goal for MVP                                                                  |
+| **Combat**             | PvP                       | ✅ Done  |                                                                  |
+|                        | Arrows                                       | ❌ Not implemented | Stretch goal for MVP                                                                 |
+|                        | Player health                      | ✅ Done |    |
 | **World Persistence**  | Saving world                                 | ❌ Not implemented | Most useful in case the event server crashes                     |
 | **Physics**            | Entity-block collisions (anti-cheat)         | ✅ Done            |                               |
 |                        | Entity-entity collisions                     | ✅ Done            | Required for arrow-based combat                                  |
 | **Gameplay Mechanics** | Day/night cycle                              | ✅ Done            |                                                                  |
 | **Audio**              | Proximity voice chat                         | ✅ Done            | Not included in open-source repository                           |
-| **Modularity**         | Mod/Plugin API                               | 🌊 In progress    | We want to make events extensions on top of the core game engine |
+| **Modularity**         | Mod/Plugin API                               | ✅ Done    | We want to make events extensions on top of the core game engine |
 
 # Running
 
