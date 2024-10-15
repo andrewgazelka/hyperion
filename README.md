@@ -19,23 +19,24 @@ on [Overcast Network](https://oc.tc/) (we are not affiliated with them).
 | **Category**           | **Task**                                     | **Status**        | **Notes**                                                        |
 |------------------------|----------------------------------------------|-------------------|------------------------------------------------------------------|
 | **Lighting**           | Pre-loaded lighting                          | ✅ Done            |                                                                  |
-|                        | Dynamic lighting updates                     | ❌ Not implemented | May be unnecessary for Overcast-like modes                       |
+|                        | Dynamic lighting updates                     | 📚 Backlogged | Not planning for MVP                       |
 | **Block Mechanics**    | Placing blocks                               | ✅ Done | Existed pre-rewrite                                                                 |
 |                        | Block breaking                               | ✅ Done            |                                                                  |
 |                        | Block drops                                  | ✅ Done |                                                                  |
-|                        | Block physics (doors, liquid, torches, etc.) | ❌ Not implemented | Not planning for MVP                                                                 |
+|                        | Block physics (doors, liquid, torches, etc.) | 📚 Backlogged | Not planning for MVP                                                                 |
 | **World Generation**   | Pre-loaded chunks from Java world saves      | ✅ Done            | Uses pre-built maps                                              |
 | **Rendering**          | Block animation/Frame API                    | ✅ Done            |                                                                  |
 | **Inventory**          | Player inventory                             | ✅ Done | Existed to some extent pre-rewrite                                                                 |
-|                        | Block inventory (chests, etc.)               | ❌ Not implemented | Stretch goal for MVP                                                                  |
+|                        | Block inventory (chests, etc.)               | 🤞 Not implemented | Stretch goal for MVP                                                                  |
 | **Combat**             | PvP                       | ✅ Done  |                                                                  |
-|                        | Arrows                                       | ❌ Not implemented | Stretch goal for MVP                                                                 |
+|                        | Arrows                                       | 🤞 Not implemented | Stretch goal for MVP                                                                 |
 |                        | Player health                      | ✅ Done |    |
-| **World Persistence**  | Saving world                                 | ❌ Not implemented | Most useful in case the event server crashes                     |
+| **World Persistence**  | Saving world                                 | 📚 Backlogged | Not planning for MVP                     |
+|                        | Saving inventory / player state                                 | ⏳ WIP |                      |
 | **Physics**            | Entity-block collisions (anti-cheat)         | ✅ Done            |                               |
 |                        | Entity-entity collisions                     | ✅ Done            | Required for arrow-based combat                                  |
 | **Gameplay Mechanics** | Day/night cycle                              | ✅ Done            |                                                                  |
-| **Audio**              | Proximity voice chat                         | ✅ Done            | Not included in open-source repository                           |
+| **Audio**              | Proximity voice chat (SimpleVoiceChat)                       | ✅ Done            | Not included in open-source repository                           |
 | **Modularity**         | Mod/Plugin API                               | ✅ Done    | We want to make events extensions on top of the core game engine |
 
 # Running
