@@ -37,6 +37,7 @@ on [Overcast Network](https://oc.tc/) (we are not affiliated with them).
 | **Physics**            | Entity-block collisions (anti-cheat)         | ✅ Done            |                               |
 |                        | Entity-entity collisions                     | ✅ Done            | Required for arrow-based combat                                  |
 | **Gameplay Mechanics** | Day/night cycle                              | ✅ Done            |                                                                  |
+|  | Custom commands                              | ✅ Done            |                                                                  |
 | **Audio**              | Proximity voice chat (SimpleVoiceChat)                       | ✅ Done            | Not included in open-source repository                           |
 | **Modularity**         | Mod/Plugin API                               | ✅ Done    | We want to make events extensions on top of the core game engine |
 
