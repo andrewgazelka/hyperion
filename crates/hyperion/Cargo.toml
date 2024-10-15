@@ -37,7 +37,6 @@ bumpalo.workspace = true
 bvh-region.workspace = true
 bytemuck = { version = "1.18.0", features = ["derive"] }
 byteorder = "1.5.0"
-compact_str.workspace = true
 derive_more.workspace = true
 dirs-next.workspace = true
 enumset = "1.1.5"

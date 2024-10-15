@@ -1608,7 +1608,6 @@ dependencies = [
  "bytemuck",
  "byteorder",
  "bytes",
- "compact_str",
  "derive_more",
  "dirs-next",
  "divan",
