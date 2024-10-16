@@ -6,6 +6,7 @@ use std::{
 
 use anyhow::Context;
 use base64::{engine::general_purpose, Engine};
+use colored::Colorize;
 use flecs_ecs::prelude::*;
 use hyperion_utils::EntityExt;
 use parking_lot::Mutex;
@@ -126,7 +127,8 @@ fn process_login(
         .pop()
         .unwrap_or_else(|| offline_uuid(&username).unwrap());
 
-    println!("{username} spawning with uuid {uuid:?}");
+    let uuid_s = format!("{uuid:?}").dimmed();
+    println!("{username} {uuid_s}");
 
     let skins = comms.skins_tx.clone();
     let id = entity.id();

@@ -34,8 +34,8 @@ fmt:
 proxy:
     ulimit -Sn {{fds}} && cargo run --bin hyperion-proxy --release
 
-infection:
-    cargo run --bin infection --release -- -t
+nyc:
+    cargo run --bin nyc --release -- -t
 
 # cargo machete
 unused-deps:
@@ -48,20 +48,20 @@ deny:
 # run in debug mode with tracy; auto-restarts on changes
 debug:
     #!/usr/bin/env -S parallel --shebang --ungroup --jobs 3
-    RUST_BACKTRACE=full RUN_MODE=debug-{{arch}} cargo watch --postpone --no-vcs-ignores -w {{project_root}}/.trigger-debug -s './target/debug/infection -t'
+    RUST_BACKTRACE=full RUN_MODE=debug-{{arch}} cargo watch --postpone --no-vcs-ignores -w {{project_root}}/.trigger-debug -s './target/debug/nyc -t'
     RUST_BACKTRACE=full ulimit -Sn {{fds}} && cargo run --bin hyperion-proxy --release
-    cargo watch -w '{{project_root}}/crates/hyperion' -w '{{project_root}}/events/infection' -s 'cargo check -p infection && cargo build -p infection' -s 'touch {{project_root}}/.trigger-debug'
+    cargo watch -w '{{project_root}}/crates/hyperion' -w '{{project_root}}/events/nyc' -s 'cargo check -p nyc && cargo build -p nyc' -s 'touch {{project_root}}/.trigger-debug'
 
 # run in release mode with tracy; auto-restarts on changes
 release:
     #!/usr/bin/env -S parallel --shebang --ungroup --jobs 3
-    RUN_MODE=release-{{arch}} cargo watch --postpone --no-vcs-ignores -w {{project_root}}/.trigger-release -s './target/release/infection -t'
+    RUN_MODE=release-{{arch}} cargo watch --postpone --no-vcs-ignores -w {{project_root}}/.trigger-release -s './target/release/nyc -t'
     ulimit -Sn {{fds}} && cargo run --bin hyperion-proxy --release
-    cargo watch -w '{{project_root}}/crates/hyperion' -w '{{project_root}}/events/infection' -s 'cargo check -p infection && cargo build --release -p infection' -s 'touch {{project_root}}/.trigger-release'
+    cargo watch -w '{{project_root}}/crates/hyperion' -w '{{project_root}}/events/nyc' -s 'cargo check -p nyc && cargo build --release -p nyc' -s 'touch {{project_root}}/.trigger-release'
 
 release-full:
     #!/usr/bin/env -S parallel --shebang --ungroup --jobs 2
-    RUN_MODE=release-f-{{arch}} cargo run --profile release-full -p infection -- -t
+    RUN_MODE=release-f-{{arch}} cargo run --profile release-full -p nyc -- -t
     ulimit -Sn {{fds}} && cargo run --bin hyperion-proxy --profile release-full
 
 # run a given number of bots to connect to hyperion

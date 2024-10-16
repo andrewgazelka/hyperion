@@ -1,5 +1,6 @@
 use clap::Parser;
-use infection::init_game;
+use colored::Colorize;
+use nyc::init_game;
 use tracing_subscriber::{layer::SubscriberExt, EnvFilter};
 
 /// The arguments to run the server
@@ -16,10 +17,17 @@ struct Args {
     tracy: bool,
 }
 
+fn print_nyc() {
+    let nyc = include_str!("nyc.txt");
+    println!("\n\n{}\n", nyc.bright_white());
+}
+
 fn main() {
     dotenvy::dotenv().ok();
 
     let Args { ip, port, tracy } = Args::parse();
+
+    print_nyc();
 
     if tracy {
         tracing::subscriber::set_global_default(

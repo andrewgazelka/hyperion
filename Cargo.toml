@@ -17,7 +17,7 @@ members = [
     "crates/hyperion-scheduled",
     "crates/hyperion-text",
     "crates/hyperion-utils",
-    "events/infection",
+    "events/nyc",
     "examples",
 ]
 
