@@ -52,7 +52,6 @@ define_events! {
     event::PlaceBlock,
     event::PluginMessage<'static>,
     event::PostureUpdate,
-    event::SetHealth,
     event::SwingArm,
     event::ToggleDoor
 }

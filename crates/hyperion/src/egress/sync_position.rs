@@ -6,16 +6,19 @@ use hyperion_inventory::PlayerInventory;
 use hyperion_utils::EntityExt;
 use tracing::trace_span;
 use valence_protocol::{
+    game_mode::OptGameMode,
     ident,
     packets::{play, play::entity_equipment_update_s2c::EquipmentEntry},
     sound::{SoundCategory, SoundId},
-    ByteAngle, RawBytes, VarInt, Velocity,
+    ByteAngle, GameMode, RawBytes, VarInt, Velocity,
 };
 
 use crate::{
+    egress::metadata::show_all,
     net::{Compose, NetworkStreamRef},
     simulation::{
         animation::ActiveAnimation, metadata::Metadata, EntityReaction, Health, Position,
+        PLAYER_SPAWN_POSITION,
     },
     system_registry::SYNC_ENTITY_POSITION,
     util::TracingExt,
@@ -32,7 +35,7 @@ impl Module for SyncPositionModule {
             "sync_position",
             world,
             &Compose($),
-            &Position,
+            &mut Position,
             &NetworkStreamRef,
             &mut Metadata,
             &mut ActiveAnimation,
@@ -47,7 +50,7 @@ impl Module for SyncPositionModule {
             move |entity,
                   elems: (
                 &Compose,
-                &Position,
+                &mut Position,
                 &NetworkStreamRef,
                 &mut Metadata,
                 &mut ActiveAnimation,
@@ -106,13 +109,15 @@ impl Module for SyncPositionModule {
                     let from = value.from;
                     let to = value.to;
 
-                    let pkt = play::HealthUpdateS2c {
-                        health: to,
-                        food: VarInt(10),
-                        food_saturation: 10.0,
-                    };
-
-                    compose.unicast(&pkt, io, system_id, &world).unwrap();
+                    // not sure health update is needed
+                    // let pkt = play::HealthUpdateS2c {
+                    //     health: to,
+                    //     food: VarInt(20),
+                    //     food_saturation: 10.0,
+                    // };
+                    //
+                    // compose.unicast(&pkt, io, system_id, &world).unwrap();
+                    metadata.health(to);
 
                     if to < from {
                         let pkt = play::EntityDamageS2c {
@@ -139,6 +144,31 @@ impl Module for SyncPositionModule {
                             category: SoundCategory::Player,
                         };
                         compose.broadcast(&pkt, system_id).send(&world).unwrap();
+                    }
+
+                    if to == 0.0 {
+                        // send respawn packet
+                        let pkt = play::PlayerRespawnS2c {
+                            dimension_type_name: ident!("minecraft:overworld").into(),
+                            dimension_name: ident!("minecraft:overworld").into(),
+                            hashed_seed: 0,
+                            game_mode: GameMode::Adventure,
+                            previous_game_mode: OptGameMode::default(),
+                            is_debug: false,
+                            is_flat: false,
+                            copy_metadata: false,
+                            last_death_location: None,
+                            portal_cooldown: VarInt::default(),
+                        };
+                        pose.position = PLAYER_SPAWN_POSITION;
+                        compose.unicast(&pkt, io, system_id, &world).unwrap();
+
+                        health.reset();
+
+                        let show_all = show_all(entity.minecraft_id());
+                        compose
+                            .unicast(show_all.borrow_packet(), io, system_id, &world)
+                            .unwrap();
                     }
                 }
 

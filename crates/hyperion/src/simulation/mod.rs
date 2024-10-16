@@ -94,26 +94,35 @@ pub enum PacketState {
     Terminate,
 }
 
-/// The health of a player.
+/// The health component.
+///
+/// Health changes can be applied in any order within a tick.
+/// Damage and healing are processed as they occur, with the health value
+/// being updated immediately after each change.
+///
+/// Once an entity's health reaches 0, it is considered dead and cannot be
+/// revived by healing alone. The entity remains dead until explicitly reset.
+///
+/// To revive a dead entity, use the [`Health::reset`] method, typically when respawning.
+/// This method restores the entity to full health and allows it to be affected
+/// by subsequent health changes.
 #[derive(Component, Debug, PartialEq)]
 pub struct Health {
-    /// The normal (red heart) health of the player. This number is twice the displayed number of hearts.
-    ///
-    /// For instance, if the player has 10 hearts, this is 20.
     value: f32,
 
     pending: f32,
 }
 
-pub struct HealthUpdate {
-    pub from: f32,
-    pub to: f32,
-}
+pub const FULL_HEALTH: f32 = 20.0;
 
 impl Health {
-    pub fn pop_updated(&mut self) -> Option<HealthUpdate> {
+    /// Checks if there's a pending health update and returns it.
+    ///
+    /// This method updates the current health value with the pending value
+    /// and returns an [`event::HealthUpdate`] if there was a change.
+    pub fn pop_updated(&mut self) -> Option<event::HealthUpdate> {
         #[allow(clippy::float_cmp)]
-        let result = (self.pending == self.value).then_some(HealthUpdate {
+        let result = (self.pending != self.value).then_some(event::HealthUpdate {
             from: self.value,
             to: self.pending,
         });
@@ -122,24 +131,54 @@ impl Health {
         result
     }
 
+    /// Returns the current health value.
     #[must_use]
     pub const fn get(&self) -> f32 {
         self.value
     }
 
+    /// Checks if the entity is dead (health is 0).
     #[must_use]
-    #[deprecated = "we should really be using is_dead from pop_updated or similar"]
     pub const fn is_dead(&self) -> bool {
         self.pending == 0.0
     }
 
-    pub fn set(&mut self, value: f32) {
+    /// Sets the health of a living entity to a specific value.
+    ///
+    /// This method will not affect dead entities. To revive a dead entity,
+    /// use [`Self::reset`] instead.
+    pub fn set_for_alive(&mut self, value: f32) {
+        if self.is_dead() {
+            return;
+        }
+
         self.pending = value;
     }
 
+    /// Applies damage to the entity, reducing its health.
+    ///
+    /// The resulting health will be clamped between 0 and [`FULL_HEALTH`].
     pub fn damage(&mut self, amount: f32) {
-        self.pending -= amount;
-        self.pending = self.pending.max(0.0);
+        self.pending = (self.pending - amount).clamp(0.0, FULL_HEALTH);
+    }
+
+    /// Resets the entity's health to full, reviving it if dead.
+    ///
+    /// This is the only way to revive a dead entity.
+    pub fn reset(&mut self) {
+        self.pending = FULL_HEALTH;
+    }
+
+    /// Heals the entity, increasing its health.
+    ///
+    /// This method will not affect dead entities. The resulting health
+    /// will be clamped between 0 and [`FULL_HEALTH`].
+    pub fn heal(&mut self, amount: f32) {
+        if self.is_dead() {
+            return;
+        }
+
+        self.pending = (self.pending + amount).clamp(0.0, FULL_HEALTH);
     }
 }
 

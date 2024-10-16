@@ -14,15 +14,12 @@ use hyperion::{
         packets::{BossBarAction, BossBarS2c},
         Compose, NetworkStreamRef,
     },
-    simulation::{
-        event, EntityReaction, Health, PacketState, Player, Position, PLAYER_SPAWN_POSITION,
-    },
+    simulation::{event, EntityReaction, Health, PacketState, Player, Position},
     storage::EventQueue,
     system_registry::SystemId,
     util::TracingExt,
     uuid::Uuid,
     valence_protocol::{
-        game_mode::OptGameMode,
         ident,
         math::{DVec3, Vec3},
         nbt,
@@ -34,7 +31,7 @@ use hyperion::{
             },
         },
         sound::{SoundCategory, SoundId},
-        GameMode, ItemKind, ItemStack, Particle, VarInt,
+        ItemKind, ItemStack, Particle, VarInt,
     },
 };
 use hyperion_inventory::PlayerInventory;
@@ -147,11 +144,10 @@ impl Module for AttackModule {
                                 &mut Health,
                                 &mut Position,
                                 &mut EntityReaction,
-                                &NetworkStreamRef,
                                 &CombatStats,
                                 &PlayerInventory
                             )>(
-                                |(immune_until, health, target_position, reaction, io, stats, target_inventory)| {
+                                |(immune_until, health, target_position, reaction, stats, target_inventory)| {
                                     if immune_until.tick > current_tick {
                                         return;
                                     }
@@ -167,7 +163,6 @@ impl Module for AttackModule {
                                     let damage_after_protection = get_inflicted_damage(damage_after_armor, protection);
 
                                     health.damage(damage_after_protection);
-                                    // todo handle elsewhere
                                     if health.is_dead() {
 
                                         // Play a sound at the attacker's position
@@ -399,26 +394,6 @@ impl Module for AttackModule {
                                         }
                                         // player died, increment kill count
                                         kill_count.kill_count += 1;
-
-                                        // send respawn packet
-
-                                        let pkt = play::PlayerRespawnS2c {
-                                            dimension_type_name: ident!("minecraft:overworld").into(),
-                                            dimension_name: ident!("minecraft:overworld").into(),
-                                            hashed_seed: 0,
-                                            game_mode: GameMode::Adventure,
-                                            previous_game_mode: OptGameMode::default(),
-                                            is_debug: false,
-                                            is_flat: false,
-                                            copy_metadata: false,
-                                            last_death_location: None,
-                                            portal_cooldown: VarInt::default(),
-                                        };
-                                        target_position.position = PLAYER_SPAWN_POSITION;
-                                        compose
-                                            .unicast(&pkt, *io, SystemId(99), &world)
-                                            .unwrap();
-                                        health.set(20.0);
                                         return;
                                     }
 

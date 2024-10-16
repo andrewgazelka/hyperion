@@ -10,8 +10,6 @@ pub struct Metadata(Vec<u8>);
 
 mod status;
 
-// status flags = u8
-
 mod kind {
     use valence_protocol::VarInt;
 

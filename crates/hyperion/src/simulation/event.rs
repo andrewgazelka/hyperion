@@ -1,5 +1,6 @@
 //! Flecs components which are used for events.
 
+use derive_more::Constructor;
 use flecs_ecs::{core::Entity, macros::Component};
 use glam::{IVec3, Vec3};
 use valence_generated::block::BlockState;
@@ -22,9 +23,10 @@ pub struct AttackEntity {
     pub damage: f32,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq)]
-pub struct SetHealth {
-    pub health: f32,
+#[derive(Copy, Clone, Debug, PartialEq, Constructor)]
+pub struct HealthUpdate {
+    pub from: f32,
+    pub to: f32,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]

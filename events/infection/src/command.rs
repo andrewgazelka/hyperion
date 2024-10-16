@@ -114,7 +114,7 @@ fn process_command(command: &ParsedCommand, context: &mut CommandContext<'_>) {
 }
 
 fn handle_health_command(amount: f32, context: &mut CommandContext<'_>) {
-    context.health.set(amount);
+    context.health.set_for_alive(amount);
     println!("Set health to {amount}");
 }
 
