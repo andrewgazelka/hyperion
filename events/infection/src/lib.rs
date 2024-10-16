@@ -8,22 +8,16 @@
 use std::net::ToSocketAddrs;
 
 use flecs_ecs::prelude::*;
-use hyperion::{storage::GlobalEventHandlers, Hyperion};
+use hyperion::{simulation::Player, Hyperion};
+use module::block::BlockModule;
 
-use crate::block::BlockModule;
-
-mod animation;
-mod attack;
-mod block;
-mod command;
 mod component;
-mod handler;
-mod level;
+mod module;
 
-pub use animation::AnimationModule;
-use command::CommandModule;
-
-use crate::{attack::AttackModule, level::LevelModule};
+use module::{
+    attack::AttackModule, command::CommandModule, level::LevelModule,
+    regeneration::RegenerationModule,
+};
 
 #[derive(Component)]
 pub struct InfectionModule;
@@ -32,20 +26,20 @@ impl Module for InfectionModule {
     fn module(world: &World) {
         world.component::<component::team::Team>();
 
+        world
+            .component::<Player>()
+            .add_trait::<(flecs::With, component::team::Team)>();
+
         world.import::<CommandModule>();
         world.import::<BlockModule>();
         world.import::<AttackModule>();
         world.import::<LevelModule>();
-        // world.import::<AnimationModule>();
+        world.import::<RegenerationModule>();
     }
 }
 
 pub fn init_game(address: impl ToSocketAddrs + Send + Sync + 'static) -> anyhow::Result<()> {
     Hyperion::init_with(address, |world| {
-        world.get::<&mut GlobalEventHandlers>(|handlers| {
-            handlers.join_server.register(handler::add_player_to_team);
-        });
-
         world.import::<InfectionModule>();
     })?;
 

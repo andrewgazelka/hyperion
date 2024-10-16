@@ -137,6 +137,10 @@ impl Health {
         self.value
     }
 
+    pub fn just_damaged(&mut self) -> bool {
+        self.pending < self.value
+    }
+
     /// Checks if the entity is dead (health is 0).
     #[must_use]
     pub const fn is_dead(&self) -> bool {

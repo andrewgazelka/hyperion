@@ -2,11 +2,12 @@ use std::fmt::Display;
 
 use flecs_ecs::macros::Component;
 
-#[derive(Component, Debug)]
+#[derive(Component, Debug, Default)]
 #[repr(C)]
 pub enum Team {
-    Zombie,
+    #[default]
     Player,
+    Zombie,
 }
 
 impl Display for Team {

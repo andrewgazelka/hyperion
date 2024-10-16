@@ -31,7 +31,8 @@ use parse::Stat;
 use tracing::{debug, trace_span};
 
 use crate::{
-    attack::CombatStats, command::parse::ParsedCommand, component::team::Team, level::Level,
+    component::team::Team,
+    module::{attack::CombatStats, command::parse::ParsedCommand, level::Level},
 };
 
 pub mod parse;
@@ -115,7 +116,6 @@ fn process_command(command: &ParsedCommand, context: &mut CommandContext<'_>) {
 
 fn handle_health_command(amount: f32, context: &mut CommandContext<'_>) {
     context.health.set_for_alive(amount);
-    println!("Set health to {amount}");
 }
 
 fn handle_upgrade_command(context: &mut CommandContext<'_>) {
@@ -417,7 +417,7 @@ fn handle_team_command(context: &CommandContext<'_>) {
 fn handle_zombie_command(context: &CommandContext<'_>) {
     static ZOMBIE_PROPERTY: std::sync::LazyLock<valence_protocol::profile::Property> =
         std::sync::LazyLock::new(|| {
-            let skin = include_str!("zombie_skin.json");
+            let skin = include_str!("../zombie_skin.json");
             let json: serde_json::Value = serde_json::from_str(skin).unwrap();
 
             let value = json["textures"].as_str().unwrap().to_string();
