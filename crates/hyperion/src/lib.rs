@@ -14,19 +14,22 @@
 #![feature(try_trait_v2)]
 #![feature(let_chains)]
 #![feature(ptr_metadata)]
-#![allow(
-    clippy::redundant_pub_crate,
-    clippy::cast_possible_truncation,
-    clippy::cast_possible_wrap,
-    clippy::cast_precision_loss,
-    clippy::missing_errors_doc,
-    clippy::module_name_repetitions,
-    clippy::missing_panics_doc,
-    clippy::needless_pass_by_value,
-    clippy::future_not_send
-)]
 #![feature(stmt_expr_attributes)]
 #![feature(coroutines)]
+#![deny(
+    clippy::expect_used,
+    clippy::get_unwrap,
+    clippy::indexing_slicing,
+    clippy::missing_assert_message,
+    clippy::panic,
+    clippy::string_slice,
+    clippy::todo,
+    clippy::unimplemented,
+    clippy::unwrap_in_result,
+    clippy::unwrap_used,
+    clippy::allow_attributes
+)]
+
 use std::{alloc::Allocator, cell::RefCell, fmt::Debug, io::Write, net::ToSocketAddrs, sync::Arc};
 
 use anyhow::{bail, Context};
@@ -37,7 +40,6 @@ use ingress::IngressModule;
 #[cfg(unix)]
 use libc::{getrlimit, setrlimit, RLIMIT_NOFILE};
 use libdeflater::CompressionLvl;
-use once_cell::sync::Lazy;
 use simulation::{blocks::Blocks, util::generate_biome_registry, Comms, SimModule, StreamLookup};
 use storage::{Db, Events, GlobalEventHandlers, SkinHandler, ThreadLocal};
 use tracing::info;
@@ -164,9 +166,6 @@ impl Hyperion {
         #[cfg(unix)]
         adjust_file_descriptor_limits(32_768).context("failed to set file limits")?;
 
-        info!("starting hyperion");
-        Lazy::force(&config::CONFIG);
-
         let shared = Arc::new(common::Shared {
             compression_threshold: CompressionThreshold(256),
             compression_level: CompressionLvl::new(2)
@@ -193,7 +192,11 @@ impl Hyperion {
 
         world.component::<Db>();
         world.component::<SkinHandler>();
-        world.component::<storage::Events>();
+        world.component::<Events>();
+
+        info!("starting hyperion");
+        let config = config::Config::load("run/config.toml")?;
+        world.set(config);
 
         let runtime = AsyncRuntime::default();
 

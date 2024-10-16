@@ -7,7 +7,7 @@ use tracing::trace_span;
 use valence_protocol::packets::play::{self};
 
 use crate::{
-    config::CONFIG,
+    config::Config,
     net::{Compose, NetworkStreamRef},
     simulation::{
         blocks::{Blocks, GetChunk},
@@ -29,7 +29,7 @@ impl Module for SyncChunksModule {
     fn module(world: &World) {
         world.component::<ChunkSendQueue>();
 
-        let radius = CONFIG.view_distance as i16;
+        let radius = world.get::<&Config>(|config| config.view_distance);
         let liberal_radius = radius + 2;
 
         let system_id = GENERATE_CHUNK_CHANGES;

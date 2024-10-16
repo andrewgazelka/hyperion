@@ -182,24 +182,39 @@ impl ServerReader {
         let len = loop {
             let byte = self.server_read.read_u8().await?;
 
+            // [A]
             let to_set = vint
                 .get_mut(i)
                 .context("Failed to get mutable reference to byte in vint")?;
+
             *to_set = byte;
+
+            #[expect(
+                clippy::indexing_slicing,
+                reason = "we already verified in [A] that up to index i is valid"
+            )]
             let mut cursor = Cursor::new(&vint[..=i]);
+
             if let Ok(len) = decode_varint(&mut cursor) {
                 break len;
             }
             i += 1;
         };
-        Ok(usize::try_from(len).expect("Failed to convert varint to usize"))
+
+        usize::try_from(len).context("Failed to convert varint to usize. len is {len}")
     }
 
     #[instrument(level = "trace")]
     async fn next_server_packet(&mut self, len: usize) -> anyhow::Result<ServerToProxyMessage> {
+        // [A]
         if self.buffer.len() < len {
             self.buffer.resize(len, 0);
         }
+
+        #[expect(
+            clippy::indexing_slicing,
+            reason = "we already verified in [A] that length of buffer is at least {len}"
+        )]
         let slice = &mut self.buffer[..len];
         self.server_read.read_exact(slice).await?;
         let mut cursor = Cursor::new(slice);

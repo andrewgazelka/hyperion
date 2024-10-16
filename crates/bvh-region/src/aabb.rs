@@ -134,18 +134,12 @@ impl Aabb {
     }
 
     pub fn collides_point(&self, point: Vec3) -> bool {
-        let point = point.as_ref();
-        let self_min = self.min.as_ref();
-        let self_max = self.max.as_ref();
-
-        let mut collide = 0b1_u8;
-
-        for i in 0..3 {
-            collide &= u8::from(self_min[i] <= point[i]);
-            collide &= u8::from(self_max[i] >= point[i]);
-        }
-
-        collide == 1
+        self.min.x <= point.x
+            && point.x <= self.max.x
+            && self.min.y <= point.y
+            && point.y <= self.max.y
+            && self.min.z <= point.z
+            && point.z <= self.max.z
     }
 
     pub fn dist2(&self, point: Vec3) -> f32 {
@@ -155,6 +149,7 @@ impl Aabb {
 
         let mut dist2 = 0.0;
 
+        #[expect(clippy::indexing_slicing, reason = "all of these have length of 3")]
         for i in 0..3 {
             dist2 += (self_min[i] - point[i]).max(0.0).powi(2);
             dist2 += (self_max[i] - point[i]).min(0.0).powi(2);

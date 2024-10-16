@@ -33,11 +33,6 @@ panic = "abort"
 inherits = "release"
 debug = true
 
-#[profile.bench]
-##debug = true
-#lto = "fat"
-#codegen-units = 1
-
 [workspace.dependencies]
 anyhow = "1.0.86"
 arc-swap = "1.7.1"
@@ -145,3 +140,5 @@ module_name_repetitions = "allow"
 single_match_else = "allow"
 too_long_first_doc_paragraph = "allow"
 too_many_lines = "allow"
+
+

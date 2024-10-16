@@ -25,7 +25,7 @@ mod list;
 pub use list::*;
 
 use crate::{
-    config::CONFIG,
+    config::Config,
     egress::metadata::show_all,
     net::{Compose, NetworkStreamRef},
     runtime::AsyncRuntime,
@@ -57,6 +57,7 @@ pub fn player_join_world(
     root_command: Entity,
     query: &Query<(&Uuid, &InGameName, &Position, &PlayerSkin)>,
     crafting_registry: &CraftingRegistry,
+    config: &crate::config::Config,
 ) {
     static CACHED_DATA: once_cell::sync::OnceCell<bytes::Bytes> = once_cell::sync::OnceCell::new();
 
@@ -79,9 +80,9 @@ pub fn player_join_world(
         is_hardcore: false,
         dimension_names: Cow::Owned(dimension_names),
         registry_codec: Cow::Borrowed(registry_codec),
-        max_players: CONFIG.max_players.into(),
-        view_distance: CONFIG.view_distance.into(), // max view distance
-        simulation_distance: CONFIG.simulation_distance.into(),
+        max_players: config.max_players.into(),
+        view_distance: i32::from(config.view_distance).into(), // max view distance
+        simulation_distance: config.simulation_distance.into(),
         reduced_debug_info: false,
         enable_respawn_screen: false,
         dimension_name: dimension_name.into(),
@@ -106,7 +107,8 @@ pub fn player_join_world(
             info!(
                 "caching world data for new players with compression level {compression_level:?}"
             );
-            generate_cached_packet_bytes(&mut encoder, chunks, tasks, crafting_registry).unwrap();
+            generate_cached_packet_bytes(&mut encoder, chunks, tasks, crafting_registry, config)
+                .unwrap();
 
             let bytes = encoder.take();
             bytes.freeze()
@@ -344,6 +346,7 @@ fn generate_cached_packet_bytes(
     chunks: &Blocks,
     tasks: &AsyncRuntime,
     crafting_registry: &CraftingRegistry,
+    config: &Config,
 ) -> anyhow::Result<()> {
     send_sync_tags(encoder)?;
 
@@ -394,7 +397,7 @@ fn generate_cached_packet_bytes(
         },
     })?;
 
-    if let Some(diameter) = CONFIG.border_diameter {
+    if let Some(diameter) = config.border_diameter {
         debug!("Setting world border to diameter {}", diameter);
 
         encoder.append_packet(&play::WorldBorderInitializeS2c {
@@ -501,62 +504,66 @@ impl Module for PlayerJoinModule {
             &Blocks($),
             &Compose($),
             &CraftingRegistry($),
+            &Config($),
         )
         .kind::<flecs::pipeline::PreUpdate>()
-        .each(move |(tasks, comms, blocks, compose, crafting_registry)| {
-            let span = tracing::trace_span!("joins");
-            let _enter = span.enter();
+        .each(
+            move |(tasks, comms, blocks, compose, crafting_registry, config)| {
+                let span = tracing::trace_span!("joins");
+                let _enter = span.enter();
 
-            let mut skins = Vec::new();
+                let mut skins = Vec::new();
 
-            while let Ok(Some((entity, skin))) = comms.skins_rx.try_recv() {
-                skins.push((entity, skin.clone()));
-            }
-
-            // todo: par_iter but bugs...
-            // for (entity, skin) in skins {
-            skins.into_par_iter().for_each(|(entity, skin)| {
-                // if we are not in rayon context that means we are in a single-threaded context and 0 will work
-                let idx = rayon::current_thread_index().unwrap_or(0);
-
-                let world = &stages[idx];
-                let world = world.0;
-
-                if !world.is_alive(entity) {
-                    return;
+                while let Ok(Some((entity, skin))) = comms.skins_rx.try_recv() {
+                    skins.push((entity, skin.clone()));
                 }
 
-                let entity = world.entity_from_id(entity);
+                // todo: par_iter but bugs...
+                // for (entity, skin) in skins {
+                skins.into_par_iter().for_each(|(entity, skin)| {
+                    // if we are not in rayon context that means we are in a single-threaded context and 0 will work
+                    let idx = rayon::current_thread_index().unwrap_or(0);
 
-                entity.add::<Play>();
+                    let world = &stages[idx];
+                    let world = world.0;
 
-                entity.get::<(&Uuid, &InGameName, &Position, &NetworkStreamRef)>(
-                    |(uuid, name, pose, &stream_id)| {
-                        let query = &query;
-                        let query = &query.0;
+                    if !world.is_alive(entity) {
+                        return;
+                    }
 
-                        player_join_world(
-                            &entity,
-                            tasks,
-                            blocks,
-                            compose,
-                            uuid.0,
-                            name,
-                            stream_id,
-                            pose,
-                            &world,
-                            &skin,
-                            system_id,
-                            root_command,
-                            query,
-                            crafting_registry,
-                        );
-                    },
-                );
+                    let entity = world.entity_from_id(entity);
 
-                let entity = world.entity_from_id(entity);
-                entity.set(skin);
-            });
-        });
+                    entity.add::<Play>();
+
+                    entity.get::<(&Uuid, &InGameName, &Position, &NetworkStreamRef)>(
+                        |(uuid, name, pose, &stream_id)| {
+                            let query = &query;
+                            let query = &query.0;
+
+                            player_join_world(
+                                &entity,
+                                tasks,
+                                blocks,
+                                compose,
+                                uuid.0,
+                                name,
+                                stream_id,
+                                pose,
+                                &world,
+                                &skin,
+                                system_id,
+                                root_command,
+                                query,
+                                crafting_registry,
+                                config,
+                            );
+                        },
+                    );
+
+                    let entity = world.entity_from_id(entity);
+                    entity.set(skin);
+                });
+            },
+        );
     }
 }
