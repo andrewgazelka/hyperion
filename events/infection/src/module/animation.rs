@@ -10,7 +10,7 @@ use hyperion::{
 use ndarray::Array3;
 use tracing::trace_span;
 
-use crate::command::add_to_tree;
+use crate::module::command::add_to_tree;
 
 #[derive(Component)]
 pub struct AnimationModule;
