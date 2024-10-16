@@ -90,7 +90,7 @@ impl Module for SyncChunksModule {
                 let added_chunks = current_range_x
                     .flat_map(move |x| current_range_z.clone().map(move |z| I16Vec2::new(x, z)))
                     .filter(|pos| {
-                        !last_sent_range_z.contains(&pos.x) || !last_sent_range_x.contains(&pos.y)
+                        !last_sent_range_x.contains(&pos.x) || !last_sent_range_z.contains(&pos.y)
                     });
 
                 let mut num_chunks_added = 0;

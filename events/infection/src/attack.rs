@@ -15,7 +15,8 @@ use hyperion::{
         Compose, NetworkStreamRef,
     },
     simulation::{
-        event, metadata::Metadata, EntityReaction, Health, Player, Position, PLAYER_SPAWN_POSITION,
+        event, metadata::Metadata, EntityReaction, Health, PacketState, Player, Position,
+        PLAYER_SPAWN_POSITION,
     },
     storage::EventQueue,
     system_registry::SystemId,
@@ -87,6 +88,7 @@ impl Module for AttackModule {
             &KillCount,
             &NetworkStreamRef,
         )
+        .with_enum(PacketState::Play)
         .multi_threaded()
         .kind::<flecs::pipeline::OnUpdate>()
         .tracing_each_entity(

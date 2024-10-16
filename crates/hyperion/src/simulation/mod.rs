@@ -85,8 +85,7 @@ pub struct Player;
 
 /// The state of the login process.
 #[derive(Component, Debug, Eq, PartialEq)]
-#[repr(u8)]
-#[allow(missing_docs)]
+#[repr(C)]
 pub enum PacketState {
     Handshake,
     Status,

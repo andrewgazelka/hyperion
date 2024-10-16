@@ -8,25 +8,6 @@ publish = false
 
 [dependencies]
 anyhow.workspace = true
-tracing = { workspace = true }
-serde_json.workspace = true
-bytes.workspace = true
-
-valence_text.workspace = true
-valence_protocol.workspace = true
-valence_registry.workspace = true
-valence_anvil.workspace = true
-valence_server.workspace = true
-valence_nbt.workspace = true
-valence_generated.workspace = true
-
-hyperion-utils.workspace = true
-
-#chunk.workspace = true
-
-# no secure alloc
-sha2.workspace = true
-itertools.workspace = true
 base64.workspace = true
 bitfield-struct.workspace = true
 bitvec.workspace = true
@@ -34,6 +15,8 @@ bumpalo.workspace = true
 bvh-region.workspace = true
 bytemuck.workspace = true
 byteorder.workspace = true
+bytes.workspace = true
+compact_str.workspace = true
 derive_more.workspace = true
 dirs-next.workspace = true
 enumset.workspace = true
@@ -49,7 +32,9 @@ hyperion-inventory.workspace = true
 hyperion-palette.workspace = true
 hyperion-proto.workspace = true
 hyperion-text.workspace = true
+hyperion-utils.workspace = true
 indexmap.workspace = true
+itertools.workspace = true
 kanal.workspace = true
 libc.workspace = true
 libdeflater.workspace = true
@@ -65,11 +50,21 @@ rayon.workspace = true
 reqwest = { workspace = true, features = ["blocking"] }
 roaring = { workspace = true, features = ["simd"] }
 serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+sha2.workspace = true
 tar.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true, features = ["full"] }
 toml.workspace = true
+tracing = { workspace = true }
 uuid = { workspace = true, features = ["v3"] }
+valence_anvil.workspace = true
+valence_generated.workspace = true
+valence_nbt.workspace = true
+valence_protocol.workspace = true
+valence_registry.workspace = true
+valence_server.workspace = true
+valence_text.workspace = true
 
 [dev-dependencies]
 divan.workspace = true

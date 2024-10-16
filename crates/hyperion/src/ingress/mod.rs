@@ -162,6 +162,8 @@ fn process_login(
         .set(ChunkPosition::null())
         .set(EntityReaction::default());
 
+    println!("setting recv broadcasts");
+
     compose.io_buf().set_receive_broadcasts(stream_id, world);
 
     Ok(())
@@ -221,9 +223,7 @@ fn process_status(
             let send = packets::status::QueryResponseS2c { json: &json };
 
             trace!("sent query response: {query_request:?}");
-            compose
-                .unicast_no_compression(&send, packets, system_id, world)
-                .unwrap();
+            compose.unicast_no_compression(&send, packets, system_id, world)?;
         }
 
         packets::status::QueryPingC2s::ID => {
@@ -233,9 +233,7 @@ fn process_status(
 
             let send = packets::status::QueryPongS2c { payload };
 
-            compose
-                .unicast_no_compression(&send, packets, system_id, world)
-                .unwrap();
+            compose.unicast_no_compression(&send, packets, system_id, world)?;
 
             trace!("sent query pong: {query_ping:?}");
             *login_state = PacketState::Terminate;
