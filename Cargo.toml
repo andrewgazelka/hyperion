@@ -9,6 +9,7 @@ members = [
     "crates/bvh-region",
     "crates/hyperion",
     "crates/hyperion-crafting",
+    "crates/hyperion-event-macros",
     "crates/hyperion-inventory",
     "crates/hyperion-palette",
     "crates/hyperion-proto",
@@ -68,6 +69,7 @@ heed = "0.20.5"
 hex = "0.4.3"
 hyperion = { path = "crates/hyperion" }
 hyperion-crafting = { path = "crates/hyperion-crafting" }
+hyperion-event-macros = { path = "crates/hyperion-event-macros" }
 hyperion-inventory = { path = "crates/hyperion-inventory" }
 hyperion-palette = { path = "crates/hyperion-palette" }
 hyperion-proto = { path = "crates/hyperion-proto" }

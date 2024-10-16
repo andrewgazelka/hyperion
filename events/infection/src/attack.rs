@@ -15,8 +15,7 @@ use hyperion::{
         Compose, NetworkStreamRef,
     },
     simulation::{
-        event, metadata::Metadata, EntityReaction, Health, PacketState, Player, Position,
-        PLAYER_SPAWN_POSITION,
+        event, EntityReaction, Health, PacketState, Player, Position, PLAYER_SPAWN_POSITION,
     },
     storage::EventQueue,
     system_registry::SystemId,
@@ -146,14 +145,13 @@ impl Module for AttackModule {
                             target.get::<(
                                 &mut ImmuneUntil,
                                 &mut Health,
-                                &mut Metadata,
                                 &mut Position,
                                 &mut EntityReaction,
                                 &NetworkStreamRef,
                                 &CombatStats,
                                 &PlayerInventory
                             )>(
-                                |(immune_until, health, metadata, target_position, reaction, io, stats, target_inventory)| {
+                                |(immune_until, health, target_position, reaction, io, stats, target_inventory)| {
                                     if immune_until.tick > current_tick {
                                         return;
                                     }
@@ -168,8 +166,9 @@ impl Module for AttackModule {
                                     let damage_after_armor = get_damage_left(damage, armor, toughness);
                                     let damage_after_protection = get_inflicted_damage(damage_after_armor, protection);
 
-                                    health.normal -= damage_after_protection;
-                                    if health.normal <= 0.0 {
+                                    health.damage(damage_after_protection);
+                                    // todo handle elsewhere
+                                    if health.is_dead() {
 
                                         // Play a sound at the attacker's position
                                         let sound_pkt = play::PlaySoundS2c {
@@ -419,46 +418,9 @@ impl Module for AttackModule {
                                         compose
                                             .unicast(&pkt, *io, SystemId(99), &world)
                                             .unwrap();
-                                        health.normal = 20.0;
-                                        metadata.health(20.0);
+                                        health.set(20.0);
                                         return;
                                     }
-                                    metadata.health(health.normal);
-
-                                    let pkt = play::HealthUpdateS2c {
-                                        health: health.normal,
-                                        food: VarInt(10),
-                                        food_saturation: 10.0,
-                                    };
-
-                                    compose.unicast(&pkt, *io, SystemId(999), &world).unwrap();
-
-                                    let entity_id = event.target.minecraft_id();
-                                    let pkt = play::EntityDamageS2c {
-                                        entity_id: VarInt(entity_id),
-                                        source_type_id: VarInt::default(),
-                                        source_cause_id: VarInt::default(),
-                                        source_direct_id: VarInt::default(),
-                                        source_pos: None,
-                                    };
-
-                                    compose.broadcast(&pkt, SystemId(999)).send(&world).unwrap();
-
-
-                                    // Play a sound when an entity is damaged
-                                    let ident = ident!("minecraft:entity.player.hurt");
-                                    let pkt = play::PlaySoundS2c {
-                                        id: SoundId::Direct {
-                                            id: ident.into(),
-                                            range: None,
-                                        },
-                                        position: (target_position.position * 8.0).as_ivec3(),
-                                        volume: 1.0,
-                                        pitch: 1.0,
-                                        seed: fastrand::i64(..),
-                                        category: SoundCategory::Player,
-                                    };
-                                    compose.broadcast(&pkt, SystemId(999)).send(&world).unwrap();
 
                                     // Calculate velocity change based on attack direction
                                     let this = target_position.position;

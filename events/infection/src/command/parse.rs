@@ -26,6 +26,7 @@ pub enum ParsedCommand {
     Give,
     Upgrade,
     Stats(Stat, f32),
+    Health(f32),
 }
 
 fn parse_speed(input: &str) -> IResult<&str, ParsedCommand> {
@@ -65,6 +66,13 @@ fn parse_upgrade(input: &str) -> IResult<&str, ParsedCommand> {
     map(tag("upgrade"), |_| ParsedCommand::Upgrade)(input)
 }
 
+fn parse_health(input: &str) -> IResult<&str, ParsedCommand> {
+    map(
+        preceded(preceded(tag("health"), space1), float),
+        ParsedCommand::Health,
+    )(input)
+}
+
 fn parse_stat(input: &str) -> IResult<&str, ParsedCommand> {
     map_res(
         preceded(
@@ -83,12 +91,13 @@ fn parse_stat(input: &str) -> IResult<&str, ParsedCommand> {
 
 pub fn command(input: &str) -> IResult<&str, ParsedCommand> {
     alt((
-        parse_speed,
-        parse_team,
-        parse_zombie,
         parse_dirt,
         parse_give,
-        parse_upgrade,
+        parse_health,
+        parse_speed,
         parse_stat,
+        parse_team,
+        parse_upgrade,
+        parse_zombie,
     ))(input)
 }

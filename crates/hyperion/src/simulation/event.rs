@@ -22,6 +22,11 @@ pub struct AttackEntity {
     pub damage: f32,
 }
 
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub struct SetHealth {
+    pub health: f32,
+}
+
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct DestroyBlock {
     pub position: IVec3,

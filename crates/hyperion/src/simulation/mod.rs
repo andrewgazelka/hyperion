@@ -100,7 +100,47 @@ pub struct Health {
     /// The normal (red heart) health of the player. This number is twice the displayed number of hearts.
     ///
     /// For instance, if the player has 10 hearts, this is 20.
-    pub normal: f32,
+    value: f32,
+
+    pending: f32,
+}
+
+pub struct HealthUpdate {
+    pub from: f32,
+    pub to: f32,
+}
+
+impl Health {
+    pub fn pop_updated(&mut self) -> Option<HealthUpdate> {
+        #[allow(clippy::float_cmp)]
+        let result = (self.pending == self.value).then_some(HealthUpdate {
+            from: self.value,
+            to: self.pending,
+        });
+
+        self.value = self.pending;
+        result
+    }
+
+    #[must_use]
+    pub const fn get(&self) -> f32 {
+        self.value
+    }
+
+    #[must_use]
+    #[deprecated = "we should really be using is_dead from pop_updated or similar"]
+    pub const fn is_dead(&self) -> bool {
+        self.pending == 0.0
+    }
+
+    pub fn set(&mut self, value: f32) {
+        self.pending = value;
+    }
+
+    pub fn damage(&mut self, amount: f32) {
+        self.pending -= amount;
+        self.pending = self.pending.max(0.0);
+    }
 }
 
 #[derive(Component, Debug, Default, Deref, DerefMut)]
@@ -109,7 +149,7 @@ pub struct ConfirmBlockSequences(pub Vec<i32>);
 // use unicode hearts
 impl Display for Health {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let normal = usize::try_from(self.normal.ceil() as isize).unwrap_or(0);
+        let normal = usize::try_from(self.value.ceil() as isize).unwrap_or(0);
 
         let full_hearts = normal / 2;
         for _ in 0..full_hearts {
@@ -127,7 +167,10 @@ impl Display for Health {
 
 impl Default for Health {
     fn default() -> Self {
-        Self { normal: 20.0 }
+        Self {
+            value: 20.0,
+            pending: 20.0,
+        }
     }
 }
 

@@ -17,6 +17,7 @@ bytemuck.workspace = true
 byteorder.workspace = true
 bytes.workspace = true
 derive_more.workspace = true
+hyperion-event-macros.workspace = true
 dirs-next.workspace = true
 enumset.workspace = true
 fastrand.workspace = true

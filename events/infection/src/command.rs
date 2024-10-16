@@ -7,7 +7,7 @@ use hyperion::{
     simulation::{
         blocks::Blocks,
         command::{get_root_command, Command, Parser},
-        event, InGameName, Uuid,
+        event, Health, InGameName, Uuid,
     },
     storage::EventQueue,
     system_registry::SystemId,
@@ -36,63 +36,53 @@ use crate::{
 
 pub mod parse;
 
+fn add_command(world: &World, command: Command, parent: Entity) -> Entity {
+    world.entity().set(command).child_of_id(parent).id()
+}
+
 pub fn add_to_tree(world: &World) {
     let root_command = get_root_command();
 
     // add to tree
-    world
-        .entity()
-        .set(Command::literal("team"))
-        .child_of_id(root_command);
+    add_command(world, Command::literal("team"), root_command);
+    add_command(world, Command::literal("zombie"), root_command);
+    add_command(world, Command::literal("give"), root_command);
+    add_command(world, Command::literal("upgrade"), root_command);
 
-    world
-        .entity()
-        .set(Command::literal("zombie"))
-        .child_of_id(root_command);
-
-    world
-        .entity()
-        .set(Command::literal("give"))
-        .child_of_id(root_command);
-
-    world
-        .entity()
-        .set(Command::literal("upgrade"))
-        .child_of_id(root_command);
-
-    let speed = world
-        .entity()
-        .set(Command::literal("speed"))
-        .child_of_id(root_command);
-
-    world
-        .entity()
-        .set(Command::argument("amount", Parser::Float {
+    let speed = add_command(world, Command::literal("speed"), root_command);
+    add_command(
+        world,
+        Command::argument("amount", Parser::Float {
             min: Some(0.0),
             max: Some(1024.0),
-        }))
-        .child_of_id(speed);
+        }),
+        speed,
+    );
 
-    let stat = world
-        .entity()
-        .set(Command::literal("stat"))
-        .child_of_id(root_command);
-
-    let stat_child = world
-        .entity()
-        .set(Command::argument(
-            "type",
-            Parser::String(StringArg::SingleWord),
-        ))
-        .child_of_id(stat);
-
-    world
-        .entity()
-        .set(Command::argument("amount", Parser::Float {
+    let stat = add_command(world, Command::literal("stat"), root_command);
+    let stat_child = add_command(
+        world,
+        Command::argument("type", Parser::String(StringArg::SingleWord)),
+        stat,
+    );
+    add_command(
+        world,
+        Command::argument("amount", Parser::Float {
             min: Some(0.0),
             max: Some(1024.0),
-        }))
-        .child_of_id(stat_child);
+        }),
+        stat_child,
+    );
+
+    let health = add_command(world, Command::literal("health"), root_command);
+    add_command(
+        world,
+        Command::argument("amount", Parser::Float {
+            min: Some(0.0),
+            max: None,
+        }),
+        health,
+    );
 }
 
 struct CommandContext<'a> {
@@ -107,6 +97,7 @@ struct CommandContext<'a> {
     name: &'a InGameName,
     inventory: &'a mut PlayerInventory,
     level: &'a mut Level,
+    health: &'a mut Health,
 }
 
 fn process_command(command: &ParsedCommand, context: &mut CommandContext<'_>) {
@@ -118,7 +109,13 @@ fn process_command(command: &ParsedCommand, context: &mut CommandContext<'_>) {
         ParsedCommand::Give => handle_give_command(context),
         ParsedCommand::Upgrade => handle_upgrade_command(context),
         ParsedCommand::Stats(stat, amount) => handle_stats(*stat, *amount, context),
+        ParsedCommand::Health(amount) => handle_health_command(*amount, context),
     }
+}
+
+fn handle_health_command(amount: f32, context: &mut CommandContext<'_>) {
+    context.health.set(amount);
+    println!("Set health to {amount}");
 }
 
 fn handle_upgrade_command(context: &mut CommandContext<'_>) {
@@ -550,8 +547,9 @@ impl Module for CommandModule {
                         &InGameName,
                         &mut PlayerInventory,
                         &mut Level,
+                        &mut Health
                     )>(
-                        |(stream, team, uuid, name, inventory, level)| {
+                        |(stream, team, uuid, name, inventory, level, health)| {
                             let mut context = CommandContext {
                                 entity: event.by,
                                 stream: *stream,
@@ -564,6 +562,7 @@ impl Module for CommandModule {
                                 name,
                                 inventory,
                                 level,
+                                health
                             };
                             process_command(&command, &mut context);
                         },
