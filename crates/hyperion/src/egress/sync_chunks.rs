@@ -47,7 +47,6 @@ impl Module for SyncChunksModule {
         .multi_threaded()
         .tracing_each_entity(
             trace_span!("generate_chunk_changes"),
-            #[allow(clippy::similar_names)]
             move |entity, (compose, last_sent, pose, &stream_id, chunk_changes)| {
                 let world = entity.world();
 

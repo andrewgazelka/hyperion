@@ -16,7 +16,6 @@ bvh-region.workspace = true
 bytemuck.workspace = true
 byteorder.workspace = true
 bytes.workspace = true
-compact_str.workspace = true
 derive_more.workspace = true
 dirs-next.workspace = true
 enumset.workspace = true
