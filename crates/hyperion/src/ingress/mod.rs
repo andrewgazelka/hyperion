@@ -162,8 +162,6 @@ fn process_login(
         .set(ChunkPosition::null())
         .set(EntityReaction::default());
 
-    println!("setting recv broadcasts");
-
     compose.io_buf().set_receive_broadcasts(stream_id, world);
 
     Ok(())

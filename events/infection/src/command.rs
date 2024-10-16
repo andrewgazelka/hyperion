@@ -565,7 +565,6 @@ impl Module for CommandModule {
                                 inventory,
                                 level,
                             };
-                            println!("{:?}", event.by);
                             process_command(&command, &mut context);
                         },
                     );

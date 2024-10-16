@@ -41,7 +41,7 @@ impl PlayerSkin {
             return Ok(Some(skin));
         }
 
-        println!("cache miss for {uuid}");
+        println!("player skin cache miss for {uuid}");
 
         let json_object = mojang.data_from_uuid(&uuid).await?;
         let properties_array = json_object["properties"]
