@@ -28,7 +28,6 @@ criterion.workspace = true
 rand.workspace = true
 tango-bench.workspace = true
 tracing-subscriber.workspace = true
-# criterion = { version = "0.5.1", features = ["html_reports"] }
 
 [[bench]]
 name = "sort"

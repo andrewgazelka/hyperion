@@ -3,7 +3,7 @@ use std::borrow::Cow;
 use serde::{Deserialize, Serialize};
 
 /// Scoreboard value.
-#[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub struct ScoreboardValueContent<'a> {
     /// The name of the score holder whose score should be displayed. This
     /// can be a [`selector`] or an explicit name.

@@ -6,7 +6,7 @@ use uuid::Uuid;
 use crate::Text;
 
 /// Action to take on click of the text.
-#[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
 #[serde(tag = "action", content = "value", rename_all = "snake_case")]
 pub enum ClickEvent<'a> {
     /// Opens an URL

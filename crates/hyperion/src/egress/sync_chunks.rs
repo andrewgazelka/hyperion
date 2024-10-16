@@ -71,26 +71,26 @@ impl Module for SyncChunksModule {
 
                 last_sent.0 = current_chunk;
 
-                let last_sent_x_range = (last_sent_chunk.x - radius)..(last_sent_chunk.x + radius);
-                let last_sent_z_range = (last_sent_chunk.y - radius)..(last_sent_chunk.y + radius);
+                let last_sent_range_x = (last_sent_chunk.x - radius)..(last_sent_chunk.x + radius);
+                let last_sent_range_z = (last_sent_chunk.y - radius)..(last_sent_chunk.y + radius);
 
-                let current_x_range = (current_chunk.x - radius)..(current_chunk.x + radius);
-                let current_z_range = (current_chunk.y - radius)..(current_chunk.y + radius);
+                let current_range_x = (current_chunk.x - radius)..(current_chunk.x + radius);
+                let current_range_z = (current_chunk.y - radius)..(current_chunk.y + radius);
 
-                let current_x_range_liberal =
+                let current_range_liberal_x =
                     (current_chunk.x - liberal_radius)..(current_chunk.x + liberal_radius);
-                let current_z_range_liberal =
+                let current_range_liberal_z =
                     (current_chunk.y - liberal_radius)..(current_chunk.y + liberal_radius);
 
                 chunk_changes.retain(|elem| {
-                    current_x_range_liberal.contains(&elem.x)
-                        && current_z_range_liberal.contains(&elem.y)
+                    current_range_liberal_x.contains(&elem.x)
+                        && current_range_liberal_z.contains(&elem.y)
                 });
 
-                let added_chunks = current_x_range
-                    .flat_map(move |x| current_z_range.clone().map(move |z| I16Vec2::new(x, z)))
+                let added_chunks = current_range_x
+                    .flat_map(move |x| current_range_z.clone().map(move |z| I16Vec2::new(x, z)))
                     .filter(|pos| {
-                        !last_sent_x_range.contains(&pos.x) || !last_sent_z_range.contains(&pos.y)
+                        !last_sent_range_z.contains(&pos.x) || !last_sent_range_x.contains(&pos.y)
                     });
 
                 let mut num_chunks_added = 0;

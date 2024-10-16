@@ -2,20 +2,20 @@ use valence_protocol::ItemStack;
 
 use super::{slot_index_from_hand, PlayerInventory, OFFHAND_SLOT};
 
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum FullMouseButton {
     Left,
     Right,
     Middle,
 }
 
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum MouseButton {
     Left,
     Right,
 }
 
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum InventoryAction {
     NormalClick {
         button: MouseButton,

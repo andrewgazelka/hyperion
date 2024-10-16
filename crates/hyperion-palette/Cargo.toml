@@ -7,7 +7,7 @@ readme = "README.md"
 publish = false
 
 [dependencies]
-anyhow = "1.0.89"
+anyhow.workspace = true
 valence_protocol.workspace = true
 
 [lints]

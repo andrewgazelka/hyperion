@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 /// The font of the text.
-#[derive(Clone, Copy, PartialEq, Debug, Serialize, Deserialize)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub enum Font {
     /// The default font.
     #[serde(rename = "minecraft:default")]

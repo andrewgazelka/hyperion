@@ -22,14 +22,14 @@ pub struct AttackEntity {
     pub damage: f32,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct DestroyBlock {
     pub position: IVec3,
     pub from: Entity,
     pub sequence: i32,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct PlaceBlock {
     pub position: IVec3,
     pub block: BlockState,
@@ -37,7 +37,7 @@ pub struct PlaceBlock {
     pub sequence: i32,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct ToggleDoor {
     pub position: IVec3,
     pub from: Entity,

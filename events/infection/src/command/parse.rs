@@ -9,7 +9,7 @@ use nom::{
     Err, IResult,
 };
 
-#[derive(Debug, PartialEq, Copy, Clone)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub enum Stat {
     Armor,
     Toughness,

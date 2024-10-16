@@ -27,19 +27,16 @@ hyperion-utils.workspace = true
 # no secure alloc
 sha2.workspace = true
 itertools.workspace = true
-
-# todo: how much will adding "sync" wakers hurt performance?
-#rayon-local = { version = "0.1.0", path = "../rayon-local" }
 base64.workspace = true
-bitfield-struct = "0.8.0"
+bitfield-struct.workspace = true
 bitvec.workspace = true
 bumpalo.workspace = true
 bvh-region.workspace = true
-bytemuck = { version = "1.18.0", features = ["derive"] }
-byteorder = "1.5.0"
+bytemuck.workspace = true
+byteorder.workspace = true
 derive_more.workspace = true
 dirs-next.workspace = true
-enumset = "1.1.5"
+enumset.workspace = true
 fastrand.workspace = true
 flate2 = { workspace = true, features = ["zlib-ng"] }
 flecs_ecs.workspace = true
@@ -52,13 +49,13 @@ hyperion-inventory.workspace = true
 hyperion-palette.workspace = true
 hyperion-proto.workspace = true
 hyperion-text.workspace = true
-indexmap = "2.5.0"
+indexmap.workspace = true
 kanal.workspace = true
 libc.workspace = true
 libdeflater.workspace = true
-memmap2 = "0.9.4"
+memmap2.workspace = true
 more-asserts.workspace = true
-ndarray = "0.16.1"
+ndarray.workspace = true
 no_denormals.workspace = true
 once_cell.workspace = true
 ouroboros.workspace = true
@@ -66,14 +63,13 @@ parking_lot.workspace = true
 prost.workspace = true
 rayon.workspace = true
 reqwest = { workspace = true, features = ["blocking"] }
-roaring = { version = "0.10.6", features = ["simd"] }
+roaring = { workspace = true, features = ["simd"] }
 serde = { workspace = true, features = ["derive"] }
 tar.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true, features = ["full"] }
 toml.workspace = true
 uuid = { workspace = true, features = ["v3"] }
-
 
 [dev-dependencies]
 divan.workspace = true

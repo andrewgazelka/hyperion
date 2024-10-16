@@ -16,7 +16,6 @@ members = [
     "crates/hyperion-scheduled",
     "crates/hyperion-text",
     "crates/hyperion-utils",
-    "crates/lunar-proto",
     "events/infection",
     "examples",
 ]
@@ -43,18 +42,22 @@ anyhow = "1.0.86"
 arc-swap = "1.7.1"
 arrayvec = "0.7.4"
 base64 = "0.22.1"
-bitfield-struct = "0.8.0"
+bitfield-struct = "0.9.2"
 bitvec = "1.0.1"
 bumpalo = "3.16"
 bvh = { git = "https://github.com/andrewgazelka/bvh-data" }
 bvh-region = { path = "crates/bvh-region" }
+bytemuck = { version = "1.19.0", features = ["derive"] }
+byteorder = "1.5.0"
 bytes = "1.6.0"
 clap = { version = "4.5.7", features = ["derive"] }
 compact_str = "0.8.0"
 criterion = "0.5.1"
+derive-build = "0.1.1"
 derive_more = { version = "1.0.0-beta.7", features = ["display", "from", "deref", "deref_mut", "debug"] }
 dirs-next = "2.0.0"
 divan = "0.1.14"
+enumset = "1.1.5"
 fastrand = "2.1.0"
 flate2 = { version = "1.0.30", default-features = false }
 flecs_ecs = { git = "https://github.com/andrewgazelka/flecs-ecs-rs", branch = "andrew/terms-32" }
@@ -71,11 +74,14 @@ hyperion-proto = { path = "crates/hyperion-proto" }
 hyperion-scheduled = { path = "crates/hyperion-scheduled" }
 hyperion-text = { path = "crates/hyperion-text" }
 hyperion-utils = { path = "crates/hyperion-utils" }
+indexmap = "2.6.0"
 itertools = "0.13.0"
 kanal = "0.1.0-pre8"
 libc = "0.2.155"
 libdeflater = "1.20.0"
+memmap2 = "0.9.5"
 more-asserts = "0.3.1"
+ndarray = "0.16.1"
 no_denormals = "0.1.2"
 once_cell = "1.19.0"
 ordered-float = "4.2.0"
@@ -96,7 +102,7 @@ serde_json = "1.0.117"
 sha2 = "0.10.8"
 slotmap = "1.0.7"
 snafu = "0.8.5"
-tango-bench = "0.5.0"
+tango-bench = "0.6.0"
 tar = "0.4.41"
 thiserror = "1.0.63"
 tokio = "1.40.0"
@@ -119,26 +125,21 @@ keyword_idents = { level = "deny", priority = -1 }
 let_underscore = { level = "deny", priority = -1 }
 nonstandard_style = { level = "deny", priority = -1 }
 refining_impl_trait = { level = "deny", priority = -1 }
-rust_2024_compatibility = { level = "deny", priority = -1 }
 rust_2018_idioms = { level = "deny", priority = -1 }
+rust_2024_compatibility = { level = "deny", priority = -1 }
 
 [workspace.lints.clippy]
 complexity = { level = "deny", priority = -1 }
 nursery = { level = "deny", priority = -1 }
+pedantic = { level = "deny", priority = -1 }
 perf = { level = "deny", priority = -1 }
 style = { level = "deny", priority = -1 }
 suspicious = { level = "deny", priority = -1 }
-pedantic = { level = "deny", priority = -1 }
 
-too_long_first_doc_paragraph = "allow"
-derive_partial_eq_without_eq = "allow"
-enum_variant_names = "allow"
-module_name_repetitions = "allow"
-needless_return = "allow" # seems to be a bug in 2024-10-01 nightly with macros (such as tokio)
-single_match_else = "allow"
-missing_panics_doc = "allow"
-missing_errors_doc = "allow"
-similar_names = "allow"
-match_same_arms = "allow"
-too_many_lines = "allow"
 cast_precision_loss = "allow"
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+module_name_repetitions = "allow"
+single_match_else = "allow"
+too_long_first_doc_paragraph = "allow"
+too_many_lines = "allow"

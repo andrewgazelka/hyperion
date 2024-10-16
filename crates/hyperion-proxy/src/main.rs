@@ -11,10 +11,6 @@ struct Params {
 }
 
 #[tokio::main]
-#[expect(
-    clippy::needless_return,
-    reason = "clippy bug with tokio macro I believe"
-)]
 async fn main() {
     tracing_subscriber::fmt::init();
 

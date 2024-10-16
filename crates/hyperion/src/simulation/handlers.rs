@@ -244,8 +244,6 @@ fn player_action(mut data: &[u8], query: &PacketSwitchQuery<'_>) -> anyhow::Resu
     let position = IVec3::new(packet.position.x, packet.position.y, packet.position.z);
 
     match packet.action {
-        PlayerAction::StartDestroyBlock => {}
-        PlayerAction::AbortDestroyBlock => {}
         PlayerAction::StopDestroyBlock => {
             let event = event::DestroyBlock {
                 position,
@@ -255,10 +253,7 @@ fn player_action(mut data: &[u8], query: &PacketSwitchQuery<'_>) -> anyhow::Resu
 
             query.events.push(event, query.world);
         }
-        PlayerAction::DropAllItems => {}
-        PlayerAction::DropItem => {}
-        PlayerAction::ReleaseUseItem => {}
-        PlayerAction::SwapItemWithOffhand => {}
+        _ => bail!("unimplemented"),
     }
 
     // todo: implement

@@ -1,6 +1,7 @@
 #![allow(
     clippy::module_inception,
     clippy::module_name_repetitions,
+    clippy::derive_partial_eq_without_eq,
     hidden_glob_reexports
 )]
 
