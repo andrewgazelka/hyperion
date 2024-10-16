@@ -1,5 +1,6 @@
 use std::{borrow::Cow, collections::BTreeSet};
 
+use anyhow::Context;
 use flecs_ecs::prelude::*;
 use glam::{I16Vec2, IVec3};
 use hyperion_crafting::{Action, CraftingRegistry, RecipeBookState};
@@ -40,7 +41,10 @@ use crate::{
     util::{SendableQuery, SendableRef},
 };
 
-#[allow(clippy::too_many_arguments, reason = "todo")]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "todo: we should refactor at some point"
+)]
 #[instrument(skip_all, fields(name = name))]
 pub fn player_join_world(
     entity: &EntityView<'_>,
@@ -57,8 +61,8 @@ pub fn player_join_world(
     root_command: Entity,
     query: &Query<(&Uuid, &InGameName, &Position, &PlayerSkin)>,
     crafting_registry: &CraftingRegistry,
-    config: &crate::config::Config,
-) {
+    config: &Config,
+) -> anyhow::Result<()> {
     static CACHED_DATA: once_cell::sync::OnceCell<bytes::Bytes> = once_cell::sync::OnceCell::new();
 
     let id = entity.minecraft_id();
@@ -96,7 +100,9 @@ pub fn player_join_world(
         is_debug: false,
     };
 
-    compose.unicast(&pkt, packets, system_id, world).unwrap();
+    compose
+        .unicast(&pkt, packets, system_id, world)
+        .context("failed to send player spawn packet")?;
 
     let cached_data = CACHED_DATA
         .get_or_init(|| {
@@ -107,6 +113,12 @@ pub fn player_join_world(
             info!(
                 "caching world data for new players with compression level {compression_level:?}"
             );
+
+            #[expect(
+                clippy::unwrap_used,
+                reason = "this is only called once on startup; it should be fine. we mostly care \
+                          about crashing during server execution"
+            )]
             generate_cached_packet_bytes(&mut encoder, chunks, tasks, crafting_registry, config)
                 .unwrap();
 
@@ -124,7 +136,10 @@ pub fn player_join_world(
         overlay: false,
     };
 
-    compose.broadcast(&text, system_id).send(world).unwrap();
+    compose
+        .broadcast(&text, system_id)
+        .send(world)
+        .context("failed to send player join message")?;
 
     compose
         .unicast(
@@ -139,7 +154,7 @@ pub fn player_join_world(
             system_id,
             world,
         )
-        .unwrap();
+        .context("failed to send player position and look packet")?;
 
     let mut entries = Vec::new();
     let mut all_player_names = Vec::new();
@@ -202,37 +217,57 @@ pub fn player_join_world(
                 system_id,
                 world,
             )
-            .unwrap();
+            .context("failed to send player list packet")?;
     }
 
     {
         let scope = tracing::trace_span!("sending_player_spawns");
         let _enter = scope.enter();
 
+        // todo(Indra): this is a bit awkward.
+        // todo: could also be helped by denoting some packets as infallible for serialization
+        let mut query_errors = Vec::new();
+
         query
             .iter_stage(world)
             .each_iter(|it, idx, (uuid, _, pose, _)| {
-                let query_entity = it.entity(idx);
+                let result = || {
+                    let query_entity = it.entity(idx);
 
-                if entity.id() == query_entity.id() {
-                    return;
-                }
+                    if entity.id() == query_entity.id() {
+                        return anyhow::Ok(());
+                    }
 
-                let pkt = play::PlayerSpawnS2c {
-                    entity_id: VarInt(query_entity.minecraft_id()),
-                    player_uuid: uuid.0,
-                    position: pose.position.as_dvec3(),
-                    yaw: ByteAngle::from_degrees(pose.yaw),
-                    pitch: ByteAngle::from_degrees(pose.pitch),
+                    let pkt = play::PlayerSpawnS2c {
+                        entity_id: VarInt(query_entity.minecraft_id()),
+                        player_uuid: uuid.0,
+                        position: pose.position.as_dvec3(),
+                        yaw: ByteAngle::from_degrees(pose.yaw),
+                        pitch: ByteAngle::from_degrees(pose.pitch),
+                    };
+
+                    compose
+                        .unicast(&pkt, packets, system_id, world)
+                        .context("failed to send player spawn packet")?;
+
+                    let show_all = show_all(query_entity.minecraft_id());
+                    compose
+                        .unicast(show_all.borrow_packet(), packets, system_id, world)
+                        .context("failed to send player spawn packet")?;
+
+                    Ok(())
                 };
 
-                compose.unicast(&pkt, packets, system_id, world).unwrap();
-
-                let show_all = show_all(query_entity.minecraft_id());
-                compose
-                    .unicast(show_all.borrow_packet(), packets, system_id, world)
-                    .unwrap();
+                if let Err(e) = result() {
+                    query_errors.push(e);
+                }
             });
+
+        if !query_errors.is_empty() {
+            return Err(anyhow::anyhow!(
+                "failed to send player spawn packets: {query_errors:?}"
+            ));
+        }
     }
 
     let PlayerSkin {
@@ -266,8 +301,13 @@ pub fn player_join_world(
     };
 
     // todo: fix broadcasting on first tick; and this duplication can be removed!
-    compose.broadcast(&pkt, system_id).send(world).unwrap();
-    compose.unicast(&pkt, packets, system_id, world).unwrap();
+    compose
+        .broadcast(&pkt, system_id)
+        .send(world)
+        .context("failed to send player list packet")?;
+    compose
+        .unicast(&pkt, packets, system_id, world)
+        .context("failed to send player list packet")?;
 
     let player_name = vec![name];
 
@@ -283,7 +323,7 @@ pub fn player_join_world(
         )
         .exclude(packets)
         .send(world)
-        .unwrap();
+        .context("failed to send team packet")?;
 
     let current_entity_id = VarInt(entity.minecraft_id());
 
@@ -298,13 +338,13 @@ pub fn player_join_world(
         .broadcast(&spawn_player, system_id)
         .exclude(packets)
         .send(world)
-        .unwrap();
+        .context("failed to send player spawn packet")?;
 
     let show_all = show_all(entity.minecraft_id());
     compose
         .broadcast(show_all.borrow_packet(), system_id)
         .send(world)
-        .unwrap();
+        .context("failed to send show all packet")?;
 
     compose
         .unicast(
@@ -318,15 +358,17 @@ pub fn player_join_world(
             system_id,
             world,
         )
-        .unwrap();
+        .context("failed to send team packet")?;
 
     let command_packet = get_command_packet(world, root_command);
 
     compose
         .unicast(&command_packet, packets, system_id, world)
-        .unwrap();
+        .context("failed to send command packet")?;
 
     info!("{name} joined the world");
+
+    Ok(())
 }
 
 fn send_sync_tags(encoder: &mut PacketEncoder) -> anyhow::Result<()> {
@@ -341,6 +383,11 @@ fn send_sync_tags(encoder: &mut PacketEncoder) -> anyhow::Result<()> {
     Ok(())
 }
 
+#[expect(
+    clippy::unwrap_used,
+    reason = "this is only called once on startup; it should be fine. we mostly care about \
+              crashing during server execution"
+)]
 fn generate_cached_packet_bytes(
     encoder: &mut PacketEncoder,
     chunks: &Blocks,
@@ -352,7 +399,8 @@ fn generate_cached_packet_bytes(
 
     let mut buf: heapless::Vec<u8, 32> = heapless::Vec::new();
     let brand = b"discord: andrewgazelka";
-    buf.push(brand.len() as u8).unwrap();
+    let brand_len = u8::try_from(brand.len()).context("brand length too long to fit in u8")?;
+    buf.push(brand_len).unwrap();
     buf.extend_from_slice(brand).unwrap();
 
     let bytes = RawBytes::from(buf.as_slice());
@@ -372,7 +420,10 @@ fn generate_cached_packet_bytes(
         chunk_z: center_chunk.z.into(),
     })?;
 
-    let center_chunk = I16Vec2::new(center_chunk.x as i16, center_chunk.z as i16);
+    let center_chunk = I16Vec2::new(
+        i16::try_from(center_chunk.x)?,
+        i16::try_from(center_chunk.z)?,
+    );
 
     // so they do not fall
     let chunk = unsafe { chunks.get_and_wait(center_chunk, tasks) };
@@ -472,7 +523,15 @@ impl Module for PlayerJoinModule {
 
         let query = SendableQuery(query);
 
-        let stages = (0..rayon::current_num_threads() as i32)
+        let rayon_threads = rayon::current_num_threads();
+
+        #[expect(
+            clippy::unwrap_used,
+            reason = "realistically, this should never fail; 2^31 is very large"
+        )]
+        let rayon_threads = i32::try_from(rayon_threads).unwrap();
+
+        let stages = (0..rayon_threads)
             // SAFETY: promoting world to static lifetime, system won't outlive world
             .map(|i| unsafe { std::mem::transmute(world.stage(i)) })
             .map(SendableRef)
@@ -482,6 +541,11 @@ impl Module for PlayerJoinModule {
 
         let root_command = world.entity().set(Command::ROOT);
 
+        #[expect(
+            clippy::unwrap_used,
+            reason = "this is only called once on startup. We mostly care about crashing during \
+                      server execution"
+        )]
         ROOT_COMMAND.set(root_command.id()).unwrap();
 
         let hello_command = world
@@ -524,6 +588,11 @@ impl Module for PlayerJoinModule {
                     // if we are not in rayon context that means we are in a single-threaded context and 0 will work
                     let idx = rayon::current_thread_index().unwrap_or(0);
 
+                    #[expect(
+                        clippy::indexing_slicing,
+                        reason = "unless the number of rayon threads changes, this should never \
+                                  panic"
+                    )]
                     let world = &stages[idx];
                     let world = world.0;
 
@@ -540,6 +609,7 @@ impl Module for PlayerJoinModule {
                             let query = &query;
                             let query = &query.0;
 
+                            // if we get an error joining, we should kick the player
                             player_join_world(
                                 &entity,
                                 tasks,

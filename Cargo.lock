@@ -1719,6 +1719,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "hyperion-minecraft-proto"
+version = "0.1.0"
+
+[[package]]
 name = "hyperion-palette"
 version = "0.1.0"
 dependencies = [

@@ -16,6 +16,8 @@
 #![feature(ptr_metadata)]
 #![feature(stmt_expr_attributes)]
 #![feature(coroutines)]
+#![feature(array_try_map)]
+#![feature(split_array)]
 #![deny(
     clippy::expect_used,
     clippy::get_unwrap,
@@ -65,12 +67,6 @@ pub mod storage;
 pub trait PacketBundle {
     fn encode_including_ids(self, w: impl Write) -> anyhow::Result<()>;
 }
-
-// impl<T: Packet + Encode> PacketBundle for T {
-//     fn encode_including_ids(self, w: impl Write) -> anyhow::Result<()> {
-//         self.encode_with_id(w)
-//     }
-// }
 
 impl<T: Packet + Encode> PacketBundle for &T {
     fn encode_including_ids(self, w: impl Write) -> anyhow::Result<()> {

@@ -361,7 +361,7 @@ impl<P> Broadcast<'_, P> {
 }
 
 #[must_use]
-#[allow(missing_docs)]
+#[expect(missing_docs)]
 pub struct BroadcastLocal<'a, 'b, P> {
     packet: &'b P,
     compose: &'a Compose,
@@ -516,7 +516,7 @@ impl IoBuf {
         Ok(())
     }
 
-    #[allow(clippy::too_many_arguments, reason = "todo")]
+    #[expect(clippy::too_many_arguments, reason = "todo")]
     fn broadcast_local_raw(
         &self,
         data: bytes::Bytes,

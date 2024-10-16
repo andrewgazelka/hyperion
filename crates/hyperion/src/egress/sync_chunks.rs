@@ -3,7 +3,7 @@ use std::cmp::Ordering;
 use derive_more::derive::{Deref, DerefMut};
 use flecs_ecs::prelude::*;
 use glam::I16Vec2;
-use tracing::trace_span;
+use tracing::{error, trace_span};
 use valence_protocol::packets::play::{self};
 
 use crate::{
@@ -64,9 +64,13 @@ impl Module for SyncChunksModule {
                     chunk_z: i32::from(current_chunk.y).into(),
                 };
 
-                compose
-                    .unicast(&center_chunk, stream_id, system_id, &world)
-                    .unwrap();
+                if let Err(e) = compose.unicast(&center_chunk, stream_id, system_id, &world) {
+                    error!(
+                        "failed to send chunk render distance center packet: {e}. Chunk location: \
+                         {current_chunk:?}"
+                    );
+                    return;
+                }
 
                 last_sent.0 = current_chunk;
 
@@ -145,16 +149,22 @@ impl Module for SyncChunksModule {
 
                     let mut iter_count = 0;
 
+                    #[expect(clippy::cast_possible_wrap, reason = "realistically queue.changes.len() will never be large enough to wrap")]
                     let mut idx = (queue.changes.len() as isize) - 1;
 
                     while idx >= 0 {
-                        #[allow(clippy::cast_sign_loss, reason = "we are checking if < 0")]
-                        let elem = queue.changes[idx as usize];
+                        #[expect(clippy::cast_sign_loss, reason = "we are checking if < 0")]
+                        let Some(elem) = queue.changes.get(idx as usize).copied() else {
+                            // should never happen but we do not want to panic if wrong 
+                            // logic/assumptions are made
+                            error!("failed to get element from queue.changes");
+                            continue;
+                        };
 
                         // de-duplicate. todo: there are cases where duplicate will not be removed properly
                         // since sort is unstable
                         if last == Some(elem) {
-                            #[allow(clippy::cast_sign_loss, reason = "we are checking if < 0")]
+                            #[expect(clippy::cast_sign_loss, reason = "we are checking if < 0")]
                             queue.changes.swap_remove(idx as usize);
                             idx -= 1;
                             continue;
@@ -171,11 +181,14 @@ impl Module for SyncChunksModule {
                                     .unicast_raw(chunk.base_packet_bytes.clone(), stream_id, system_id, &world);
 
                                 for packet in chunk.original_delta_packets() {
-                                    compose.unicast(packet, stream_id, system_id, &world).unwrap();
+                                    if let Err(e) = compose.unicast(packet, stream_id, system_id, &world) {
+                                        error!("failed to send chunk delta packet: {e}");
+                                        return;
+                                    }
                                 }
 
                                 iter_count += 1;
-                                #[allow(clippy::cast_sign_loss, reason = "we are checking if < 0")]
+                                #[expect(clippy::cast_sign_loss, reason = "we are checking if < 0")]
                                 queue.changes.swap_remove(idx as usize);
                             }
                             GetChunk::Loading => {}

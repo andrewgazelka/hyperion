@@ -9,6 +9,7 @@ use base64::{engine::general_purpose, Engine};
 use colored::Colorize;
 use flecs_ecs::prelude::*;
 use hyperion_utils::EntityExt;
+use itertools::Itertools;
 use parking_lot::Mutex;
 use serde_json::json;
 use sha2::Digest;
@@ -46,7 +47,10 @@ fn process_handshake(
     login_state: &mut PacketState,
     packet: &BorrowedPacketFrame<'_>,
 ) -> anyhow::Result<()> {
-    debug_assert!(*login_state == PacketState::Handshake);
+    debug_assert!(
+        *login_state == PacketState::Handshake,
+        "process_handshake called with invalid state: {login_state:?}"
+    );
 
     let handshake: packets::handshaking::HandshakeC2s<'_> = packet.decode()?;
 
@@ -66,7 +70,7 @@ fn process_handshake(
     Ok(())
 }
 
-#[allow(clippy::too_many_arguments, reason = "todo del")]
+#[expect(clippy::too_many_arguments, reason = "todo; refactor")]
 fn process_login(
     world: &WorldRef<'_>,
     tasks: &AsyncRuntime,
@@ -83,18 +87,36 @@ fn process_login(
 ) -> anyhow::Result<()> {
     static UUIDS: once_cell::sync::Lazy<Mutex<Vec<uuid::Uuid>>> =
         once_cell::sync::Lazy::new(|| {
-            let uuids = File::open("10000uuids.txt").unwrap();
-            let uuids = BufReader::new(uuids);
+            let uuids = include_bytes!("../../../../10000uuids.txt");
+            let uuids = std::io::Cursor::new(uuids);
 
-            let uuids = uuids
+            #[expect(
+                clippy::expect_used,
+                reason = "this is only called once on startup; it should be fine. we mostly care \
+                          about crashing during server execution"
+            )]
+            let uuids: Vec<_> = uuids
                 .lines()
-                .map(|line| line.unwrap())
-                .map(|line| uuid::Uuid::parse_str(&line).unwrap())
-                .collect::<Vec<_>>();
+                .map(|line| {
+                    #[expect(
+                        clippy::unwrap_used,
+                        reason = "this is only called once on startup; it should be fine. we \
+                                  mostly care about crashing during server execution. Also this \
+                                  should be infallible"
+                    )]
+                    line.unwrap()
+                })
+                .map(|line| uuid::Uuid::parse_str(&line))
+                .try_collect()
+                .expect("failed to parse uuids");
+
             Mutex::new(uuids)
         });
 
-    debug_assert!(*login_state == PacketState::Login);
+    debug_assert!(
+        *login_state == PacketState::Login,
+        "process_login called with invalid state: {login_state:?}"
+    );
 
     let login::LoginHelloC2s { username, .. } = packet.decode()?;
 
@@ -125,22 +147,26 @@ fn process_login(
     let uuid = UUIDS
         .lock()
         .pop()
-        .unwrap_or_else(|| offline_uuid(&username).unwrap());
+        .unwrap_or_else(|| offline_uuid(&username));
 
     let uuid_s = format!("{uuid:?}").dimmed();
     println!("{username} {uuid_s}");
 
     let skins = comms.skins_tx.clone();
     let id = entity.id();
-    tasks.spawn(async move {
-        let mojang = MojangClient::default();
-        let skin = PlayerSkin::from_uuid(uuid, &mojang, &skins_collection)
-            .await
-            .unwrap()
-            .unwrap();
+    tasks.spawn(
+        #[expect(clippy::unwrap_used, reason = "we are panicking in a spawned task")]
+        async move {
+            let mojang = MojangClient::default();
 
-        skins.send((id, skin)).unwrap();
-    });
+            let skin = PlayerSkin::from_uuid(uuid, &mojang, &skins_collection)
+                .await
+                .unwrap()
+                .unwrap();
+
+            skins.send((id, skin)).unwrap();
+        },
+    );
 
     let pkt = login::LoginSuccessS2c {
         uuid,
@@ -148,7 +174,9 @@ fn process_login(
         properties: Cow::default(),
     };
 
-    compose.unicast(&pkt, stream_id, system_id, world).unwrap();
+    compose
+        .unicast(&pkt, stream_id, system_id, world)
+        .context("failed to send login success packet")?;
 
     *login_state = PacketState::Play;
 
@@ -170,13 +198,14 @@ fn process_login(
 }
 
 /// Get a [`uuid::Uuid`] based on the given user's name.
-fn offline_uuid(username: &str) -> anyhow::Result<uuid::Uuid> {
+fn offline_uuid(username: &str) -> uuid::Uuid {
     let digest = sha2::Sha256::digest(username);
+    let digest: [u8; 32] = digest.into();
+    let (&digest, ..) = digest.split_array_ref::<16>();
 
-    #[expect(clippy::indexing_slicing, reason = "sha256 is always 32 bytes")]
-    let slice = &digest[..16];
-
-    uuid::Uuid::from_slice(slice).context("failed to create uuid")
+    // todo: I have no idea which way we should go (be or le)
+    let digest = u128::from_be_bytes(digest);
+    uuid::Uuid::from_u128(digest)
 }
 
 fn process_status(
@@ -187,7 +216,10 @@ fn process_status(
     compose: &Compose,
     world: &World,
 ) -> anyhow::Result<()> {
-    debug_assert!(*login_state == PacketState::Status);
+    debug_assert!(
+        *login_state == PacketState::Status,
+        "process_status called with invalid state: {login_state:?}"
+    );
 
     match packet.id {
         packets::status::QueryRequestC2s::ID => {
@@ -239,7 +271,7 @@ fn process_status(
             *login_state = PacketState::Terminate;
         }
 
-        _ => panic!("unexpected packet id: {}", packet.id),
+        _ => warn!("unexpected packet id during status: {packet:?}"),
     }
 
     // todo: check version is correct
@@ -251,7 +283,7 @@ fn process_status(
 pub struct IngressModule;
 
 impl Module for IngressModule {
-    #[allow(clippy::too_many_lines)]
+    #[expect(clippy::too_many_lines)]
     fn module(world: &World) {
         system!(
             "generate_ingress_events",
@@ -289,7 +321,10 @@ impl Module for IngressModule {
             for disconnect in recv.player_disconnect.drain(..) {
                 // will initiate the removal of entity
                 info!("queue pending remove");
-                let id = lookup.get(&disconnect.stream).copied().unwrap();
+                let Some(id) = lookup.get(&disconnect.stream).copied() else {
+                    error!("failed to get id for disconnect stream {disconnect:?}");
+                    continue;
+                };
                 world.entity_from_id(*id).add::<PendingRemove>();
             }
         });
