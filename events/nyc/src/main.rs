@@ -1,5 +1,4 @@
 use clap::Parser;
-use colored::Colorize;
 use jemallocator::Jemalloc;
 use nyc::init_game;
 use tracing_subscriber::EnvFilter;
@@ -20,7 +19,7 @@ struct Args {
 
 fn print_nyc() {
     let nyc = include_str!("nyc.txt");
-    println!("\n\n{}\n", nyc.bright_white());
+    println!("\n\n{nyc}\n");
 }
 
 fn main() {

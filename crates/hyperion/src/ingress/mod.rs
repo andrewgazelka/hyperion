@@ -28,11 +28,12 @@ use crate::{
         animation::ActiveAnimation, blocks::Blocks, handlers::PacketSwitchQuery,
         metadata::Metadata, skin::PlayerSkin, AiTargetable, ChunkPosition, Comms,
         ConfirmBlockSequences, EntityReaction, Health, ImmuneStatus, InGameName, PacketState,
-        Player, Position, StreamLookup, Uuid, PLAYER_SPAWN_POSITION,
+        Player, Position, StreamLookup, Uuid,
     },
     storage::{Events, GlobalEventHandlers, PlayerJoinServer, SkinHandler},
     system_registry::{SystemId, RECV_DATA, REMOVE_PLAYER_FROM_VISIBILITY},
     util::{mojang::MojangClient, SendableRef, TracingExt},
+    PLAYER_SPAWN_POSITION,
 };
 
 #[derive(Component, Debug)]

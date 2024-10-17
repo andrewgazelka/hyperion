@@ -6,9 +6,9 @@ use bytes::Bytes;
 use chunk::LoadedChunk;
 use flecs_ecs::{core::Entity, macros::Component};
 use fxhash::FxBuildHasher;
-use glam::{I16Vec2, IVec2, IVec3};
+use glam::{IVec2, IVec3};
 use indexmap::IndexMap;
-use loader::{launch_manager, LaunchHandle, CHUNK_HEIGHT_SPAN};
+use loader::{launch_manager, LaunchHandle};
 use roaring::RoaringBitmap;
 use shared::Shared;
 use tracing::instrument;
@@ -16,7 +16,7 @@ use valence_generated::block::BlockState;
 use valence_registry::BiomeRegistry;
 use valence_server::layer::chunk::Chunk;
 
-use crate::runtime::AsyncRuntime;
+use crate::{runtime::AsyncRuntime, CHUNK_HEIGHT_SPAN};
 
 pub mod chunk;
 
@@ -47,8 +47,7 @@ pub enum TrySetBlockDeltaError {
 #[derive(Component)]
 pub struct Blocks {
     /// Map to a Chunk by Entity ID
-    chunk_cache: IndexMap<I16Vec2, LoadedChunk, FxBuildHasher>,
-    // chunk_cache: lru::LruCache<I16Vec2, LoadedChunk>,
+    chunk_cache: IndexMap<IVec2, LoadedChunk, FxBuildHasher>,
     should_update: RoaringBitmap,
 
     launch_manager: LaunchHandle,
@@ -101,13 +100,13 @@ impl Blocks {
         self.should_update.clear();
     }
 
-    pub fn cache_mut(&mut self) -> &mut IndexMap<I16Vec2, LoadedChunk, FxBuildHasher> {
+    pub fn cache_mut(&mut self) -> &mut IndexMap<IVec2, LoadedChunk, FxBuildHasher> {
         &mut self.chunk_cache
     }
 
     /// get_and_wait can only be called if a chunk has not already been loaded
     #[instrument(skip_all)]
-    pub unsafe fn get_and_wait(&self, position: I16Vec2, tasks: &AsyncRuntime) -> Bytes {
+    pub unsafe fn get_and_wait(&self, position: IVec2, tasks: &AsyncRuntime) -> Bytes {
         if let Some(cached) = self.get_cached(position) {
             return cached;
         }
@@ -142,11 +141,11 @@ impl Blocks {
     // I wonder if we can just implement something, where we can return an `impl Deref`
     // and see if this would make more sense or not.
     #[must_use]
-    pub fn get_loaded_chunk(&self, chunk_position: I16Vec2) -> Option<&LoadedChunk> {
+    pub fn get_loaded_chunk(&self, chunk_position: IVec2) -> Option<&LoadedChunk> {
         self.chunk_cache.get(&chunk_position)
     }
 
-    pub fn get_loaded_chunk_mut(&mut self, chunk_position: I16Vec2) -> Option<&mut LoadedChunk> {
+    pub fn get_loaded_chunk_mut(&mut self, chunk_position: IVec2) -> Option<&mut LoadedChunk> {
         self.chunk_cache.get_mut(&chunk_position)
     }
 
@@ -206,7 +205,7 @@ impl Blocks {
                 let start = start.as_uvec2();
                 let end = end.as_uvec2();
 
-                let chunk_pos = IVec2::new(cx, cz).as_i16vec2();
+                let chunk_pos = IVec2::new(cx, cz);
 
                 let Some(chunk) = self.get_loaded_chunk(chunk_pos) else {
                     continue;
@@ -254,7 +253,6 @@ impl Blocks {
 
         let chunk_pos: IVec2 = IVec2::new(position.x, position.z) >> 4;
         let chunk_start_block: IVec2 = chunk_pos << 4;
-        let chunk_pos = chunk_pos.as_i16vec2();
 
         let chunk = self.get_loaded_chunk(chunk_pos)?;
 
@@ -285,7 +283,6 @@ impl Blocks {
 
         let chunk_pos: IVec2 = IVec2::new(position.x, position.z) >> 4;
         let chunk_start_block: IVec2 = chunk_pos << 4;
-        let chunk_pos = chunk_pos.as_i16vec2();
 
         let Some((chunk_idx, _, chunk)) = self.chunk_cache.get_full_mut(&chunk_pos) else {
             return Err(TrySetBlockDeltaError::ChunkNotLoaded);
@@ -312,7 +309,7 @@ impl Blocks {
     // That should be done in a couple of days, probably.
 
     #[must_use]
-    pub fn get_cached(&self, position: I16Vec2) -> Option<Bytes> {
+    pub fn get_cached(&self, position: IVec2) -> Option<Bytes> {
         if let Some(result) = self.chunk_cache.get(&position) {
             return Some(result.bytes());
         }
@@ -322,7 +319,7 @@ impl Blocks {
 
     /// get the cached chunk for the given position or load it if it is not cached.
     #[must_use]
-    pub fn get_cached_or_load(&self, position: I16Vec2) -> GetChunk<'_> {
+    pub fn get_cached_or_load(&self, position: IVec2) -> GetChunk<'_> {
         if let Some(result) = self.chunk_cache.get(&position) {
             return GetChunk::Loaded(result);
         };

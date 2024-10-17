@@ -4,7 +4,7 @@ use bvh_region::{aabb::Aabb, HasAabb};
 use derive_more::{Deref, DerefMut, Display, From};
 use flecs_ecs::prelude::*;
 use fxhash::FxHashMap;
-use glam::{I16Vec2, IVec3, Vec3};
+use glam::{IVec2, IVec3, Vec3};
 use serde::{Deserialize, Serialize};
 use skin::PlayerSkin;
 use uuid;
@@ -317,20 +317,18 @@ impl Display for Position {
 
 #[derive(Component, Debug, Copy, Clone)]
 #[expect(missing_docs)]
-pub struct ChunkPosition(pub I16Vec2);
+pub struct ChunkPosition(pub IVec2);
 
-const SANE_MAX_RADIUS: i16 = 128;
+const SANE_MAX_RADIUS: i32 = 128;
 
 impl ChunkPosition {
     #[must_use]
     #[expect(missing_docs)]
     pub const fn null() -> Self {
-        Self(I16Vec2::new(SANE_MAX_RADIUS, SANE_MAX_RADIUS))
+        // todo: huh
+        Self(IVec2::new(SANE_MAX_RADIUS, SANE_MAX_RADIUS))
     }
 }
-
-/// The initial player spawn position. todo: this should not be a constant
-pub const PLAYER_SPAWN_POSITION: Vec3 = Vec3::new(-464.0, -16.0, -60.0);
 
 impl Position {
     // todo: possible have separate field for head yaw
@@ -365,11 +363,11 @@ impl Position {
 
     /// Get the chunk position of the center of the player's bounding box.
     #[must_use]
-    pub fn chunk_pos(&self) -> I16Vec2 {
+    pub fn chunk_pos(&self) -> IVec2 {
         let position = self.position.as_ivec3();
         let x = position.x >> 4;
         let z = position.z >> 4;
-        I16Vec2::new(i16::try_from(x).unwrap(), i16::try_from(z).unwrap())
+        IVec2::new(x, z)
     }
 }
 

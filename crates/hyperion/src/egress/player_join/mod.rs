@@ -2,7 +2,7 @@ use std::{borrow::Cow, collections::BTreeSet};
 
 use anyhow::Context;
 use flecs_ecs::prelude::*;
-use glam::{I16Vec2, IVec3};
+use glam::{IVec2, IVec3};
 use hyperion_crafting::{Action, CraftingRegistry, RecipeBookState};
 use hyperion_utils::EntityExt;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
@@ -36,10 +36,11 @@ use crate::{
         command::{get_command_packet, Command, ROOT_COMMAND},
         skin::PlayerSkin,
         util::registry_codec_raw,
-        Comms, InGameName, Play, Position, Uuid, PLAYER_SPAWN_POSITION,
+        Comms, InGameName, Play, Position, Uuid,
     },
     system_registry::{SystemId, PLAYER_JOINS},
     util::{SendableQuery, SendableRef},
+    PLAYER_SPAWN_POSITION,
 };
 
 #[expect(
@@ -86,7 +87,7 @@ pub fn player_join_world(
         dimension_names: Cow::Owned(dimension_names),
         registry_codec: Cow::Borrowed(registry_codec),
         max_players: config.max_players.into(),
-        view_distance: i32::from(config.view_distance).into(), // max view distance
+        view_distance: config.view_distance.into(), // max view distance
         simulation_distance: config.simulation_distance.into(),
         reduced_debug_info: false,
         enable_respawn_screen: false,
@@ -421,10 +422,7 @@ fn generate_cached_packet_bytes(
         chunk_z: center_chunk.z.into(),
     })?;
 
-    let center_chunk = I16Vec2::new(
-        i16::try_from(center_chunk.x)?,
-        i16::try_from(center_chunk.z)?,
-    );
+    let center_chunk = IVec2::new(center_chunk.x, center_chunk.z);
 
     // so they do not fall
     let chunk = unsafe { chunks.get_and_wait(center_chunk, tasks) };

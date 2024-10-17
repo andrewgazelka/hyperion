@@ -1,5 +1,5 @@
 #![allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
-use glam::{I16Vec2, IVec3};
+use glam::{IVec2, IVec3};
 use ndarray::ArrayView3;
 use valence_generated::block::BlockState;
 
@@ -14,10 +14,7 @@ impl Blocks {
         let chunk_x = x >> 4;
         let chunk_z = z >> 4;
 
-        let chunk_x = i16::try_from(chunk_x).unwrap();
-        let chunk_z = i16::try_from(chunk_z).unwrap();
-
-        let Some((index, ..)) = self.chunk_cache.get_full(&I16Vec2::new(chunk_x, chunk_z)) else {
+        let Some((index, ..)) = self.chunk_cache.get_full(&IVec2::new(chunk_x, chunk_z)) else {
             return;
         };
 
@@ -35,13 +32,13 @@ impl Blocks {
             );
 
         // Get all unique chunk positions
-        let start_chunk = IVec3::new(start.x >> 4, start.y >> 4, start.z >> 4).as_i16vec3();
-        let end_chunk = IVec3::new(end.x >> 4, end.y >> 4, end.z >> 4).as_i16vec3();
+        let start_chunk = IVec3::new(start.x >> 4, start.y >> 4, start.z >> 4);
+        let end_chunk = IVec3::new(end.x >> 4, end.y >> 4, end.z >> 4);
         for section_x in start_chunk.x..=end_chunk.x {
             for section_z in start_chunk.z..=end_chunk.z {
                 let Some((idx, _, loaded_chunk)) = self
                     .chunk_cache
-                    .get_full_mut(&I16Vec2::new(section_x, section_z))
+                    .get_full_mut(&IVec2::new(section_x, section_z))
                 else {
                     continue;
                 };
@@ -51,18 +48,14 @@ impl Blocks {
                 let chunk = &mut loaded_chunk.chunk;
 
                 for section_y in start_chunk.y..=end_chunk.y {
-                    let section_idx = (section_y - (START_Y / 16) as i16) as usize;
+                    let section_idx = (section_y - (START_Y / 16)) as usize;
 
                     let section = &mut chunk.sections[section_idx];
 
                     // idx is yzx
                     // todo: section.set_delta(idx, block)
                     // Calculate the bounds for this section
-                    let section_start = IVec3::new(
-                        i32::from(section_x) * 16,
-                        i32::from(section_y) * 16,
-                        i32::from(section_z) * 16,
-                    );
+                    let section_start = IVec3::new(section_x * 16, section_y * 16, section_z * 16);
                     let section_end = section_start + IVec3::new(15, 15, 15);
 
                     // Iterate over the intersection of the frame and this section

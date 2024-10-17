@@ -11,7 +11,6 @@ anyhow.workspace = true
 clap = { workspace = true, features = ["derive"] }
 compact_str.workspace = true
 dotenvy = "0.15.7"
-colored = "2.1.0"
 fastrand.workspace = true
 flecs_ecs.workspace = true
 hyperion-inventory.workspace = true

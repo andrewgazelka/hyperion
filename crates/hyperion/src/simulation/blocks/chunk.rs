@@ -1,7 +1,7 @@
 use std::fmt::Debug;
 
 use bytes::Bytes;
-use glam::I16Vec2;
+use glam::IVec2;
 use valence_generated::block::BlockState;
 use valence_server::layer::chunk::Chunk;
 
@@ -65,11 +65,11 @@ pub struct LoadedChunk {
     /// for obtaining the actual data from the chunk such as getting the block state of a block at a given position.
     pub chunk: ChunkData,
 
-    pub position: I16Vec2,
+    pub position: IVec2,
 }
 
 impl LoadedChunk {
-    pub const fn new(base_packet_bytes: Bytes, chunk: ChunkData, position: I16Vec2) -> Self {
+    pub const fn new(base_packet_bytes: Bytes, chunk: ChunkData, position: IVec2) -> Self {
         Self {
             base_packet_bytes,
             chunk,

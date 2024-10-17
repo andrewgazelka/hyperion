@@ -1,6 +1,7 @@
 use std::{borrow::Cow, collections::BTreeMap};
 
 use thiserror::Error;
+use tracing::warn;
 use valence_anvil::RegionError;
 use valence_generated::block::{BlockKind, BlockState, PropName, PropValue};
 use valence_nbt::{Compound, List, Value};
@@ -288,6 +289,7 @@ pub fn parse_chunk(
             .copy_from_slice(sky_light);
 
         let Some(Value::Compound(mut block_states)) = section.remove("block_states") else {
+            warn!("missing block states was {section:#?}");
             return Err(ParseChunkError::MissingBlockStates);
         };
 

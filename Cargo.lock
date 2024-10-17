@@ -2234,7 +2234,6 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
- "colored",
  "compact_str",
  "dotenvy",
  "fastrand 2.1.1",

@@ -2,7 +2,7 @@ use std::cmp::Ordering;
 
 use derive_more::derive::{Deref, DerefMut};
 use flecs_ecs::prelude::*;
-use glam::I16Vec2;
+use glam::IVec2;
 use tracing::{error, trace_span};
 use valence_protocol::{
     packets::play::{self},
@@ -22,7 +22,7 @@ use crate::{
 
 #[derive(Component, Deref, DerefMut, Default)]
 pub struct ChunkSendQueue {
-    changes: Vec<I16Vec2>,
+    changes: Vec<IVec2>,
 }
 
 #[derive(Component)]
@@ -63,8 +63,8 @@ impl Module for SyncChunksModule {
 
                 // center chunk
                 let center_chunk = play::ChunkRenderDistanceCenterS2c {
-                    chunk_x: i32::from(current_chunk.x).into(),
-                    chunk_z: i32::from(current_chunk.y).into(),
+                    chunk_x: current_chunk.x.into(),
+                    chunk_z: current_chunk.y.into(),
                 };
 
                 if let Err(e) = compose.unicast(&center_chunk, stream_id, system_id, &world) {
@@ -95,13 +95,13 @@ impl Module for SyncChunksModule {
 
                 let removed_chunks = last_sent_range_x
                     .clone()
-                    .flat_map(|x| last_sent_range_z.clone().map(move |z| I16Vec2::new(x, z)))
+                    .flat_map(|x| last_sent_range_z.clone().map(move |z| IVec2::new(x, z)))
                     .filter(|pos| {
                         !current_range_x.contains(&pos.x) || !current_range_z.contains(&pos.y)
                     });
 
                 for chunk in removed_chunks {
-                    let pos = ChunkPos::new(i32::from(chunk.x), i32::from(chunk.y));
+                    let pos = ChunkPos::new(chunk.x, chunk.y);
                     let unload_chunk = play::UnloadChunkS2c { pos };
                     if let Err(e) = compose.unicast(&unload_chunk, stream_id, system_id, &world) {
                         error!(
@@ -111,7 +111,7 @@ impl Module for SyncChunksModule {
                 }
 
                 let added_chunks = current_range_x
-                    .flat_map(move |x| current_range_z.clone().map(move |z| I16Vec2::new(x, z)))
+                    .flat_map(move |x| current_range_z.clone().map(move |z| IVec2::new(x, z)))
                     .filter(|pos| {
                         !last_sent_range_x.contains(&pos.x) || !last_sent_range_z.contains(&pos.y)
                     });

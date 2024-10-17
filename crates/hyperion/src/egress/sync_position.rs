@@ -19,10 +19,10 @@ use crate::{
     net::{Compose, NetworkStreamRef},
     simulation::{
         animation::ActiveAnimation, metadata::Metadata, EntityReaction, Health, Position,
-        PLAYER_SPAWN_POSITION,
     },
     system_registry::SYNC_ENTITY_POSITION,
     util::TracingExt,
+    PLAYER_SPAWN_POSITION,
 };
 
 #[derive(Component)]

@@ -42,7 +42,12 @@ impl Region {
     pub fn open(file: &File) -> Result<Self, RegionError> {
         let mmap = unsafe { MmapOptions::new().map(file)? };
 
-        let header = &mmap[..SECTOR_SIZE * 2];
+        let Some(header) = &mmap.get(..SECTOR_SIZE * 2) else {
+            return Err(RegionError::Io(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "region header is not present",
+            )));
+        };
 
         let locations = std::array::from_fn(|i| {
             Location(u32::from_be_bytes(

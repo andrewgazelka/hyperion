@@ -3,7 +3,7 @@ use std::{borrow::Cow, cell::RefCell, collections::HashSet, io::Write, sync::Arc
 use anyhow::{bail, Context};
 use bytes::BytesMut;
 use fxhash::FxHashSet;
-use glam::I16Vec2;
+use glam::IVec2;
 use itertools::Itertools;
 use libdeflater::{CompressionLvl, Compressor};
 use parse::ChunkData;
@@ -19,10 +19,8 @@ pub mod parse;
 use super::{chunk::LoadedChunk, shared::Shared};
 use crate::{
     net::encoder::PacketEncoder, runtime::AsyncRuntime, simulation::util::heightmap,
-    storage::BitStorage, Scratch,
+    storage::BitStorage, Scratch, CHUNK_HEIGHT_SPAN,
 };
-
-pub const CHUNK_HEIGHT_SPAN: u32 = 384;
 
 struct TasksState {
     bytes: BytesMut,
@@ -45,13 +43,13 @@ thread_local! {
 }
 
 struct Message {
-    position: I16Vec2,
+    position: IVec2,
     tx: tokio::sync::mpsc::UnboundedSender<LoadedChunk>,
 }
 
 struct LaunchManager {
     rx_load_chunk_requests: tokio::sync::mpsc::UnboundedReceiver<Message>,
-    received_request: FxHashSet<I16Vec2>,
+    received_request: FxHashSet<IVec2>,
     shared: Arc<Shared>,
     runtime: AsyncRuntime,
 }
@@ -61,7 +59,7 @@ pub struct LaunchHandle {
 }
 
 impl LaunchHandle {
-    pub fn send(&self, position: I16Vec2, tx: tokio::sync::mpsc::UnboundedSender<LoadedChunk>) {
+    pub fn send(&self, position: IVec2, tx: tokio::sync::mpsc::UnboundedSender<LoadedChunk>) {
         self.tx_load_chunk_requests
             .send(Message { position, tx })
             .unwrap();
@@ -113,13 +111,15 @@ impl LaunchManager {
         self.runtime.spawn(async move {
             let loaded_chunk = match load_chunk(position, &shared).await {
                 Ok(loaded_chunk) => {
-                    if loaded_chunk.chunk.height() == CHUNK_HEIGHT_SPAN {
+                    let chunk_height = loaded_chunk.chunk.height();
+                    if chunk_height == CHUNK_HEIGHT_SPAN {
                         loaded_chunk
                     } else {
                         warn!(
                             "got a chunk that did not have the correct height at {position}, \
                              setting to empty. This can happen if a chunk was generated in an old \
-                             version of Minecraft."
+                             version of Minecraft.\n\nExpected height: {CHUNK_HEIGHT_SPAN}, got \
+                             {chunk_height}"
                         );
                         empty_chunk(position)
                     }
@@ -135,7 +135,7 @@ impl LaunchManager {
     }
 }
 
-fn empty_chunk(position: I16Vec2) -> LoadedChunk {
+fn empty_chunk(position: IVec2) -> LoadedChunk {
     // height: 24
     let unloaded = ChunkData::with_height(CHUNK_HEIGHT_SPAN);
 
@@ -150,9 +150,9 @@ fn empty_chunk(position: I16Vec2) -> LoadedChunk {
     LoadedChunk::new(bytes.freeze(), unloaded, position)
 }
 
-async fn load_chunk(position: I16Vec2, shared: &Shared) -> anyhow::Result<LoadedChunk> {
-    let x = i32::from(position.x);
-    let y = i32::from(position.y);
+async fn load_chunk(position: IVec2, shared: &Shared) -> anyhow::Result<LoadedChunk> {
+    let x = position.x;
+    let y = position.y;
 
     // todo: I do not love this heap allocation.
     let mut decompress_buf = vec![0; 1024 * 1024];
@@ -170,8 +170,11 @@ async fn load_chunk(position: I16Vec2, shared: &Shared) -> anyhow::Result<Loaded
             .context("no chunk found")?
     };
 
-    let Ok(chunk) = parse::parse_chunk(raw_chunk.data, &shared.biome_to_id) else {
-        bail!("failed to parse chunk {position:?}");
+    let chunk = match parse::parse_chunk(raw_chunk.data, &shared.biome_to_id) {
+        Ok(chunk) => chunk,
+        Err(err) => {
+            bail!("failed to parse chunk {position:?}: {err}");
+        }
     };
 
     STATE.with_borrow_mut(|state| {
@@ -188,13 +191,13 @@ async fn load_chunk(position: I16Vec2, shared: &Shared) -> anyhow::Result<Loaded
 // #[instrument(skip_all, level = "trace", fields(location = ?location))]
 fn encode_chunk_packet(
     chunk: &ChunkData,
-    location: I16Vec2,
+    location: IVec2,
     state: &mut TasksState,
 ) -> anyhow::Result<Option<BytesMut>> {
     let encoder = PacketEncoder::new(CompressionThreshold::from(6));
 
-    let section_count = 384 / 16_usize;
-    let dimension_height = 384;
+    let section_count = CHUNK_HEIGHT_SPAN as usize / 16_usize;
+    let dimension_height = CHUNK_HEIGHT_SPAN;
 
     let map = heightmap(dimension_height, dimension_height - 3);
     let map = map.into_iter().map(i64::try_from).try_collect()?;
@@ -245,7 +248,7 @@ fn encode_chunk_packet(
     let ones_data = all_ones.into_data();
 
     let pkt = play::ChunkDataS2c {
-        pos: ChunkPos::new(i32::from(location.x), i32::from(location.y)),
+        pos: ChunkPos::new(location.x, location.y),
 
         // todo: I think this is for rain and snow???
         heightmaps: Cow::Owned(compound! {

@@ -1,6 +1,6 @@
 use std::io::Write;
 
-use glam::I16Vec2;
+use glam::IVec2;
 use valence_protocol::{
     packets::play::{chunk_delta_update_s2c::ChunkDeltaUpdateEntry, ChunkDeltaUpdateS2c},
     ChunkSectionPos, Encode, Packet, VarInt,
@@ -98,9 +98,7 @@ impl PacketBundle for DeltaPacket<'_> {
 
 impl LoadedChunk {
     pub fn delta_drain_packets(&mut self) -> impl Iterator<Item = DeltaDrainPacket<'_>> + '_ {
-        let I16Vec2 { x, y: z } = self.position;
-        let x = i32::from(x);
-        let z = i32::from(z);
+        let IVec2 { x, y: z } = self.position;
 
         self.chunk
             .sections
@@ -119,9 +117,7 @@ impl LoadedChunk {
     }
 
     pub fn original_delta_packets(&self) -> impl Iterator<Item = DeltaPacket<'_>> + '_ {
-        let I16Vec2 { x, y: z } = self.position;
-        let x = i32::from(x);
-        let z = i32::from(z);
+        let IVec2 { x, y: z } = self.position;
 
         self.chunk
             .sections
