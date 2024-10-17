@@ -54,8 +54,7 @@ Feel free to PR if something is missing/incorrect.
 | PvP                                                                                  | ✅        | ❌       | ❌       |
 | Vertical scaling (fully multi-threaded)                                              | ✅        | ❌       | ❌       |
 | Horizontal scaling (through proxies)                                                 | ✅        | ❌       | ❌       | 
-| Tracing/profiling through [tracy](https://github.com/wolfpld/tracy))                 | ✅        | ❌       | ❌       | 
-| [Flecs ECS](https://github.com/SanderMertens/flecs/tree/master)                      | ✅        | ❌       | ❌       |
+| Advanced tracing support ([tracy](https://github.com/wolfpld/tracy))                 | ✅        | ❌       | ❌       | 
 | Set Resource Packets                                                                 | ❌        | ✅       | ?       |
 | Configuration                                                                        | ✅        | ✅       | ✅       |
 | Minecraft 1.20.1                                                                     | ✅        | ✅       | ✅       |
