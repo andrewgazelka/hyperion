@@ -6,7 +6,6 @@ edition = "2021"
 
 [dependencies]
 hyperion.workspace = true
-tracing.workspace = true
 tracing-subscriber = { workspace = true, features = ["chrono", "env-filter"] }
 clap = { workspace = true, features = ["derive"] }
 

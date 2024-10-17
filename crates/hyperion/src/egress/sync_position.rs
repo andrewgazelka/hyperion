@@ -61,7 +61,7 @@ impl Module for SyncPositionModule {
             )| {
                 let (compose, pose, io, metadata, animation, inventory, reaction, health) = elems;
 
-                let run = || {
+                let mut run = || {
                     let entity_id = VarInt(entity.minecraft_id());
 
                     let io = *io;
@@ -204,23 +204,19 @@ impl Module for SyncPositionModule {
                             error!("failed to convert slot to u16 {slot}");
                             continue;
                         };
-                        
                         let item = inventory.get(slot).with_context(|| {
                             format!("failed to get item for slot {slot}")
                         })?;
-                        
                         let Ok(slot) = i16::try_from(slot) else {
                             error!("failed to convert slot to i16 {slot}");
                             continue;
                         };
-                        
                         let pkt = play::ScreenHandlerSlotUpdateS2c {
                             window_id: 0,
                             state_id: VarInt::default(),
                             slot_idx: slot,
                             slot_data: Cow::Borrowed(item),
                         };
-                        
                         compose.unicast(&pkt, io, system_id, &world).context("failed to send inventory update")?;
                     }
 
@@ -251,6 +247,9 @@ impl Module for SyncPositionModule {
 
                     anyhow::Ok(())
                 };
+                if let Err(e) = run() {
+                    error!("failed to run sync_position: {e}");
+                }
             },
         );
     }

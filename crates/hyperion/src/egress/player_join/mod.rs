@@ -28,6 +28,7 @@ pub use list::*;
 use crate::{
     config::Config,
     egress::metadata::show_all,
+    ingress::PendingRemove,
     net::{Compose, NetworkStreamRef},
     runtime::AsyncRuntime,
     simulation::{
@@ -610,7 +611,7 @@ impl Module for PlayerJoinModule {
                             let query = &query.0;
 
                             // if we get an error joining, we should kick the player
-                            player_join_world(
+                            if let Err(e) = player_join_world(
                                 &entity,
                                 tasks,
                                 blocks,
@@ -626,7 +627,9 @@ impl Module for PlayerJoinModule {
                                 query,
                                 crafting_registry,
                                 config,
-                            );
+                            ) {
+                                entity.set(PendingRemove::new(e.to_string()));
+                            };
                         },
                     );
 

@@ -39,8 +39,8 @@ pub struct Region {
 const SECTOR_SIZE: usize = 4096;
 
 impl Region {
-    pub fn open(file: File) -> Result<Self, RegionError> {
-        let mmap = unsafe { MmapOptions::new().map(&file)? };
+    pub fn open(file: &File) -> Result<Self, RegionError> {
+        let mmap = unsafe { MmapOptions::new().map(file)? };
 
         let header = &mmap[..SECTOR_SIZE * 2];
 
@@ -119,11 +119,12 @@ impl Region {
         let chunk_start = sector_offset * SECTOR_SIZE as u64;
         let chunk_end = chunk_start + (sector_count * SECTOR_SIZE) as u64;
 
-        if chunk_end as usize > self.mmap.len() {
+        if usize::try_from(chunk_end).unwrap() > self.mmap.len() {
             return Err(RegionError::InvalidChunkSize);
         }
 
-        let chunk_data = &self.mmap[chunk_start as usize..chunk_end as usize];
+        let chunk_data =
+            &self.mmap[usize::try_from(chunk_start).unwrap()..usize::try_from(chunk_end).unwrap()];
 
         let exact_chunk_size = u32::from_be_bytes(chunk_data[..4].try_into().unwrap()) as usize;
         if exact_chunk_size == 0 {
@@ -225,8 +226,8 @@ impl Region {
         sector_offset: u64,
         sector_count: usize,
     ) {
-        let start_index = sector_offset as usize;
-        let end_index = sector_offset as usize + sector_count;
+        let start_index = usize::try_from(sector_offset).unwrap();
+        let end_index = usize::try_from(sector_offset).unwrap() + sector_count;
         if used_sectors.len() < end_index {
             used_sectors.resize(start_index, false);
             used_sectors.resize(end_index, true);
@@ -235,7 +236,7 @@ impl Region {
         }
     }
 
-    #[allow(clippy::cast_sign_loss, reason = "todo")]
+    #[expect(clippy::cast_sign_loss, reason = "todo")]
     const fn chunk_idx(pos_x: i32, pos_z: i32) -> usize {
         (pos_x.rem_euclid(32) + pos_z.rem_euclid(32) * 32) as usize
     }

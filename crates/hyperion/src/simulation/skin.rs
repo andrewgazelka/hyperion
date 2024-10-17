@@ -20,7 +20,7 @@ impl PlayerSkin {
         textures: String::new(),
         signature: String::new(),
     };
-    
+
     /// Creates a new [`PlayerSkin`]
     #[must_use]
     pub const fn new(textures: String, signature: String) -> Self {
@@ -78,7 +78,7 @@ impl PlayerSkin {
                 textures: textures.to_string(),
                 signature: signature.to_string(),
             };
-            skins.insert(uuid, res.clone())?;
+            skins.insert(uuid, &res)?;
             return Ok(Some(res));
         }
         Ok(None)

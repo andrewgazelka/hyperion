@@ -185,10 +185,10 @@ impl ProxyReader {
             if !self.buffer.is_empty() {
                 let mut cursor = Cursor::new(&self.buffer);
 
-                // tood: handle invalid varint
+                // todo: handle invalid varint
                 if let Ok(len) = decode_varint(&mut cursor) {
-                    self.buffer.advance(cursor.position() as usize);
-                    break len as usize;
+                    self.buffer.advance(usize::try_from(cursor.position())?);
+                    break usize::try_from(len)?;
                 }
             }
 

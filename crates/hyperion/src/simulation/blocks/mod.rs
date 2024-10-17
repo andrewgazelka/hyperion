@@ -59,8 +59,8 @@ pub struct Blocks {
 }
 
 impl Blocks {
-    pub(crate) fn new(registry: &BiomeRegistry, runtime: AsyncRuntime) -> anyhow::Result<Self> {
-        let shared = Shared::new(registry, &runtime)?;
+    pub(crate) fn new(registry: &BiomeRegistry, runtime: &AsyncRuntime) -> anyhow::Result<Self> {
+        let shared = Shared::new(registry, runtime)?;
         let shared = Arc::new(shared);
 
         let (tx_loaded_chunks, rx_loaded_chunks) = tokio::sync::mpsc::unbounded_channel();
@@ -106,7 +106,6 @@ impl Blocks {
     }
 
     /// get_and_wait can only be called if a chunk has not already been loaded
-    #[allow(clippy::missing_panics_doc, reason = "todo use unwrap unchecked")]
     #[instrument(skip_all)]
     pub unsafe fn get_and_wait(&self, position: I16Vec2, tasks: &AsyncRuntime) -> Bytes {
         if let Some(cached) = self.get_cached(position) {
@@ -152,7 +151,7 @@ impl Blocks {
     }
 
     /// Returns all loaded blocks within the range from `start` to `end` (inclusive).
-    #[allow(clippy::excessive_nesting)]
+    #[expect(clippy::excessive_nesting)]
     pub fn get_blocks<F, R>(&self, start: IVec3, end: IVec3, mut f: F) -> R
     where
         F: FnMut(IVec3, BlockState) -> R,
@@ -169,10 +168,10 @@ impl Blocks {
         // let start_chunk_pos = start_chunk_pos.as_i16vec2();
         // let end_chunk_pos = end_chunk_pos.as_i16vec2();
 
-        #[allow(clippy::cast_sign_loss)]
+        #[expect(clippy::cast_sign_loss)]
         let y_start = (start.y - START_Y).max(0) as u32;
 
-        #[allow(clippy::cast_sign_loss)]
+        #[expect(clippy::cast_sign_loss)]
         let y_end = (end.y - START_Y).max(0) as u32;
 
         for cx in start_chunk_pos.x..=end_chunk_pos.x {
@@ -226,9 +225,12 @@ impl Blocks {
 
                             let block = chunk.block_state(x, y, z);
 
-                            let y = y as i32 + START_Y;
-                            let pos =
-                                IVec3::new(x as i32 + chunk_start.x, y, z as i32 + chunk_start.y);
+                            let y = i32::try_from(y).unwrap() + START_Y;
+                            let pos = IVec3::new(
+                                i32::try_from(x).unwrap() + chunk_start.x,
+                                y,
+                                i32::try_from(z).unwrap() + chunk_start.y,
+                            );
 
                             f(pos, block)?;
                         }
@@ -296,7 +298,7 @@ impl Blocks {
         let old_state = chunk.chunk.set_delta(x, y, z, state);
 
         if old_state != state {
-            self.should_update.insert(chunk_idx as u32);
+            self.should_update.insert(u32::try_from(chunk_idx).unwrap());
         }
 
         Ok(old_state)

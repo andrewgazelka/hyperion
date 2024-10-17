@@ -46,46 +46,39 @@ impl Db {
 /// A handler for player skin operations
 #[derive(Component, Debug, Clone)]
 pub struct SkinHandler {
-    something: u32,
-    // db: Db,
+    db: Db,
 }
 
 impl SkinHandler {
-    // /// Creates a new [`SkinHandler`] from a given [`Db`].
-    // #[must_use]
-    // pub const fn new(db: Db) -> Self {
-    //     Self { db }
-    // }
-    pub const fn new() -> Self {
-        Self {
-            something: 0,
-        }
+    /// Creates a new [`SkinHandler`] from a given [`Db`].
+    #[must_use]
+    pub const fn new(db: Db) -> Self {
+        Self { db }
     }
 
     /// Finds a [`PlayerSkin`] by its UUID.
     pub fn find(&self, uuid: Uuid) -> anyhow::Result<Option<PlayerSkin>> {
-        Ok(None)
-        // // We open a read transaction to check if those values are now available
-        // 
-        // let uuid = uuid.as_u128();
-        // 
-        // let rtxn = self.db.env.read_txn()?;
-        // let skin = self.db.skins.get(&rtxn, &uuid);
-        // 
-        // let Some(skin) = skin? else {
-        //     return Ok(None);
-        // };
-        // 
-        // Ok(Some(skin))
+        // We open a read transaction to check if those values are now available
+
+        let uuid = uuid.as_u128();
+
+        let rtxn = self.db.env.read_txn()?;
+        let skin = self.db.skins.get(&rtxn, &uuid);
+
+        let Some(skin) = skin? else {
+            return Ok(None);
+        };
+
+        Ok(Some(skin))
     }
 
     /// Inserts a [`PlayerSkin`] into the database.
-    pub fn insert(&self, uuid: Uuid, skin: PlayerSkin) -> anyhow::Result<()> {
-        // let uuid = uuid.as_u128();
-        // 
-        // let mut wtxn = self.db.env.write_txn()?;
-        // self.db.skins.put(&mut wtxn, &uuid, &skin)?;
-        // wtxn.commit()?;
+    pub fn insert(&self, uuid: Uuid, skin: &PlayerSkin) -> anyhow::Result<()> {
+        let uuid = uuid.as_u128();
+
+        let mut wtxn = self.db.env.write_txn()?;
+        self.db.skins.put(&mut wtxn, &uuid, skin)?;
+        wtxn.commit()?;
 
         Ok(())
     }

@@ -1,3 +1,9 @@
+#![expect(
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    reason = "todo"
+)]
+
 //! Encoding of packets.
 
 use std::{
@@ -44,9 +50,9 @@ where
 
     pkt.encode_including_ids(&mut cursor)?;
 
-    let data_len = cursor.position() as usize - data_write_start as usize;
+    let data_len = usize::try_from(cursor.position())? - usize::try_from(data_write_start)?;
 
-    let packet_len_size = VarInt(data_len as i32).written_size();
+    let packet_len_size = VarInt(i32::try_from(data_len)?).written_size();
 
     let packet_len = packet_len_size + data_len;
     ensure!(
@@ -57,14 +63,19 @@ where
     let inner = cursor.into_inner();
 
     inner.copy_within(
-        data_write_start as usize..data_write_start as usize + data_len,
+        usize::try_from(data_write_start)?..usize::try_from(data_write_start)? + data_len,
         packet_len_size,
     );
 
     let mut cursor = Cursor::new(inner);
-    VarInt(data_len as i32).encode(&mut cursor)?;
+    VarInt(i32::try_from(data_len)?).encode(&mut cursor)?;
 
     let slice = cursor.into_inner();
+
+    #[expect(
+        clippy::indexing_slicing,
+        reason = "this is probably fine? todo: verify"
+    )]
     let entire_slice = &slice[..packet_len_size + data_len];
 
     let len = entire_slice.len();
@@ -120,8 +131,8 @@ impl PacketEncoder {
 
             debug_assert!(scratch.is_empty());
 
-            let data_slice =
-                &mut slice[data_write_start as usize..end_data_position_exclusive as usize];
+            let data_slice = &mut slice
+                [usize::try_from(data_write_start)?..usize::try_from(end_data_position_exclusive)?];
 
             {
                 // todo: I think this kinda safe maybe??? ... lol. well I know at least scratch is always large enough

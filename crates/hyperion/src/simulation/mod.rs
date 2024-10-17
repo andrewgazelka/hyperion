@@ -121,7 +121,7 @@ impl Health {
     /// This method updates the current health value with the pending value
     /// and returns an [`event::HealthUpdate`] if there was a change.
     pub fn pop_updated(&mut self) -> Option<event::HealthUpdate> {
-        #[allow(clippy::float_cmp)]
+        #[expect(clippy::float_cmp)]
         let result = (self.pending != self.value).then_some(event::HealthUpdate {
             from: self.value,
             to: self.pending,
@@ -192,6 +192,10 @@ pub struct ConfirmBlockSequences(pub Vec<i32>);
 // use unicode hearts
 impl Display for Health {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        #[expect(
+            clippy::cast_possible_truncation,
+            reason = "we want saturating ceiling"
+        )]
         let normal = usize::try_from(self.value.ceil() as isize).unwrap_or(0);
 
         let full_hearts = normal / 2;
@@ -218,7 +222,7 @@ impl Default for Health {
 }
 
 #[derive(Component, Debug, Eq, PartialEq, Default)]
-#[allow(missing_docs)]
+#[expect(missing_docs)]
 pub struct ImmuneStatus {
     /// The tick until the player is immune to player attacks.
     pub until: i64,
@@ -226,7 +230,7 @@ pub struct ImmuneStatus {
 
 impl ImmuneStatus {
     #[must_use]
-    #[allow(missing_docs)]
+    #[expect(missing_docs)]
     pub const fn is_invincible(&self, global: &Global) -> bool {
         global.tick < self.until
     }
@@ -312,14 +316,14 @@ impl Display for Position {
 }
 
 #[derive(Component, Debug, Copy, Clone)]
-#[allow(missing_docs)]
+#[expect(missing_docs)]
 pub struct ChunkPosition(pub I16Vec2);
 
 const SANE_MAX_RADIUS: i16 = 128;
 
 impl ChunkPosition {
     #[must_use]
-    #[allow(missing_docs)]
+    #[expect(missing_docs)]
     pub const fn null() -> Self {
         Self(I16Vec2::new(SANE_MAX_RADIUS, SANE_MAX_RADIUS))
     }
@@ -365,7 +369,7 @@ impl Position {
         let position = self.position.as_ivec3();
         let x = position.x >> 4;
         let z = position.z >> 4;
-        I16Vec2::new(x as i16, z as i16)
+        I16Vec2::new(i16::try_from(x).unwrap(), i16::try_from(z).unwrap())
     }
 }
 

@@ -6,6 +6,7 @@ use std::{
 };
 
 use flecs_ecs::core::World;
+
 use crate::NUM_THREADS;
 
 /// Thread-local in flecs environment
@@ -58,7 +59,7 @@ impl<T> ThreadLocal<T> {
     }
 
     #[must_use]
-    #[allow(clippy::cast_sign_loss)]
+    #[expect(clippy::cast_sign_loss)]
     pub fn get(&self, world: &World) -> &T {
         let id = world.stage_id();
         let id = id as usize;

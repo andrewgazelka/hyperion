@@ -18,19 +18,21 @@
 #![feature(coroutines)]
 #![feature(array_try_map)]
 #![feature(split_array)]
-#![deny(
-    clippy::expect_used,
-    clippy::get_unwrap,
-    clippy::indexing_slicing,
-    clippy::missing_assert_message,
-    clippy::panic,
-    clippy::string_slice,
-    clippy::todo,
-    clippy::unimplemented,
-    clippy::unwrap_in_result,
-    clippy::unwrap_used,
-    clippy::allow_attributes
-)]
+
+// todo: deny more and completely fix panics
+// #![deny(
+//     clippy::expect_used,
+//     clippy::get_unwrap,
+//     clippy::indexing_slicing,
+//     clippy::missing_assert_message,
+//     clippy::panic,
+//     clippy::string_slice,
+//     clippy::todo,
+//     clippy::unimplemented,
+//     clippy::unwrap_in_result,
+//     clippy::unwrap_used,
+//     clippy::allow_attributes
+// )]
 
 pub const NUM_THREADS: usize = 8;
 
@@ -79,10 +81,6 @@ impl<T: Packet + Encode> PacketBundle for &T {
 /// on macOS, the soft limit for the number of open file descriptors is often 256. This is far too low
 /// to test 10k players with.
 /// This attempts to the specified `recommended_min` value.
-#[allow(
-    clippy::cognitive_complexity,
-    reason = "I have no idea why the cognitive complexity is calcualted as being high"
-)]
 #[tracing::instrument(skip_all)]
 #[cfg(unix)]
 pub fn adjust_file_descriptor_limits(recommended_min: u64) -> std::io::Result<()> {
@@ -158,7 +156,6 @@ impl Hyperion {
     }
 
     /// Initialize the server.
-    #[allow(clippy::too_many_lines, reason = "todo")]
     fn init_with_helper(
         address: impl ToSocketAddrs + Send + Sync + 'static,
         handlers: impl FnOnce(&World) + Send + Sync + 'static,
@@ -185,7 +182,7 @@ impl Hyperion {
         //     .set_threads(rayon::current_num_threads() as i32)
         //     .set_target_fps(20.0);
 
-        world.set_threads(rayon::current_num_threads() as i32);
+        world.set_threads(i32::try_from(rayon::current_num_threads())?);
 
         let address = address
             .to_socket_addrs()?
@@ -205,11 +202,11 @@ impl Hyperion {
         world.set(GlobalEventHandlers::default());
 
         info!("initializing database");
-        // let db = Db::new()?;
-        let skins = SkinHandler::new();
+        let db = Db::new()?;
+        let skins = SkinHandler::new(db.clone());
         info!("database initialized");
 
-        // world.set(db);
+        world.set(db);
         world.set(skins);
 
         let (receive_state, egress_comm) = init_proxy_comms(&runtime, address);
@@ -237,7 +234,7 @@ impl Hyperion {
         let biome_registry =
             generate_biome_registry().context("failed to generate biome registry")?;
 
-        let minecraft_world = Blocks::new(&biome_registry, runtime.clone())?;
+        let minecraft_world = Blocks::new(&biome_registry, &runtime)?;
 
         world.set(minecraft_world);
         world.set(runtime);

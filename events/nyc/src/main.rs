@@ -16,9 +16,6 @@ struct Args {
     /// The port the server should listen on. Defaults to 25565
     #[clap(short, long, default_value = "35565")]
     port: u16,
-
-    #[clap(short, long, default_value = "false")]
-    tracy: bool,
 }
 
 fn print_nyc() {
@@ -29,7 +26,7 @@ fn print_nyc() {
 fn main() {
     dotenvy::dotenv().ok();
 
-    let Args { ip, port, tracy } = Args::parse();
+    let Args { ip, port } = Args::parse();
 
     print_nyc();
 

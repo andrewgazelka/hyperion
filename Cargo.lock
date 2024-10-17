@@ -1051,7 +1051,6 @@ version = "0.0.0"
 dependencies = [
  "clap",
  "hyperion",
- "tracing",
  "tracing-subscriber",
 ]
 
@@ -1638,7 +1637,6 @@ dependencies = [
  "kanal",
  "libc",
  "libdeflater",
- "lru",
  "memmap2",
  "more-asserts",
  "ndarray",
@@ -1903,17 +1901,6 @@ name = "itoa"
 version = "1.0.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "49f1f14873335454500d59611f1cf4a4b0f786f9ac11f4312a78e4cf2566695b"
-
-[[package]]
-name = "jemalloc-ctl"
-version = "0.5.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7cffc705424a344c054e135d12ee591402f4539245e8bbd64e6c9eaa9458b63c"
-dependencies = [
- "jemalloc-sys",
- "libc",
- "paste",
-]
 
 [[package]]
 name = "jemalloc-sys"
@@ -2266,7 +2253,6 @@ dependencies = [
  "hyperion-scheduled",
  "hyperion-text",
  "hyperion-utils",
- "jemalloc-ctl",
  "jemallocator",
  "ndarray",
  "nom",

@@ -111,7 +111,7 @@ mod tests {
         let states = [BlockState::STONE, BlockState::DIRT, BlockState::GRASS_BLOCK];
 
         for (i, &state) in states.iter().enumerate() {
-            section.set_delta(i as u16, state);
+            section.set_delta(u16::try_from(i).unwrap(), state);
         }
 
         assert_eq!(section.changed.len(), 3);

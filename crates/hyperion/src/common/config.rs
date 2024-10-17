@@ -1,6 +1,7 @@
 //! Configuration for the server.
 
 use std::{fmt::Debug, fs::File, io::Read, path::Path};
+
 use flecs_ecs::macros::Component;
 use serde::{Deserialize, Serialize};
 use tracing::{info, instrument, warn};

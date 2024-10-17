@@ -95,12 +95,12 @@ impl Compose {
     }
 
     #[must_use]
-    #[allow(missing_docs)]
+    #[expect(missing_docs)]
     pub const fn global(&self) -> &Global {
         &self.global
     }
 
-    #[allow(missing_docs)]
+    #[expect(missing_docs)]
     pub fn global_mut(&mut self) -> &mut Global {
         &mut self.global
     }
@@ -122,12 +122,12 @@ impl Compose {
     }
 
     #[must_use]
-    #[allow(missing_docs)]
+    #[expect(missing_docs)]
     pub const fn io_buf(&self) -> &IoBuf {
         &self.io_buf
     }
 
-    #[allow(missing_docs)]
+    #[expect(missing_docs)]
     pub fn io_buf_mut(&mut self) -> &mut IoBuf {
         &mut self.io_buf
     }

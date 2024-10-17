@@ -1,8 +1,4 @@
-use std::{
-    borrow::Cow,
-    fs::File,
-    io::{BufRead, BufReader},
-};
+use std::borrow::Cow;
 
 use anyhow::Context;
 use base64::{engine::general_purpose, Engine};
@@ -19,6 +15,7 @@ use valence_protocol::{
     },
     Bounded, Packet, VarInt,
 };
+use valence_text::IntoText;
 
 use crate::{
     egress::sync_chunks::ChunkSendQueue,
@@ -39,7 +36,18 @@ use crate::{
 };
 
 #[derive(Component, Debug)]
-pub struct PendingRemove;
+pub struct PendingRemove {
+    pub reason: String,
+}
+
+impl PendingRemove {
+    #[must_use]
+    pub fn new(reason: impl Into<String>) -> Self {
+        Self {
+            reason: reason.into(),
+        }
+    }
+}
 
 fn process_handshake(
     login_state: &mut PacketState,
@@ -299,11 +307,20 @@ impl Module for IngressModule {
                     error!("failed to get id for disconnect stream {disconnect:?}");
                     continue;
                 };
-                world.entity_from_id(*id).add::<PendingRemove>();
+                world
+                    .entity_from_id(*id)
+                    .set(PendingRemove::new("disconnected"));
             }
         });
 
-        let worlds = (0..rayon::current_num_threads() as i32)
+        #[expect(
+            clippy::unwrap_used,
+            reason = "this is only called once on startup; it should be fine. we mostly care \
+                      about crashing during server execution"
+        )]
+        let num_threads = i32::try_from(rayon::current_num_threads()).unwrap();
+
+        let worlds = (0..num_threads)
             // SAFETY: promoting world to static lifetime, system won't outlive world
             .map(|i| unsafe { std::mem::transmute(world.stage(i)) })
             .map(SendableRef)
@@ -328,6 +345,11 @@ impl Module for IngressModule {
             let mut recv = receive.0.lock();
 
             recv.packets.par_drain().for_each(|(entity_id, bytes)| {
+                #[expect(
+                    clippy::indexing_slicing,
+                    reason = "it should be impossible to get a thread index that is out of bounds \
+                              unless the rayon thread pool changes size which does not occur"
+                )]
                 let world = &worlds[rayon::current_thread_index().unwrap_or_default()];
                 let world = &world.0;
 
@@ -357,12 +379,13 @@ impl Module for IngressModule {
             world,
             &Uuid,
             &Compose($),
+            &NetworkStreamRef,
+            &PendingRemove,
         )
-        .with::<&PendingRemove>()
         .kind::<flecs::pipeline::PostLoad>()
         .tracing_each_entity(
             trace_span!("remove_player"),
-            move |entity, (uuid, compose)| {
+            move |entity, (uuid, compose, io, pending_remove)| {
                 let uuids = &[uuid.0];
                 let entity_ids = [VarInt(entity.minecraft_id())];
 
@@ -373,13 +396,28 @@ impl Module for IngressModule {
                     entity_ids: Cow::Borrowed(&entity_ids),
                 };
 
-                compose.broadcast(&pkt, system_id).send(&world).unwrap();
+                if let Err(e) = compose.broadcast(&pkt, system_id).send(&world) {
+                    error!("failed to send player remove packet: {e}");
+                    return;
+                };
 
                 let pkt = play::PlayerRemoveS2c {
                     uuids: Cow::Borrowed(uuids),
                 };
 
-                compose.broadcast(&pkt, system_id).send(&world).unwrap();
+                if let Err(e) = compose.broadcast(&pkt, system_id).send(&world) {
+                    error!("failed to send player remove packet: {e}");
+                };
+
+                if !pending_remove.reason.is_empty() {
+                    let pkt = play::DisconnectS2c {
+                        reason: pending_remove.reason.clone().into_cow_text(),
+                    };
+
+                    if let Err(e) = compose.unicast_no_compression(&pkt, *io, system_id, &world) {
+                        error!("failed to send disconnect packet: {e}");
+                    }
+                }
             },
         );
 
@@ -440,7 +478,16 @@ impl Module for IngressModule {
                 let bump = compose.bump.get(&world);
 
                 loop {
-                    let Some(frame) = decoder.try_next_packet(bump).unwrap() else {
+                    let frame = match decoder.try_next_packet(bump) {
+                        Ok(frame) => frame,
+                        Err(e) => {
+                            error!("failed to decode packet: {e}");
+                            entity.destruct();
+                            break;
+                        }
+                    };
+
+                    let Some(frame) = frame else {
                         break;
                     };
 
@@ -455,24 +502,59 @@ impl Module for IngressModule {
                             }
                         }
                         PacketState::Status => {
-                            process_status(login_state, system_id, &frame, io_ref, compose, &world)
-                                .unwrap();
+                            if let Err(e) = process_status(
+                                login_state,
+                                system_id,
+                                &frame,
+                                io_ref,
+                                compose,
+                                &world,
+                            ) {
+                                error!("failed to process status packet: {e}");
+                                entity.destruct();
+                                break;
+                            }
                         }
-                        PacketState::Login => process_login(
-                            &world,
-                            tasks,
-                            login_state,
-                            decoder,
-                            comms,
-                            skins_collection.clone(),
-                            &frame,
-                            io_ref,
-                            compose,
-                            &entity,
-                            system_id,
-                            handlers,
-                        )
-                        .unwrap(),
+                        PacketState::Login => {
+                            if let Err(e) = process_login(
+                                &world,
+                                tasks,
+                                login_state,
+                                decoder,
+                                comms,
+                                skins_collection.clone(),
+                                &frame,
+                                io_ref,
+                                compose,
+                                &entity,
+                                system_id,
+                                handlers,
+                            ) {
+                                error!("failed to process login packet");
+                                let msg = format!(
+                                    "§c§lFailed to process login packet:§r\n\n§4{e}§r\n\n§eAre \
+                                     you on the right version of Minecraft?§r\n§b(Required: \
+                                     1.20.1)§r"
+                                );
+
+                                // hopefully we were in no compression mode
+                                // todo we want to handle sending different based on whether
+                                // we sent compression packet or not
+                                if let Err(e) = compose.unicast_no_compression(
+                                    &login::LoginDisconnectS2c {
+                                        reason: msg.into_cow_text(),
+                                    },
+                                    io_ref,
+                                    system_id,
+                                    &world,
+                                ) {
+                                    error!("failed to send login disconnect packet: {e}");
+                                }
+
+                                entity.destruct();
+                                break;
+                            }
+                        }
                         PacketState::Play => {
                             // We call this code when you're in play.
                             // Transitioning to play is just a way to make sure that the player is officially in play before we start sending them play packets.

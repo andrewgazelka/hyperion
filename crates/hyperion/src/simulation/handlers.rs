@@ -220,7 +220,6 @@ fn player_interact_entity(mut data: &[u8], query: &PacketSwitchQuery<'_>) -> any
 //
 pub struct PacketSwitchQuery<'a> {
     pub id: Entity,
-    #[allow(unused)]
     pub view: EntityView<'a>,
     pub compose: &'a Compose,
     pub io_ref: NetworkStreamRef,

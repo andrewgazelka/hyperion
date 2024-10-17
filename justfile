@@ -35,7 +35,7 @@ proxy:
     ulimit -Sn {{fds}} && cargo run --bin hyperion-proxy --release
 
 nyc:
-    cargo run --bin nyc --release -- -t
+    cargo run --bin nyc --release
 
 # cargo machete
 unused-deps:
@@ -48,20 +48,20 @@ deny:
 # run in debug mode with tracy; auto-restarts on changes
 debug:
     #!/usr/bin/env -S parallel --shebang --ungroup --jobs 3
-    RUST_BACKTRACE=full RUN_MODE=debug-{{arch}} cargo watch --postpone --no-vcs-ignores -w {{project_root}}/.trigger-debug -s './target/debug/nyc -t'
+    RUST_BACKTRACE=full RUN_MODE=debug-{{arch}} cargo watch --postpone --no-vcs-ignores -w {{project_root}}/.trigger-debug -s './target/debug/nyc'
     RUST_BACKTRACE=full ulimit -Sn {{fds}} && cargo run --bin hyperion-proxy --release
     cargo watch -w '{{project_root}}/crates/hyperion' -w '{{project_root}}/events/nyc' -s 'cargo check -p nyc && cargo build -p nyc' -s 'touch {{project_root}}/.trigger-debug'
 
 # run in release mode with tracy; auto-restarts on changes
 release:
     #!/usr/bin/env -S parallel --shebang --ungroup --jobs 3
-    RUN_MODE=release-{{arch}} cargo watch --postpone --no-vcs-ignores -w {{project_root}}/.trigger-release -s './target/release/nyc -t'
+    RUN_MODE=release-{{arch}} cargo watch --postpone --no-vcs-ignores -w {{project_root}}/.trigger-release -s './target/release/nyc'
     ulimit -Sn {{fds}} && cargo run --bin hyperion-proxy --release
     cargo watch -w '{{project_root}}/crates/hyperion' -w '{{project_root}}/events/nyc' -s 'cargo check -p nyc && cargo build --release -p nyc' -s 'touch {{project_root}}/.trigger-release'
 
 release-full:
     #!/usr/bin/env -S parallel --shebang --ungroup --jobs 2
-    RUN_MODE=release-f-{{arch}} cargo run --profile release-full -p nyc -- -t
+    RUN_MODE=release-f-{{arch}} cargo run --profile release-full -p nyc'
     ulimit -Sn {{fds}} && cargo run --bin hyperion-proxy --profile release-full
 
 # run a given number of bots to connect to hyperion

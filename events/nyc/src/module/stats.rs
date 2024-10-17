@@ -8,7 +8,6 @@ use hyperion::{
     system_registry::SystemId,
     valence_protocol::{packets::play, text::IntoText},
 };
-use jemalloc_ctl::{epoch, stats};
 
 #[derive(Component)]
 pub struct StatsModule;
@@ -18,14 +17,12 @@ impl Module for StatsModule {
     fn module(world: &World) {
         let mode = std::env::var("RUN_MODE").unwrap_or_else(|_| "Unknown".to_string());
 
+        let mut tick_times = Vec::with_capacity(20 * 60); // 20 ticks per second, 60 seconds
         let mut last_frame_time_total = 0.0;
 
         system!("stats", world, &Compose($))
             .multi_threaded()
             .each_iter(move |it, _, compose| {
-                // Update the epoch to get the most recent stats
-                epoch::advance().unwrap();
-
                 let world = it.world();
                 let player_count = compose
                     .global()
@@ -38,21 +35,21 @@ impl Module for StatsModule {
                 let ms_per_tick = (current_frame_time_total - last_frame_time_total) * 1000.0;
                 last_frame_time_total = current_frame_time_total;
 
-                let allocated = stats::allocated::read().unwrap();
-                let active = stats::active::read().unwrap();
-                let resident = stats::resident::read().unwrap();
+                tick_times.push(ms_per_tick);
+                if tick_times.len() > 20 * 60 {
+                    tick_times.remove(0);
+                }
 
-                let allocated_gib = allocated as f64 / 1_073_741_824.0;
-                let active_gib = active as f64 / 1_073_741_824.0;
-                let resident_gib = resident as f64 / 1_073_741_824.0;
+                let avg_s05 = tick_times.iter().rev().take(20 * 5).sum::<f32>() / (20.0 * 5.0);
+                let avg_s15 = tick_times.iter().rev().take(20 * 15).sum::<f32>() / (20.0 * 15.0);
+                let avg_s60 = tick_times.iter().sum::<f32>() / tick_times.len() as f32;
 
                 let title = format!(
-                    "§6§l{:.2} ms/tick §r| §b{}§r\n§aAllocated: {:.2} GiB §r| §eActive: {:.2} GiB \
-                     §r| §cResident: {:.2} GiB",
-                    ms_per_tick, mode, allocated_gib, active_gib, resident_gib
+                    "§b{mode}§r\n§aµ/5s: {avg_s05:.2} ms §r| §eµ/15s: {avg_s15:.2} ms §r| §cµ/1m: \
+                     {avg_s60:.2} ms"
                 );
 
-                let footer = format!("§d§l{} players online", player_count);
+                let footer = format!("§d§l{player_count} players online");
 
                 let pkt = play::PlayerListHeaderS2c {
                     header: title.into_cow_text(),
