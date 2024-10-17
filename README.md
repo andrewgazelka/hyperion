@@ -18,31 +18,6 @@ join [Hyperion's Discord](https://discord.gg/sTN8mdRQ) for the latest updates on
 Our current efforts are focused on making an event roughly similar to something that would be
 on [Overcast Network](https://oc.tc/) (we are not affiliated with them).
 
-| **Category**           | **Task**                                     | **Status**        | **Notes**                                                        |
-|------------------------|----------------------------------------------|-------------------|------------------------------------------------------------------|
-| **Lighting**           | Pre-loaded lighting                          | ✅ Done            |                                                                  |
-|                        | Dynamic lighting updates                     | 📚 Backlogged | Not planning for MVP                       |
-| **Block Mechanics**    | Placing blocks                               | ✅ Done | Existed pre-rewrite                                                                 |
-|                        | Block breaking                               | ✅ Done            |                                                                  |
-|                        | Block drops                                  | ✅ Done |                                                                  |
-|                        | Block physics (doors, liquid, torches, etc.) | 📚 Backlogged | Not planning for MVP                                                                 |
-| **World Generation**   | Pre-loaded chunks from Java world saves      | ✅ Done            | Uses pre-built maps                                              |
-| **Rendering**          | Block animation/Frame API                    | ✅ Done            |                                                                  |
-|            | Distant Horizons LoD protocol support                    | 🤞 Not implemented            | Stretch goal for MVP; will not be in open-source repository.                                                                  |
-| **Inventory**          | Player inventory                             | ✅ Done | Existed to some extent pre-rewrite                                                                 |
-|                        | Block inventory (chests, etc.)               | 🤞 Not implemented | Stretch goal for MVP                                                                  |
-| **Combat**             | PvP                       | ✅ Done  |                                                                  |
-|                        | Arrows                                       | 🤞 Not implemented | Stretch goal for MVP                                                                 |
-|                        | Player health                      | ✅ Done |    |
-| **World Persistence**  | Saving world                                 | 📚 Backlogged | Not planning for MVP                     |
-|                        | Saving inventory / player state                                 | ⏳ WIP |                      |
-| **Physics**            | Entity-block collisions (anti-cheat)         | ✅ Done            |                               |
-|                        | Entity-entity collisions                     | ✅ Done            | Required for arrow-based combat                                  |
-| **Gameplay Mechanics** | Day/night cycle                              | ✅ Done            |                                                                  |
-|  | Custom commands                              | ✅ Done            |                                                                  |
-| **Audio**              | Proximity voice chat (SimpleVoiceChat)                       | ✅ Done            | Not included in open-source repository                           |
-| **Modularity**         | Mod/Plugin API                               | ✅ Done    | We want to make events extensions on top of the core game engine |
-
 # Running
 
 ## Debug mode
@@ -58,4 +33,40 @@ just
 brew install just
 just release
 ```
+
+# Feature Support Matrix
+
+Feel free to PR if something is missing/incorrect.
+
+| Feature                                                                              | Hyperion | Pumpkin | FerrumC |
+|--------------------------------------------------------------------------------------|----------|---------|---------|
+| Loading Java Worlds                                                                  | ✅        | ✅       | ✅       |
+| Plugin API                                                                           | ✅        | ✅       | ❌       |
+| Has been tested with thousands of player connections                                 | ✅        | ❌       | ❌       |
+| Proximity Voice ([Simple Voice Chat](https://modrinth.com/plugin/simple-voice-chat)) | ✅        | ❌       | ❌       |
+| Lighting                                                                             | ✅        | ❌       | ✅       |
+| Placing blocks                                                                       | ✅        | ❌       | ❌       |
+| Breaking blocks                                                                      | ✅        | ❌       | ❌       |
+| Blocks physics                                                                       | ✅        | ❌       | ❌       |
+| Entity-entity collisions                                                             | ✅        | ❌       | ❌       |
+| Block-entity collisions                                                              | ✅        | ❌       | ❌       |
+| World borders                                                                        | ✅        | ❌       | ❌       |
+| Block Edit API (think WorldEdit)                                                     | ✅        | ❌       | ❌       |
+| PvP                                                                                  | ✅        | ❌       | ❌       |
+| Vertical scaling (fully multi-threaded)                                              | ✅        | ❌       | ❌       |
+| Horizontal scaling (through proxies)                                                 | ✅        | ❌       | ❌       | 
+| Tracing/profiling through [tracy](https://github.com/wolfpld/tracy))                 | ✅        | ❌       | ❌       | 
+| [Flecs ECS](https://github.com/SanderMertens/flecs/tree/master)                      | ✅        | ❌       | ❌       |
+| Set Resource Packets                                                                 | ❌        | ✅       | ?       |
+| Configuration                                                                        | ✅        | ✅       | ✅       |
+| Minecraft 1.20.1                                                                     | ✅        | ✅       | ✅       |
+| Proxy Support (Velocity)                                                             | ✅        | ✅       | ?       |
+| Inventory                                                                            | ✅        | ✅       | ?       |
+| Particle Support                                                                     | ✅        | ✅       | ?       |
+| RCON                                                                                 | ❌        | ✅       | ❌       |
+| Chat Support                                                                         | ❌        | ✅       | ?       |
+| Command Support                                                                      | ✅        | ✅       | ?       |
+| Particle Support                                                                     | ✅        | ✅       | ?       |
+
+
 
