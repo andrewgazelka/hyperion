@@ -2,34 +2,34 @@
 
 [![Discord invite link](https://dcbadge.vercel.app/api/server/PBfnDtj5Wb)](https://discord.gg/PBfnDtj5Wb)
 
+Hyperion aims to have 10k players PvP simultaneously on one Minecraft world to break the Guinness World Record ([8825 by
+EVE Online](https://www.guinnessworldrecords.com/world-records/105603-largest-videogame-pvp-battle)). The
+architecture is ECS-driven using [Flecs Rust](https://github.com/Indra-db/Flecs-Rust). Contribution is greatly appreciated. 
+To see what to work on check the [issues page](https://github.com/andrewgazelka/hyperion/issues) or 
+join [Hyperion's Discord](https://discord.gg/sTN8mdRQ) for the latest updates on development.
+
+## Demonstrations 
 [hyperion.webm](https://github.com/user-attachments/assets/5ea4bdec-25a8-4bb5-a670-0cb81bf88d7e)
 
 ![many](https://github.com/user-attachments/assets/e69f2c3a-f053-4361-a49d-336894f544ba)
 
-Hyperion aims to have 10k players PvP simultaneously on one Minecraft world to break the Guinness World Record ([8825 by
-EVE Online](https://www.guinnessworldrecords.com/world-records/105603-largest-videogame-pvp-battle)). The
-architecture is ECS-driven using [Flecs Rust](https://github.com/Indra-db/Flecs-Rust). To contribute,
-join [Hyperion's Discord](https://discord.gg/sTN8mdRQ) for the latest updates on development.
+## Running
 
-Our event will be placed in NYC with the gracious support of [Build the Earth NYC](https://buildtheearth.net/teams/nyc).
-
-# Running
-
-## Debug mode
+### Debug mode
 
 ```bash
 brew install just
 just
 ```
 
-## Release mode
+### Release mode
 
 ```
 brew install just
 just release
 ```
 
-# Feature Support Matrix
+## Feature Support Matrix
 
 Feel free to PR if something is missing/incorrect.
 
@@ -60,7 +60,7 @@ Feel free to PR if something is missing/incorrect.
 | Chat Support                                                                         | ❌        | ✅       | ?       |
 | Command Support                                                                      | ✅        | ✅       | ?       |
 
-# Related Projects
+## Related Projects ❤️
 
 - [Minestom](https://github.com/Minestom/Minestom)
 - [Valence](https://github.com/valence-rs/valence)
