@@ -62,7 +62,7 @@ Feel free to PR if something is missing/incorrect.
 
 # Related Projects
 
-- [Minestom](https://github.com/Minestom/Minestom):
-- [Valence](https://github.com/valence-rs/valence):
+- [Minestom](https://github.com/Minestom/Minestom)
+- [Valence](https://github.com/valence-rs/valence)
 
 
