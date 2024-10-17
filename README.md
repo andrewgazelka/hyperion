@@ -60,4 +60,9 @@ Feel free to PR if something is missing/incorrect.
 | Chat Support                                                                         | ❌        | ✅       | ?       |
 | Command Support                                                                      | ✅        | ✅       | ?       |
 
+# Related Projects
+
+- [Minestom](https://github.com/Minestom/Minestom):
+- [Valence](https://github.com/valence-rs/valence):
+
 
