@@ -13,8 +13,15 @@ pub struct AsyncRuntime {
 
 impl Default for AsyncRuntime {
     fn default() -> Self {
+        #[expect(
+            clippy::unwrap_used,
+            reason = "this is very unlikely to fail and even if it does it will be in \
+                      initialization"
+        )]
         let runtime = tokio::runtime::Builder::new_multi_thread()
+            // .worker_threads(2)
             .enable_all()
+            // .thread_stack_size(1024 * 1024) // 1 MiB
             .build()
             .unwrap();
 

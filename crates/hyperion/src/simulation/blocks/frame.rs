@@ -27,7 +27,12 @@ impl Blocks {
     pub fn paste(&mut self, offset: IVec3, frame: ArrayView3<'_, BlockState>) {
         let (width, height, depth) = frame.dim();
         let start = offset;
-        let end = start + IVec3::new(width as i32 - 1, height as i32 - 1, depth as i32 - 1);
+        let end = start
+            + IVec3::new(
+                i32::try_from(width).unwrap() - 1,
+                i32::try_from(height).unwrap() - 1,
+                i32::try_from(depth).unwrap() - 1,
+            );
 
         // Get all unique chunk positions
         let start_chunk = IVec3::new(start.x >> 4, start.y >> 4, start.z >> 4).as_i16vec3();
@@ -64,7 +69,7 @@ impl Blocks {
                     let iter_start = start.max(section_start);
                     let iter_end = end.min(section_end);
 
-                    #[allow(clippy::excessive_nesting)]
+                    #[expect(clippy::excessive_nesting)]
                     for y in iter_start.y..=iter_end.y {
                         for z in iter_start.z..=iter_end.z {
                             for x in iter_start.x..=iter_end.x {

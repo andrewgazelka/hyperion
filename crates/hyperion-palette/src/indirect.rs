@@ -34,7 +34,7 @@ impl Indirect {
         // Compare the chunk with the search element
         let mask = chunk_simd.simd_eq(search_simd);
 
-        #[allow(
+        #[expect(
             clippy::cast_possible_truncation,
             reason = "idx is [0, 16) which is a valid u8"
         )]
@@ -42,18 +42,27 @@ impl Indirect {
     }
 
     pub unsafe fn get_unchecked(&self, index: usize) -> Data {
-        debug_assert!(index < LEN);
+        debug_assert!(index < LEN, "index {index} is out of bounds");
 
         let packed_byte_index = index / 2;
+
+        #[expect(
+            clippy::indexing_slicing,
+            reason = "if debug_assert passes, then index is in bounds"
+        )]
         let packed_byte = self.data[packed_byte_index];
 
         // Create a mask based on whether the index is even or odd
         // Either 0 or 4
         let shift = (index & 1) << 2;
 
-        // Shift and mask to get the correct nibble
+        // Shift and mask to get the correct nibble (u4)
         let palette_index = (packed_byte >> shift) & 0x0F;
 
+        #[expect(
+            clippy::indexing_slicing,
+            reason = "u4 is at most 16, palette is of size 16 so this is valid"
+        )]
         self.palette[palette_index as usize]
     }
 
@@ -66,7 +75,7 @@ impl Indirect {
     }
 
     pub unsafe fn set_unchecked(&mut self, index: usize, value: Data) -> Result<Data, Full> {
-        debug_assert!(index < LEN);
+        debug_assert!(index < LEN, "index {index} is out of bounds");
 
         let palette_index = match self.index_of(value) {
             Some(idx) => idx,

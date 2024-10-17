@@ -6,13 +6,13 @@ use serde_json::Value;
 use uuid::Uuid;
 
 fn username_url(username: &str) -> String {
-    // format!("https://api.mojang.com/users/profiles/minecraft/{username}")
-    format!("https://mowojang.matdoes.dev/users/profiles/minecraft/{username}")
+    format!("https://api.mojang.com/users/profiles/minecraft/{username}")
+    // format!("https://mowojang.matdoes.dev/users/profiles/minecraft/{username}")
 }
 
 fn uuid_url(uuid: &Uuid) -> String {
-    // format!("https://sessionserver.mojang.com/session/minecraft/profile/{uuid}?unsigned=false")
-    format!("https://mowojang.matdoes.dev/session/minecraft/profile/{uuid}?unsigned=false")
+    format!("https://sessionserver.mojang.com/session/minecraft/profile/{uuid}?unsigned=false")
+    // format!("https://mowojang.matdoes.dev/session/minecraft/profile/{uuid}?unsigned=false")
 }
 
 /// A client to interface with the Mojang API.
@@ -32,7 +32,13 @@ impl MojangClient {
     pub async fn get_uuid(&self, username: &str) -> anyhow::Result<Uuid> {
         let url = username_url(username);
         let json_object = self.response_raw(&url).await?;
-        let id = json_object["id"].as_str().context("UUID not found")?;
+
+        let id = json_object
+            .get("id")
+            .context("no id in json")?
+            .as_str()
+            .context("id is not a string")?;
+
         Uuid::parse_str(id).map_err(Into::into)
     }
 
@@ -40,7 +46,10 @@ impl MojangClient {
     pub async fn get_username(&self, uuid: Uuid) -> anyhow::Result<String> {
         let url = uuid_url(&uuid);
         let json_object = self.response_raw(&url).await?;
-        json_object["name"]
+
+        json_object
+            .get("name")
+            .context("no name in json")?
             .as_str()
             .map(String::from)
             .context("Username not found")
@@ -62,13 +71,15 @@ impl MojangClient {
         let response = self.req.get(url).send().await?;
         if response.status().is_success() {
             let body = response.text().await?;
-            let json_object = serde_json::from_str::<Value>(&body)?;
-            if json_object.get("error").is_some() {
+            let json_object = serde_json::from_str::<Value>(&body)
+                .with_context(|| format!("failed to parse json from mojang response: {body:?}"))?;
+
+            if let Some(error) = json_object.get("error") {
                 bail!(
                     "Mojang API Error: {}",
-                    json_object["error"].as_str().unwrap_or("Unknown error")
+                    error.as_str().unwrap_or("Unknown error")
                 );
-            }
+            };
             Ok(json_object)
         } else {
             bail!("Failed to retrieve data from Mojang API");
@@ -77,6 +88,7 @@ impl MojangClient {
 }
 
 #[cfg(test)]
+#[expect(clippy::unwrap_used, reason = "these are tests")]
 mod tests {
     use std::str::FromStr;
 

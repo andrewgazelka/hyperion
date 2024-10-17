@@ -26,6 +26,11 @@ impl RefBytesMut {
         let before = self.cursor.get();
         let after = before + len;
         self.cursor.set(after);
+
+        #[expect(
+            clippy::indexing_slicing,
+            reason = "this is probably fine? todo: verify"
+        )]
         &self.inner[before..after]
     }
 }
@@ -38,6 +43,10 @@ impl Index<RangeFull> for RefBytesMut {
 
     fn index(&self, _: RangeFull) -> &Self::Output {
         let on = self.cursor.get();
+        #[expect(
+            clippy::indexing_slicing,
+            reason = "this is probably fine? todo: verify"
+        )]
         &self.inner[on..]
     }
 }
@@ -151,7 +160,10 @@ impl PacketDecoder {
                     decompressor.zlib_decompress(r, decompression_buf)?
                 };
 
-                debug_assert_eq!(written_len, data_len as usize);
+                debug_assert_eq!(
+                    written_len, data_len as usize,
+                    "{written_len} != {data_len}"
+                );
 
                 let total_packet_len = VarInt(packet_len).written_size() + packet_len as usize;
 
@@ -159,7 +171,7 @@ impl PacketDecoder {
 
                 data = &*decompression_buf;
             } else {
-                debug_assert_eq!(data_len, 0);
+                debug_assert_eq!(data_len, 0, "{data_len} != 0");
 
                 ensure!(
                     r.len() <= self.threshold.get().0 as usize,

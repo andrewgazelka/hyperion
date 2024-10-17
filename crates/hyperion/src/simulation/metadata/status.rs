@@ -3,7 +3,6 @@ use std::ops::BitOr;
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct EntityStatus(pub u8);
 
-#[allow(unused)]
 impl EntityStatus {
     pub const HAS_GLOWING_EFFECT: Self = Self(0x40);
     pub const IS_CROUCHING: Self = Self(0x02);

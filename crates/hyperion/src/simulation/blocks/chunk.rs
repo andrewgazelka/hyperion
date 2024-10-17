@@ -81,15 +81,6 @@ impl LoadedChunk {
         self.base_packet_bytes.clone()
     }
 
-    #[must_use]
-    pub const fn chunk(&self) -> &ChunkData {
-        &self.chunk
-    }
-
-    pub fn chunk_mut(&mut self) -> &mut ChunkData {
-        &mut self.chunk
-    }
-
     #[expect(unused, reason = "might be useful in the future")]
     fn set_block_internal(&mut self, x: u8, y: u16, z: u8, state: BlockState) {
         self.chunk

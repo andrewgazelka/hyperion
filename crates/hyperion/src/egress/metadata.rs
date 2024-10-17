@@ -23,9 +23,11 @@ pub fn show_all(id: i32) -> ShowAll {
     let mut bytes = Vec::new();
     bytes.push(17_u8);
 
+    #[expect(clippy::unwrap_used, reason = "this should never fail")]
     VarInt(0).encode(&mut bytes).unwrap();
 
     // all 1s
+    #[expect(clippy::unwrap_used, reason = "this should never fail")]
     u8::MAX.encode(&mut bytes).unwrap();
 
     // end with 0xff

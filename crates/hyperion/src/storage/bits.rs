@@ -127,7 +127,7 @@ impl BitStorage {
             }
         }
 
-        debug_assert!((1..=32).contains(&bits));
+        debug_assert!((1..=32).contains(&bits), "{bits} is not in 1..=32");
 
         let values_per_long = 64 / bits;
         let magic_index = values_per_long - 1;

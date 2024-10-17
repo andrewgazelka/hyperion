@@ -73,11 +73,11 @@ impl SkinHandler {
     }
 
     /// Inserts a [`PlayerSkin`] into the database.
-    pub fn insert(&self, uuid: Uuid, skin: PlayerSkin) -> anyhow::Result<()> {
+    pub fn insert(&self, uuid: Uuid, skin: &PlayerSkin) -> anyhow::Result<()> {
         let uuid = uuid.as_u128();
 
         let mut wtxn = self.db.env.write_txn()?;
-        self.db.skins.put(&mut wtxn, &uuid, &skin)?;
+        self.db.skins.put(&mut wtxn, &uuid, skin)?;
         wtxn.commit()?;
 
         Ok(())

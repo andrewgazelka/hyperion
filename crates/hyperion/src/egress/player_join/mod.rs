@@ -1,5 +1,6 @@
 use std::{borrow::Cow, collections::BTreeSet};
 
+use anyhow::Context;
 use flecs_ecs::prelude::*;
 use glam::{I16Vec2, IVec3};
 use hyperion_crafting::{Action, CraftingRegistry, RecipeBookState};
@@ -25,8 +26,9 @@ mod list;
 pub use list::*;
 
 use crate::{
-    config::CONFIG,
+    config::Config,
     egress::metadata::show_all,
+    ingress::PendingRemove,
     net::{Compose, NetworkStreamRef},
     runtime::AsyncRuntime,
     simulation::{
@@ -40,7 +42,10 @@ use crate::{
     util::{SendableQuery, SendableRef},
 };
 
-#[allow(clippy::too_many_arguments, reason = "todo")]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "todo: we should refactor at some point"
+)]
 #[instrument(skip_all, fields(name = name))]
 pub fn player_join_world(
     entity: &EntityView<'_>,
@@ -57,7 +62,8 @@ pub fn player_join_world(
     root_command: Entity,
     query: &Query<(&Uuid, &InGameName, &Position, &PlayerSkin)>,
     crafting_registry: &CraftingRegistry,
-) {
+    config: &Config,
+) -> anyhow::Result<()> {
     static CACHED_DATA: once_cell::sync::OnceCell<bytes::Bytes> = once_cell::sync::OnceCell::new();
 
     let id = entity.minecraft_id();
@@ -79,9 +85,9 @@ pub fn player_join_world(
         is_hardcore: false,
         dimension_names: Cow::Owned(dimension_names),
         registry_codec: Cow::Borrowed(registry_codec),
-        max_players: CONFIG.max_players.into(),
-        view_distance: CONFIG.view_distance.into(), // max view distance
-        simulation_distance: CONFIG.simulation_distance.into(),
+        max_players: config.max_players.into(),
+        view_distance: i32::from(config.view_distance).into(), // max view distance
+        simulation_distance: config.simulation_distance.into(),
         reduced_debug_info: false,
         enable_respawn_screen: false,
         dimension_name: dimension_name.into(),
@@ -95,7 +101,9 @@ pub fn player_join_world(
         is_debug: false,
     };
 
-    compose.unicast(&pkt, packets, system_id, world).unwrap();
+    compose
+        .unicast(&pkt, packets, system_id, world)
+        .context("failed to send player spawn packet")?;
 
     let cached_data = CACHED_DATA
         .get_or_init(|| {
@@ -106,7 +114,14 @@ pub fn player_join_world(
             info!(
                 "caching world data for new players with compression level {compression_level:?}"
             );
-            generate_cached_packet_bytes(&mut encoder, chunks, tasks, crafting_registry).unwrap();
+
+            #[expect(
+                clippy::unwrap_used,
+                reason = "this is only called once on startup; it should be fine. we mostly care \
+                          about crashing during server execution"
+            )]
+            generate_cached_packet_bytes(&mut encoder, chunks, tasks, crafting_registry, config)
+                .unwrap();
 
             let bytes = encoder.take();
             bytes.freeze()
@@ -122,7 +137,10 @@ pub fn player_join_world(
         overlay: false,
     };
 
-    compose.broadcast(&text, system_id).send(world).unwrap();
+    compose
+        .broadcast(&text, system_id)
+        .send(world)
+        .context("failed to send player join message")?;
 
     compose
         .unicast(
@@ -137,7 +155,7 @@ pub fn player_join_world(
             system_id,
             world,
         )
-        .unwrap();
+        .context("failed to send player position and look packet")?;
 
     let mut entries = Vec::new();
     let mut all_player_names = Vec::new();
@@ -200,37 +218,57 @@ pub fn player_join_world(
                 system_id,
                 world,
             )
-            .unwrap();
+            .context("failed to send player list packet")?;
     }
 
     {
         let scope = tracing::trace_span!("sending_player_spawns");
         let _enter = scope.enter();
 
+        // todo(Indra): this is a bit awkward.
+        // todo: could also be helped by denoting some packets as infallible for serialization
+        let mut query_errors = Vec::new();
+
         query
             .iter_stage(world)
             .each_iter(|it, idx, (uuid, _, pose, _)| {
-                let query_entity = it.entity(idx);
+                let result = || {
+                    let query_entity = it.entity(idx);
 
-                if entity.id() == query_entity.id() {
-                    return;
-                }
+                    if entity.id() == query_entity.id() {
+                        return anyhow::Ok(());
+                    }
 
-                let pkt = play::PlayerSpawnS2c {
-                    entity_id: VarInt(query_entity.minecraft_id()),
-                    player_uuid: uuid.0,
-                    position: pose.position.as_dvec3(),
-                    yaw: ByteAngle::from_degrees(pose.yaw),
-                    pitch: ByteAngle::from_degrees(pose.pitch),
+                    let pkt = play::PlayerSpawnS2c {
+                        entity_id: VarInt(query_entity.minecraft_id()),
+                        player_uuid: uuid.0,
+                        position: pose.position.as_dvec3(),
+                        yaw: ByteAngle::from_degrees(pose.yaw),
+                        pitch: ByteAngle::from_degrees(pose.pitch),
+                    };
+
+                    compose
+                        .unicast(&pkt, packets, system_id, world)
+                        .context("failed to send player spawn packet")?;
+
+                    let show_all = show_all(query_entity.minecraft_id());
+                    compose
+                        .unicast(show_all.borrow_packet(), packets, system_id, world)
+                        .context("failed to send player spawn packet")?;
+
+                    Ok(())
                 };
 
-                compose.unicast(&pkt, packets, system_id, world).unwrap();
-
-                let show_all = show_all(query_entity.minecraft_id());
-                compose
-                    .unicast(show_all.borrow_packet(), packets, system_id, world)
-                    .unwrap();
+                if let Err(e) = result() {
+                    query_errors.push(e);
+                }
             });
+
+        if !query_errors.is_empty() {
+            return Err(anyhow::anyhow!(
+                "failed to send player spawn packets: {query_errors:?}"
+            ));
+        }
     }
 
     let PlayerSkin {
@@ -264,8 +302,13 @@ pub fn player_join_world(
     };
 
     // todo: fix broadcasting on first tick; and this duplication can be removed!
-    compose.broadcast(&pkt, system_id).send(world).unwrap();
-    compose.unicast(&pkt, packets, system_id, world).unwrap();
+    compose
+        .broadcast(&pkt, system_id)
+        .send(world)
+        .context("failed to send player list packet")?;
+    compose
+        .unicast(&pkt, packets, system_id, world)
+        .context("failed to send player list packet")?;
 
     let player_name = vec![name];
 
@@ -281,7 +324,7 @@ pub fn player_join_world(
         )
         .exclude(packets)
         .send(world)
-        .unwrap();
+        .context("failed to send team packet")?;
 
     let current_entity_id = VarInt(entity.minecraft_id());
 
@@ -296,13 +339,13 @@ pub fn player_join_world(
         .broadcast(&spawn_player, system_id)
         .exclude(packets)
         .send(world)
-        .unwrap();
+        .context("failed to send player spawn packet")?;
 
     let show_all = show_all(entity.minecraft_id());
     compose
         .broadcast(show_all.borrow_packet(), system_id)
         .send(world)
-        .unwrap();
+        .context("failed to send show all packet")?;
 
     compose
         .unicast(
@@ -316,15 +359,17 @@ pub fn player_join_world(
             system_id,
             world,
         )
-        .unwrap();
+        .context("failed to send team packet")?;
 
     let command_packet = get_command_packet(world, root_command);
 
     compose
         .unicast(&command_packet, packets, system_id, world)
-        .unwrap();
+        .context("failed to send command packet")?;
 
     info!("{name} joined the world");
+
+    Ok(())
 }
 
 fn send_sync_tags(encoder: &mut PacketEncoder) -> anyhow::Result<()> {
@@ -339,17 +384,24 @@ fn send_sync_tags(encoder: &mut PacketEncoder) -> anyhow::Result<()> {
     Ok(())
 }
 
+#[expect(
+    clippy::unwrap_used,
+    reason = "this is only called once on startup; it should be fine. we mostly care about \
+              crashing during server execution"
+)]
 fn generate_cached_packet_bytes(
     encoder: &mut PacketEncoder,
     chunks: &Blocks,
     tasks: &AsyncRuntime,
     crafting_registry: &CraftingRegistry,
+    config: &Config,
 ) -> anyhow::Result<()> {
     send_sync_tags(encoder)?;
 
     let mut buf: heapless::Vec<u8, 32> = heapless::Vec::new();
     let brand = b"discord: andrewgazelka";
-    buf.push(brand.len() as u8).unwrap();
+    let brand_len = u8::try_from(brand.len()).context("brand length too long to fit in u8")?;
+    buf.push(brand_len).unwrap();
     buf.extend_from_slice(brand).unwrap();
 
     let bytes = RawBytes::from(buf.as_slice());
@@ -369,7 +421,10 @@ fn generate_cached_packet_bytes(
         chunk_z: center_chunk.z.into(),
     })?;
 
-    let center_chunk = I16Vec2::new(center_chunk.x as i16, center_chunk.z as i16);
+    let center_chunk = I16Vec2::new(
+        i16::try_from(center_chunk.x)?,
+        i16::try_from(center_chunk.z)?,
+    );
 
     // so they do not fall
     let chunk = unsafe { chunks.get_and_wait(center_chunk, tasks) };
@@ -394,7 +449,7 @@ fn generate_cached_packet_bytes(
         },
     })?;
 
-    if let Some(diameter) = CONFIG.border_diameter {
+    if let Some(diameter) = config.border_diameter {
         debug!("Setting world border to diameter {}", diameter);
 
         encoder.append_packet(&play::WorldBorderInitializeS2c {
@@ -469,7 +524,15 @@ impl Module for PlayerJoinModule {
 
         let query = SendableQuery(query);
 
-        let stages = (0..rayon::current_num_threads() as i32)
+        let rayon_threads = rayon::current_num_threads();
+
+        #[expect(
+            clippy::unwrap_used,
+            reason = "realistically, this should never fail; 2^31 is very large"
+        )]
+        let rayon_threads = i32::try_from(rayon_threads).unwrap();
+
+        let stages = (0..rayon_threads)
             // SAFETY: promoting world to static lifetime, system won't outlive world
             .map(|i| unsafe { std::mem::transmute(world.stage(i)) })
             .map(SendableRef)
@@ -479,6 +542,11 @@ impl Module for PlayerJoinModule {
 
         let root_command = world.entity().set(Command::ROOT);
 
+        #[expect(
+            clippy::unwrap_used,
+            reason = "this is only called once on startup. We mostly care about crashing during \
+                      server execution"
+        )]
         ROOT_COMMAND.set(root_command.id()).unwrap();
 
         let hello_command = world
@@ -501,62 +569,74 @@ impl Module for PlayerJoinModule {
             &Blocks($),
             &Compose($),
             &CraftingRegistry($),
+            &Config($),
         )
         .kind::<flecs::pipeline::PreUpdate>()
-        .each(move |(tasks, comms, blocks, compose, crafting_registry)| {
-            let span = tracing::trace_span!("joins");
-            let _enter = span.enter();
+        .each(
+            move |(tasks, comms, blocks, compose, crafting_registry, config)| {
+                let span = tracing::trace_span!("joins");
+                let _enter = span.enter();
 
-            let mut skins = Vec::new();
+                let mut skins = Vec::new();
 
-            while let Ok(Some((entity, skin))) = comms.skins_rx.try_recv() {
-                skins.push((entity, skin.clone()));
-            }
-
-            // todo: par_iter but bugs...
-            // for (entity, skin) in skins {
-            skins.into_par_iter().for_each(|(entity, skin)| {
-                // if we are not in rayon context that means we are in a single-threaded context and 0 will work
-                let idx = rayon::current_thread_index().unwrap_or(0);
-
-                let world = &stages[idx];
-                let world = world.0;
-
-                if !world.is_alive(entity) {
-                    return;
+                while let Ok(Some((entity, skin))) = comms.skins_rx.try_recv() {
+                    skins.push((entity, skin.clone()));
                 }
 
-                let entity = world.entity_from_id(entity);
+                // todo: par_iter but bugs...
+                // for (entity, skin) in skins {
+                skins.into_par_iter().for_each(|(entity, skin)| {
+                    // if we are not in rayon context that means we are in a single-threaded context and 0 will work
+                    let idx = rayon::current_thread_index().unwrap_or(0);
 
-                entity.add::<Play>();
+                    #[expect(
+                        clippy::indexing_slicing,
+                        reason = "unless the number of rayon threads changes, this should never \
+                                  panic"
+                    )]
+                    let world = &stages[idx];
+                    let world = world.0;
 
-                entity.get::<(&Uuid, &InGameName, &Position, &NetworkStreamRef)>(
-                    |(uuid, name, pose, &stream_id)| {
-                        let query = &query;
-                        let query = &query.0;
+                    if !world.is_alive(entity) {
+                        return;
+                    }
 
-                        player_join_world(
-                            &entity,
-                            tasks,
-                            blocks,
-                            compose,
-                            uuid.0,
-                            name,
-                            stream_id,
-                            pose,
-                            &world,
-                            &skin,
-                            system_id,
-                            root_command,
-                            query,
-                            crafting_registry,
-                        );
-                    },
-                );
+                    let entity = world.entity_from_id(entity);
 
-                let entity = world.entity_from_id(entity);
-                entity.set(skin);
-            });
-        });
+                    entity.add::<Play>();
+
+                    entity.get::<(&Uuid, &InGameName, &Position, &NetworkStreamRef)>(
+                        |(uuid, name, pose, &stream_id)| {
+                            let query = &query;
+                            let query = &query.0;
+
+                            // if we get an error joining, we should kick the player
+                            if let Err(e) = player_join_world(
+                                &entity,
+                                tasks,
+                                blocks,
+                                compose,
+                                uuid.0,
+                                name,
+                                stream_id,
+                                pose,
+                                &world,
+                                &skin,
+                                system_id,
+                                root_command,
+                                query,
+                                crafting_registry,
+                                config,
+                            ) {
+                                entity.set(PendingRemove::new(e.to_string()));
+                            };
+                        },
+                    );
+
+                    let entity = world.entity_from_id(entity);
+                    entity.set(skin);
+                });
+            },
+        );
     }
 }

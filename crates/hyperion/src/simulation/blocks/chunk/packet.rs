@@ -29,7 +29,7 @@ impl PacketBundle for DeltaDrainPacket<'_> {
 
         let deltas = &mut self.section.changed_since_last_tick;
         let len = deltas.len();
-        VarInt(len as i32).encode(&mut write)?;
+        VarInt(i32::try_from(len)?).encode(&mut write)?;
 
         for delta_idx in deltas.iter() {
             let block_state =
@@ -72,7 +72,7 @@ impl PacketBundle for DeltaPacket<'_> {
 
         let deltas = &self.section.changed;
         let len = deltas.len();
-        VarInt(len as i32).encode(&mut write)?;
+        VarInt(i32::try_from(len)?).encode(&mut write)?;
 
         for delta_idx in deltas {
             let block_state =
@@ -108,7 +108,7 @@ impl LoadedChunk {
             .enumerate()
             .filter(|(_, section)| !section.changed_since_last_tick.is_empty())
             .map(move |(i, section)| {
-                let y = i as i32;
+                let y = i32::try_from(i).unwrap();
                 let y = y + (START_Y >> 4);
 
                 DeltaDrainPacket {
@@ -129,7 +129,7 @@ impl LoadedChunk {
             .enumerate()
             .filter(|(_, section)| !section.changed.is_empty())
             .map(move |(i, section)| {
-                let y = i as i32;
+                let y = i32::try_from(i).unwrap();
                 let y = y + (START_Y >> 4);
 
                 DeltaPacket {

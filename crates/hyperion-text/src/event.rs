@@ -29,7 +29,7 @@ pub enum ClickEvent<'a> {
 /// Action to take when mouse-hovering on the text.
 #[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
 #[serde(tag = "action", content = "contents", rename_all = "snake_case")]
-#[allow(clippy::enum_variant_names)]
+#[expect(clippy::enum_variant_names)]
 pub enum HoverEvent<'a> {
     /// Displays a tooltip with the given text.
     ShowText(Text<'a>),

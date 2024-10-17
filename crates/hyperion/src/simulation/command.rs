@@ -98,7 +98,7 @@ pub fn get_command_packet(
                     redirect_node: None,
                 });
 
-                let node = commands.get_mut(parent_ptr).unwrap();
+                let node = &mut commands[parent_ptr];
                 node.children.push(i32::try_from(ptr).unwrap().into());
 
                 stack.push(StackElement {

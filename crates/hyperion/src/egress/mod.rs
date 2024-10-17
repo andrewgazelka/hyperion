@@ -1,7 +1,7 @@
 use flecs_ecs::prelude::*;
 use hyperion_proto::Flush;
 use prost::Message;
-use tracing::trace_span;
+use tracing::{error, trace_span};
 use valence_protocol::{packets::play, VarInt};
 
 use crate::{net::Compose, simulation::EgressComm};
@@ -26,6 +26,12 @@ impl Module for EgressModule {
     fn module(world: &World) {
         let flush = {
             let mut data = Vec::new();
+
+            #[expect(
+                clippy::unwrap_used,
+                reason = "this is only called once on startup; it should be fine. we mostly care \
+                          about crashing during server execution"
+            )]
             hyperion_proto::ServerToProxy::from(Flush {})
                 .encode_length_delimited(&mut data)
                 .unwrap();
@@ -63,10 +69,10 @@ impl Module for EgressModule {
 
             mc.for_each_to_update_mut(|chunk| {
                 for packet in chunk.delta_drain_packets() {
-                    compose
-                        .broadcast(packet, SystemId(99))
-                        .send(&world)
-                        .unwrap();
+                    if let Err(e) = compose.broadcast(packet, SystemId(99)).send(&world) {
+                        error!("failed to send chunk delta packet: {e}");
+                        return;
+                    }
                 }
             });
             mc.clear_should_update();
@@ -79,9 +85,9 @@ impl Module for EgressModule {
                 };
 
                 entity.get::<&NetworkStreamRef>(|stream| {
-                    compose
-                        .unicast(&pkt, *stream, SystemId(99), &world)
-                        .unwrap();
+                    if let Err(e) = compose.unicast(&pkt, *stream, SystemId(99), &world) {
+                        error!("failed to send player action response: {e}");
+                    }
                 });
             }
         });
@@ -101,10 +107,14 @@ impl Module for EgressModule {
                 if bytes.is_empty() {
                     continue;
                 }
-                egress.send(bytes.freeze()).unwrap();
+                if let Err(e) = egress.send(bytes.freeze()) {
+                    error!("failed to send egress: {e}");
+                }
             }
 
-            egress.send(flush.clone()).unwrap();
+            if let Err(e) = egress.send(flush.clone()) {
+                error!("failed to send flush: {e}");
+            }
         });
 
         system!(

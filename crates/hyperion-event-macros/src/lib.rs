@@ -79,8 +79,17 @@ impl EventType {
             }
         }
 
+        let Some(first_segment) = path.segments.first() else {
+            return Err(syn::Error::new(
+                path.span(),
+                "expected a path with at least one segment",
+            ));
+        };
+
+        let path = first_segment.ident.clone();
+
         Ok(Self {
-            path: path.segments.first().unwrap().ident.clone(),
+            path,
             ty,
             lifetime,
             ident,

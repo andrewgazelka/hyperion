@@ -68,7 +68,7 @@ impl LaunchHandle {
     }
 }
 
-pub fn launch_manager(shared: Arc<Shared>, runtime: AsyncRuntime) -> LaunchHandle {
+pub fn launch_manager(shared: Arc<Shared>, runtime: &AsyncRuntime) -> LaunchHandle {
     let (tx_load_chunk_requests, rx_load_chunk_requests) = tokio::sync::mpsc::unbounded_channel();
 
     runtime.spawn({

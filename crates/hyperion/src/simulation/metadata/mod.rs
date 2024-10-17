@@ -18,7 +18,7 @@ mod kind {
     pub const POSE: VarInt = VarInt(20);
 }
 
-#[derive(Encode)]
+#[derive(Encode, Clone, Copy)]
 pub enum Pose {
     Standing,
     FallFlying,

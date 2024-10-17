@@ -125,6 +125,8 @@ impl<T: HasAabb + Send + Copy + Sync + Debug> Bvh<T> {
 
         // // 1.7 works too, 2.0 is upper bound ... 1.8 is probably best
         let capacity = ((len / ELEMENTS_TO_ACTIVATE_LEAF) as f64 * 8.0) as usize;
+
+        // [A]
         let capacity = capacity.max(16);
 
         let mut nodes = vec![BvhNode::DUMMY; capacity];
@@ -134,6 +136,10 @@ impl<T: HasAabb + Send + Copy + Sync + Debug> Bvh<T> {
             start_nodes_ptr: nodes.as_ptr(),
         };
 
+        #[expect(
+            clippy::indexing_slicing,
+            reason = "Look at [A]. The length is at least 16, so this is safe."
+        )]
         let nodes_slice = &mut nodes[1..];
 
         let (root, _) = BvhNode::build_in(&bvh, &mut elements, max_threads, 0, nodes_slice);

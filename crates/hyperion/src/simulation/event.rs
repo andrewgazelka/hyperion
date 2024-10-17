@@ -64,7 +64,7 @@ pub struct PluginMessage<'a> {
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 #[repr(i32)]
-#[allow(missing_docs, reason = "self explanatory")]
+#[expect(missing_docs, reason = "self explanatory")]
 pub enum Posture {
     Standing = 0,
     FallFlying = 1,

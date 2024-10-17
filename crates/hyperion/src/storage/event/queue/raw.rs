@@ -72,7 +72,7 @@ impl<T: Copy> RawQueue<T> {
         let len = self.len.load(std::sync::atomic::Ordering::Relaxed);
 
         (0..len).map(move |i| {
-            let elem = self.elems.get(i).unwrap();
+            let elem = &self.elems[i];
             let elem = unsafe { &*elem.get() };
             unsafe { elem.assume_init_read() }
         })

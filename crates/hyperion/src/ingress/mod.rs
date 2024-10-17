@@ -1,15 +1,10 @@
-use std::{
-    borrow::Cow,
-    fs::File,
-    io::{BufRead, BufReader},
-};
+use std::borrow::Cow;
 
 use anyhow::Context;
 use base64::{engine::general_purpose, Engine};
 use colored::Colorize;
 use flecs_ecs::prelude::*;
 use hyperion_utils::EntityExt;
-use parking_lot::Mutex;
 use serde_json::json;
 use sha2::Digest;
 use tracing::{error, info, trace, trace_span, warn};
@@ -20,6 +15,7 @@ use valence_protocol::{
     },
     Bounded, Packet, VarInt,
 };
+use valence_text::IntoText;
 
 use crate::{
     egress::sync_chunks::ChunkSendQueue,
@@ -40,13 +36,27 @@ use crate::{
 };
 
 #[derive(Component, Debug)]
-pub struct PendingRemove;
+pub struct PendingRemove {
+    pub reason: String,
+}
+
+impl PendingRemove {
+    #[must_use]
+    pub fn new(reason: impl Into<String>) -> Self {
+        Self {
+            reason: reason.into(),
+        }
+    }
+}
 
 fn process_handshake(
     login_state: &mut PacketState,
     packet: &BorrowedPacketFrame<'_>,
 ) -> anyhow::Result<()> {
-    debug_assert!(*login_state == PacketState::Handshake);
+    debug_assert!(
+        *login_state == PacketState::Handshake,
+        "process_handshake called with invalid state: {login_state:?}"
+    );
 
     let handshake: packets::handshaking::HandshakeC2s<'_> = packet.decode()?;
 
@@ -66,7 +76,7 @@ fn process_handshake(
     Ok(())
 }
 
-#[allow(clippy::too_many_arguments, reason = "todo del")]
+#[expect(clippy::too_many_arguments, reason = "todo; refactor")]
 fn process_login(
     world: &WorldRef<'_>,
     tasks: &AsyncRuntime,
@@ -81,20 +91,10 @@ fn process_login(
     system_id: SystemId,
     handlers: &GlobalEventHandlers,
 ) -> anyhow::Result<()> {
-    static UUIDS: once_cell::sync::Lazy<Mutex<Vec<uuid::Uuid>>> =
-        once_cell::sync::Lazy::new(|| {
-            let uuids = File::open("10000uuids.txt").unwrap();
-            let uuids = BufReader::new(uuids);
-
-            let uuids = uuids
-                .lines()
-                .map(|line| line.unwrap())
-                .map(|line| uuid::Uuid::parse_str(&line).unwrap())
-                .collect::<Vec<_>>();
-            Mutex::new(uuids)
-        });
-
-    debug_assert!(*login_state == PacketState::Login);
+    debug_assert!(
+        *login_state == PacketState::Login,
+        "process_login called with invalid state: {login_state:?}"
+    );
 
     let login::LoginHelloC2s { username, .. } = packet.decode()?;
 
@@ -122,25 +122,33 @@ fn process_login(
     let pose = Position::player(PLAYER_SPAWN_POSITION);
     let username = Box::from(username);
 
-    let uuid = UUIDS
-        .lock()
-        .pop()
-        .unwrap_or_else(|| offline_uuid(&username).unwrap());
+    let uuid = offline_uuid(&username);
 
     let uuid_s = format!("{uuid:?}").dimmed();
     println!("{username} {uuid_s}");
 
     let skins = comms.skins_tx.clone();
     let id = entity.id();
-    tasks.spawn(async move {
-        let mojang = MojangClient::default();
-        let skin = PlayerSkin::from_uuid(uuid, &mojang, &skins_collection)
-            .await
-            .unwrap()
-            .unwrap();
+    tasks.spawn(
+        #[expect(clippy::unwrap_used, reason = "we are panicking in a spawned task")]
+        async move {
+            let mojang = MojangClient::default();
 
-        skins.send((id, skin)).unwrap();
-    });
+            let skin = match PlayerSkin::from_uuid(uuid, &mojang, &skins_collection).await {
+                Ok(Some(skin)) => skin,
+                Err(e) => {
+                    error!("failed to get skin {e}. Using empty skin");
+                    PlayerSkin::EMPTY
+                }
+                Ok(None) => {
+                    error!("failed to get skin. Using empty skin");
+                    PlayerSkin::EMPTY
+                }
+            };
+
+            skins.send((id, skin)).unwrap();
+        },
+    );
 
     let pkt = login::LoginSuccessS2c {
         uuid,
@@ -148,7 +156,9 @@ fn process_login(
         properties: Cow::default(),
     };
 
-    compose.unicast(&pkt, stream_id, system_id, world).unwrap();
+    compose
+        .unicast(&pkt, stream_id, system_id, world)
+        .context("failed to send login success packet")?;
 
     *login_state = PacketState::Play;
 
@@ -170,13 +180,14 @@ fn process_login(
 }
 
 /// Get a [`uuid::Uuid`] based on the given user's name.
-fn offline_uuid(username: &str) -> anyhow::Result<uuid::Uuid> {
+fn offline_uuid(username: &str) -> uuid::Uuid {
     let digest = sha2::Sha256::digest(username);
+    let digest: [u8; 32] = digest.into();
+    let (&digest, ..) = digest.split_array_ref::<16>();
 
-    #[expect(clippy::indexing_slicing, reason = "sha256 is always 32 bytes")]
-    let slice = &digest[..16];
-
-    uuid::Uuid::from_slice(slice).context("failed to create uuid")
+    // todo: I have no idea which way we should go (be or le)
+    let digest = u128::from_be_bytes(digest);
+    uuid::Uuid::from_u128(digest)
 }
 
 fn process_status(
@@ -187,7 +198,10 @@ fn process_status(
     compose: &Compose,
     world: &World,
 ) -> anyhow::Result<()> {
-    debug_assert!(*login_state == PacketState::Status);
+    debug_assert!(
+        *login_state == PacketState::Status,
+        "process_status called with invalid state: {login_state:?}"
+    );
 
     match packet.id {
         packets::status::QueryRequestC2s::ID => {
@@ -239,7 +253,7 @@ fn process_status(
             *login_state = PacketState::Terminate;
         }
 
-        _ => panic!("unexpected packet id: {}", packet.id),
+        _ => warn!("unexpected packet id during status: {packet:?}"),
     }
 
     // todo: check version is correct
@@ -251,7 +265,7 @@ fn process_status(
 pub struct IngressModule;
 
 impl Module for IngressModule {
-    #[allow(clippy::too_many_lines)]
+    #[expect(clippy::too_many_lines)]
     fn module(world: &World) {
         system!(
             "generate_ingress_events",
@@ -289,12 +303,24 @@ impl Module for IngressModule {
             for disconnect in recv.player_disconnect.drain(..) {
                 // will initiate the removal of entity
                 info!("queue pending remove");
-                let id = lookup.get(&disconnect.stream).copied().unwrap();
-                world.entity_from_id(*id).add::<PendingRemove>();
+                let Some(id) = lookup.get(&disconnect.stream).copied() else {
+                    error!("failed to get id for disconnect stream {disconnect:?}");
+                    continue;
+                };
+                world
+                    .entity_from_id(*id)
+                    .set(PendingRemove::new("disconnected"));
             }
         });
 
-        let worlds = (0..rayon::current_num_threads() as i32)
+        #[expect(
+            clippy::unwrap_used,
+            reason = "this is only called once on startup; it should be fine. we mostly care \
+                      about crashing during server execution"
+        )]
+        let num_threads = i32::try_from(rayon::current_num_threads()).unwrap();
+
+        let worlds = (0..num_threads)
             // SAFETY: promoting world to static lifetime, system won't outlive world
             .map(|i| unsafe { std::mem::transmute(world.stage(i)) })
             .map(SendableRef)
@@ -319,6 +345,11 @@ impl Module for IngressModule {
             let mut recv = receive.0.lock();
 
             recv.packets.par_drain().for_each(|(entity_id, bytes)| {
+                #[expect(
+                    clippy::indexing_slicing,
+                    reason = "it should be impossible to get a thread index that is out of bounds \
+                              unless the rayon thread pool changes size which does not occur"
+                )]
                 let world = &worlds[rayon::current_thread_index().unwrap_or_default()];
                 let world = &world.0;
 
@@ -348,12 +379,13 @@ impl Module for IngressModule {
             world,
             &Uuid,
             &Compose($),
+            &NetworkStreamRef,
+            &PendingRemove,
         )
-        .with::<&PendingRemove>()
         .kind::<flecs::pipeline::PostLoad>()
         .tracing_each_entity(
             trace_span!("remove_player"),
-            move |entity, (uuid, compose)| {
+            move |entity, (uuid, compose, io, pending_remove)| {
                 let uuids = &[uuid.0];
                 let entity_ids = [VarInt(entity.minecraft_id())];
 
@@ -364,13 +396,28 @@ impl Module for IngressModule {
                     entity_ids: Cow::Borrowed(&entity_ids),
                 };
 
-                compose.broadcast(&pkt, system_id).send(&world).unwrap();
+                if let Err(e) = compose.broadcast(&pkt, system_id).send(&world) {
+                    error!("failed to send player remove packet: {e}");
+                    return;
+                };
 
                 let pkt = play::PlayerRemoveS2c {
                     uuids: Cow::Borrowed(uuids),
                 };
 
-                compose.broadcast(&pkt, system_id).send(&world).unwrap();
+                if let Err(e) = compose.broadcast(&pkt, system_id).send(&world) {
+                    error!("failed to send player remove packet: {e}");
+                };
+
+                if !pending_remove.reason.is_empty() {
+                    let pkt = play::DisconnectS2c {
+                        reason: pending_remove.reason.clone().into_cow_text(),
+                    };
+
+                    if let Err(e) = compose.unicast_no_compression(&pkt, *io, system_id, &world) {
+                        error!("failed to send disconnect packet: {e}");
+                    }
+                }
             },
         );
 
@@ -431,7 +478,16 @@ impl Module for IngressModule {
                 let bump = compose.bump.get(&world);
 
                 loop {
-                    let Some(frame) = decoder.try_next_packet(bump).unwrap() else {
+                    let frame = match decoder.try_next_packet(bump) {
+                        Ok(frame) => frame,
+                        Err(e) => {
+                            error!("failed to decode packet: {e}");
+                            entity.destruct();
+                            break;
+                        }
+                    };
+
+                    let Some(frame) = frame else {
                         break;
                     };
 
@@ -446,24 +502,59 @@ impl Module for IngressModule {
                             }
                         }
                         PacketState::Status => {
-                            process_status(login_state, system_id, &frame, io_ref, compose, &world)
-                                .unwrap();
+                            if let Err(e) = process_status(
+                                login_state,
+                                system_id,
+                                &frame,
+                                io_ref,
+                                compose,
+                                &world,
+                            ) {
+                                error!("failed to process status packet: {e}");
+                                entity.destruct();
+                                break;
+                            }
                         }
-                        PacketState::Login => process_login(
-                            &world,
-                            tasks,
-                            login_state,
-                            decoder,
-                            comms,
-                            skins_collection.clone(),
-                            &frame,
-                            io_ref,
-                            compose,
-                            &entity,
-                            system_id,
-                            handlers,
-                        )
-                        .unwrap(),
+                        PacketState::Login => {
+                            if let Err(e) = process_login(
+                                &world,
+                                tasks,
+                                login_state,
+                                decoder,
+                                comms,
+                                skins_collection.clone(),
+                                &frame,
+                                io_ref,
+                                compose,
+                                &entity,
+                                system_id,
+                                handlers,
+                            ) {
+                                error!("failed to process login packet");
+                                let msg = format!(
+                                    "§c§lFailed to process login packet:§r\n\n§4{e}§r\n\n§eAre \
+                                     you on the right version of Minecraft?§r\n§b(Required: \
+                                     1.20.1)§r"
+                                );
+
+                                // hopefully we were in no compression mode
+                                // todo we want to handle sending different based on whether
+                                // we sent compression packet or not
+                                if let Err(e) = compose.unicast_no_compression(
+                                    &login::LoginDisconnectS2c {
+                                        reason: msg.into_cow_text(),
+                                    },
+                                    io_ref,
+                                    system_id,
+                                    &world,
+                                ) {
+                                    error!("failed to send login disconnect packet: {e}");
+                                }
+
+                                entity.destruct();
+                                break;
+                            }
+                        }
                         PacketState::Play => {
                             // We call this code when you're in play.
                             // Transitioning to play is just a way to make sure that the player is officially in play before we start sending them play packets.

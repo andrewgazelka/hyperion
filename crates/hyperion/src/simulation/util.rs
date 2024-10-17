@@ -113,10 +113,6 @@ pub fn generate_biome_registry() -> anyhow::Result<BiomeRegistry> {
     Ok(biome_registry)
 }
 
-#[allow(
-    clippy::cognitive_complexity,
-    reason = "todo break up into smaller functions"
-)]
 pub fn get_nyc_save() -> anyhow::Result<PathBuf> {
     // $HOME/.hyperion
     let home_dir = dirs_next::home_dir().context("could not find home directory")?;

@@ -1,15 +1,12 @@
 use std::{borrow::Cow, collections::BTreeMap};
 
-use roaring::RoaringBitmap;
 use thiserror::Error;
 use valence_anvil::RegionError;
 use valence_generated::block::{BlockKind, BlockState, PropName, PropValue};
 use valence_nbt::{Compound, List, Value};
 use valence_protocol::Ident;
 use valence_registry::biome::BiomeId;
-use valence_server::layer::chunk::{
-    check_biome_oob, check_block_oob, check_section_oob, BiomeContainer, Chunk,
-};
+use valence_server::layer::chunk::{check_biome_oob, check_block_oob, check_section_oob, Chunk};
 
 use crate::simulation::blocks::loader::parse::section::Section;
 
@@ -110,7 +107,7 @@ impl ChunkData {
 
 impl Chunk for ChunkData {
     fn height(&self) -> u32 {
-        self.sections.len() as u32 * 16
+        u32::try_from(self.sections.len()).unwrap() * 16
     }
 
     fn block_state(&self, x: u32, y: u32, z: u32) -> BlockState {
@@ -212,20 +209,7 @@ impl Chunk for ChunkData {
     }
 }
 
-impl Default for Section {
-    fn default() -> Self {
-        Self {
-            block_states: hyperion_palette::PalettedContainer::Single(0),
-            biomes: BiomeContainer::default(),
-            block_light: [0_u8; 2048],
-            sky_light: [0_u8; 2048],
-            changed: RoaringBitmap::new(),
-            changed_since_last_tick: RoaringBitmap::new(),
-        }
-    }
-}
-
-#[allow(clippy::cast_sign_loss, clippy::cast_lossless, clippy::too_many_lines)]
+#[expect(clippy::cast_sign_loss, clippy::cast_lossless, clippy::too_many_lines)]
 pub fn parse_chunk(
     mut nbt: Compound,
     biome_map: &BTreeMap<Ident<String>, BiomeId>, // TODO: replace with biome registry arg.
@@ -311,7 +295,7 @@ pub fn parse_chunk(
             return Err(ParseChunkError::MissingBlockPalette);
         };
 
-        if !(1..BLOCKS_PER_SECTION).contains(&palette.len()) {
+        if !(1..usize::from(BLOCKS_PER_SECTION)).contains(&palette.len()) {
             return Err(ParseChunkError::BadBlockPaletteLen);
         }
 
@@ -360,8 +344,8 @@ pub fn parse_chunk(
 
             let bits_per_idx = bit_width(converted_block_palette.len() - 1).max(4);
             let idxs_per_long = 64 / bits_per_idx;
-            let long_count = BLOCKS_PER_SECTION.div_ceil(idxs_per_long);
-            let mask = 2_u64.pow(bits_per_idx as u32) - 1;
+            let long_count = usize::from(BLOCKS_PER_SECTION).div_ceil(idxs_per_long);
+            let mask = 2_u64.pow(u32::try_from(bits_per_idx).unwrap()) - 1;
 
             if long_count != data.len() {
                 return Err(ParseChunkError::BadBlockLongCount);
@@ -369,16 +353,19 @@ pub fn parse_chunk(
 
             let mut i: u32 = 0;
             for long in data {
-                let u64 = long as u64;
+                let long_unsigned = long as u64;
 
                 for j in 0..idxs_per_long {
-                    if i >= BLOCKS_PER_SECTION as u32 {
+                    if i >= u32::from(BLOCKS_PER_SECTION) {
                         break;
                     }
 
-                    let idx = (u64 >> (bits_per_idx * j)) & mask;
+                    let idx = (long_unsigned >> (bits_per_idx * j)) & mask;
 
-                    let Some(block) = converted_block_palette.get(idx as usize).copied() else {
+                    let Some(block) = converted_block_palette
+                        .get(usize::try_from(idx).unwrap())
+                        .copied()
+                    else {
                         return Err(ParseChunkError::BadBlockPaletteIndex);
                     };
 
@@ -401,7 +388,7 @@ pub fn parse_chunk(
             return Err(ParseChunkError::MissingBiomePalette);
         };
 
-        if !(1..BIOMES_PER_SECTION).contains(&palette.len()) {
+        if !(1..usize::from(BIOMES_PER_SECTION)).contains(&palette.len()) {
             return Err(ParseChunkError::BadBiomePaletteLen);
         }
 
@@ -427,8 +414,8 @@ pub fn parse_chunk(
 
             let bits_per_idx = bit_width(converted_biome_palette.len() - 1);
             let idxs_per_long = 64 / bits_per_idx;
-            let long_count = BIOMES_PER_SECTION.div_ceil(idxs_per_long);
-            let mask = 2_u64.pow(bits_per_idx as u32) - 1;
+            let long_count = usize::from(BIOMES_PER_SECTION).div_ceil(idxs_per_long);
+            let mask = 2_u64.pow(u32::try_from(bits_per_idx).unwrap()) - 1;
 
             if long_count != data.len() {
                 return Err(ParseChunkError::BadBiomeLongCount);
@@ -445,7 +432,10 @@ pub fn parse_chunk(
 
                     let idx = (u64 >> (bits_per_idx * j)) & mask;
 
-                    let Some(biome) = converted_biome_palette.get(idx as usize).copied() else {
+                    let Some(biome) = converted_biome_palette
+                        .get(usize::try_from(idx).unwrap())
+                        .copied()
+                    else {
                         return Err(ParseChunkError::BadBiomePaletteIndex);
                     };
 
@@ -508,8 +498,8 @@ pub fn parse_chunk(
     Ok(chunk)
 }
 
-const BLOCKS_PER_SECTION: usize = 16 * 16 * 16;
-const BIOMES_PER_SECTION: usize = 4 * 4 * 4;
+const BLOCKS_PER_SECTION: u16 = 16 * 16 * 16;
+const BIOMES_PER_SECTION: u16 = 4 * 4 * 4;
 
 /// Gets the path part of a resource identifier.
 fn ident_path(ident: &str) -> &str {

@@ -16,6 +16,11 @@ impl Encode for PlayerListS2c<'_> {
         self.actions.0.encode(&mut w)?;
 
         // Write number of entries.
+        #[expect(
+            clippy::cast_possible_wrap,
+            clippy::cast_possible_truncation,
+            reason = "realistically the length should never be this long"
+        )]
         VarInt(self.entries.len() as i32).encode(&mut w)?;
 
         for entry in self.entries.as_ref() {

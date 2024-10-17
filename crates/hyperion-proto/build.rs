@@ -9,6 +9,10 @@ fn main() {
         "Unicast.data",
     ];
 
+    #[expect(
+        clippy::expect_used,
+        reason = "this is a build script; panics are fine at compile time"
+    )]
     prost_build::Config::new()
         .bytes(bytes)
         .compile_protos(&protos, &["src/"])
