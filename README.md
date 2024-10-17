@@ -2,34 +2,59 @@
 
 [![Discord invite link](https://dcbadge.vercel.app/api/server/PBfnDtj5Wb)](https://discord.gg/PBfnDtj5Wb)
 
-Hyperion aims to have 10k players PvP simultaneously on one Minecraft world to break the Guinness World Record ([8825 by
+Hyperion is a **Minecraft game engine** that aims to enable a 10k player PvP battle to break the Guinness World Record ([8825 by
 EVE Online](https://www.guinnessworldrecords.com/world-records/105603-largest-videogame-pvp-battle)). The
-architecture is ECS-driven using [Flecs Rust](https://github.com/Indra-db/Flecs-Rust). Contribution is greatly appreciated. 
+architecture is ECS-driven using [Flecs Rust](https://github.com/Indra-db/Flecs-Rust). 
+
+I would greatly appreciate the contribution. 
 To see what to work on check the [issues page](https://github.com/andrewgazelka/hyperion/issues) or 
 join [Hyperion's Discord](https://discord.gg/sTN8mdRQ) for the latest updates on development.
 
-## Demonstrations 
+# Demo Map using Block API
+Note: performance has improved since this video was recorded.
+
 [hyperion.webm](https://github.com/user-attachments/assets/5ea4bdec-25a8-4bb5-a670-0cb81bf88d7e)
 
-![many](https://github.com/user-attachments/assets/e69f2c3a-f053-4361-a49d-336894f544ba)
+# Benchmarks
 
-## Running
 
-### Debug mode
+| Players | Tick Time (ms) | CPU Usage (%) |
+|---------|----------------|---------------|
+| 1       | 0.24           | 4.3           |
+| 10      | 0.30           | 10.3          |
+| 100     | 0.46           | 10.7          |
+| 1000    | 0.40           | 15.3          |
+
+**Test Environment:**
+- Machine: 2023 MacBook Pro Max 16"
+- Chunk Render Distance: 32 (4225 total)
+- Commit hash `faac9117` run with `just release`
+- Bot Launch Command: `just bots {number}`
+
+**Note on Performance:**
+Most of the computational cost is fixed due to synchronization with all threads. A couple of $$O(1)$$ cost sync points (with respect to player count) during each game tick. This explains why performance is not strongly correlated with the number of players. The overhead of thread synchronization dominates the performance profile, resulting in relatively stable tick times even as the player count increases significantly. 
+
+The primary burden relies on the proxy, which can be horizontally scaled.
+
+![image](https://github.com/user-attachments/assets/92448a00-43e3-4be6-ba52-1e348b3c7e49)
+
+# Running
+
+## Debug mode
 
 ```bash
 brew install just
 just
 ```
 
-### Release mode
+## Release mode
 
 ```
 brew install just
 just release
 ```
 
-## Feature Support Matrix
+# Feature Support Matrix
 
 Feel free to PR if something is missing/incorrect.
 
