@@ -2,37 +2,42 @@
 
 [![Discord invite link](https://dcbadge.vercel.app/api/server/PBfnDtj5Wb)](https://discord.gg/PBfnDtj5Wb)
 
-Hyperion is a **Minecraft game engine** that aims to enable a 10k player PvP battle to break the Guinness World Record ([8825 by
+Hyperion is a **Minecraft game engine** that aims to enable a 10k player PvP battle to break the Guinness World
+Record ([8825 by
 EVE Online](https://www.guinnessworldrecords.com/world-records/105603-largest-videogame-pvp-battle)). The
-architecture is ECS-driven using [Flecs Rust](https://github.com/Indra-db/Flecs-Rust). 
+architecture is ECS-driven using [Flecs Rust](https://github.com/Indra-db/Flecs-Rust).
 
-I would greatly appreciate the contribution. 
-To see what to work on check the [issues page](https://github.com/andrewgazelka/hyperion/issues) or 
+I would greatly appreciate the contribution.
+To see what to work on check the [issues page](https://github.com/andrewgazelka/hyperion/issues) or
 join [Hyperion's Discord](https://discord.gg/sTN8mdRQ) for the latest updates on development.
 
-# Demo Map using Block API
+# Demo Usage using Block API
+
 Note: performance has improved since this video was recorded.
 
 [hyperion.webm](https://github.com/user-attachments/assets/5ea4bdec-25a8-4bb5-a670-0cb81bf88d7e)
 
 # Benchmarks
 
-
-| Players | Tick Time (ms) | Core Usage (%)| Total CPU Utilization (%) |
-|---------|----------------|---------------|---------------------------|
-| 1       | 0.24           | 4.3           | 0.31                      |
-| 10      | 0.30           | 10.3          | 0.74                      |
-| 100     | 0.46           | 10.7          | 0.76                      |
-| 1000    | 0.40           | 15.3          | 1.09                      |
+| Players | Tick Time (ms) | Core Usage (%) | Total CPU Utilization (%) |
+|---------|----------------|----------------|---------------------------|
+| 1       | 0.24           | 4.3            | 0.31                      |
+| 10      | 0.30           | 10.3           | 0.74                      |
+| 100     | 0.46           | 10.7           | 0.76                      |
+| 1000    | 0.40           | 15.3           | 1.09                      |
 
 **Test Environment:**
+
 - Machine: 2023 MacBook Pro Max 16" (14-cores)
 - Chunk Render Distance: 32 (4225 total)
 - Commit hash `faac9117` run with `just release`
 - Bot Launch Command: `just bots {number}`
 
 **Note on Performance:**
-Most of the computational cost is fixed due to synchronization with all threads. A couple of $$O(1)$$ cost sync points (with respect to player count) during each game tick. This explains why performance is not strongly correlated with the number of players. The overhead of thread synchronization dominates the performance profile, resulting in relatively stable tick times even as the player count increases significantly. 
+Most of the computational cost is fixed due to synchronization with all threads. A couple of $$O(1)$$ cost sync points (
+with respect to player count) during each game tick. This explains why performance is not strongly correlated with the
+number of players. The overhead of thread synchronization dominates the performance profile, resulting in relatively
+stable tick times even as the player count increases significantly.
 
 The primary burden relies on the proxy, which can be horizontally scaled.
 
@@ -56,34 +61,61 @@ just release
 
 # Feature Support Matrix
 
-Feel free to PR if something is missing/incorrect.
+Notes:
 
-| Feature                                                                              | Hyperion | Pumpkin | FerrumC |
-|--------------------------------------------------------------------------------------|----------|---------|---------|
-| Loading Java Worlds                                                                  | ✅        | ✅       | ✅       |
-| Plugin API                                                                           | ✅        | ✅       | ❌       |
-| Has been tested with thousands of player connections                                 | ✅        | ❌       | ❌       |
-| Proximity Voice ([Simple Voice Chat](https://modrinth.com/plugin/simple-voice-chat)) | ✅        | ❌       | ❌       |
-| Lighting                                                                             | ✅        | ❌       | ✅       |
-| Placing blocks                                                                       | ✅        | ❌       | ❌       |
-| Breaking blocks                                                                      | ✅        | ❌       | ❌       |
-| Blocks physics                                                                       | ✅        | ❌       | ❌       |
-| Entity-entity collisions                                                             | ✅        | ❌       | ❌       |
-| Block-entity collisions                                                              | ✅        | ❌       | ❌       |
-| World borders                                                                        | ✅        | ❌       | ❌       |
-| Block Edit API (think WorldEdit)                                                     | ✅        | ❌       | ❌       |
-| PvP                                                                                  | ✅        | ❌       | ❌       |
-| Vertical scaling (fully multi-threaded)                                              | ✅        | ❌       | ❌       |
-| Horizontal scaling (through proxies)                                                 | ✅        | ❌       | ❌       | 
-| Advanced tracing support ([tracy](https://github.com/wolfpld/tracy))                 | ✅        | ❌       | ❌       | 
-| Set Resource Packets                                                                 | ❌        | ✅       | ?       |
-| Minecraft 1.20.1                                                                     | ✅        | ✅       | ✅       |
-| Proxy Support (Velocity)                                                             | ✅        | ✅       | ?       |
-| Inventory                                                                            | ✅        | ✅       | ?       |
-| Particle Support                                                                     | ✅        | ✅       | ?       |
-| RCON                                                                                 | ❌        | ✅       | ❌       |
-| Chat Support                                                                         | ❌        | ✅       | ?       |
-| Command Support                                                                      | ✅        | ✅       | ?       |
+- Pumpkin, FerrumC, and Valence are wonderful and interesting projects. Our goals are not entirely the same. As such,
+  the features we have will be different.
+- This list is not comprehensive. Feel free to PR or file an issue if something is missing/incorrect.
+
+| Feature                                                                              | Hyperion                       | Pumpkin             | FerrumC             | Valence     |
+|--------------------------------------------------------------------------------------|--------------------------------|---------------------|---------------------|-------------|
+| Loading Java Worlds                                                                  | ✅                              | ✅                   | ✅                   | ✅           |
+| Goal                                                                                 | game engine for massive events | 1:1 vanilla re-impl | 1:1 vanilla re-impl | game engine |
+| Entity Component System (ECS)                                                        | flecs                          | custom              | custom              | bevy        |
+| Major Dependencies                                                                   | valence*                       |                     |                     |             |           |
+| Plugin API                                                                           | flecs                          | ✅                   | ❌                   | bevy        |
+| Has been tested with thousands of player connections                                 | ✅                              | ❌                   | ❌                   | ❌           |
+| Proximity Voice ([Simple Voice Chat](https://modrinth.com/plugin/simple-voice-chat)) | ✅                              | ❌                   | ❌                   | ❌           |
+| Lighting                                                                             | ✅                              | ❌                   | ✅                   | ❌           |
+| Placing blocks                                                                       | ✅                              | ❌                   | ❌                   | ?           |
+| Breaking blocks                                                                      | ✅                              | ❌                   | ❌                   | ?           |
+| Blocks physics                                                                       | ✅                              | ❌                   | ❌                   | ❌           |
+| Entity-entity collisions                                                             | ✅                              | ❌                   | ❌                   | ❌           |
+| Block-entity collisions                                                              | ✅                              | ❌                   | ❌                   | ✅           |
+| World borders                                                                        | ✅                              | ❌                   | ❌                   | ✅           |
+| Block Edit API (think WorldEdit)                                                     | ✅                              | ❌                   | ❌                   | ✅           |
+| PvP                                                                                  | ✅                              | ❌                   | ❌                   | ✅           |
+| Vertical scaling (fully multi-threaded)                                              | ✅                              | ❌                   | ❌                   | ✅           |
+| Horizontal scaling (through proxies)                                                 | ✅                              | ❌                   | ❌                   | ❌           |
+| Advanced tracing support ([tracy](https://github.com/wolfpld/tracy))                 | ✅                              | ❌                   | ❌                   | ✅           |
+| Set Resource Packets                                                                 | ❌                              | ❌                   | ?                   | ✅           |
+| Minecraft 1.20.1                                                                     | ✅                              | ❌                   | ✅                   | ✅           |
+| Minecraft 1.21.x                                                                     | ❌                              | ✅                   | ❌                   | ❌           |
+| Proxy Support (Velocity)                                                             | ✅                              | ✅                   | ?                   | ✅           |
+| Inventory                                                                            | ✅                              | ✅                   | ?                   | ✅           |
+| Particle Support                                                                     | ✅                              | ✅                   | ?                   | ✅           |
+| RCON                                                                                 | ❌                              | ✅                   | ❌                   | ?           |
+| Chat Support                                                                         | ❌                              | ✅                   | ?                   | ✅           |
+| Command Support                                                                      | ✅                              | ✅                   | ?                   | ✅           |
+
+* = we depend on these (forked) crates from valence
+
+```text
+valence_anvil
+valence_build_utils
+valence_entity
+valence_generated
+valence_ident
+valence_ident_macros
+valence_math
+valence_nbt
+valence_protocol
+valence_protocol_macros
+valence_registry
+valence_server
+valence_server_common
+valence_text
+```
 
 ## Related Projects ❤️
 
