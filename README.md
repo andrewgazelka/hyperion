@@ -61,11 +61,7 @@ just release
 
 # Feature Support Matrix
 
-Notes:
-
-- Pumpkin, FerrumC, and Valence are wonderful and interesting projects. Our goals are not entirely the same. As such,
-  the features we have will be different.
-- This list is not comprehensive. Feel free to PR or file an issue if something is missing/incorrect.
+This list is not comprehensive. Feel free to PR or file an issue if something is missing/incorrect.
 
 | Feature                                                                              | Hyperion                       | Pumpkin             | FerrumC             | Valence     | Minestom*        |
 |--------------------------------------------------------------------------------------|--------------------------------|---------------------|---------------------|-------------|------------------|
