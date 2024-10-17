@@ -18,15 +18,15 @@ Note: performance has improved since this video was recorded.
 # Benchmarks
 
 
-| Players | Tick Time (ms) | CPU Usage (%) |
-|---------|----------------|---------------|
-| 1       | 0.24           | 4.3           |
-| 10      | 0.30           | 10.3          |
-| 100     | 0.46           | 10.7          |
-| 1000    | 0.40           | 15.3          |
+| Players | Tick Time (ms) | CPU Usage (%) | Total CPU Utilization (%) |
+|---------|----------------|---------------|---------------------------|
+| 1       | 0.24           | 4.3           | 0.31                      |
+| 10      | 0.30           | 10.3          | 0.74                      |
+| 100     | 0.46           | 10.7          | 0.76                      |
+| 1000    | 0.40           | 15.3          | 1.09                      |
 
 **Test Environment:**
-- Machine: 2023 MacBook Pro Max 16"
+- Machine: 2023 MacBook Pro Max 16" (14-cores)
 - Chunk Render Distance: 32 (4225 total)
 - Commit hash `faac9117` run with `just release`
 - Bot Launch Command: `just bots {number}`
