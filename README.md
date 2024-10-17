@@ -63,7 +63,5 @@ Feel free to PR if something is missing/incorrect.
 | RCON                                                                                 | ❌        | ✅       | ❌       |
 | Chat Support                                                                         | ❌        | ✅       | ?       |
 | Command Support                                                                      | ✅        | ✅       | ?       |
-| Particle Support                                                                     | ✅        | ✅       | ?       |
-
 
 
