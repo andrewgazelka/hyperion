@@ -56,7 +56,6 @@ Feel free to PR if something is missing/incorrect.
 | Horizontal scaling (through proxies)                                                 | ✅        | ❌       | ❌       | 
 | Advanced tracing support ([tracy](https://github.com/wolfpld/tracy))                 | ✅        | ❌       | ❌       | 
 | Set Resource Packets                                                                 | ❌        | ✅       | ?       |
-| Configuration                                                                        | ✅        | ✅       | ✅       |
 | Minecraft 1.20.1                                                                     | ✅        | ✅       | ✅       |
 | Proxy Support (Velocity)                                                             | ✅        | ✅       | ?       |
 | Inventory                                                                            | ✅        | ✅       | ?       |
