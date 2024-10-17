@@ -6,8 +6,7 @@ use std::{
 };
 
 use flecs_ecs::core::World;
-
-const NUM_THREADS: usize = 8;
+use crate::NUM_THREADS;
 
 /// Thread-local in flecs environment
 #[derive(Debug, Default)]

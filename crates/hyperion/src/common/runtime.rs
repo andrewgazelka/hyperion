@@ -19,7 +19,9 @@ impl Default for AsyncRuntime {
                       initialization"
         )]
         let runtime = tokio::runtime::Builder::new_multi_thread()
+            // .worker_threads(2)
             .enable_all()
+            // .thread_stack_size(1024 * 1024) // 1 MiB
             .build()
             .unwrap();
 

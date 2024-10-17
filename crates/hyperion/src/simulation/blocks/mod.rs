@@ -48,6 +48,7 @@ pub enum TrySetBlockDeltaError {
 pub struct Blocks {
     /// Map to a Chunk by Entity ID
     chunk_cache: IndexMap<I16Vec2, LoadedChunk, FxBuildHasher>,
+    // chunk_cache: lru::LruCache<I16Vec2, LoadedChunk>,
     should_update: RoaringBitmap,
 
     launch_manager: LaunchHandle,

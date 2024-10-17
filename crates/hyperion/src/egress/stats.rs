@@ -17,7 +17,6 @@ pub struct StatsModule;
 
 impl Module for StatsModule {
     fn module(world: &World) {
-        // let mode = std::env::var("RUN_MODE").unwrap_or_else(|_| "Unknown".to_string());
 
         let mut players = world.new_query::<&Play>();
 

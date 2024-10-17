@@ -212,18 +212,6 @@ impl Chunk for ChunkData {
     }
 }
 
-impl Default for Section {
-    fn default() -> Self {
-        Self {
-            block_states: hyperion_palette::PalettedContainer::Single(0),
-            biomes: BiomeContainer::default(),
-            block_light: [0_u8; 2048],
-            sky_light: [0_u8; 2048],
-            changed: RoaringBitmap::new(),
-            changed_since_last_tick: RoaringBitmap::new(),
-        }
-    }
-}
 
 #[allow(clippy::cast_sign_loss, clippy::cast_lossless, clippy::too_many_lines)]
 pub fn parse_chunk(

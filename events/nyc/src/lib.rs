@@ -19,6 +19,8 @@ use module::{
     regeneration::RegenerationModule,
 };
 
+use crate::module::stats::StatsModule;
+
 #[derive(Component)]
 pub struct InfectionModule;
 
@@ -31,6 +33,7 @@ impl Module for InfectionModule {
             .add_trait::<(flecs::With, component::team::Team)>();
 
         world.import::<CommandModule>();
+        world.import::<StatsModule>();
         world.import::<BlockModule>();
         world.import::<AttackModule>();
         world.import::<LevelModule>();

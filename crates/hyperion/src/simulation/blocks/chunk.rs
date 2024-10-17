@@ -4,7 +4,7 @@ use bytes::Bytes;
 use glam::I16Vec2;
 use valence_generated::block::BlockState;
 use valence_server::layer::chunk::Chunk;
-
+use crate::simulation::blocks::loader::CHUNK_HEIGHT_SPAN;
 use super::loader::parse::ChunkData;
 
 pub const START_Y: i32 = -64;
@@ -69,7 +69,7 @@ pub struct LoadedChunk {
 }
 
 impl LoadedChunk {
-    pub const fn new(base_packet_bytes: Bytes, chunk: ChunkData, position: I16Vec2) -> Self {
+    pub fn new(base_packet_bytes: Bytes, chunk: ChunkData, position: I16Vec2) -> Self {
         Self {
             base_packet_bytes,
             chunk,
@@ -79,15 +79,6 @@ impl LoadedChunk {
 
     pub fn bytes(&self) -> Bytes {
         self.base_packet_bytes.clone()
-    }
-
-    #[must_use]
-    pub const fn chunk(&self) -> &ChunkData {
-        &self.chunk
-    }
-
-    pub fn chunk_mut(&mut self) -> &mut ChunkData {
-        &mut self.chunk
     }
 
     #[expect(unused, reason = "might be useful in the future")]

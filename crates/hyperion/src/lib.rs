@@ -32,6 +32,8 @@
     clippy::allow_attributes
 )]
 
+pub const NUM_THREADS: usize = 8;
+
 use std::{alloc::Allocator, cell::RefCell, fmt::Debug, io::Write, net::ToSocketAddrs, sync::Arc};
 
 use anyhow::{bail, Context};
@@ -137,13 +139,16 @@ impl Hyperion {
         // Denormals (numbers very close to 0) are flushed to zero because doing computations on them
         // is slow.
         rayon::ThreadPoolBuilder::new()
-            .num_threads(8)
+            .num_threads(NUM_THREADS)
             .spawn_handler(|thread| {
-                std::thread::spawn(|| {
-                    no_denormals::no_denormals(|| {
-                        thread.run();
-                    });
-                });
+                std::thread::Builder::new()
+                    .stack_size(1024 * 1024)
+                    .spawn(move || {
+                        no_denormals::no_denormals(|| {
+                            thread.run();
+                        });
+                    })
+                    .expect("Failed to spawn thread");
                 Ok(())
             })
             .build_global()
@@ -169,15 +174,16 @@ impl Hyperion {
         });
 
         let world = World::new();
+
         let world = Box::new(world);
         let world = Box::leak(world);
 
         let mut app = world.app();
 
-        app.enable_rest(0)
-            .enable_stats(true)
-            .set_threads(rayon::current_num_threads() as i32)
-            .set_target_fps(20.0);
+        // app.enable_rest(0)
+        //     .enable_stats(true)
+        //     .set_threads(rayon::current_num_threads() as i32)
+        //     .set_target_fps(20.0);
 
         world.set_threads(rayon::current_num_threads() as i32);
 
@@ -199,11 +205,11 @@ impl Hyperion {
         world.set(GlobalEventHandlers::default());
 
         info!("initializing database");
-        let db = Db::new()?;
-        let skins = SkinHandler::new(db.clone());
+        // let db = Db::new()?;
+        let skins = SkinHandler::new();
         info!("database initialized");
 
-        world.set(db);
+        // world.set(db);
         world.set(skins);
 
         let (receive_state, egress_comm) = init_proxy_comms(&runtime, address);

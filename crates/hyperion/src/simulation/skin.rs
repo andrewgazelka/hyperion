@@ -16,6 +16,11 @@ pub struct PlayerSkin {
 }
 
 impl PlayerSkin {
+    pub const EMPTY: Self = Self {
+        textures: String::new(),
+        signature: String::new(),
+    };
+    
     /// Creates a new [`PlayerSkin`]
     #[must_use]
     pub const fn new(textures: String, signature: String) -> Self {

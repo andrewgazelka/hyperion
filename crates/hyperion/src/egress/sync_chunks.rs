@@ -4,7 +4,10 @@ use derive_more::derive::{Deref, DerefMut};
 use flecs_ecs::prelude::*;
 use glam::I16Vec2;
 use tracing::{error, trace_span};
-use valence_protocol::packets::play::{self};
+use valence_protocol::{
+    packets::play::{self},
+    ChunkPos,
+};
 
 use crate::{
     config::Config,
@@ -89,6 +92,23 @@ impl Module for SyncChunksModule {
                     current_range_liberal_x.contains(&elem.x)
                         && current_range_liberal_z.contains(&elem.y)
                 });
+
+                let removed_chunks = last_sent_range_x
+                    .clone()
+                    .flat_map(|x| last_sent_range_z.clone().map(move |z| I16Vec2::new(x, z)))
+                    .filter(|pos| {
+                        !current_range_x.contains(&pos.x) || !current_range_z.contains(&pos.y)
+                    });
+
+                for chunk in removed_chunks {
+                    let pos = ChunkPos::new(i32::from(chunk.x), i32::from(chunk.y));
+                    let unload_chunk = play::UnloadChunkS2c { pos };
+                    if let Err(e) = compose.unicast(&unload_chunk, stream_id, system_id, &world) {
+                        error!(
+                            "Failed to send unload chunk packet: {e}. Chunk location: {chunk:?}"
+                        );
+                    }
+                }
 
                 let added_chunks = current_range_x
                     .flat_map(move |x| current_range_z.clone().map(move |z| I16Vec2::new(x, z)))
@@ -198,41 +218,5 @@ impl Module for SyncChunksModule {
                     }
                 },
             );
-
-        // system!(
-        //     "local_stats",
-        //     world,
-        //     &Compose($),
-        //     &ChunkSendQueue,
-        //     &NetworkStreamRef,
-        // )
-        // .multi_threaded()
-        // .kind::<flecs::pipeline::OnUpdate>()
-        // .tracing_each_entity(
-        //     trace_span!("local_chunk_stats"),
-        //     move |entity, (compose, chunk_send_queue, stream)| {
-        //         const FULL_BAR_CHUNKS: usize = 4096;
-        //
-        //         let world = entity.world();
-        //         let chunks_to_send = chunk_send_queue.len();
-        //
-        //         let title = format_compact!("{chunks_to_send} chunks to send");
-        //         let title = hyperion_text::Text::new(&title);
-        //         let health = (chunks_to_send as f32 / FULL_BAR_CHUNKS as f32).min(1.0);
-        //
-        //         let pkt = BossBarS2c {
-        //             id: Uuid::from_u128(2),
-        //             action: BossBarAction::Add {
-        //                 title,
-        //                 health,
-        //                 color: BossBarColor::Red,
-        //                 division: BossBarDivision::NoDivision,
-        //                 flags: BossBarFlags::default(),
-        //             },
-        //         };
-        //
-        //         compose.unicast(&pkt, *stream, system_id, &world).unwrap();
-        //     },
-        // );
     }
 }

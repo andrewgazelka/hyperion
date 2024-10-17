@@ -68,7 +68,7 @@ impl RegionManager {
 struct RegionManagerTask {
     root: PathBuf,
     receiver: mpsc::Receiver<RegionRequest>,
-    regions: HashMap<IVec2, Arc<Region>>,
+    regions: HashMap<IVec2, std::sync::Weak<Region>>,
 }
 
 impl RegionManagerTask {
@@ -106,17 +106,20 @@ impl RegionManagerTask {
 
     async fn get_or_create_region(&mut self, coord: IVec2) -> std::io::Result<Arc<Region>> {
         if let Some(region) = self.regions.get(&coord) {
-            Ok(region.clone())
-        } else {
-            self.create_and_insert_region(coord).await
+            if let Some(region) = region.upgrade() {
+                return Ok(region);
+            }
         }
+
+        self.create_and_insert_region(coord).await
     }
 
     async fn create_and_insert_region(&mut self, coord: IVec2) -> std::io::Result<Arc<Region>> {
         let file = self.region_file(coord.x, coord.y).await?;
         let region = Region::open(file).unwrap();
         let region = Arc::new(region);
-        self.regions.insert(coord, region.clone());
+        let region_weak = Arc::downgrade(&region);
+        self.regions.insert(coord, region_weak);
         Ok(region)
     }
 }

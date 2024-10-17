@@ -58,6 +58,7 @@ thiserror.workspace = true
 tokio = { workspace = true, features = ["full"] }
 toml.workspace = true
 tracing = { workspace = true }
+lru = "0.12.5"
 uuid = { workspace = true, features = ["v3"] }
 valence_anvil.workspace = true
 valence_generated.workspace = true

@@ -9,8 +9,6 @@ use base64::{engine::general_purpose, Engine};
 use colored::Colorize;
 use flecs_ecs::prelude::*;
 use hyperion_utils::EntityExt;
-use itertools::Itertools;
-use parking_lot::Mutex;
 use serde_json::json;
 use sha2::Digest;
 use tracing::{error, info, trace, trace_span, warn};
@@ -85,34 +83,6 @@ fn process_login(
     system_id: SystemId,
     handlers: &GlobalEventHandlers,
 ) -> anyhow::Result<()> {
-    static UUIDS: once_cell::sync::Lazy<Mutex<Vec<uuid::Uuid>>> =
-        once_cell::sync::Lazy::new(|| {
-            let uuids = include_bytes!("../../../../10000uuids.txt");
-            let uuids = std::io::Cursor::new(uuids);
-
-            #[expect(
-                clippy::expect_used,
-                reason = "this is only called once on startup; it should be fine. we mostly care \
-                          about crashing during server execution"
-            )]
-            let uuids: Vec<_> = uuids
-                .lines()
-                .map(|line| {
-                    #[expect(
-                        clippy::unwrap_used,
-                        reason = "this is only called once on startup; it should be fine. we \
-                                  mostly care about crashing during server execution. Also this \
-                                  should be infallible"
-                    )]
-                    line.unwrap()
-                })
-                .map(|line| uuid::Uuid::parse_str(&line))
-                .try_collect()
-                .expect("failed to parse uuids");
-
-            Mutex::new(uuids)
-        });
-
     debug_assert!(
         *login_state == PacketState::Login,
         "process_login called with invalid state: {login_state:?}"
@@ -144,10 +114,7 @@ fn process_login(
     let pose = Position::player(PLAYER_SPAWN_POSITION);
     let username = Box::from(username);
 
-    let uuid = UUIDS
-        .lock()
-        .pop()
-        .unwrap_or_else(|| offline_uuid(&username));
+    let uuid = offline_uuid(&username);
 
     let uuid_s = format!("{uuid:?}").dimmed();
     println!("{username} {uuid_s}");
@@ -159,10 +126,17 @@ fn process_login(
         async move {
             let mojang = MojangClient::default();
 
-            let skin = PlayerSkin::from_uuid(uuid, &mojang, &skins_collection)
-                .await
-                .unwrap()
-                .unwrap();
+            let skin = match PlayerSkin::from_uuid(uuid, &mojang, &skins_collection).await {
+                Ok(Some(skin)) => skin,
+                Err(e) => {
+                    error!("failed to get skin {e}. Using empty skin");
+                    PlayerSkin::EMPTY
+                }
+                Ok(None) => {
+                    error!("failed to get skin. Using empty skin");
+                    PlayerSkin::EMPTY
+                }
+            };
 
             skins.send((id, skin)).unwrap();
         },

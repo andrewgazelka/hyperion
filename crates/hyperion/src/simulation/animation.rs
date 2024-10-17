@@ -22,10 +22,7 @@ impl ActiveAnimation {
         kind: EnumSet::empty(),
     };
 
-    pub fn packets(
-        &mut self,
-        entity_id: VarInt,
-    ) -> impl Iterator<Item = EntityAnimationS2c> + use<> {
+    pub fn packets(&mut self, entity_id: VarInt) -> impl Iterator<Item = EntityAnimationS2c> + use<> {
         self.kind.iter().map(move |kind| {
             let kind = kind as u8;
             EntityAnimationS2c {
