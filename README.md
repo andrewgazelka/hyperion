@@ -15,8 +15,7 @@ EVE Online](https://www.guinnessworldrecords.com/world-records/105603-largest-vi
 architecture is ECS-driven using [Flecs Rust](https://github.com/Indra-db/Flecs-Rust). To contribute,
 join [Hyperion's Discord](https://discord.gg/sTN8mdRQ) for the latest updates on development.
 
-Our current efforts are focused on making an event roughly similar to something that would be
-on [Overcast Network](https://oc.tc/) (we are not affiliated with them).
+Our event will be placed in NYC with the gracious support of [Build the Earth NYC](https://buildtheearth.net/teams/nyc).
 
 # Running
 
