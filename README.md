@@ -1,5 +1,7 @@
 # Hyperion
 
+# 10k player PvP
+
 ### JOIN THE DISCORD
 
 [![Discord invite link](https://dcbadge.vercel.app/api/server/PBfnDtj5Wb)](https://discord.gg/PBfnDtj5Wb)
