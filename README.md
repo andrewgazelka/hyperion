@@ -39,7 +39,7 @@ with respect to player count) during each game tick. This explains why performan
 number of players. The overhead of thread synchronization dominates the performance profile, resulting in relatively
 stable tick times even as the player count increases significantly.
 
-The primary burden relies on the proxy, which can be horizontally scaled.
+The primary burden relies on our proxy that can be horizontally scaled. A lot of logic including regional multicasting is done in the proxy.
 
 ![image](https://github.com/user-attachments/assets/92448a00-43e3-4be6-ba52-1e348b3c7e49)
 
@@ -72,7 +72,7 @@ This list is not comprehensive. Feel free to PR or file an issue if something is
 | Can handle 10k players                                                               | ✅                              | ❌                   | ❌                   | ❌           | ❌                |
 | Used in production                                                                   | ❌                              | ❌                   | ❌                   | ❌           | ✅                |
 | Stable and large adoption                                                            | ❌                              | ❌                   | ❌                   | ❌           | ✅                |
-| Proximity Voice ([Simple Voice Chat](https://modrinth.com/plugin/simple-voice-chat)) | ✅                              | ❌                   | ❌                   | ❌           | ❌                |
+| Proximity Voice ([Simple Voice Chat](https://modrinth.com/plugin/simple-voice-chat)) | ✅                              | ❌                   | ❌                   | ❌           | ✅                |
 | Lighting                                                                             | ✅                              | ❌                   | ✅                   | ❌           | ✅                |
 | Placing blocks                                                                       | ✅                              | ❌                   | ❌                   | ?           | ✅                |
 | Breaking blocks                                                                      | ✅                              | ❌                   | ❌                   | ?           | ✅                |
@@ -83,7 +83,7 @@ This list is not comprehensive. Feel free to PR or file an issue if something is
 | Block Edit API (think WorldEdit)                                                     | ✅                              | ❌                   | ❌                   | ✅           | ✅                |
 | PvP                                                                                  | ✅                              | ❌                   | ❌                   | ✅           | ✅                |
 | Vertical scaling (fully multi-threaded)                                              | ✅                              | ❌                   | ❌                   | ✅           | ✅                |
-| Horizontal scaling (through proxies)                                                 | ✅                              | ❌                   | ❌                   | ❌           | ❌                |
+| Horizontal scaling                                                                   | ✅                              | ❌                   | ❌                   | ❌           | ❌                |
 | Advanced tracing support ([tracy](https://github.com/wolfpld/tracy))                 | ✅                              | ❌                   | ❌                   | ✅           | ❌                |
 | Set Resource Packets                                                                 | ❌                              | ❌                   | ?                   | ✅           | ✅                |
 | Minecraft 1.20.1                                                                     | ✅                              | ❌                   | ✅                   | ✅           | ✅                |
