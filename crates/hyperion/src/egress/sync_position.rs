@@ -22,7 +22,6 @@ use crate::{
     },
     system_registry::SYNC_ENTITY_POSITION,
     util::TracingExt,
-    PLAYER_SPAWN_POSITION,
 };
 
 #[derive(Component)]
@@ -171,7 +170,7 @@ impl Module for SyncPositionModule {
                                 last_death_location: None,
                                 portal_cooldown: VarInt::default(),
                             };
-                            pose.position = PLAYER_SPAWN_POSITION;
+                            // pose.position = PLAYER_SPAWN_POSITION;
                             compose.unicast(&pkt, io, system_id, &world)?;
 
                             health.reset();

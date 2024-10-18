@@ -36,8 +36,6 @@
 
 pub const NUM_THREADS: usize = 8;
 pub const CHUNK_HEIGHT_SPAN: u32 = 384; // 512; // usually 384
-                                        // pub const PLAYER_SPAWN_POSITION: Vec3 = Vec3::new(-8_526_209_f32, 100f32, -6_028_464f32);
-pub const PLAYER_SPAWN_POSITION: Vec3 = Vec3::new(0.0, 100.0, 0.0);
 
 use std::{alloc::Allocator, cell::RefCell, fmt::Debug, io::Write, net::ToSocketAddrs, sync::Arc};
 

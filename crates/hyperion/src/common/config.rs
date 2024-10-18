@@ -3,6 +3,7 @@
 use std::{fmt::Debug, fs::File, io::Read, path::Path};
 
 use flecs_ecs::macros::Component;
+use glam::IVec2;
 use serde::{Deserialize, Serialize};
 use tracing::{info, instrument, warn};
 
@@ -14,6 +15,45 @@ pub struct Config {
     pub view_distance: i32,
     pub simulation_distance: i32,
     pub server_desc: String,
+    pub spawn_chebyshev_radius: Spawn,
+}
+
+#[derive(Serialize, Deserialize, Debug, Component)]
+pub struct Spawn {
+    pub radius: Radius,
+    pub x: i32,
+    pub y: i32,
+    pub z: i32,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
+enum Radius {
+    Chebyshev(i32),
+    Euclidean(i32),
+}
+
+impl Radius {
+    pub fn get_random_2d(self) -> IVec2 {
+        match self {
+            Radius::Chebyshev(radius) => {
+                let x = fastrand::i32(-radius..radius);
+                let z = fastrand::i32(-radius..radius);
+                IVec2::new(x, z)
+            }
+            Radius::Euclidean(radius) => {
+                let r = fastrand::f32() * radius as f32;
+                let theta = fastrand::f32() * 2.0 * std::f32::consts::PI;
+
+                let x = r * theta.cos();
+                let z = r * theta.sin();
+
+                let x = x as i32;
+                let z = z as i32;
+
+                IVec2::new(x, z)
+            }
+        }
+    }
 }
 
 impl Default for Config {
@@ -24,6 +64,7 @@ impl Default for Config {
             view_distance: 32,
             simulation_distance: 10,
             server_desc: "Hyperion Test Server".to_owned(),
+            spawn_chebyshev_radius: 10_000,
         }
     }
 }

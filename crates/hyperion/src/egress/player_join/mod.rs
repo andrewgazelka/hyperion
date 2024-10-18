@@ -40,7 +40,6 @@ use crate::{
     },
     system_registry::{SystemId, PLAYER_JOINS},
     util::{SendableQuery, SendableRef},
-    PLAYER_SPAWN_POSITION,
 };
 
 #[expect(
@@ -414,24 +413,24 @@ fn generate_cached_packet_bytes(
 
     encoder.append_packet(&brand)?;
 
-    let center_chunk: IVec3 = PLAYER_SPAWN_POSITION.as_ivec3() >> 4;
+    // let center_chunk: IVec3 = PLAYER_SPAWN_POSITION.as_ivec3() >> 4;
 
-    // TODO: Do we need to send this else where?
-    encoder.append_packet(&play::ChunkRenderDistanceCenterS2c {
-        chunk_x: center_chunk.x.into(),
-        chunk_z: center_chunk.z.into(),
-    })?;
-
-    let center_chunk = IVec2::new(center_chunk.x, center_chunk.z);
-
-    // so they do not fall
-    let chunk = unsafe { chunks.get_and_wait(center_chunk, tasks) };
-    encoder.append_bytes(&chunk);
-
-    encoder.append_packet(&play::PlayerSpawnPositionS2c {
-        position: PLAYER_SPAWN_POSITION.as_dvec3().into(),
-        angle: 3.0,
-    })?;
+    // // TODO: Do we need to send this else where?
+    // encoder.append_packet(&play::ChunkRenderDistanceCenterS2c {
+    //     chunk_x: center_chunk.x.into(),
+    //     chunk_z: center_chunk.z.into(),
+    // })?;
+    // 
+    // let center_chunk = IVec2::new(center_chunk.x, center_chunk.z);
+    // 
+    // // so they do not fall
+    // let chunk = unsafe { chunks.get_and_wait(center_chunk, tasks) };
+    // encoder.append_bytes(&chunk);
+    // 
+    // encoder.append_packet(&play::PlayerSpawnPositionS2c {
+    //     position: PLAYER_SPAWN_POSITION.as_dvec3().into(),
+    //     angle: 3.0,
+    // })?;
 
     encoder.append_packet(&play::TeamS2c {
         team_name: "no_tag",
@@ -447,27 +446,27 @@ fn generate_cached_packet_bytes(
         },
     })?;
 
-    if let Some(diameter) = config.border_diameter {
-        debug!("Setting world border to diameter {}", diameter);
-
-        encoder.append_packet(&play::WorldBorderInitializeS2c {
-            x: f64::from(PLAYER_SPAWN_POSITION.x),
-            z: f64::from(PLAYER_SPAWN_POSITION.z),
-            old_diameter: diameter,
-            new_diameter: diameter,
-            duration_millis: 1.into(),
-            portal_teleport_boundary: 29_999_984.into(),
-            warning_blocks: 50.into(),
-            warning_time: 200.into(),
-        })?;
-
-        encoder.append_packet(&play::WorldBorderSizeChangedS2c { diameter })?;
-
-        encoder.append_packet(&play::WorldBorderCenterChangedS2c {
-            x_pos: f64::from(PLAYER_SPAWN_POSITION.x),
-            z_pos: f64::from(PLAYER_SPAWN_POSITION.z),
-        })?;
-    }
+    // if let Some(diameter) = config.border_diameter {
+    //     debug!("Setting world border to diameter {}", diameter);
+    // 
+    //     encoder.append_packet(&play::WorldBorderInitializeS2c {
+    //         x: f64::from(PLAYER_SPAWN_POSITION.x),
+    //         z: f64::from(PLAYER_SPAWN_POSITION.z),
+    //         old_diameter: diameter,
+    //         new_diameter: diameter,
+    //         duration_millis: 1.into(),
+    //         portal_teleport_boundary: 29_999_984.into(),
+    //         warning_blocks: 50.into(),
+    //         warning_time: 200.into(),
+    //     })?;
+    // 
+    //     encoder.append_packet(&play::WorldBorderSizeChangedS2c { diameter })?;
+    // 
+    //     encoder.append_packet(&play::WorldBorderCenterChangedS2c {
+    //         x_pos: f64::from(PLAYER_SPAWN_POSITION.x),
+    //         z_pos: f64::from(PLAYER_SPAWN_POSITION.z),
+    //     })?;
+    // }
 
     if let Some(pkt) = crafting_registry.packet() {
         encoder.append_packet(&pkt)?;

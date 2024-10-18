@@ -33,7 +33,6 @@ use crate::{
     storage::{Events, GlobalEventHandlers, PlayerJoinServer, SkinHandler},
     system_registry::{SystemId, RECV_DATA, REMOVE_PLAYER_FROM_VISIBILITY},
     util::{mojang::MojangClient, SendableRef, TracingExt},
-    PLAYER_SPAWN_POSITION,
 };
 
 #[derive(Component, Debug)]
