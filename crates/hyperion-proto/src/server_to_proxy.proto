@@ -16,18 +16,24 @@ message SetReceiveBroadcasts {
 
 message BroadcastGlobal {
   bytes data = 1;
-  bool optional = 2;
   uint64 exclude = 3;
   uint32 order = 4;
 }
 
-// Resulting priority is calculated by the taxicab distance multiplied by the priority
+// Represents a local broadcast message within a specified area.
 message BroadcastLocal {
+  // The payload of the broadcast message.
   bytes data = 1;
-  uint32 taxicab_radius = 2;
+
+  // The central point of the broadcast area.
   shared.ChunkPosition center = 3;
-  bool optional = 4;
+
+  // A bitmask or identifier to exclude certain entities or areas from receiving the broadcast.
+  // The exact meaning depends on the application's implementation.
   uint64 exclude = 5;
+
+  // An optional ordering value for prioritizing or sequencing broadcasts.
+  // Higher values typically indicate higher priority or later sequence.
   uint32 order = 6;
 }
 

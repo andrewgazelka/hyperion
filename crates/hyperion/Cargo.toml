@@ -24,7 +24,7 @@ enumset.workspace = true
 fastrand.workspace = true
 flate2 = { workspace = true, features = ["zlib-ng"] }
 flecs_ecs.workspace = true
-fxhash.workspace = true
+rustc-hash.workspace = true
 glam = { workspace = true, features = ["serde"] }
 heapless.workspace = true
 heed.workspace = true

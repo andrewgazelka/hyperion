@@ -3,7 +3,6 @@ use std::collections::HashMap;
 use bvh_region::{aabb::Aabb, HasAabb};
 use derive_more::{Deref, DerefMut, Display, From};
 use flecs_ecs::prelude::*;
-use fxhash::FxHashMap;
 use glam::{IVec2, IVec3, Vec3};
 use serde::{Deserialize, Serialize};
 use skin::PlayerSkin;
@@ -24,7 +23,7 @@ pub mod util;
 #[derive(Component, Default, Debug, Deref, DerefMut)]
 pub struct StreamLookup {
     /// The UUID of all players
-    inner: FxHashMap<u64, Entity>,
+    inner: rustc_hash::FxHashMap<u64, Entity>,
 }
 
 #[derive(Component, Default, Debug, Deref, DerefMut)]
@@ -329,6 +328,9 @@ impl ChunkPosition {
         Self(IVec2::new(SANE_MAX_RADIUS, SANE_MAX_RADIUS))
     }
 }
+
+/// The initial player spawn position. todo: this should not be a constant
+pub const PLAYER_SPAWN_POSITION: Vec3 = Vec3::new(-8_526_209_f32, 100f32, -6_028_464f32);
 
 impl Position {
     // todo: possible have separate field for head yaw

@@ -3,19 +3,30 @@ use std::sync::{atomic::Ordering, Arc};
 use arc_swap::ArcSwap;
 use bvh::{Aabb, Bvh, Data, Point};
 use glam::I16Vec2;
-use hyperion_proto::ServerToProxyMessage;
+use hyperion_proto::{ChunkPosition, ServerToProxyMessage};
 use slotmap::KeyData;
-use tracing::{debug, error, info, instrument, warn};
+use tracing::{debug, error, instrument, warn};
 
 use crate::{
-    cache::ExclusionManager,
+    cache::GlobalExclusionsManager,
     data::{OrderedBytes, PlayerId, PlayerRegistry},
 };
 
+#[derive(Default, Debug)]
+struct PositionData {
+    streams: Vec<u64>,
+    positions: Vec<ChunkPosition>,
+}
+
 #[derive(Default)]
 pub struct Egress {
-    bvh: ArcSwap<Bvh<u64>>,
     registry: Arc<PlayerRegistry>,
+    positions: ArcSwap<PositionData>,
+}
+
+pub struct BroadcastLocalInstruction {
+    pub order: u32,
+    pub bvh: Arc<Bvh<bytes::Bytes>>,
 }
 
 impl Egress {
@@ -23,22 +34,22 @@ impl Egress {
     #[instrument]
     pub fn new(registry: Arc<PlayerRegistry>) -> Self {
         Self {
-            bvh: ArcSwap::default(),
             registry,
+            positions: ArcSwap::default(),
         }
     }
 
     pub fn handle_packet(self: &Arc<Self>, packet: ServerToProxyMessage) {
         match packet {
             ServerToProxyMessage::UpdatePlayerChunkPositions(pkt) => {
-                self.handle_update_player_chunk_positions(&pkt);
+                self.handle_update_player_chunk_positions(pkt);
             }
             ServerToProxyMessage::BroadcastGlobal(_pkt) => {
                 todo!();
                 // self.handle_broadcast_global(pkt);
             }
             ServerToProxyMessage::BroadcastLocal(pkt) => {
-                self.clone().handle_broadcast_local(pkt);
+                // self.clone().handle_broadcast_local(pkt);
             }
             ServerToProxyMessage::Multicast(pkt) => {
                 self.handle_multicast(pkt);
@@ -56,28 +67,21 @@ impl Egress {
     #[instrument(skip(self, pkt))]
     pub fn handle_update_player_chunk_positions(
         &self,
-        pkt: &hyperion_proto::UpdatePlayerChunkPositions,
+        pkt: hyperion_proto::UpdatePlayerChunkPositions,
     ) {
-        // todo: handle case where we are getting updates too fast
-        let positions: Vec<_> = (0..pkt.positions.len())
-            .map(|i| PlayerChunkPosRef {
-                parent: pkt,
-                idx: i,
-            })
-            .collect();
+        let position_data = PositionData {
+            streams: pkt.stream,
+            positions: pkt.positions,
+        };
 
-        let len = positions.len();
-        let bvh = Bvh::build(positions, len);
-
-        self.bvh.store(Arc::new(bvh));
-        info!("Updated player chunk positions and stored new BVH");
+        self.positions.store(Arc::new(position_data));
     }
 
     #[instrument(skip(self, pkt, exclusions), level = "trace")]
     pub fn handle_broadcast_global(
         &self,
         pkt: hyperion_proto::BroadcastGlobal,
-        exclusions: ExclusionManager,
+        exclusions: GlobalExclusionsManager,
     ) {
         let data = pkt.data;
 
@@ -112,28 +116,23 @@ impl Egress {
         }
     }
 
-    #[instrument(skip(self, pkt))]
-    pub fn handle_broadcast_local(self: Arc<Self>, pkt: hyperion_proto::BroadcastLocal) {
-        let center = pkt.center.expect("center is required");
-        let radius = pkt.taxicab_radius as i16;
-
-        let center = I16Vec2::new(center.x as i16, center.z as i16);
-        let min = center - I16Vec2::splat(radius);
-        let max = center + I16Vec2::splat(radius);
-
-        let aabb = Aabb::new(min, max);
-        let data = pkt.data;
+    pub fn handle_broadcast_local(self: Arc<Self>, instruction: BroadcastLocalInstruction) {
+        let order = instruction.order;
+        let bvh = instruction.bvh;
 
         // we are spawning because it is rather intensive to call get_in_slices on a bvh
         #[allow(clippy::significant_drop_tightening)]
         tokio::spawn(async move {
-            // todo: ArrayVec might overflow
-            let bvh = self.bvh.load();
-            let player_ids = bvh.get_in_slices(aabb).into_iter().flatten();
+            const RADIUS: i16 = 8;
 
+            let positions = self.positions.load();
             let players = self.registry.read().unwrap();
-            for id in player_ids {
-                let id = KeyData::from_ffi(*id);
+            
+            let mut byte_slice_total = 0;
+            let total_players = players.len();
+
+            for (&id, &position) in positions.streams.iter().zip(positions.positions.iter()) {
+                let id = KeyData::from_ffi(id);
                 let id = PlayerId::from(id);
 
                 let Some(player) = players.get(id) else {
@@ -146,13 +145,31 @@ impl Egress {
                     continue;
                 }
 
-                let to_send = OrderedBytes::no_order(data.clone());
+                let position = I16Vec2::new(position.x as i16, position.z as i16);
+                let min = position - I16Vec2::splat(RADIUS);
+                let max = position + I16Vec2::splat(RADIUS);
 
-                // todo: handle error; kick player if cannot send (buffer full)
-                if let Err(e) = player.writer.try_send(to_send) {
-                    debug!("Failed to send data to player: {:?}", e);
+                let aabb = Aabb::new(min, max);
+                let byte_slices = bvh.get_in_slices_bytes(aabb);
+                byte_slice_total += byte_slices.len();
+
+                for data in byte_slices {
+                    if data.is_empty() {
+                        continue;
+                    }
+
+                    if let Err(e) = player.writer.try_send(OrderedBytes {
+                        order,
+                        data,
+                        exclusions: None,
+                    }) {
+                        debug!("Failed to send data to player: {:?}", e);
+                    }
                 }
             }
+            
+            let avg = byte_slice_total as f32 / total_players as f32;
+            println!("average byte slice size: {avg:.2} elems");
         });
     }
 
@@ -225,6 +242,7 @@ impl Egress {
     }
 }
 
+#[derive(Debug)]
 struct PlayerChunkPosRef<'a> {
     parent: &'a hyperion_proto::UpdatePlayerChunkPositions,
     idx: usize,

@@ -10,6 +10,7 @@ use bytes::BytesMut;
 pub use decoder::PacketDecoder;
 use derive_more::Deref;
 use flecs_ecs::{core::World, macros::Component};
+use glam::IVec2;
 use hyperion_proto::ChunkPosition;
 use libdeflater::CompressionLvl;
 use prost::Message;
@@ -70,6 +71,11 @@ impl NetworkStreamRef {
     pub(crate) const fn new(stream_id: u64) -> Self {
         Self { stream_id }
     }
+
+    #[must_use]
+    pub const fn inner(self) -> u64 {
+        self.stream_id
+    }
 }
 
 /// A singleton that can be used to compose and encode packets.
@@ -114,7 +120,6 @@ impl Compose {
     {
         Broadcast {
             packet,
-            optional: false,
             compose: self,
             exclude: 0,
             system_id,
@@ -135,22 +140,23 @@ impl Compose {
     /// Broadcast a packet within a certain region.
     ///
     /// See <https://github.com/andrewgazelka/hyperion-proto/blob/main/src/server_to_proxy.proto#L17-L22>
-    pub const fn broadcast_local<'a, 'b, P>(
-        &'a self,
-        packet: &'b P,
-        center: ChunkPosition,
+    pub const fn broadcast_local<P>(
+        &self,
+        packet: P,
+        center: IVec2,
         system_id: SystemId,
-    ) -> BroadcastLocal<'a, 'b, P>
+    ) -> BroadcastLocal<'_, P>
     where
-        P: valence_protocol::Packet + valence_protocol::Encode,
+        P: PacketBundle,
     {
         BroadcastLocal {
             packet,
-            optional: false,
             compose: self,
-            radius: 0,
             exclude: 0,
-            center,
+            center: ChunkPosition {
+                x: center.x,
+                z: center.y,
+            },
             system_id,
         }
     }
@@ -266,7 +272,6 @@ impl IoBuf {
 #[must_use]
 pub struct Broadcast<'a, P> {
     packet: P,
-    optional: bool,
     compose: &'a Compose,
     exclude: u64,
     system_id: SystemId,
@@ -321,12 +326,6 @@ where
 }
 
 impl<P> Broadcast<'_, P> {
-    /// If the packet is optional and can be dropped. An example is movement packets.
-    pub const fn optional(mut self) -> Self {
-        self.optional = true;
-        self
-    }
-
     /// Send the packet to all players.
     pub fn send(self, world: &World) -> anyhow::Result<()>
     where
@@ -337,9 +336,48 @@ impl<P> Broadcast<'_, P> {
             .io_buf
             .encode_packet(self.packet, self.compose, world)?;
 
-        self.compose.io_buf.broadcast_raw(
+        self.compose
+            .io_buf
+            .broadcast_raw(bytes, self.exclude, self.system_id, world);
+
+        Ok(())
+    }
+
+    /// Exclude a certain player from the broadcast. This can only be called once.
+    pub fn exclude(self, exclude: NetworkStreamRef) -> Self {
+        Broadcast {
+            packet: self.packet,
+            compose: self.compose,
+            system_id: self.system_id,
+            exclude: exclude.stream_id,
+        }
+    }
+}
+
+#[must_use]
+#[expect(missing_docs)]
+pub struct BroadcastLocal<'a, P> {
+    packet: P,
+    compose: &'a Compose,
+    center: ChunkPosition,
+    exclude: u64,
+    system_id: SystemId,
+}
+
+impl<P> BroadcastLocal<'_, P> {
+    /// Send the packet
+    pub fn send(self, world: &World) -> anyhow::Result<()>
+    where
+        P: PacketBundle,
+    {
+        let bytes = self
+            .compose
+            .io_buf
+            .encode_packet(self.packet, self.compose, world)?;
+
+        self.compose.io_buf.broadcast_local_raw(
             bytes,
-            self.optional,
+            self.center,
             self.exclude,
             self.system_id,
             world,
@@ -350,72 +388,10 @@ impl<P> Broadcast<'_, P> {
 
     /// Exclude a certain player from the broadcast. This can only be called once.
     pub fn exclude(self, exclude: NetworkStreamRef) -> Self {
-        Broadcast {
-            packet: self.packet,
-            optional: self.optional,
-            compose: self.compose,
-            system_id: self.system_id,
-            exclude: exclude.stream_id,
-        }
-    }
-}
-
-#[must_use]
-#[expect(missing_docs)]
-pub struct BroadcastLocal<'a, 'b, P> {
-    packet: &'b P,
-    compose: &'a Compose,
-    radius: u32,
-    center: ChunkPosition,
-    optional: bool,
-    exclude: u64,
-    system_id: SystemId,
-}
-
-impl<P> BroadcastLocal<'_, '_, P> {
-    /// The radius of the broadcast. The radius is measured by Chebyshev distance
-    pub const fn radius(mut self, radius: u32) -> Self {
-        self.radius = radius;
-        self
-    }
-
-    /// If the packet is optional and can be dropped. An example is movement packets.
-    pub const fn optional(mut self) -> Self {
-        self.optional = true;
-        self
-    }
-
-    /// Send the packet
-    pub fn send(self, world: &World) -> anyhow::Result<()>
-    where
-        P: valence_protocol::Packet + valence_protocol::Encode,
-    {
-        let bytes = self
-            .compose
-            .io_buf
-            .encode_packet(self.packet, self.compose, world)?;
-
-        self.compose.io_buf.broadcast_local_raw(
-            bytes,
-            self.center,
-            self.radius,
-            self.optional,
-            self.exclude,
-            self.system_id,
-            world,
-        );
-
-        Ok(())
-    }
-
-    /// Exclude a certain player from the broadcast. This can only be called once.
-    pub const fn exclude(self, exclude: &NetworkStreamRef) -> Self {
         BroadcastLocal {
             packet: self.packet,
             compose: self.compose,
-            radius: self.radius,
             center: self.center,
-            optional: self.optional,
             exclude: exclude.stream_id,
             system_id: self.system_id,
         }
@@ -516,13 +492,10 @@ impl IoBuf {
         Ok(())
     }
 
-    #[expect(clippy::too_many_arguments, reason = "todo")]
     fn broadcast_local_raw(
         &self,
         data: bytes::Bytes,
         center: ChunkPosition,
-        radius: u32,
-        optional: bool,
         exclude: u64,
         system_id: SystemId,
         world: &World,
@@ -530,13 +503,11 @@ impl IoBuf {
         let buffer = self.buffer.get(world);
         let buffer = &mut *buffer.borrow_mut();
 
-        let order = self.order_id(system_id, world);
+        let order = u32::from(system_id.id()) << 16;
 
         let to_send = hyperion_proto::BroadcastLocal {
             data,
-            taxicab_radius: radius,
             center: Some(center),
-            optional,
             exclude,
             order,
         };
@@ -549,7 +520,6 @@ impl IoBuf {
     pub(crate) fn broadcast_raw(
         &self,
         data: bytes::Bytes,
-        optional: bool,
         exclude: u64,
         system_id: SystemId,
         world: &World,
@@ -561,7 +531,6 @@ impl IoBuf {
 
         let to_send = hyperion_proto::BroadcastGlobal {
             data,
-            optional,
             // todo: Right now, we are using `to_vec`.
             // We want to probably allow encoding without allocation in the future.
             // Fortunately, `to_vec` will not require any allocation if the buffer is empty.

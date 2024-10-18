@@ -9,7 +9,7 @@ use tokio::{io::AsyncReadExt, net::TcpStream, task::JoinHandle};
 use tracing::{debug, info, instrument, trace_span, warn, Instrument};
 
 use crate::{
-    cache::ExclusionManager,
+    cache::GlobalExclusionsManager,
     data::{OrderedBytes, PlayerId, PlayerRegistry},
     server_sender::ServerSender,
     util::AsyncWriteVectoredExt,
@@ -174,7 +174,9 @@ impl PlayerPacketWriter {
             self.pending_packets.clear();
             return Ok(());
         }
-
+        
+        tracy_client::plot!("iovecs", io_vectors.len() as f64);
+        
         self.tcp_writer.write_vectored_all(&mut io_vectors).await?;
         self.pending_packets.clear();
 
@@ -198,7 +200,7 @@ fn prepare_io_vectors(
 /// Generates IO vectors to right given ranges of data that shuold be excluded.
 fn apply_exclusions<'a>(
     packet_data: &'a [u8],
-    exclusions: Option<&'a ExclusionManager>,
+    exclusions: Option<&'a GlobalExclusionsManager>,
     player_id: PlayerId,
 ) -> impl Iterator<Item = IoSlice<'a>> + 'a {
     let coroutine = #[coroutine]

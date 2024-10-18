@@ -2,7 +2,7 @@ use std::{borrow::Cow, cell::RefCell, collections::HashSet, io::Write, sync::Arc
 
 use anyhow::{bail, Context};
 use bytes::BytesMut;
-use fxhash::FxHashSet;
+use rustc_hash::FxHashSet;
 use glam::IVec2;
 use itertools::Itertools;
 use libdeflater::{CompressionLvl, Compressor};

@@ -168,7 +168,7 @@ impl Hyperion {
         #[cfg(unix)]
         adjust_file_descriptor_limits(32_768).context("failed to set file limits")?;
 
-        let shared = Arc::new(common::Shared {
+        let shared = Arc::new(Shared {
             compression_threshold: CompressionThreshold(256),
             compression_level: CompressionLvl::new(2)
                 .map_err(|_| anyhow::anyhow!("failed to create compression level"))?,

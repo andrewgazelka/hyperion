@@ -5,7 +5,7 @@ use std::{ops::Try, sync::Arc};
 use bytes::Bytes;
 use chunk::LoadedChunk;
 use flecs_ecs::{core::Entity, macros::Component};
-use fxhash::FxBuildHasher;
+use rustc_hash::FxBuildHasher;
 use glam::{IVec2, IVec3};
 use indexmap::IndexMap;
 use loader::{launch_manager, LaunchHandle};

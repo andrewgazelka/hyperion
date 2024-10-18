@@ -57,7 +57,7 @@ enumset = "1.1.5"
 fastrand = "2.1.0"
 flate2 = { version = "1.0.30", default-features = false }
 flecs_ecs = { git = "https://github.com/andrewgazelka/flecs-ecs-rs", branch = "andrew/terms-32" }
-fxhash = "0.2.1"
+rustc-hash = "2.0.0"
 glam = "0.26.0"
 heapless = "0.8.0"
 heed = "0.20.5"

@@ -1,5 +1,6 @@
+use bytes::BytesMut;
 use flecs_ecs::prelude::*;
-use hyperion_proto::Flush;
+use hyperion_proto::{Flush, UpdatePlayerChunkPositions};
 use prost::Message;
 use tracing::{error, trace_span};
 use valence_protocol::{packets::play, VarInt};
@@ -17,7 +18,11 @@ use stats::StatsModule;
 use sync_chunks::SyncChunksModule;
 use sync_position::SyncPositionModule;
 
-use crate::{net::NetworkStreamRef, simulation::blocks::Blocks, system_registry::SystemId};
+use crate::{
+    net::NetworkStreamRef,
+    simulation::{blocks::Blocks, ChunkPosition},
+    system_registry::SystemId,
+};
 
 #[derive(Component)]
 pub struct EgressModule;
@@ -92,6 +97,8 @@ impl Module for EgressModule {
             }
         });
 
+        let player_location_query = world.new_query::<(&NetworkStreamRef, &ChunkPosition)>();
+
         system!(
             "egress",
             world,
@@ -100,8 +107,38 @@ impl Module for EgressModule {
         )
         .kind_id(pipeline)
         .each(move |(compose, egress)| {
-            let span = tracing::trace_span!("egress");
+            let span = trace_span!("egress");
             let _enter = span.enter();
+
+            {
+                let span = trace_span!("chunk_positions");
+                let _enter = span.enter();
+
+                let mut stream = Vec::new();
+                let mut positions = Vec::new();
+
+                player_location_query.each(|(io, pos)| {
+                    stream.push(io.inner());
+
+                    let position = hyperion_proto::ChunkPosition {
+                        x: pos.0.x,
+                        z: pos.0.y,
+                    };
+
+                    positions.push(position);
+                });
+
+                let packet = UpdatePlayerChunkPositions { stream, positions };
+
+                let mut buffer = BytesMut::new();
+                let to_send = hyperion_proto::ServerToProxy::from(packet);
+                to_send.encode_length_delimited(&mut buffer).unwrap();
+
+                if let Err(e) = egress.send(buffer.freeze()) {
+                    error!("failed to send egress: {e}");
+                }
+            }
+
             let io = compose.io_buf_mut();
             for bytes in io.reset_and_split() {
                 if bytes.is_empty() {

@@ -14,6 +14,11 @@ struct Params {
 async fn main() {
     tracing_subscriber::fmt::init();
 
+    let client = tracy_client::Client::start();
+    // tracy_client::plot!("test", 0.0);
+    // client.plot(tracy_client::plot!("test", 0.0));
+    // let tracy = Tracy::default(),
+
     // tracing::subscriber::set_global_default(
     //     tracing_subscriber::registry().with(tracing_tracy::TracyLayer::default()),
     // )
@@ -42,7 +47,12 @@ async fn main() {
     //     .expect("setup tracing");
 
     let params = Params::parse();
-    run_proxy(params.proxy_addr, params.server_addr)
-        .await
-        .unwrap();
+
+    let handle = tokio::spawn(async move {
+        run_proxy(params.proxy_addr, params.server_addr)
+            .await
+            .unwrap();
+    });
+
+    handle.await.unwrap();
 }
