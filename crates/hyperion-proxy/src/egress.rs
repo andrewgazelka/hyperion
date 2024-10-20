@@ -1,7 +1,7 @@
 use std::sync::{atomic::Ordering, Arc};
 
 use arc_swap::ArcSwap;
-use bvh::{Aabb, Bvh, Data, Point};
+use bvh::{Aabb, Bvh};
 use glam::I16Vec2;
 use hyperion_proto::{ChunkPosition, ServerToProxyMessage};
 use slotmap::KeyData;
@@ -20,7 +20,7 @@ struct PositionData {
 
 #[derive(Default)]
 pub struct Egress {
-    registry: Arc<PlayerRegistry>,
+    player_registry: Arc<PlayerRegistry>,
     positions: ArcSwap<PositionData>,
 }
 
@@ -34,7 +34,7 @@ impl Egress {
     #[instrument]
     pub fn new(registry: Arc<PlayerRegistry>) -> Self {
         Self {
-            registry,
+            player_registry: registry,
             positions: ArcSwap::default(),
         }
     }
@@ -80,7 +80,7 @@ impl Egress {
     ) {
         let data = pkt.data;
 
-        let players = self.registry.read().unwrap();
+        let players = self.player_registry.read().unwrap();
 
         let exclusions = Arc::new(exclusions);
 
@@ -102,7 +102,7 @@ impl Egress {
 
     #[instrument(skip_all)]
     pub fn handle_flush(&self) {
-        let players = self.registry.read().unwrap();
+        let players = self.player_registry.read().unwrap();
 
         for player in players.values() {
             if let Err(e) = player.writer.try_send(OrderedBytes::FLUSH) {
@@ -116,12 +116,12 @@ impl Egress {
         let bvh = instruction.bvh;
 
         // we are spawning because it is rather intensive to call get_in_slices on a bvh
-        #[allow(clippy::significant_drop_tightening)]
+        // #[allow(clippy::significant_drop_tightening)]
         tokio::spawn(async move {
             const RADIUS: i16 = 8;
 
             let positions = self.positions.load();
-            let players = self.registry.read().unwrap();
+            let players = self.player_registry.read().unwrap();
 
             let mut byte_slice_total = 0;
             let total_players = players.len();
@@ -166,7 +166,7 @@ impl Egress {
 
     #[instrument(skip(self, pkt))]
     pub fn handle_multicast(&self, pkt: hyperion_proto::Multicast) {
-        let players = self.registry.read().unwrap();
+        let players = self.player_registry.read().unwrap();
         let data = pkt.data;
 
         // todo: ArrayVec might overflow
@@ -201,7 +201,7 @@ impl Egress {
         let id = KeyData::from_ffi(id);
         let id = PlayerId::from(id);
 
-        let players = self.registry.read().unwrap();
+        let players = self.player_registry.read().unwrap();
         let Some(player) = players.get(id) else {
             // expected to still happen infrequently
             debug!("Player not found for id {id:?}");
@@ -217,8 +217,8 @@ impl Egress {
     }
 
     pub fn handle_set_receive_broadcasts(&self, pkt: hyperion_proto::SetReceiveBroadcasts) {
-        let registry = self.registry.clone();
-        let players = registry.read().unwrap();
+        let player_registry = self.player_registry.clone();
+        let players = player_registry.read().unwrap();
         let stream = pkt.stream;
         let stream = KeyData::from_ffi(stream);
         let stream = PlayerId::from(stream);

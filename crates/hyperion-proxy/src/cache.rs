@@ -1,7 +1,7 @@
 use std::{ops::Range, sync::Arc};
 
 use bvh::{Bvh, Data, Point};
-use bytes::{Bytes, BytesMut};
+use bytes::BytesMut;
 use glam::I16Vec2;
 use hyperion_proto::{BroadcastGlobal, ServerToProxyMessage, UpdatePlayerChunkPositions};
 use slotmap::{KeyData, SecondaryMap};

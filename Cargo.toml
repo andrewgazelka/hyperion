@@ -1,6 +1,7 @@
 # https://doc.rust-lang.org/rustc/profile-guided-optimization.html
 # https://nikolaivazquez.com/blog/divan/#measure-allocations
 # https://doc.rust-lang.org/cargo/reference/profiles.html
+# https://doc.rust-lang.org/rustc/profile-guided-optimization.html
 
 [workspace]
 resolver = "2"
@@ -106,7 +107,7 @@ tar = "0.4.41"
 thiserror = "1.0.63"
 tokio = "1.40.0"
 toml = "0.8.14"
-tracing = { version = "0.1.40" }
+tracing = { version = "0.1.40", features = ["release_max_level_info"] }
 tracing-subscriber = "0.3.18"
 uuid = "1.8.0"
 valence_anvil = { git = "https://github.com/andrewgazelka/valence", features = ["parsing"], branch = "feat-open" }

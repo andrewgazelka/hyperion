@@ -29,9 +29,7 @@ use crate::{
     egress::metadata::show_all,
     ingress::PendingRemove,
     net::{Compose, NetworkStreamRef},
-    runtime::AsyncRuntime,
     simulation::{
-        blocks::Blocks,
         command::{get_command_packet, Command, ROOT_COMMAND},
         skin::PlayerSkin,
         util::registry_codec_raw,
@@ -48,8 +46,6 @@ use crate::{
 #[instrument(skip_all, fields(name = name))]
 pub fn player_join_world(
     entity: &EntityView<'_>,
-    tasks: &AsyncRuntime,
-    blocks: &Blocks,
     compose: &Compose,
     uuid: uuid::Uuid,
     name: &str,
@@ -140,7 +136,7 @@ pub fn player_join_world(
                 reason = "this is only called once on startup; it should be fine. we mostly care \
                           about crashing during server execution"
             )]
-            generate_cached_packet_bytes(&mut encoder, tasks, crafting_registry, config).unwrap();
+            generate_cached_packet_bytes(&mut encoder, crafting_registry).unwrap();
 
             let bytes = encoder.take();
             bytes.freeze()
@@ -410,9 +406,7 @@ fn send_sync_tags(encoder: &mut PacketEncoder) -> anyhow::Result<()> {
 )]
 fn generate_cached_packet_bytes(
     encoder: &mut PacketEncoder,
-    tasks: &AsyncRuntime,
     crafting_registry: &CraftingRegistry,
-    config: &Config,
 ) -> anyhow::Result<()> {
     send_sync_tags(encoder)?;
 
@@ -560,79 +554,72 @@ impl Module for PlayerJoinModule {
         system!(
             "player_joins",
             world,
-            &AsyncRuntime($),
             &Comms($),
-            &Blocks($),
             &Compose($),
             &CraftingRegistry($),
             &Config($),
         )
         .kind::<flecs::pipeline::PreUpdate>()
-        .each(
-            move |(tasks, comms, blocks, compose, crafting_registry, config)| {
-                let span = tracing::trace_span!("joins");
-                let _enter = span.enter();
+        .each(move |(comms, compose, crafting_registry, config)| {
+            let span = tracing::trace_span!("joins");
+            let _enter = span.enter();
 
-                let mut skins = Vec::new();
+            let mut skins = Vec::new();
 
-                while let Ok(Some((entity, skin))) = comms.skins_rx.try_recv() {
-                    skins.push((entity, skin.clone()));
+            while let Ok(Some((entity, skin))) = comms.skins_rx.try_recv() {
+                skins.push((entity, skin.clone()));
+            }
+
+            // todo: par_iter but bugs...
+            // for (entity, skin) in skins {
+            skins.into_par_iter().for_each(|(entity, skin)| {
+                // if we are not in rayon context that means we are in a single-threaded context and 0 will work
+                let idx = rayon::current_thread_index().unwrap_or(0);
+
+                #[expect(
+                    clippy::indexing_slicing,
+                    reason = "unless the number of rayon threads changes, this should never panic"
+                )]
+                let world = &stages[idx];
+                let world = world.0;
+
+                if !world.is_alive(entity) {
+                    return;
                 }
 
-                // todo: par_iter but bugs...
-                // for (entity, skin) in skins {
-                skins.into_par_iter().for_each(|(entity, skin)| {
-                    // if we are not in rayon context that means we are in a single-threaded context and 0 will work
-                    let idx = rayon::current_thread_index().unwrap_or(0);
+                let entity = world.entity_from_id(entity);
 
-                    #[expect(
-                        clippy::indexing_slicing,
-                        reason = "unless the number of rayon threads changes, this should never \
-                                  panic"
-                    )]
-                    let world = &stages[idx];
-                    let world = world.0;
+                entity.add::<Play>();
 
-                    if !world.is_alive(entity) {
-                        return;
-                    }
+                entity.get::<(&Uuid, &InGameName, &Position, &NetworkStreamRef)>(
+                    |(uuid, name, pose, &stream_id)| {
+                        let query = &query;
+                        let query = &query.0;
 
-                    let entity = world.entity_from_id(entity);
+                        // if we get an error joining, we should kick the player
+                        if let Err(e) = player_join_world(
+                            &entity,
+                            compose,
+                            uuid.0,
+                            name,
+                            stream_id,
+                            pose,
+                            &world,
+                            &skin,
+                            system_id,
+                            root_command,
+                            query,
+                            crafting_registry,
+                            config,
+                        ) {
+                            entity.set(PendingRemove::new(e.to_string()));
+                        };
+                    },
+                );
 
-                    entity.add::<Play>();
-
-                    entity.get::<(&Uuid, &InGameName, &Position, &NetworkStreamRef)>(
-                        |(uuid, name, pose, &stream_id)| {
-                            let query = &query;
-                            let query = &query.0;
-
-                            // if we get an error joining, we should kick the player
-                            if let Err(e) = player_join_world(
-                                &entity,
-                                tasks,
-                                blocks,
-                                compose,
-                                uuid.0,
-                                name,
-                                stream_id,
-                                pose,
-                                &world,
-                                &skin,
-                                system_id,
-                                root_command,
-                                query,
-                                crafting_registry,
-                                config,
-                            ) {
-                                entity.set(PendingRemove::new(e.to_string()));
-                            };
-                        },
-                    );
-
-                    let entity = world.entity_from_id(entity);
-                    entity.set(skin);
-                });
-            },
-        );
+                let entity = world.entity_from_id(entity);
+                entity.set(skin);
+            });
+        });
     }
 }

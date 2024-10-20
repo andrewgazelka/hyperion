@@ -1,5 +1,9 @@
 use clap::Parser;
 use hyperion_proxy::run_proxy;
+use jemallocator::Jemalloc;
+
+#[global_allocator]
+static GLOBAL: Jemalloc = Jemalloc;
 
 #[derive(Parser)]
 struct Params {
@@ -14,7 +18,7 @@ struct Params {
 async fn main() {
     tracing_subscriber::fmt::init();
 
-    let client = tracy_client::Client::start();
+    // let client = tracy_client::Client::start();
     // tracy_client::plot!("test", 0.0);
     // client.plot(tracy_client::plot!("test", 0.0));
     // let tracy = Tracy::default(),

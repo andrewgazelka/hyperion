@@ -29,7 +29,7 @@ use tokio::{
     io::{AsyncReadExt, BufReader},
     net::{TcpListener, TcpStream, ToSocketAddrs},
 };
-use tracing::{error, info, instrument, trace, trace_span, Instrument};
+use tracing::{debug, error, instrument, trace, trace_span, Instrument};
 
 use crate::{
     cache::BufferedEgress,
@@ -48,7 +48,7 @@ pub mod player;
 pub mod server_sender;
 pub mod util;
 
-#[tracing::instrument(skip_all)]
+#[tracing::instrument(level = "trace", skip_all)]
 pub async fn connect(addr: impl ToSocketAddrs + Debug + Clone) -> TcpStream {
     loop {
         if let Ok(stream) = TcpStream::connect(addr.clone()).await {
@@ -59,55 +59,85 @@ pub async fn connect(addr: impl ToSocketAddrs + Debug + Clone) -> TcpStream {
     }
 }
 
-#[tracing::instrument(skip_all)]
+#[tracing::instrument(level = "trace", skip_all)]
 pub async fn run_proxy(
     proxy_addr: impl ToSocketAddrs + Debug + Clone,
     server_addr: impl ToSocketAddrs + Debug + Clone,
 ) -> anyhow::Result<()> {
     let mut listener = TcpListener::bind(proxy_addr).await?;
 
+    let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
+
+    tokio::spawn({
+        let shutdown_tx = shutdown_tx.clone();
+        async move {
+            tokio::signal::ctrl_c().await.unwrap();
+            println!("ctrl-c received, shutting down");
+            shutdown_tx.send(true).unwrap();
+        }
+    });
+
     loop {
-        let server_socket = connect(server_addr.clone()).await;
-        if let Err(e) = connect_to_server_and_run_proxy(&mut listener, server_socket).await {
-            error!("Error connecting to server: {e:?}");
+        let mut shutdown_rx2 = shutdown_rx.clone();
+        tokio::select! {
+            _ = shutdown_rx2.changed() => {
+                println!("Received shutdown signal, exiting proxy loop");
+                break Ok(());
+            }
+            () = async {
+                let server_socket = connect(server_addr.clone()).await;
+                if let Err(e) = connect_to_server_and_run_proxy(&mut listener, server_socket, shutdown_rx.clone(), shutdown_tx.clone()).await {
+                    error!("Error connecting to server: {e:?}");
+                }
+            } => {}
         }
     }
 }
 
-#[instrument(level = "trace")]
+#[tracing::instrument(level = "trace", skip_all)]
 async fn connect_to_server_and_run_proxy(
     listener: &mut TcpListener,
     server_socket: TcpStream,
+    shutdown_rx: tokio::sync::watch::Receiver<bool>,
+    shutdown_tx: tokio::sync::watch::Sender<bool>,
 ) -> anyhow::Result<()> {
     let (server_read, server_write) = server_socket.into_split();
     let server_sender = launch_server_writer(server_write);
     let mut reader = ServerReader::new(BufReader::new(server_read));
     let player_registry = Arc::new(PlayerRegistry::default());
 
-    let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
-
     tokio::spawn({
-        let data = player_registry.clone();
+        let player_registry = player_registry.clone();
+        let mut shutdown_rx = shutdown_rx.clone();
+
         async move {
-            let egress = Egress::new(data);
+            let egress = Egress::new(player_registry);
             let egress = Arc::new(egress);
             let mut egress = BufferedEgress::new(egress);
 
             loop {
-                match reader.next().await {
-                    Ok(packet) => egress.handle_packet(packet),
-                    Err(e) => {
-                        error!(
-                            "Error reading next packet: {e:?}. Are you connected to a valid \
-                             hyperion server? If you are connected to a vanilla server, \
-                             hyperion-proxy will not work."
-                        );
-                        break;
+                tokio::select! {
+                    _ = shutdown_rx.changed() => {
+                        println!("Received shutdown signal, exiting server reader loop");
+                        return;
+                    }
+                    result = reader.next() => {
+                        match result {
+                            Ok(packet) => egress.handle_packet(packet),
+                            Err(e) => {
+                                error!(
+                                    "Error reading next packet: {e:?}. Are you connected to a valid \
+                                     hyperion server? If you are connected to a vanilla server, \
+                                     hyperion-proxy will not work."
+                                );
+                                break;
+                            }
+                        }
                     }
                 }
             }
 
-            info!("Sending shutdown to all players");
+            debug!("Sending shutdown to all players");
 
             shutdown_tx.send(true).unwrap();
         }
@@ -132,7 +162,7 @@ async fn connect_to_server_and_run_proxy(
             can_receive_broadcasts: AtomicBool::new(false),
         });
 
-        info!("got player with id {id:?}");
+        debug!("got player with id {id:?}");
 
         initiate_player_connection(
             socket,

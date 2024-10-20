@@ -1751,13 +1751,13 @@ dependencies = [
  "glam",
  "heapless",
  "hyperion-proto",
+ "jemallocator",
  "prost",
  "rustc-hash 2.0.0",
  "slotmap",
  "tokio",
  "tracing",
  "tracing-subscriber",
- "tracing-tracy",
  "tracy-client",
 ]
 
@@ -3619,17 +3619,6 @@ dependencies = [
  "tracing",
  "tracing-core",
  "tracing-log",
-]
-
-[[package]]
-name = "tracing-tracy"
-version = "0.11.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dc775fdaf33c3dfd19dc354729e65e87914bc67dcdc390ca1210807b8bee5902"
-dependencies = [
- "tracing-core",
- "tracing-subscriber",
- "tracy-client",
 ]
 
 [[package]]

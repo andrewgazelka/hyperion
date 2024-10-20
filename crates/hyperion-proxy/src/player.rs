@@ -6,7 +6,7 @@ use hyperion_proto::{PlayerConnect, PlayerDisconnect, PlayerPackets, ProxyToServ
 use prost::bytes;
 use slotmap::Key;
 use tokio::{io::AsyncReadExt, net::TcpStream, task::JoinHandle};
-use tracing::{debug, info, instrument, trace_span, warn, Instrument};
+use tracing::{debug, instrument, trace_span, warn, Instrument};
 
 use crate::{
     cache::GlobalExclusionsManager,
@@ -124,7 +124,7 @@ pub fn initiate_player_connection(
                 // Handle player disconnection
                 player_registry.write().unwrap().remove(player_id);
 
-                info!("Player disconnected: {player_id:?}");
+                debug!("Player disconnected: {player_id:?}");
 
                 let player_stream_id = player_id.data().as_ffi();
 
