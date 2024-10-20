@@ -8,7 +8,6 @@ type EventFn<T, O = ()> = dyn Fn(&World, &mut T) -> O + Send + Sync + 'static;
 #[derive(Component, Default)]
 pub struct GlobalEventHandlers {
     pub join_server: EventHandlers<PlayerJoinServer>,
-    pub get_spawn: Box<dyn Fn(&World, Entity) -> Option<Entity>>,
 }
 
 

@@ -60,10 +60,7 @@ fn process_handshake(
 
     let handshake: packets::handshaking::HandshakeC2s<'_> = packet.decode()?;
 
-    // info!("received handshake: {:?}", handshake);
-
     // todo: check version is correct
-
     match handshake.next_state {
         HandshakeNextState::Status => {
             *login_state = PacketState::Status;
@@ -119,11 +116,8 @@ fn process_login(
 
     decoder.set_compression(global.shared.compression_threshold);
 
-    let pose = Position::player(PLAYER_SPAWN_POSITION);
     let username = Box::from(username);
-
     let uuid = offline_uuid(&username);
-
     let uuid_s = format!("{uuid:?}").dimmed();
     println!("{username} {uuid_s}");
 
@@ -163,13 +157,11 @@ fn process_login(
     *login_state = PacketState::Play;
 
     entity
-        .set(pose)
         .set(InGameName::from(username))
         .add::<AiTargetable>()
         .set(ImmuneStatus::default())
         .set(Uuid::from(uuid))
         .set(Health::default())
-        .set(Position::player(PLAYER_SPAWN_POSITION))
         .set(ChunkSendQueue::default())
         .set(ChunkPosition::null())
         .set(EntityReaction::default());

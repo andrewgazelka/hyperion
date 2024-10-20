@@ -76,9 +76,11 @@ impl Module for SyncPositionModule {
                         pitch: ByteAngle::from_degrees(pose.pitch),
                         on_ground: false,
                     };
+                    
+                    let chunk_pos = pose.chunk_pos();
 
                     compose
-                        .broadcast_local(&pkt, pose.chunk_pos(), system_id)
+                        .broadcast_local(&pkt, chunk_pos, system_id)
                         .exclude(io)
                         .send(&world)?;
 
@@ -138,7 +140,7 @@ impl Module for SyncPositionModule {
                                 source_pos: None,
                             };
 
-                            compose.broadcast(&pkt, system_id).send(&world)?;
+                            compose.broadcast_local(&pkt, chunk_pos, system_id).send(&world)?;
 
                             // Play a sound when an entity is damaged
                             let ident = ident!("minecraft:entity.player.hurt");
@@ -153,7 +155,7 @@ impl Module for SyncPositionModule {
                                 seed: fastrand::i64(..),
                                 category: SoundCategory::Player,
                             };
-                            compose.broadcast(&pkt, system_id).send(&world)?;
+                            compose.broadcast_local(&pkt, chunk_pos, system_id).send(&world)?;
                         }
 
                         if to == 0.0 {
@@ -186,12 +188,12 @@ impl Module for SyncPositionModule {
                             tracked_values: RawBytes(&view),
                         };
 
-                        compose.broadcast(&pkt, system_id).send(&world)?;
+                        compose.broadcast_local(&pkt, chunk_pos, system_id).send(&world)?;
                     }
 
                     for pkt in animation.packets(entity_id) {
                         compose
-                            .broadcast(&pkt, system_id)
+                            .broadcast_local(&pkt, chunk_pos, system_id)
                             .exclude(io)
                             .send(&world)?;
                     }
@@ -235,7 +237,7 @@ impl Module for SyncPositionModule {
                         };
 
                         compose
-                            .broadcast(&pkt, system_id)
+                            .broadcast_local(&pkt, chunk_pos, system_id)
                             .exclude(io)
                             .send(&world)
                             .context("failed to send equipment update")?;

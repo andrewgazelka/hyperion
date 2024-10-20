@@ -254,7 +254,7 @@ impl Default for Comms {
 }
 
 /// A UUID component. Generally speaking, this tends to be tied to entities with a [`Player`] component.
-#[derive(Component, Copy, Clone, Debug, Deref, From)]
+#[derive(Component, Copy, Clone, Debug, Deref, From, Hash, Eq, PartialEq)]
 pub struct Uuid(pub uuid::Uuid);
 
 /// Any living minecraft entity that is NOT a player.

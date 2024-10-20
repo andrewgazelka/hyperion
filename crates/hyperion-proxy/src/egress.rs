@@ -44,13 +44,6 @@ impl Egress {
             ServerToProxyMessage::UpdatePlayerChunkPositions(pkt) => {
                 self.handle_update_player_chunk_positions(pkt);
             }
-            ServerToProxyMessage::BroadcastGlobal(_pkt) => {
-                todo!();
-                // self.handle_broadcast_global(pkt);
-            }
-            ServerToProxyMessage::BroadcastLocal(pkt) => {
-                // self.clone().handle_broadcast_local(pkt);
-            }
             ServerToProxyMessage::Multicast(pkt) => {
                 self.handle_multicast(pkt);
             }
@@ -60,7 +53,9 @@ impl Egress {
             ServerToProxyMessage::SetReceiveBroadcasts(pkt) => {
                 self.handle_set_receive_broadcasts(pkt);
             }
-            ServerToProxyMessage::Flush(_) => {}
+            ServerToProxyMessage::BroadcastLocal(..)
+            | ServerToProxyMessage::BroadcastGlobal(..)
+            | ServerToProxyMessage::Flush(..) => {}
         }
     }
 
@@ -127,7 +122,7 @@ impl Egress {
 
             let positions = self.positions.load();
             let players = self.registry.read().unwrap();
-            
+
             let mut byte_slice_total = 0;
             let total_players = players.len();
 
@@ -154,10 +149,6 @@ impl Egress {
                 byte_slice_total += byte_slices.len();
 
                 for data in byte_slices {
-                    if data.is_empty() {
-                        continue;
-                    }
-
                     if let Err(e) = player.writer.try_send(OrderedBytes {
                         order,
                         data,
@@ -167,7 +158,7 @@ impl Egress {
                     }
                 }
             }
-            
+
             let avg = byte_slice_total as f32 / total_players as f32;
             println!("average byte slice size: {avg:.2} elems");
         });
@@ -239,27 +230,5 @@ impl Egress {
         };
 
         player.can_receive_broadcasts.store(true, Ordering::Relaxed);
-    }
-}
-
-#[derive(Debug)]
-struct PlayerChunkPosRef<'a> {
-    parent: &'a hyperion_proto::UpdatePlayerChunkPositions,
-    idx: usize,
-}
-
-impl Point for PlayerChunkPosRef<'_> {
-    fn point(&self) -> I16Vec2 {
-        let position = &self.parent.positions[self.idx].clone();
-        I16Vec2::new(position.x as i16, position.z as i16)
-    }
-}
-
-impl Data for PlayerChunkPosRef<'_> {
-    type Unit = u64;
-
-    fn data(&self) -> &[Self::Unit] {
-        let elem = &self.parent.stream[self.idx];
-        core::slice::from_ref(elem)
     }
 }

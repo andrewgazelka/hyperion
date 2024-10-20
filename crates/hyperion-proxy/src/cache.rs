@@ -1,8 +1,8 @@
-use std::{collections::HashMap, ops::Range, sync::Arc};
+use std::{ops::Range, sync::Arc};
 
 use bvh::{Bvh, Data, Point};
 use bytes::{Bytes, BytesMut};
-use glam::{I16Vec2, IVec2};
+use glam::I16Vec2;
 use hyperion_proto::{BroadcastGlobal, ServerToProxyMessage, UpdatePlayerChunkPositions};
 use slotmap::{KeyData, SecondaryMap};
 use tracing::error;
@@ -128,8 +128,8 @@ impl Iterator for ExclusionIterator<'_> {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 struct LocalBroadcastData {
     position: I16Vec2,
-    data: Bytes,
-    exclude: u64,
+    range_start: usize,
+    range_end: usize,
 }
 
 impl Point for LocalBroadcastData {
@@ -139,10 +139,11 @@ impl Point for LocalBroadcastData {
 }
 
 impl Data for LocalBroadcastData {
+    type Context<'a> = &'a Vec<u8>;
     type Unit = u8;
 
-    fn data(&self) -> &[Self::Unit] {
-        self.data.as_ref()
+    fn data<'a: 'c, 'b: 'c, 'c>(&'a self, context: &'b Vec<u8>) -> &'c [Self::Unit] {
+        unsafe { context.get_unchecked(self.range_start..self.range_end) }
     }
 }
 
@@ -151,6 +152,7 @@ pub struct BufferedEgress {
     /// Buffer for required broadcast data.
     global_broadcast_buffer: BytesMut,
 
+    raw_local_broadcast_data: Vec<u8>,
     local_broadcast_buffer: Vec<LocalBroadcastData>,
 
     /// Manages player-specific exclusions.
@@ -169,6 +171,7 @@ impl BufferedEgress {
     pub fn new(egress: Arc<Egress>) -> Self {
         Self {
             global_broadcast_buffer: BytesMut::new(),
+            raw_local_broadcast_data: vec![],
             local_broadcast_buffer: Vec::default(),
             exclusion_manager: GlobalExclusionsManager::default(),
             queued_position_update: None,
@@ -227,11 +230,16 @@ impl BufferedEgress {
                     return;
                 };
 
+                let before_len = self.raw_local_broadcast_data.len();
+                self.raw_local_broadcast_data
+                    .extend_from_slice(&packet.data);
+                let after_len = self.raw_local_broadcast_data.len();
+
                 self.local_broadcast_buffer.push(LocalBroadcastData {
                     // todo: checked
                     position: I16Vec2::new(center.x as i16, center.z as i16),
-                    data: packet.data.clone(),
-                    exclude: packet.exclude,
+                    range_start: before_len,
+                    range_end: after_len,
                 });
             }
             ServerToProxyMessage::Multicast(_) => {
@@ -263,9 +271,7 @@ impl BufferedEgress {
                     return;
                 }
 
-                // todo: size hint is fake
-                let len = local_broadcast_buffer.len();
-                let bvh = Bvh::build(local_broadcast_buffer, len * 20);
+                let bvh = Bvh::build(local_broadcast_buffer, &self.raw_local_broadcast_data);
 
                 let bvh = bvh.into_bytes();
 
@@ -274,7 +280,7 @@ impl BufferedEgress {
                     bvh: Arc::new(bvh),
                 };
 
-                // self.egress.clone().handle_broadcast_local(instruction);
+                self.egress.clone().handle_broadcast_local(instruction);
             }
         }
     }
@@ -288,8 +294,7 @@ impl BufferedEgress {
         };
 
         let exclusions = self.exclusion_manager.take();
-        
-        self.egress
-            .handle_broadcast_global(pkt, exclusions);
+
+        self.egress.handle_broadcast_global(pkt, exclusions);
     }
 }

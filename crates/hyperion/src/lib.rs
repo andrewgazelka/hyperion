@@ -43,7 +43,6 @@ use anyhow::{bail, Context};
 use derive_more::{Deref, DerefMut};
 use egress::EgressModule;
 use flecs_ecs::prelude::*;
-use glam::Vec3;
 use ingress::IngressModule;
 #[cfg(unix)]
 use libc::{getrlimit, setrlimit, RLIMIT_NOFILE};

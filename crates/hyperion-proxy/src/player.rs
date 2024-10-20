@@ -144,6 +144,7 @@ struct PlayerPacketWriter {
     tcp_writer: tokio::net::tcp::OwnedWriteHalf,
     player_id: PlayerId,
     pending_packets: Vec<OrderedBytes>,
+    io_vecs: Vec<IoSlice<'static>>,
 }
 
 impl PlayerPacketWriter {
@@ -153,6 +154,7 @@ impl PlayerPacketWriter {
             tcp_writer,
             player_id,
             pending_packets: Vec::new(),
+            io_vecs: vec![],
         }
     }
 
@@ -164,21 +166,22 @@ impl PlayerPacketWriter {
     /// Flushes all pending packets to the TCP writer.
     #[instrument(skip(self), fields(player_id = ?self.player_id))]
     async fn flush_pending_packets(&mut self) -> anyhow::Result<()> {
-        let mut io_vectors = Vec::new();
-
         for iovec in prepare_io_vectors(&mut self.pending_packets, self.player_id) {
-            io_vectors.push(iovec);
+            // extend lifetime of iovecs so we can reuse the io_vecs Vec
+            let iovec = unsafe { std::mem::transmute::<IoSlice<'_>, IoSlice<'static>>(iovec) };
+            self.io_vecs.push(iovec);
         }
 
-        if io_vectors.is_empty() {
+        if self.io_vecs.is_empty() {
             self.pending_packets.clear();
             return Ok(());
         }
-        
-        tracy_client::plot!("iovecs", io_vectors.len() as f64);
-        
-        self.tcp_writer.write_vectored_all(&mut io_vectors).await?;
+
+        self.tcp_writer
+            .write_vectored_all(&mut self.io_vecs)
+            .await?;
         self.pending_packets.clear();
+        self.io_vecs.clear();
 
         Ok(())
     }

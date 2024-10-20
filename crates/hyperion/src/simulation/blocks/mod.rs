@@ -1,6 +1,6 @@
 //! Constructs for working with blocks.
 
-use std::{future::Future, ops::Try, sync::Arc};
+use std::{future::Future, ops::Try, pin::Pin, sync::Arc};
 
 use bytes::Bytes;
 use chunk::LoadedChunk;
@@ -11,7 +11,7 @@ use loader::{launch_manager, LaunchHandle};
 use roaring::RoaringBitmap;
 use rustc_hash::FxBuildHasher;
 use shared::Shared;
-use tracing::{error, instrument};
+use tracing::error;
 use valence_generated::block::BlockState;
 use valence_registry::BiomeRegistry;
 use valence_server::layer::chunk::Chunk;
@@ -105,9 +105,9 @@ impl Blocks {
     }
 
     #[must_use]
-    pub fn get_and_wait(&self, position: IVec2) -> Box<dyn Future<Output = Bytes> + Send> {
+    pub fn get_and_wait(&self, position: IVec2) -> Pin<Box<dyn Future<Output = Bytes> + Send>> {
         if let Some(cached) = self.get_cached(position) {
-            return Box::new(core::future::ready(cached));
+            return Box::pin(core::future::ready(cached));
         }
 
         // get_and_wait is called infrequently, ideally this would be a oneshot channel
@@ -132,7 +132,7 @@ impl Blocks {
             bytes
         };
 
-        Box::new(result)
+        Box::pin(result)
     }
 
     pub fn load_pending(&mut self) {

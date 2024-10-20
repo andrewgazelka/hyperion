@@ -2,11 +2,10 @@ use std::{borrow::Cow, collections::BTreeSet};
 
 use anyhow::Context;
 use flecs_ecs::prelude::*;
-use glam::{IVec2, IVec3};
 use hyperion_crafting::{Action, CraftingRegistry, RecipeBookState};
 use hyperion_utils::EntityExt;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
-use tracing::{debug, info, instrument};
+use tracing::{info, instrument};
 use valence_protocol::{
     game_mode::OptGameMode,
     ident,
@@ -50,11 +49,11 @@ use crate::{
 pub fn player_join_world(
     entity: &EntityView<'_>,
     tasks: &AsyncRuntime,
-    chunks: &Blocks,
+    blocks: &Blocks,
     compose: &Compose,
     uuid: uuid::Uuid,
     name: &str,
-    packets: NetworkStreamRef,
+    io: NetworkStreamRef,
     pose: &Position,
     world: &WorldRef<'_>,
     skin: &PlayerSkin,
@@ -102,8 +101,29 @@ pub fn player_join_world(
     };
 
     compose
-        .unicast(&pkt, packets, system_id, world)
+        .unicast(&pkt, io, system_id, world)
         .context("failed to send player spawn packet")?;
+
+    let center_chunk = pose.chunk_pos();
+
+    let pkt = play::ChunkRenderDistanceCenterS2c {
+        chunk_x: center_chunk.x.into(),
+        chunk_z: center_chunk.y.into(),
+    };
+
+    compose.unicast(&pkt, io, system_id, world)?;
+
+    // let chunk = blocks.get_and_wait(center_chunk);
+    // let chunk = tasks.block_on(chunk);
+    //
+    // compose.io_buf().unicast_raw(chunk, io, system_id, world);
+
+    let pkt = play::PlayerSpawnPositionS2c {
+        position: pose.position.as_dvec3().into(),
+        angle: pose.yaw,
+    };
+
+    compose.unicast(&pkt, io, system_id, world)?;
 
     let cached_data = CACHED_DATA
         .get_or_init(|| {
@@ -120,8 +140,7 @@ pub fn player_join_world(
                 reason = "this is only called once on startup; it should be fine. we mostly care \
                           about crashing during server execution"
             )]
-            generate_cached_packet_bytes(&mut encoder, chunks, tasks, crafting_registry, config)
-                .unwrap();
+            generate_cached_packet_bytes(&mut encoder, tasks, crafting_registry, config).unwrap();
 
             let bytes = encoder.take();
             bytes.freeze()
@@ -130,7 +149,7 @@ pub fn player_join_world(
 
     compose
         .io_buf()
-        .unicast_raw(cached_data, packets, system_id, world);
+        .unicast_raw(cached_data, io, system_id, world);
 
     let text = play::GameMessageS2c {
         chat: format!("{name} joined the world").into_cow_text(),
@@ -151,7 +170,7 @@ pub fn player_join_world(
                 flags: PlayerPositionLookFlags::default(),
                 teleport_id: 1.into(),
             },
-            packets,
+            io,
             system_id,
             world,
         )
@@ -214,7 +233,7 @@ pub fn player_join_world(
                     actions,
                     entries: Cow::Owned(entries),
                 },
-                packets,
+                io,
                 system_id,
                 world,
             )
@@ -248,12 +267,12 @@ pub fn player_join_world(
                     };
 
                     compose
-                        .unicast(&pkt, packets, system_id, world)
+                        .unicast(&pkt, io, system_id, world)
                         .context("failed to send player spawn packet")?;
 
                     let show_all = show_all(query_entity.minecraft_id());
                     compose
-                        .unicast(show_all.borrow_packet(), packets, system_id, world)
+                        .unicast(show_all.borrow_packet(), io, system_id, world)
                         .context("failed to send player spawn packet")?;
 
                     Ok(())
@@ -307,7 +326,7 @@ pub fn player_join_world(
         .send(world)
         .context("failed to send player list packet")?;
     compose
-        .unicast(&pkt, packets, system_id, world)
+        .unicast(&pkt, io, system_id, world)
         .context("failed to send player list packet")?;
 
     let player_name = vec![name];
@@ -322,7 +341,7 @@ pub fn player_join_world(
             },
             system_id,
         )
-        .exclude(packets)
+        .exclude(io)
         .send(world)
         .context("failed to send team packet")?;
 
@@ -337,7 +356,7 @@ pub fn player_join_world(
     };
     compose
         .broadcast(&spawn_player, system_id)
-        .exclude(packets)
+        .exclude(io)
         .send(world)
         .context("failed to send player spawn packet")?;
 
@@ -355,7 +374,7 @@ pub fn player_join_world(
                     entities: all_player_names,
                 },
             },
-            packets,
+            io,
             system_id,
             world,
         )
@@ -364,7 +383,7 @@ pub fn player_join_world(
     let command_packet = get_command_packet(world, root_command);
 
     compose
-        .unicast(&command_packet, packets, system_id, world)
+        .unicast(&command_packet, io, system_id, world)
         .context("failed to send command packet")?;
 
     info!("{name} joined the world");
@@ -391,7 +410,6 @@ fn send_sync_tags(encoder: &mut PacketEncoder) -> anyhow::Result<()> {
 )]
 fn generate_cached_packet_bytes(
     encoder: &mut PacketEncoder,
-    chunks: &Blocks,
     tasks: &AsyncRuntime,
     crafting_registry: &CraftingRegistry,
     config: &Config,
@@ -413,25 +431,6 @@ fn generate_cached_packet_bytes(
 
     encoder.append_packet(&brand)?;
 
-    // let center_chunk: IVec3 = PLAYER_SPAWN_POSITION.as_ivec3() >> 4;
-
-    // // TODO: Do we need to send this else where?
-    // encoder.append_packet(&play::ChunkRenderDistanceCenterS2c {
-    //     chunk_x: center_chunk.x.into(),
-    //     chunk_z: center_chunk.z.into(),
-    // })?;
-    // 
-    // let center_chunk = IVec2::new(center_chunk.x, center_chunk.z);
-    // 
-    // // so they do not fall
-    // let chunk = unsafe { chunks.get_and_wait(center_chunk, tasks) };
-    // encoder.append_bytes(&chunk);
-    // 
-    // encoder.append_packet(&play::PlayerSpawnPositionS2c {
-    //     position: PLAYER_SPAWN_POSITION.as_dvec3().into(),
-    //     angle: 3.0,
-    // })?;
-
     encoder.append_packet(&play::TeamS2c {
         team_name: "no_tag",
         mode: Mode::CreateTeam {
@@ -448,7 +447,7 @@ fn generate_cached_packet_bytes(
 
     // if let Some(diameter) = config.border_diameter {
     //     debug!("Setting world border to diameter {}", diameter);
-    // 
+    //
     //     encoder.append_packet(&play::WorldBorderInitializeS2c {
     //         x: f64::from(PLAYER_SPAWN_POSITION.x),
     //         z: f64::from(PLAYER_SPAWN_POSITION.z),
@@ -459,9 +458,9 @@ fn generate_cached_packet_bytes(
     //         warning_blocks: 50.into(),
     //         warning_time: 200.into(),
     //     })?;
-    // 
+    //
     //     encoder.append_packet(&play::WorldBorderSizeChangedS2c { diameter })?;
-    // 
+    //
     //     encoder.append_packet(&play::WorldBorderCenterChangedS2c {
     //         x_pos: f64::from(PLAYER_SPAWN_POSITION.x),
     //         z_pos: f64::from(PLAYER_SPAWN_POSITION.z),
