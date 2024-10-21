@@ -8,7 +8,6 @@
 *.zip
 .idea
 /run
-.cargo
 perf.data
 **/*.zip
 .DS_Store
