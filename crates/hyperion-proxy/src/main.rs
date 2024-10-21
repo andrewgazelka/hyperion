@@ -16,7 +16,7 @@ struct Params {
 
 #[tokio::main]
 async fn main() {
-    console_subscriber::init();
+    // console_subscriber::init();
 
     let params = Params::parse();
 

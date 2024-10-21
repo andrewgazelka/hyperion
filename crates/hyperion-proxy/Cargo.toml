@@ -7,9 +7,10 @@ readme = "README.md"
 publish = false
 
 [dependencies]
+
 anyhow.workspace = true
+rkyv = "0.8.8"
 rustc-hash = "2.0.0"
-prost.workspace = true
 tokio = { workspace = true, features = ["full"] }
 bvh.workspace = true
 #tracy-client = "0.17.4"

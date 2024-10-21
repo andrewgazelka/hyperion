@@ -1,7 +1,9 @@
+use byteorder::WriteBytesExt;
 use bytes::BytesMut;
 use flecs_ecs::prelude::*;
-use hyperion_proto::{Flush, UpdatePlayerChunkPositions};
+use hyperion_proto::{Flush, ServerToProxyMessage, UpdatePlayerChunkPositions};
 use prost::Message;
+use rkyv::util::AlignedVec;
 use tracing::{error, trace_span};
 use valence_protocol::{packets::play, VarInt};
 
@@ -30,22 +32,24 @@ pub struct EgressModule;
 impl Module for EgressModule {
     fn module(world: &World) {
         let flush = {
-            let mut data = Vec::new();
-
             #[expect(
                 clippy::unwrap_used,
                 reason = "this is only called once on startup; it should be fine. we mostly care \
                           about crashing during server execution"
             )]
-            hyperion_proto::ServerToProxy::from(Flush {})
-                .encode_length_delimited(&mut data)
-                .unwrap();
+            let flush = ServerToProxyMessage::Flush(Flush);
 
-            // We are turning it into a `Box` first because we want to make sure the allocation is as small as possible.
-            // See `Vec::leak` for more information.
-            let data = data.into_boxed_slice();
-            let data = Box::leak(data);
-            bytes::Bytes::from_static(data)
+            let mut v: AlignedVec = AlignedVec::new();
+            // length
+            v.write_u64::<byteorder::BigEndian>(0).unwrap();
+
+            rkyv::api::high::to_bytes_in::<_, rkyv::rancor::Error>(&flush, &mut v).unwrap();
+
+            let len = u64::try_from(v.len() - size_of::<u64>()).unwrap();
+            v[0..8].copy_from_slice(&len.to_be_bytes());
+
+            let s = Box::leak(v.into_boxed_slice());
+            bytes::Bytes::from_static(s)
         };
 
         let pipeline = world
@@ -121,8 +125,8 @@ impl Module for EgressModule {
                     stream.push(io.inner());
 
                     let position = hyperion_proto::ChunkPosition {
-                        x: pos.0.x,
-                        z: pos.0.y,
+                        x: i16::try_from(pos.0.x).unwrap(),
+                        z: i16::try_from(pos.0.y).unwrap(),
                     };
 
                     positions.push(position);
@@ -130,11 +134,22 @@ impl Module for EgressModule {
 
                 let packet = UpdatePlayerChunkPositions { stream, positions };
 
-                let mut buffer = BytesMut::new();
-                let to_send = hyperion_proto::ServerToProxy::from(packet);
-                to_send.encode_length_delimited(&mut buffer).unwrap();
+                let chunk_positions = ServerToProxyMessage::UpdatePlayerChunkPositions(packet);
 
-                if let Err(e) = egress.send(buffer.freeze()) {
+                let mut v: AlignedVec = AlignedVec::new();
+                // length
+                v.write_u64::<byteorder::BigEndian>(0).unwrap();
+
+                rkyv::api::high::to_bytes_in::<_, rkyv::rancor::Error>(&chunk_positions, &mut v)
+                    .unwrap();
+
+                let len = u64::try_from(v.len() - size_of::<u64>()).unwrap();
+                v[0..8].copy_from_slice(&len.to_be_bytes());
+
+                let v = v.into_boxed_slice();
+                let bytes = bytes::Bytes::from(v);
+
+                if let Err(e) = egress.send(bytes) {
                     error!("failed to send egress: {e}");
                 }
             }
@@ -144,7 +159,7 @@ impl Module for EgressModule {
                 if bytes.is_empty() {
                     continue;
                 }
-                if let Err(e) = egress.send(bytes.freeze()) {
+                if let Err(e) = egress.send(bytes) {
                     error!("failed to send egress: {e}");
                 }
             }

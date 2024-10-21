@@ -203,10 +203,10 @@ fn process_status(
         packets::status::QueryRequestC2s::ID => {
             let query_request: packets::status::QueryRequestC2s = packet.decode()?;
 
-            let img_bytes = include_bytes!("data/hyperion.png");
+            // let img_bytes = include_bytes!("data/hyperion.png");
 
-            let favicon = general_purpose::STANDARD.encode(img_bytes);
-            let favicon = format!("data:image/png;base64,{favicon}");
+            // let favicon = general_purpose::STANDARD.encode(img_bytes);
+            // let favicon = format!("data:image/png;base64,{favicon}");
 
             let online = compose
                 .global()
@@ -225,7 +225,7 @@ fn process_status(
                     "sample": [],
                 },
                 "description": "Getting 10k Players to PvP at Once on a Minecraft Server to Break the Guinness World Record",
-                "favicon": favicon,
+                // "favicon": favicon,
             });
 
             let json = serde_json::to_string_pretty(&json)?;

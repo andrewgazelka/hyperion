@@ -3,7 +3,8 @@ use std::{ops::Range, sync::Arc};
 use bvh::{Bvh, Data, Point};
 use bytes::BytesMut;
 use glam::I16Vec2;
-use hyperion_proto::{BroadcastGlobal, ServerToProxyMessage, UpdatePlayerChunkPositions};
+use hyperion_proto::{ArchivedServerToProxyMessage, BroadcastGlobal, UpdatePlayerChunkPositions};
+use rkyv::util::AlignedVec;
 use rustc_hash::FxBuildHasher;
 use tracing::error;
 
@@ -144,7 +145,7 @@ impl Data for LocalBroadcastData {
 /// Buffers egress operations for optimized processing.
 pub struct BufferedEgress {
     /// Buffer for required broadcast data.
-    global_broadcast_buffer: BytesMut,
+    global_broadcast_buffer: Vec<u8>,
 
     raw_local_broadcast_data: Vec<u8>,
     local_broadcast_buffer: Vec<LocalBroadcastData>,
@@ -154,7 +155,7 @@ pub struct BufferedEgress {
     /// Stores pending chunk position updates.
     queued_position_update: Option<UpdatePlayerChunkPositions>,
     /// Reference to the underlying egress handler.
-    egress: Arc<Egress>,
+    egress: Egress,
     /// Tracks the current broadcast order.
     current_broadcast_order: Option<u32>,
     local_flush_counter: u32,
@@ -162,9 +163,10 @@ pub struct BufferedEgress {
 
 impl BufferedEgress {
     /// Creates a new `BufferedEgress` instance.
-    pub fn new(egress: Arc<Egress>) -> Self {
+    #[must_use]
+    pub fn new(egress: Egress) -> Self {
         Self {
-            global_broadcast_buffer: BytesMut::new(),
+            global_broadcast_buffer: Vec::new(),
             raw_local_broadcast_data: vec![],
             local_broadcast_buffer: Vec::default(),
             exclusion_manager: GlobalExclusionsManager::default(),
@@ -177,39 +179,43 @@ impl BufferedEgress {
 
     /// Handles incoming server-to-proxy messages.
     // #[instrument(skip_all)]
-    pub fn handle_packet(&mut self, message: ServerToProxyMessage) {
+    pub fn handle_packet(&mut self, message: &ArchivedServerToProxyMessage) {
         match message {
-            ServerToProxyMessage::UpdatePlayerChunkPositions(packet) => {
-                self.queued_position_update = Some(packet);
+            ArchivedServerToProxyMessage::UpdatePlayerChunkPositions(packet) => {
+                self.egress.handle_update_player_chunk_positions(packet);
             }
-            ServerToProxyMessage::BroadcastGlobal(packet) => {
+            ArchivedServerToProxyMessage::BroadcastGlobal(packet) => {
+                let Ok(packet_order) = rkyv::deserialize::<u32, !>(&packet.order);
+
                 if let Some(order) = self.current_broadcast_order
-                    && order != packet.order
+                    && order != packet_order
                 {
                     // send the current broadcasts to all players
                     self.flush_broadcast(order);
                 }
 
-                self.current_broadcast_order = Some(packet.order);
+                self.current_broadcast_order = Some(packet_order);
 
                 let current_len = self.global_broadcast_buffer.len();
                 self.global_broadcast_buffer.extend_from_slice(&packet.data);
 
-                if packet.exclude != 0 {
+                let Ok(packet_exclude) = rkyv::deserialize::<u64, !>(&packet.exclude);
+
+                if packet_exclude != 0 {
                     // we need to exclude a player
                     let new_len = self.global_broadcast_buffer.len();
                     self.exclusion_manager
-                        .append(packet.exclude, current_len..new_len);
+                        .append(packet_exclude, current_len..new_len);
                 }
 
                 // TODO: Consider implementing auto-flush based on buffer size
                 // to optimize cache usage.
             }
-            ServerToProxyMessage::BroadcastLocal(packet) => {
-                let Some(center) = packet.center else {
-                    error!("center is required");
-                    return;
-                };
+            ArchivedServerToProxyMessage::BroadcastLocal(packet) => {
+                let Ok(center_x) = rkyv::deserialize::<i16, !>(&packet.center.x);
+                let Ok(center_z) = rkyv::deserialize::<i16, !>(&packet.center.z);
+
+                let position = I16Vec2::new(center_x, center_z);
 
                 let before_len = self.raw_local_broadcast_data.len();
                 self.raw_local_broadcast_data
@@ -218,27 +224,21 @@ impl BufferedEgress {
 
                 self.local_broadcast_buffer.push(LocalBroadcastData {
                     // todo: checked
-                    position: I16Vec2::new(center.x as i16, center.z as i16),
+                    position,
                     range_start: before_len,
                     range_end: after_len,
                 });
             }
-            ServerToProxyMessage::Multicast(_) => {
+            ArchivedServerToProxyMessage::Multicast(_) => {
                 // TODO: Implement handling for these message types
             }
-            pkt @ ServerToProxyMessage::Unicast(_) => self.egress.handle_packet(pkt),
-            pkt @ ServerToProxyMessage::SetReceiveBroadcasts(..) => {
-                self.egress.handle_packet(pkt);
+            ArchivedServerToProxyMessage::Unicast(unicast) => {
+                self.egress.handle_unicast(unicast);
             }
-            ServerToProxyMessage::Flush(_) => {
-                // todo: better should probs wait for recalc before sending
-                if let Some(queued_position_update) = self.queued_position_update.take() {
-                    self.egress
-                        .handle_packet(ServerToProxyMessage::UpdatePlayerChunkPositions(
-                            queued_position_update,
-                        ));
-                }
-
+            ArchivedServerToProxyMessage::SetReceiveBroadcasts(pkt) => {
+                self.egress.handle_set_receive_broadcasts(pkt);
+            }
+            ArchivedServerToProxyMessage::Flush(_) => {
                 if let Some(order) = self.current_broadcast_order.take() {
                     self.flush_broadcast(order);
                 }
@@ -252,10 +252,9 @@ impl BufferedEgress {
                     return;
                 }
 
-                let egress = self.egress.clone();
-
                 let raw_local_broadcast_data = core::mem::take(&mut self.raw_local_broadcast_data);
 
+                let egress = self.egress;
                 tokio::task::Builder::new()
                     .name("bvh")
                     .spawn(async move {
@@ -268,7 +267,7 @@ impl BufferedEgress {
                             bvh: Arc::new(bvh),
                         };
 
-                        egress.clone().handle_broadcast_local(instruction);
+                        egress.handle_broadcast_local(instruction);
                     })
                     .unwrap();
             }
@@ -277,8 +276,9 @@ impl BufferedEgress {
 
     /// Flushes the current broadcast buffer.
     fn flush_broadcast(&mut self, order: u32) {
+        let data = core::mem::take(&mut self.global_broadcast_buffer);
         let pkt = BroadcastGlobal {
-            data: self.global_broadcast_buffer.split().freeze(),
+            data,
             exclude: 0,
             order,
         };

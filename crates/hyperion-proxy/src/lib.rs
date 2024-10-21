@@ -2,6 +2,7 @@
 #![feature(allocator_api)]
 #![feature(let_chains)]
 #![feature(coroutines)]
+#![feature(never_type)]
 #![feature(iter_from_coroutine)]
 #![feature(stmt_expr_attributes)]
 #![allow(
@@ -23,8 +24,7 @@ use std::{
 };
 
 use anyhow::{bail, Context};
-use hyperion_proto::{ServerToProxy, ServerToProxyMessage};
-use prost::{encoding::decode_varint, Message};
+use hyperion_proto::ArchivedServerToProxyMessage;
 use rustc_hash::FxBuildHasher;
 use tokio::{
     io::{AsyncReadExt, BufReader},
@@ -104,10 +104,13 @@ async fn connect_to_server_and_run_proxy(
 ) -> anyhow::Result<()> {
     let (server_read, server_write) = server_socket.into_split();
     let server_sender = launch_server_writer(server_write);
-    let mut reader = ServerReader::new(BufReader::new(server_read));
 
     let map = papaya::HashMap::default();
     let map: &'static papaya::HashMap<u64, PlayerHandle, FxBuildHasher> = Box::leak(Box::new(map));
+    let egress = Egress::new(map);
+    let mut egress = BufferedEgress::new(egress);
+
+    let mut handler = IngressHandler::new(BufReader::new(server_read), egress);
 
     tokio::task::Builder::new()
         .name("s2prox")
@@ -115,9 +118,6 @@ async fn connect_to_server_and_run_proxy(
         let mut shutdown_rx = shutdown_rx.clone();
 
         async move {
-            let egress = Egress::new(map);
-            let egress = Arc::new(egress);
-            let mut egress = BufferedEgress::new(egress);
 
             loop {
                 tokio::select! {
@@ -125,9 +125,9 @@ async fn connect_to_server_and_run_proxy(
                         println!("Received shutdown signal, exiting server reader loop");
                         return;
                     }
-                    result = reader.next() => {
+                    result = handler.handle_next() => {
                         match result {
-                            Ok(packet) => egress.handle_packet(packet),
+                            Ok(()) => {},
                             Err(e) => {
                                 error!(
                                     "Error reading next packet: {e:?}. Are you connected to a valid \
@@ -186,67 +186,54 @@ async fn connect_to_server_and_run_proxy(
     }
 }
 
-struct ServerReader {
+struct IngressHandler {
     server_read: BufReader<tokio::net::tcp::OwnedReadHalf>,
     buffer: Vec<u8>,
+    egress: BufferedEgress,
 }
 
-impl Debug for ServerReader {
+impl Debug for IngressHandler {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("ServerReader").finish()
     }
 }
 
-impl ServerReader {
-    #[instrument(level = "trace")]
-    pub fn new(server_read: BufReader<tokio::net::tcp::OwnedReadHalf>) -> Self {
+impl IngressHandler {
+    pub fn new(
+        server_read: BufReader<tokio::net::tcp::OwnedReadHalf>,
+        egress: BufferedEgress,
+    ) -> Self {
         Self {
             server_read,
+            egress,
             buffer: Vec::with_capacity(DEFAULT_BUFFER_SIZE),
         }
     }
 
     // #[instrument(level = "info", skip_all, name = "ServerReader::next")]
-    pub async fn next(&mut self) -> anyhow::Result<ServerToProxyMessage> {
-        let len = self.read_varint().await?;
+    pub async fn handle_next(&mut self) -> anyhow::Result<()> {
+        let len = self.read_len().await?;
+        let len = usize::try_from(len).context("Failed to convert len to usize")?;
+
+        debug_assert!(len <= 1_000_000);
+
+        // println!("prox need to read {len} bytes");
 
         trace!("Received packet of length {len}");
 
-        let message = self.next_server_packet(len).await?;
-        Ok(message)
+        self.handle_next_server_packet(len).await
     }
 
     #[instrument(level = "trace")]
-    async fn read_varint(&mut self) -> anyhow::Result<usize> {
-        let mut vint = [0u8; 4];
-        let mut i = 0;
-        let len = loop {
-            let byte = self.server_read.read_u8().await?;
-
-            // [A]
-            let to_set = vint
-                .get_mut(i)
-                .context("Failed to get mutable reference to byte in vint")?;
-
-            *to_set = byte;
-
-            #[expect(
-                clippy::indexing_slicing,
-                reason = "we already verified in [A] that up to index i is valid"
-            )]
-            let mut cursor = Cursor::new(&vint[..=i]);
-
-            if let Ok(len) = decode_varint(&mut cursor) {
-                break len;
-            }
-            i += 1;
-        };
-
-        usize::try_from(len).context("Failed to convert varint to usize. len is {len}")
+    async fn read_len(&mut self) -> anyhow::Result<u64> {
+        self.server_read
+            .read_u64()
+            .await
+            .context("Failed to read int")
     }
 
     #[instrument(level = "trace")]
-    async fn next_server_packet(&mut self, len: usize) -> anyhow::Result<ServerToProxyMessage> {
+    async fn handle_next_server_packet(&mut self, len: usize) -> anyhow::Result<()> {
         // [A]
         if self.buffer.len() < len {
             self.buffer.resize(len, 0);
@@ -258,13 +245,13 @@ impl ServerReader {
         )]
         let slice = &mut self.buffer[..len];
         self.server_read.read_exact(slice).await?;
-        let mut cursor = Cursor::new(slice);
-        let Ok(message) = ServerToProxy::decode(&mut cursor) else {
-            bail!("Failed to decode ServerToProxy message");
-        };
-        let Some(message) = message.server_to_proxy_message else {
-            bail!("No message in ServerToProxy message");
-        };
-        Ok(message)
+
+        let result = unsafe { rkyv::access_unchecked::<ArchivedServerToProxyMessage>(slice) };
+        
+        println!("got packet {result:?}");
+
+        self.egress.handle_packet(result);
+
+        Ok(())
     }
 }

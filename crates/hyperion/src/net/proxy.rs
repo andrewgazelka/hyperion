@@ -5,7 +5,9 @@ use std::{collections::HashMap, io::Cursor, net::SocketAddr, process::Command, s
 use anyhow::bail;
 use bytes::{Buf, BytesMut};
 use flecs_ecs::macros::Component;
-use hyperion_proto::{PlayerConnect, PlayerDisconnect, ProxyToServer, ProxyToServerMessage};
+use hyperion_proto::{
+    ArchivedProxyToServerMessage, PlayerConnect, PlayerDisconnect, ProxyToServerMessage,
+};
 use parking_lot::Mutex;
 use prost::{encoding::decode_varint, Message};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -195,7 +197,9 @@ impl ProxyReader {
                 let mut cursor = Cursor::new(&self.buffer);
 
                 // todo: handle invalid varint
-                if let Ok(len) = decode_varint(&mut cursor) {
+                if let Ok(len) =
+                    byteorder::ReadBytesExt::read_u64::<byteorder::BigEndian>(&mut cursor)
+                {
                     self.buffer.advance(usize::try_from(cursor.position())?);
                     break usize::try_from(len)?;
                 }
@@ -211,18 +215,15 @@ impl ProxyReader {
             self.server_read.read_buf(&mut self.buffer).await?;
         }
 
-        let mut buffer = self.buffer.split_to(len);
+        let buffer = self.buffer.split_to(len);
 
-        let Ok(message) = ProxyToServer::decode(&mut buffer) else {
-            bail!("Failed to decode ProxyToServerMessage from {:?}", buffer);
-        };
+        let result = unsafe { rkyv::access_unchecked::<ArchivedProxyToServerMessage>(&buffer) };
 
-        assert!(buffer.is_empty());
+        println!("got packet {result:?}");
+        
+        let result =
+            rkyv::deserialize::<ProxyToServerMessage, rkyv::rancor::Error>(result).unwrap();
 
-        let Some(message) = message.proxy_to_server_message else {
-            bail!("No message in ServerToProxy message");
-        };
-
-        Ok(message)
+        Ok(result)
     }
 }

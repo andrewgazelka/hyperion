@@ -3,7 +3,6 @@
 use std::io::IoSlice;
 
 use hyperion_proto::{PlayerConnect, PlayerDisconnect, PlayerPackets, ProxyToServerMessage};
-use prost::bytes;
 use tokio::{io::AsyncReadExt, net::TcpStream, task::JoinHandle};
 use tracing::{debug, instrument, warn};
 
@@ -34,16 +33,21 @@ pub fn initiate_player_connection(
 
     // Task for handling incoming packets (player -> proxy)
     let mut packet_reader_task = tokio::task::Builder::new()
-        .name("pl2prox") // player to proxy
+        .name("PL->PR") // player to proxy
         .spawn(async move {
-            let mut read_buffer = bytes::BytesMut::with_capacity(DEFAULT_READ_BUFFER_SIZE);
+            let mut read_buffer = Vec::new();
             let player_stream_id = player_id;
 
-            server_sender
-                .try_send(ProxyToServerMessage::PlayerConnect(PlayerConnect {
+            let connect = rkyv::to_bytes::<rkyv::rancor::Error>(
+                &ProxyToServerMessage::PlayerConnect(PlayerConnect {
                     stream: player_stream_id,
-                }))
-                .unwrap();
+                }),
+            )
+            .unwrap();
+            
+            println!("PROX sending connect");
+
+            server_sender.try_send(connect).unwrap();
 
             loop {
                 // Ensure the buffer has enough capacity
@@ -62,17 +66,24 @@ pub fn initiate_player_connection(
                     return server_sender;
                 }
 
-                // Process and forward the received data
-                let packet_data = read_buffer.split().freeze();
+                let mut arena = rkyv::ser::allocator::Arena::new();
 
-                let player_packets = PlayerPackets {
-                    data: packet_data,
-                    stream: player_stream_id,
-                };
+                let read_buffer = core::mem::take(&mut read_buffer);
 
-                if let Err(e) =
-                    server_sender.try_send(ProxyToServerMessage::PlayerPackets(player_packets))
-                {
+                println!("PROX sending read buffer {read_buffer:?}");
+                let player_packets = ProxyToServerMessage::PlayerPackets(PlayerPackets {
+                    stream: player_id,
+                    data: read_buffer,
+                });
+
+
+                let aligned_vec = rkyv::api::high::to_bytes_with_alloc::<_, rkyv::rancor::Error>(
+                    &player_packets,
+                    arena.acquire(),
+                )
+                .unwrap();
+
+                if let Err(e) = server_sender.try_send(aligned_vec) {
                     debug!("Error forwarding player packets to server: {e:?}");
                     panic!("Error forwarding player packets to server: {e:?}");
                     // return server_sender;
@@ -124,12 +135,12 @@ pub fn initiate_player_connection(
 
                     debug!("Player disconnected: {player_id:?}");
 
-                    server_sender
-                        .send(ProxyToServerMessage::PlayerDisconnect(PlayerDisconnect {
+                    let disconnect = rkyv::to_bytes::<rkyv::rancor::Error>(
+                        &ProxyToServerMessage::PlayerDisconnect(PlayerDisconnect {
                             stream: player_id,
-                        }))
-                        .await
-                        .unwrap();
+                        })).unwrap();
+
+                    server_sender.send(disconnect).await.unwrap();
                 }
             }
         })

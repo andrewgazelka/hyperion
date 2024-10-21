@@ -6,14 +6,16 @@ use std::{
 };
 
 use bumpalo::Bump;
-use bytes::BytesMut;
+use byteorder::WriteBytesExt;
+use bytes::{Bytes, BytesMut};
 pub use decoder::PacketDecoder;
 use derive_more::Deref;
 use flecs_ecs::{core::World, macros::Component};
 use glam::IVec2;
-use hyperion_proto::ChunkPosition;
+use hyperion_proto::{ChunkPosition, ServerToProxyMessage};
 use libdeflater::CompressionLvl;
 use prost::Message;
+use rkyv::util::AlignedVec;
 
 use crate::{
     net::encoder::{append_packet_without_compression, PacketEncoder},
@@ -140,7 +142,7 @@ impl Compose {
     /// Broadcast a packet within a certain region.
     ///
     /// See <https://github.com/andrewgazelka/hyperion-proto/blob/main/src/server_to_proxy.proto#L17-L22>
-    pub const fn broadcast_local<P>(
+    pub fn broadcast_local<P>(
         &self,
         packet: P,
         center: IVec2,
@@ -154,8 +156,8 @@ impl Compose {
             compose: self,
             exclude: 0,
             center: ChunkPosition {
-                x: center.x,
-                z: center.y,
+                x: i16::try_from(center.x).unwrap(),
+                z: i16::try_from(center.y).unwrap(),
             },
             system_id,
         }
@@ -248,7 +250,7 @@ impl Compose {
 /// This is useful for the ECS, so we can use Single<&mut Broadcast> instead of having to use a marker struct
 #[derive(Component, Default)]
 pub struct IoBuf {
-    buffer: ThreadLocal<RefCell<BytesMut>>,
+    buffer: ThreadLocal<RefCell<AlignedVec>>,
     // system_on: ThreadLocal<Cell<u32>>,
     // broadcast_buffer: ThreadLocal<RefCell<BytesMut>>,
     temp_buffer: ThreadLocal<RefCell<BytesMut>>,
@@ -400,16 +402,17 @@ impl<P> BroadcastLocal<'_, P> {
 
 impl IoBuf {
     /// Returns an iterator over the result of splitting the buffer into packets with [`BytesMut::split`].
-    pub fn reset_and_split(&mut self) -> impl Iterator<Item = BytesMut> + '_ {
+    pub fn reset_and_split(&mut self) -> impl Iterator<Item = Bytes> + '_ {
         // reset idx
         for elem in &mut self.idx {
             elem.set(0);
         }
 
-        self.buffer
-            .iter_mut()
-            .map(|x| x.borrow_mut())
-            .map(|mut x| x.split())
+        self.buffer.iter_mut().map(|x| x.borrow_mut()).map(|mut x| {
+            let res = Bytes::copy_from_slice(x.as_slice());
+            x.clear();
+            res
+        })
     }
 
     fn encode_packet<P>(
@@ -494,7 +497,7 @@ impl IoBuf {
 
     fn broadcast_local_raw(
         &self,
-        data: bytes::Bytes,
+        data: Bytes,
         center: ChunkPosition,
         exclude: u64,
         system_id: SystemId,
@@ -506,20 +509,27 @@ impl IoBuf {
         let order = u32::from(system_id.id()) << 16;
 
         let to_send = hyperion_proto::BroadcastLocal {
-            data,
-            center: Some(center),
+            data: data.to_vec(),
+            center,
             exclude,
             order,
         };
 
-        hyperion_proto::ServerToProxy::from(to_send)
-            .encode_length_delimited(buffer)
-            .unwrap();
+        let to_send = ServerToProxyMessage::BroadcastLocal(to_send);
+
+        let len = buffer.len();
+        buffer.write_u64::<byteorder::BigEndian>(0x00).unwrap();
+
+        rkyv::api::high::to_bytes_in::<_, rkyv::rancor::Error>(&to_send, &mut *buffer).unwrap();
+
+        let new_len = buffer.len();
+        let packet_len = u64::try_from(new_len - len - size_of::<u64>()).unwrap();
+        buffer[len..(len + 8)].copy_from_slice(&packet_len.to_be_bytes());
     }
 
     pub(crate) fn broadcast_raw(
         &self,
-        data: bytes::Bytes,
+        data: Bytes,
         exclude: u64,
         system_id: SystemId,
         world: &World,
@@ -530,7 +540,7 @@ impl IoBuf {
         let order = u32::from(system_id.id()) << 16;
 
         let to_send = hyperion_proto::BroadcastGlobal {
-            data,
+            data: data.to_vec(),
             // todo: Right now, we are using `to_vec`.
             // We want to probably allow encoding without allocation in the future.
             // Fortunately, `to_vec` will not require any allocation if the buffer is empty.
@@ -538,9 +548,16 @@ impl IoBuf {
             order,
         };
 
-        hyperion_proto::ServerToProxy::from(to_send)
-            .encode_length_delimited(buffer)
-            .unwrap();
+        let to_send = ServerToProxyMessage::BroadcastGlobal(to_send);
+
+        let len = buffer.len();
+        buffer.write_u64::<byteorder::BigEndian>(0x00).unwrap();
+
+        rkyv::api::high::to_bytes_in::<_, rkyv::rancor::Error>(&to_send, &mut *buffer).unwrap();
+
+        let new_len = buffer.len();
+        let packet_len = u64::try_from(new_len - len - size_of::<u64>()).unwrap();
+        buffer[len..(len + 8)].copy_from_slice(&packet_len.to_be_bytes());
     }
 
     pub(crate) fn unicast_raw(
@@ -556,13 +573,22 @@ impl IoBuf {
         let order = self.order_id(system_id, world);
 
         let to_send = hyperion_proto::Unicast {
-            data,
+            data: data.to_vec(),
             stream: stream.stream_id,
             order,
         };
 
-        let to_send = hyperion_proto::ServerToProxy::from(to_send);
-        to_send.encode_length_delimited(buffer).unwrap();
+        let to_send = ServerToProxyMessage::Unicast(to_send);
+
+        let len = buffer.len();
+        buffer.write_u64::<byteorder::BigEndian>(0x00).unwrap();
+
+        println!("sending unicast");
+        rkyv::api::high::to_bytes_in::<_, rkyv::rancor::Error>(&to_send, &mut *buffer).unwrap();
+
+        let new_len = buffer.len();
+        let packet_len = u64::try_from(new_len - len - size_of::<u64>()).unwrap();
+        buffer[len..(len + 8)].copy_from_slice(&packet_len.to_be_bytes());
     }
 
     pub(crate) fn multicast_raw(
@@ -572,20 +598,7 @@ impl IoBuf {
         system_id: SystemId,
         world: &World,
     ) {
-        let buffer = self.buffer.get(world);
-        let buffer = &mut *buffer.borrow_mut();
-
-        let order = self.order_id(system_id, world);
-
-        let to_send = hyperion_proto::Multicast {
-            data,
-            stream: streams.to_vec(),
-            order,
-        };
-
-        hyperion_proto::ServerToProxy::from(to_send)
-            .encode_length_delimited(buffer)
-            .unwrap();
+        unimplemented!()
     }
 
     pub(crate) fn set_receive_broadcasts(&self, stream: NetworkStreamRef, world: &World) {
@@ -596,8 +609,15 @@ impl IoBuf {
             stream: stream.stream_id,
         };
 
-        hyperion_proto::ServerToProxy::from(to_send)
-            .encode_length_delimited(buffer)
-            .unwrap();
+        let to_send = ServerToProxyMessage::SetReceiveBroadcasts(to_send);
+
+        let len = buffer.len();
+        buffer.write_u64::<byteorder::BigEndian>(0x00).unwrap();
+
+        rkyv::api::high::to_bytes_in::<_, rkyv::rancor::Error>(&to_send, &mut *buffer).unwrap();
+
+        let new_len = buffer.len();
+        let packet_len = u64::try_from(new_len - len - size_of::<u64>()).unwrap();
+        buffer[len..(len + 8)].copy_from_slice(&packet_len.to_be_bytes());
     }
 }
