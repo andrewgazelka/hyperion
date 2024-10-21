@@ -10,7 +10,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  RUST_TOOLCHAIN: nightly-2024-09-21
+  RUST_TOOLCHAIN: nightly-2024-10-15
 
 jobs:
   machete:
@@ -35,11 +35,6 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
-      - uses: awalsh128/cache-apt-pkgs-action@latest
-        with:
-          packages: protobuf-compiler
-          version: 1.0
 
       - uses: dtolnay/rust-toolchain@master
         with:
@@ -92,11 +87,6 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - uses: awalsh128/cache-apt-pkgs-action@latest
-        with:
-          packages: protobuf-compiler
-          version: 1.0
-
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
@@ -117,11 +107,6 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - uses: awalsh128/cache-apt-pkgs-action@latest
-        with:
-          packages: protobuf-compiler
-          version: 1.0
-
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@master
         with:
@@ -135,26 +120,23 @@ jobs:
       - name: Clippy check
         run: cargo clippy --workspace --benches --tests --examples --all-features -- -D warnings
 
-  clippy-macos:
-    runs-on: macos-latest
+  check:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install dependencies with Homebrew
-        run: brew install protobuf
-
-      - name: Setup Rust toolchain and cache
+      - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@master
         with:
-          components: clippy
           toolchain: ${{ env.RUST_TOOLCHAIN }}
-
 
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
 
-      - name: Clippy check
-        run: cargo clippy --workspace --benches --tests --examples --all-features -- -D warnings
-
+      - name: Cargo check
+        run: cargo check --workspace --all-features
