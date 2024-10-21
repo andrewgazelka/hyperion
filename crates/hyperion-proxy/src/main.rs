@@ -1,9 +1,9 @@
 use clap::Parser;
 use hyperion_proxy::run_proxy;
-use jemallocator::Jemalloc;
 
+#[cfg(not(target_env = "msvc"))]
 #[global_allocator]
-static GLOBAL: Jemalloc = Jemalloc;
+static GLOBAL: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
 
 #[derive(Parser)]
 struct Params {

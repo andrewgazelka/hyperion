@@ -1,9 +1,9 @@
 use clap::Parser;
-use jemallocator::Jemalloc;
 use nyc::init_game;
 
+#[cfg(not(target_env = "msvc"))]
 #[global_allocator]
-static GLOBAL: Jemalloc = Jemalloc;
+static GLOBAL: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
 
 /// The arguments to run the server
 #[derive(Parser)]
