@@ -23,6 +23,9 @@ pub fn launch_server_writer(mut write: tokio::net::tcp::OwnedWriteHalf) -> Serve
                 let mut lengths: Vec<[u8; 8]> = Vec::new();
                 let mut messages = Vec::new();
 
+                // todo: remove allocation is there an easy way to do this?
+                let mut io_slices = Vec::new();
+
                 while let Some(message) = rx.recv().await {
                     let len = message.len() as u64;
 
@@ -35,18 +38,25 @@ pub fn launch_server_writer(mut write: tokio::net::tcp::OwnedWriteHalf) -> Serve
                         messages.push(message);
                     }
 
-                    // todo: remove allocation is there an easy way to do this?
-                    let mut io_slices = Vec::new();
-
                     for (message, length) in messages.iter().zip(lengths.iter()) {
-                        io_slices.push(IoSlice::new(length.as_ref()));
-                        io_slices.push(IoSlice::new(message.as_ref()));
+                        let len = IoSlice::new(length);
+                        let msg = IoSlice::new(message);
+
+                        // todo: is there a way around this?
+                        let len =
+                            unsafe { core::mem::transmute::<IoSlice<'_>, IoSlice<'static>>(len) };
+                        let msg =
+                            unsafe { core::mem::transmute::<IoSlice<'_>, IoSlice<'static>>(msg) };
+
+                        io_slices.push(len);
+                        io_slices.push(msg);
                     }
 
                     write.write_vectored_all(&mut io_slices).await.unwrap();
-                    
+
                     lengths.clear();
                     messages.clear();
+                    io_slices.clear();
                 }
             }
             .instrument(trace_span!("server_writer_loop")),

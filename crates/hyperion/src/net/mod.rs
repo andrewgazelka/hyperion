@@ -340,7 +340,7 @@ impl<P> Broadcast<'_, P> {
 
         self.compose
             .io_buf
-            .broadcast_raw(bytes, self.exclude, self.system_id, world);
+            .broadcast_raw(&bytes, self.exclude, self.system_id, world);
 
         Ok(())
     }
@@ -378,7 +378,7 @@ impl<P> BroadcastLocal<'_, P> {
             .encode_packet(self.packet, self.compose, world)?;
 
         self.compose.io_buf.broadcast_local_raw(
-            bytes,
+            &bytes,
             self.center,
             self.exclude,
             self.system_id,
@@ -475,7 +475,7 @@ impl IoBuf {
             self.encode_packet_no_compression(packet, world)?
         };
 
-        self.unicast_raw(bytes, id, system_id, world);
+        self.unicast_raw(&bytes, id, system_id, world);
         Ok(())
     }
 
@@ -491,13 +491,13 @@ impl IoBuf {
         P: valence_protocol::Packet + valence_protocol::Encode,
     {
         let bytes = self.encode_packet(packet, compose, world)?;
-        self.multicast_raw(bytes, ids, system_id, world);
+        self.multicast_raw(&bytes, ids, system_id, world);
         Ok(())
     }
 
     fn broadcast_local_raw(
         &self,
-        data: Bytes,
+        data: &[u8],
         center: ChunkPosition,
         exclude: u64,
         system_id: SystemId,
@@ -509,7 +509,7 @@ impl IoBuf {
         let order = u32::from(system_id.id()) << 16;
 
         let to_send = hyperion_proto::BroadcastLocal {
-            data: data.to_vec(),
+            data,
             center,
             exclude,
             order,
@@ -529,7 +529,7 @@ impl IoBuf {
 
     pub(crate) fn broadcast_raw(
         &self,
-        data: Bytes,
+        data: &[u8],
         exclude: u64,
         system_id: SystemId,
         world: &World,
@@ -540,7 +540,7 @@ impl IoBuf {
         let order = u32::from(system_id.id()) << 16;
 
         let to_send = hyperion_proto::BroadcastGlobal {
-            data: data.to_vec(),
+            data,
             // todo: Right now, we are using `to_vec`.
             // We want to probably allow encoding without allocation in the future.
             // Fortunately, `to_vec` will not require any allocation if the buffer is empty.
@@ -562,7 +562,7 @@ impl IoBuf {
 
     pub(crate) fn unicast_raw(
         &self,
-        data: bytes::Bytes,
+        data: &[u8],
         stream: NetworkStreamRef,
         system_id: SystemId,
         world: &World,
@@ -573,7 +573,7 @@ impl IoBuf {
         let order = self.order_id(system_id, world);
 
         let to_send = hyperion_proto::Unicast {
-            data: data.to_vec(),
+            data,
             stream: stream.stream_id,
             order,
         };
@@ -583,7 +583,7 @@ impl IoBuf {
         let len = buffer.len();
         buffer.write_u64::<byteorder::BigEndian>(0x00).unwrap();
 
-        println!("sending unicast");
+        // println!("sending unicast");
         rkyv::api::high::to_bytes_in::<_, rkyv::rancor::Error>(&to_send, &mut *buffer).unwrap();
 
         let new_len = buffer.len();
@@ -593,7 +593,7 @@ impl IoBuf {
 
     pub(crate) fn multicast_raw(
         &self,
-        data: bytes::Bytes,
+        data: &[u8],
         streams: &[u64],
         system_id: SystemId,
         world: &World,

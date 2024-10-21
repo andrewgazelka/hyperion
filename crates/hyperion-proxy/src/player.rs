@@ -44,8 +44,6 @@ pub fn initiate_player_connection(
                 }),
             )
             .unwrap();
-            
-            println!("PROX sending connect");
 
             server_sender.try_send(connect).unwrap();
 
@@ -70,12 +68,10 @@ pub fn initiate_player_connection(
 
                 let read_buffer = core::mem::take(&mut read_buffer);
 
-                println!("PROX sending read buffer {read_buffer:?}");
                 let player_packets = ProxyToServerMessage::PlayerPackets(PlayerPackets {
                     stream: player_id,
                     data: read_buffer,
                 });
-
 
                 let aligned_vec = rkyv::api::high::to_bytes_with_alloc::<_, rkyv::rancor::Error>(
                     &player_packets,

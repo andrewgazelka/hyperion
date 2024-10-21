@@ -24,7 +24,7 @@ fn print_nyc() {
 fn main() {
     dotenvy::dotenv().ok();
 
-    console_subscriber::init();
+    // console_subscriber::init();
 
     let Args { ip, port } = Args::parse();
 

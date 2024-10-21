@@ -3,8 +3,8 @@ use std::{
     sync::{atomic::Ordering, Arc},
 };
 
-use arc_swap::ArcSwap;
 use bvh::{Aabb, Bvh};
+use bytes::Bytes;
 use glam::I16Vec2;
 use hyperion_proto::{
     ArchivedMulticast, ArchivedServerToProxyMessage, ArchivedSetReceiveBroadcasts, ArchivedUnicast,
@@ -65,18 +65,17 @@ impl Egress {
     #[instrument(skip(self, pkt, exclusions), level = "trace")]
     pub fn handle_broadcast_global(
         &self,
-        pkt: hyperion_proto::BroadcastGlobal,
+        pkt: hyperion_proto::BroadcastGlobal<'_>,
         exclusions: GlobalExclusionsManager,
     ) {
         // todo: why cannot I pin_owned inside the spawn
         let players = self.player_registry.pin_owned();
+        let data = pkt.data;
+        let data = Bytes::copy_from_slice(data);
 
         tokio::task::Builder::new()
             .name("broadcast_global")
             .spawn(async move {
-                let data = pkt.data;
-                let data = bytes::Bytes::from(data);
-
                 let exclusions = Arc::new(exclusions);
 
                 // imo it makes sense to read once... it is a fast loop
@@ -157,7 +156,7 @@ impl Egress {
     }
 
     #[instrument(skip(self, pkt))]
-    pub fn handle_multicast(&self, pkt: &ArchivedMulticast) {
+    pub fn handle_multicast(&self, pkt: &ArchivedMulticast<'_>) {
         unimplemented!()
         // let players = self.player_registry.pin_owned();
         // let data = pkt.data;
@@ -176,7 +175,7 @@ impl Egress {
     }
 
     // #[instrument(skip(self, pkt))]
-    pub fn handle_unicast(&self, pkt: &ArchivedUnicast) {
+    pub fn handle_unicast(&self, pkt: &ArchivedUnicast<'_>) {
         let data = &pkt.data;
         let data = data.to_vec();
         let data = bytes::Bytes::from(data);

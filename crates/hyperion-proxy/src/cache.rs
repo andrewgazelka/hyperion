@@ -1,12 +1,9 @@
 use std::{ops::Range, sync::Arc};
 
 use bvh::{Bvh, Data, Point};
-use bytes::BytesMut;
 use glam::I16Vec2;
 use hyperion_proto::{ArchivedServerToProxyMessage, BroadcastGlobal, UpdatePlayerChunkPositions};
-use rkyv::util::AlignedVec;
 use rustc_hash::FxBuildHasher;
-use tracing::error;
 
 use crate::egress::{BroadcastLocalInstruction, Egress};
 
@@ -179,7 +176,7 @@ impl BufferedEgress {
 
     /// Handles incoming server-to-proxy messages.
     // #[instrument(skip_all)]
-    pub fn handle_packet(&mut self, message: &ArchivedServerToProxyMessage) {
+    pub fn handle_packet(&mut self, message: &ArchivedServerToProxyMessage<'_>) {
         match message {
             ArchivedServerToProxyMessage::UpdatePlayerChunkPositions(packet) => {
                 self.egress.handle_update_player_chunk_positions(packet);
@@ -276,7 +273,7 @@ impl BufferedEgress {
 
     /// Flushes the current broadcast buffer.
     fn flush_broadcast(&mut self, order: u32) {
-        let data = core::mem::take(&mut self.global_broadcast_buffer);
+        let data = &self.global_broadcast_buffer;
         let pkt = BroadcastGlobal {
             data,
             exclude: 0,
@@ -286,5 +283,6 @@ impl BufferedEgress {
         let exclusions = self.exclusion_manager.take();
 
         self.egress.handle_broadcast_global(pkt, exclusions);
+        self.global_broadcast_buffer.clear();
     }
 }

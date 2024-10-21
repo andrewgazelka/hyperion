@@ -107,8 +107,8 @@ tar = "0.4.41"
 thiserror = "1.0.63"
 tokio = "1.40.0"
 toml = "0.8.14"
-#tracing = { version = "0.1.40", features = ["release_max_level_info"] }
-tracing = { version = "0.1.40" }
+tracing = { version = "0.1.40", features = ["release_max_level_info"] }
+#tracing = { version = "0.1.40" }
 tracing-subscriber = "0.3.18"
 uuid = "1.8.0"
 valence_anvil = { git = "https://github.com/andrewgazelka/valence", features = ["parsing"], branch = "feat-open" }

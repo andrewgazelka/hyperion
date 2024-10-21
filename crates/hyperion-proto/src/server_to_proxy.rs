@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 
-use rkyv::{Archive, Deserialize, Serialize};
+use rkyv::{with::InlineAsBox, Archive, Deserialize, Serialize};
 
 use crate::ChunkPosition;
 
@@ -18,35 +18,41 @@ pub struct SetReceiveBroadcasts {
 }
 
 #[derive(Archive, Deserialize, Serialize, Clone, PartialEq)]
-#[rkyv(derive(Debug))]
-pub struct BroadcastGlobal {
+pub struct BroadcastGlobal<'a> {
     pub exclude: u64,
     pub order: u32,
-    pub data: Vec<u8>,
+
+    #[rkyv(with = InlineAsBox)]
+    pub data: &'a [u8],
 }
 
 #[derive(Archive, Deserialize, Serialize, Clone, PartialEq)]
-#[rkyv(derive(Debug))]
-pub struct BroadcastLocal {
+// #[rkyv(derive(Debug))]
+pub struct BroadcastLocal<'a> {
     pub center: ChunkPosition,
     pub exclude: u64,
     pub order: u32,
-    pub data: Vec<u8>,
+
+    #[rkyv(with = InlineAsBox)]
+    pub data: &'a [u8],
 }
 
 #[derive(Archive, Deserialize, Serialize, Clone, PartialEq)]
-#[rkyv(derive(Debug))]
-pub struct Multicast {
+// #[rkyv(derive(Debug))]
+pub struct Multicast<'a> {
     pub order: u32,
-    pub data: Vec<u8>,
+    #[rkyv(with = InlineAsBox)]
+    pub data: &'a [u8],
 }
 
 #[derive(Archive, Deserialize, Serialize, Clone, PartialEq)]
-#[rkyv(derive(Debug))]
-pub struct Unicast {
+// #[rkyv(derive(Debug))]
+pub struct Unicast<'a> {
     pub stream: u64,
     pub order: u32,
-    pub data: Vec<u8>,
+
+    #[rkyv(with = InlineAsBox)]
+    pub data: &'a [u8],
 }
 
 #[derive(Archive, Deserialize, Serialize, Clone, Copy, PartialEq)]
@@ -54,13 +60,13 @@ pub struct Unicast {
 pub struct Flush;
 
 #[derive(Archive, Deserialize, Serialize, Clone, PartialEq)]
-#[rkyv(derive(Debug))]
-pub enum ServerToProxyMessage {
+// #[rkyv(derive(Debug))]
+pub enum ServerToProxyMessage<'a> {
     UpdatePlayerChunkPositions(UpdatePlayerChunkPositions),
-    BroadcastGlobal(BroadcastGlobal),
-    BroadcastLocal(BroadcastLocal),
-    Multicast(Multicast),
-    Unicast(Unicast),
+    BroadcastGlobal(BroadcastGlobal<'a>),
+    BroadcastLocal(BroadcastLocal<'a>),
+    Multicast(Multicast<'a>),
+    Unicast(Unicast<'a>),
     SetReceiveBroadcasts(SetReceiveBroadcasts),
     Flush(Flush),
 }

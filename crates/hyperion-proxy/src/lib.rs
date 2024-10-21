@@ -246,10 +246,8 @@ impl IngressHandler {
         let slice = &mut self.buffer[..len];
         self.server_read.read_exact(slice).await?;
 
-        let result = unsafe { rkyv::access_unchecked::<ArchivedServerToProxyMessage>(slice) };
+        let result = unsafe { rkyv::access_unchecked::<ArchivedServerToProxyMessage<'_>>(slice) };
         
-        println!("got packet {result:?}");
-
         self.egress.handle_packet(result);
 
         Ok(())

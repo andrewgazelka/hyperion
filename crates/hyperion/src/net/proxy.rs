@@ -218,8 +218,6 @@ impl ProxyReader {
         let buffer = self.buffer.split_to(len);
 
         let result = unsafe { rkyv::access_unchecked::<ArchivedProxyToServerMessage>(&buffer) };
-
-        println!("got packet {result:?}");
         
         let result =
             rkyv::deserialize::<ProxyToServerMessage, rkyv::rancor::Error>(result).unwrap();

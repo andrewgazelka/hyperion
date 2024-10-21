@@ -145,7 +145,7 @@ pub fn player_join_world(
 
     compose
         .io_buf()
-        .unicast_raw(cached_data, io, system_id, world);
+        .unicast_raw(&cached_data, io, system_id, world);
 
     let text = play::GameMessageS2c {
         chat: format!("{name} joined the world").into_cow_text(),
