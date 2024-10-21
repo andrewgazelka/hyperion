@@ -10,7 +10,6 @@ pub struct GlobalEventHandlers {
     pub join_server: EventHandlers<PlayerJoinServer>,
 }
 
-
 pub struct EventHandlers<T> {
     handlers: Vec<Box<EventFn<T>>>,
 }
@@ -40,5 +39,3 @@ pub struct PlayerJoinServer {
     pub username: String,
     pub entity: Entity,
 }
-
-

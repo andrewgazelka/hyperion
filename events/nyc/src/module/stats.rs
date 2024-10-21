@@ -56,7 +56,7 @@ impl Module for StatsModule {
                     footer: footer.into_cow_text(),
                 };
 
-                // compose.broadcast(&pkt, SystemId(99)).send(&world).unwrap();
+                compose.broadcast(&pkt, SystemId(99)).send(&world).unwrap();
             });
     }
 }

@@ -3,6 +3,7 @@
 use std::io::IoSlice;
 
 use hyperion_proto::{PlayerConnect, PlayerDisconnect, PlayerPackets, ProxyToServerMessage};
+use rkyv::ser::allocator::Arena;
 use tokio::{io::AsyncReadExt, net::TcpStream, task::JoinHandle};
 use tracing::{debug, instrument, warn};
 
@@ -26,7 +27,7 @@ pub fn initiate_player_connection(
     socket: TcpStream,
     mut shutdown_signal: tokio::sync::watch::Receiver<bool>,
     player_id: u64,
-    mut incoming_packet_receiver: tokio::sync::mpsc::Receiver<OrderedBytes>,
+    mut incoming_packet_receiver: kanal::AsyncReceiver<OrderedBytes>,
     server_sender: ServerSender,
 ) -> JoinHandle<()> {
     let (mut socket_reader, socket_writer) = socket.into_split();
@@ -47,6 +48,8 @@ pub fn initiate_player_connection(
 
             server_sender.try_send(connect).unwrap();
 
+            let mut arena = Arena::new();
+
             loop {
                 // Ensure the buffer has enough capacity
                 read_buffer.reserve(DEFAULT_READ_BUFFER_SIZE);
@@ -64,13 +67,9 @@ pub fn initiate_player_connection(
                     return server_sender;
                 }
 
-                let mut arena = rkyv::ser::allocator::Arena::new();
-
-                let read_buffer = core::mem::take(&mut read_buffer);
-
                 let player_packets = ProxyToServerMessage::PlayerPackets(PlayerPackets {
                     stream: player_id,
-                    data: read_buffer,
+                    data: &read_buffer,
                 });
 
                 let aligned_vec = rkyv::api::high::to_bytes_with_alloc::<_, rkyv::rancor::Error>(
@@ -78,6 +77,8 @@ pub fn initiate_player_connection(
                     arena.acquire(),
                 )
                 .unwrap();
+
+                read_buffer.clear();
 
                 if let Err(e) = server_sender.try_send(aligned_vec) {
                     debug!("Error forwarding player packets to server: {e:?}");
@@ -94,7 +95,7 @@ pub fn initiate_player_connection(
         .spawn(async move {
             let mut packet_writer = PlayerPacketWriter::new(socket_writer, player_id);
 
-            while let Some(outgoing_packet) = incoming_packet_receiver.recv().await {
+            while let Ok(outgoing_packet) = incoming_packet_receiver.recv().await {
                 if outgoing_packet.is_flush() {
                     if let Err(e) = packet_writer.flush_pending_packets().await {
                         debug!("Error flushing packets to player: {e:?}");

@@ -1,5 +1,3 @@
-use std::borrow::Cow;
-
 use rkyv::{with::InlineAsBox, Archive, Deserialize, Serialize};
 
 use crate::ChunkPosition;

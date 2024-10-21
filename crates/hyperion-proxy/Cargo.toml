@@ -24,6 +24,7 @@ arc-swap.workspace = true
 slotmap.workspace = true
 tracing.workspace = true
 bytes.workspace = true
+kanal = "0.1.0-pre8"
 tracing-subscriber.workspace = true
 hyperion-proto.workspace = true
 heapless.workspace = true

@@ -1,20 +1,16 @@
 use std::io::IoSlice;
 
-use hyperion_proto::{ArchivedProxyToServerMessage, ProxyToServerMessage};
 use rkyv::util::AlignedVec;
-use tokio::io::AsyncWriteExt;
 use tracing::{trace_span, Instrument};
 
 use crate::util::AsyncWriteVectoredExt;
 
-const THRESHOLD_SEND: usize = 4 * 1024;
-
-pub type ServerSender = tokio::sync::mpsc::Sender<AlignedVec>;
+pub type ServerSender = kanal::AsyncSender<AlignedVec>;
 
 // todo: probably makes sense for caller to encode bytes
 #[must_use]
 pub fn launch_server_writer(mut write: tokio::net::tcp::OwnedWriteHalf) -> ServerSender {
-    let (tx, mut rx) = tokio::sync::mpsc::channel::<AlignedVec>(65_536);
+    let (tx, rx) = kanal::bounded_async::<AlignedVec>(32_768);
 
     tokio::task::Builder::new()
         .name("server_writer")
@@ -26,13 +22,13 @@ pub fn launch_server_writer(mut write: tokio::net::tcp::OwnedWriteHalf) -> Serve
                 // todo: remove allocation is there an easy way to do this?
                 let mut io_slices = Vec::new();
 
-                while let Some(message) = rx.recv().await {
+                while let Ok(message) = rx.recv().await {
                     let len = message.len() as u64;
 
                     lengths.push(len.to_be_bytes());
                     messages.push(message);
 
-                    while let Ok(message) = rx.try_recv() {
+                    while let Ok(Some(message)) = rx.try_recv() {
                         let len = message.len() as u64;
                         lengths.push(len.to_be_bytes());
                         messages.push(message);

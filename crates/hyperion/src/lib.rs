@@ -18,6 +18,7 @@
 #![feature(coroutines)]
 #![feature(array_try_map)]
 #![feature(split_array)]
+#![feature(never_type)]
 
 // todo: deny more and completely fix panics
 // #![deny(

@@ -78,7 +78,7 @@ impl Ord for OrderedBytes {
 
 #[derive(Debug)]
 pub struct PlayerHandle {
-    pub writer: tokio::sync::mpsc::Sender<OrderedBytes>,
+    pub writer: kanal::AsyncSender<OrderedBytes>,
 
     /// Whether the player is allowed to send broadcasts.
     ///

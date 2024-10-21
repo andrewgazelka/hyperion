@@ -76,7 +76,6 @@ impl Module for SyncPositionModule {
                         pitch: ByteAngle::from_degrees(pose.pitch),
                         on_ground: false,
                     };
-                    
                     let chunk_pos = pose.chunk_pos();
 
                     compose

@@ -164,7 +164,7 @@ async fn connect_to_server_and_run_proxy(
 
         let registry = map.pin();
 
-        let (tx, rx) = tokio::sync::mpsc::channel(1024);
+        let (tx, rx) = kanal::bounded_async(1024);
         registry.insert(id_on, PlayerHandle {
             writer: tx,
             can_receive_broadcasts: AtomicBool::new(false),
@@ -247,7 +247,7 @@ impl IngressHandler {
         self.server_read.read_exact(slice).await?;
 
         let result = unsafe { rkyv::access_unchecked::<ArchivedServerToProxyMessage<'_>>(slice) };
-        
+
         self.egress.handle_packet(result);
 
         Ok(())

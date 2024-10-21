@@ -1,8 +1,6 @@
 use byteorder::WriteBytesExt;
-use bytes::BytesMut;
 use flecs_ecs::prelude::*;
 use hyperion_proto::{Flush, ServerToProxyMessage, UpdatePlayerChunkPositions};
-use prost::Message;
 use rkyv::util::AlignedVec;
 use tracing::{error, trace_span};
 use valence_protocol::{packets::play, VarInt};
@@ -32,11 +30,6 @@ pub struct EgressModule;
 impl Module for EgressModule {
     fn module(world: &World) {
         let flush = {
-            #[expect(
-                clippy::unwrap_used,
-                reason = "this is only called once on startup; it should be fine. we mostly care \
-                          about crashing during server execution"
-            )]
             let flush = ServerToProxyMessage::Flush(Flush);
 
             let mut v: AlignedVec = AlignedVec::new();

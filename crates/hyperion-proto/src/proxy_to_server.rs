@@ -1,28 +1,26 @@
-use rkyv::{Archive, Deserialize, Serialize};
+use rkyv::{with::InlineAsBox, Archive, Deserialize, Serialize};
 
 #[derive(Archive, Deserialize, Serialize, Clone, PartialEq, Debug)]
-#[rkyv(derive(Debug))]
-pub struct PlayerPackets {
+pub struct PlayerPackets<'a> {
     pub stream: u64,
-    pub data: Vec<u8>,
+
+    #[rkyv(with = InlineAsBox)]
+    pub data: &'a [u8],
 }
 
 #[derive(Archive, Deserialize, Serialize, Clone, Copy, PartialEq, Debug)]
-#[rkyv(derive(Debug))]
 pub struct PlayerConnect {
     pub stream: u64,
 }
 
 #[derive(Archive, Deserialize, Serialize, Clone, Copy, PartialEq, Debug)]
-#[rkyv(derive(Debug))]
 pub struct PlayerDisconnect {
     pub stream: u64,
 }
 
 #[derive(Archive, Deserialize, Serialize, Clone, PartialEq, Debug)]
-#[rkyv(derive(Debug))]
-pub enum ProxyToServerMessage {
+pub enum ProxyToServerMessage<'a> {
     PlayerConnect(PlayerConnect),
     PlayerDisconnect(PlayerDisconnect),
-    PlayerPackets(PlayerPackets),
+    PlayerPackets(PlayerPackets<'a>),
 }

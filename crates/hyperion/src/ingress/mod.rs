@@ -284,7 +284,7 @@ impl Module for IngressModule {
                 info!("player_connect");
                 let view = world
                     .entity()
-                    .set(NetworkStreamRef::new(connect.stream))
+                    .set(NetworkStreamRef::new(connect))
                     .set(hyperion_inventory::PlayerInventory::default())
                     .set(ConfirmBlockSequences::default())
                     .set(PacketState::Handshake)
@@ -293,13 +293,13 @@ impl Module for IngressModule {
                     .set(PacketDecoder::default())
                     .add::<Player>();
 
-                lookup.insert(connect.stream, view.id());
+                lookup.insert(connect, view.id());
             }
 
             for disconnect in recv.player_disconnect.drain(..) {
                 // will initiate the removal of entity
                 info!("queue pending remove");
-                let Some(id) = lookup.get(&disconnect.stream).copied() else {
+                let Some(id) = lookup.get(&disconnect).copied() else {
                     error!("failed to get id for disconnect stream {disconnect:?}");
                     continue;
                 };

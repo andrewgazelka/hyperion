@@ -19,9 +19,9 @@ use crate::{runtime::AsyncRuntime, simulation::EgressComm};
 #[derive(Default)]
 pub struct ReceiveStateInner {
     /// All players who have recently connected to the server.
-    pub player_connect: Vec<PlayerConnect>,
+    pub player_connect: Vec<u64>,
     /// All players who have recently disconnected from the server.
-    pub player_disconnect: Vec<PlayerDisconnect>,
+    pub player_disconnect: Vec<u64>,
     /// A map of stream ids to the corresponding [`BytesMut`] buffers. This represents data from the client to the server.
     pub packets: HashMap<u64, BytesMut>,
 }
@@ -114,7 +114,7 @@ async fn inner(
                             let mut reader = ProxyReader::new(read);
 
                             loop {
-                                let message = match reader.next().await {
+                                let buffer = match reader.next_server_packet_buffer().await {
                                     Ok(message) => message,
                                     Err(err) => {
                                         error!("failed to process packet {err:?}");
@@ -122,20 +122,33 @@ async fn inner(
                                     }
                                 };
 
-                                match message {
-                                    ProxyToServerMessage::PlayerConnect(message) => {
-                                        shared.lock().player_connect.push(message);
+                                let result = unsafe {
+                                    rkyv::access_unchecked::<ArchivedProxyToServerMessage<'_>>(
+                                        &buffer,
+                                    )
+                                };
+
+                                match result {
+                                    ArchivedProxyToServerMessage::PlayerConnect(message) => {
+                                        let Ok(stream) =
+                                            rkyv::deserialize::<u64, !>(&message.stream);
+
+                                        shared.lock().player_connect.push(stream);
                                     }
-                                    ProxyToServerMessage::PlayerDisconnect(message) => {
-                                        shared.lock().player_disconnect.push(message);
+                                    ArchivedProxyToServerMessage::PlayerDisconnect(message) => {
+                                        let Ok(stream) =
+                                            rkyv::deserialize::<u64, !>(&message.stream);
+                                        shared.lock().player_disconnect.push(stream);
                                     }
-                                    ProxyToServerMessage::PlayerPackets(message) => {
+                                    ArchivedProxyToServerMessage::PlayerPackets(message) => {
+                                        let Ok(stream) =
+                                            rkyv::deserialize::<u64, !>(&message.stream);
+
                                         shared
                                             .lock()
                                             .packets
-                                            .entry(message.stream)
+                                            .entry(stream)
                                             .or_default()
-                                            // todo: remove extra allocations
                                             .extend_from_slice(&message.data);
                                     }
                                 }
@@ -185,13 +198,8 @@ impl ProxyReader {
         }
     }
 
-    pub async fn next(&mut self) -> anyhow::Result<ProxyToServerMessage> {
-        let message = self.next_server_packet().await?;
-        Ok(message)
-    }
-
     // #[instrument]
-    async fn next_server_packet(&mut self) -> anyhow::Result<ProxyToServerMessage> {
+    pub async fn next_server_packet_buffer(&mut self) -> anyhow::Result<BytesMut> {
         let len = loop {
             if !self.buffer.is_empty() {
                 let mut cursor = Cursor::new(&self.buffer);
@@ -217,11 +225,6 @@ impl ProxyReader {
 
         let buffer = self.buffer.split_to(len);
 
-        let result = unsafe { rkyv::access_unchecked::<ArchivedProxyToServerMessage>(&buffer) };
-        
-        let result =
-            rkyv::deserialize::<ProxyToServerMessage, rkyv::rancor::Error>(result).unwrap();
-
-        Ok(result)
+        Ok(buffer)
     }
 }
