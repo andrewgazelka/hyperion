@@ -37,14 +37,6 @@ pub struct BroadcastLocal<'a> {
 
 #[derive(Archive, Deserialize, Serialize, Clone, PartialEq)]
 // #[rkyv(derive(Debug))]
-pub struct Multicast<'a> {
-    pub order: u32,
-    #[rkyv(with = InlineAsBox)]
-    pub data: &'a [u8],
-}
-
-#[derive(Archive, Deserialize, Serialize, Clone, PartialEq)]
-// #[rkyv(derive(Debug))]
 pub struct Unicast<'a> {
     pub stream: u64,
     pub order: u32,
@@ -63,7 +55,6 @@ pub enum ServerToProxyMessage<'a> {
     UpdatePlayerChunkPositions(UpdatePlayerChunkPositions),
     BroadcastGlobal(BroadcastGlobal<'a>),
     BroadcastLocal(BroadcastLocal<'a>),
-    Multicast(Multicast<'a>),
     Unicast(Unicast<'a>),
     SetReceiveBroadcasts(SetReceiveBroadcasts),
     Flush(Flush),

@@ -14,7 +14,6 @@ use flecs_ecs::{core::World, macros::Component};
 use glam::IVec2;
 use hyperion_proto::{ChunkPosition, ServerToProxyMessage};
 use libdeflater::CompressionLvl;
-use prost::Message;
 use rkyv::util::AlignedVec;
 
 use crate::{
@@ -208,26 +207,6 @@ impl Compose {
         .send(world)
     }
 
-    /// Send a packet to multiple players.
-    pub fn multicast<P>(
-        &self,
-        packet: &P,
-        ids: &[NetworkStreamRef],
-        system_id: SystemId,
-        world: &World,
-    ) -> anyhow::Result<()>
-    where
-        P: valence_protocol::Packet + valence_protocol::Encode,
-    {
-        Multicast {
-            packet,
-            compose: self,
-            system_id,
-            ids: unsafe { core::slice::from_raw_parts(ids.as_ptr().cast(), ids.len()) },
-        }
-        .send(world)
-    }
-
     #[must_use]
     pub(crate) fn encoder(&self) -> PacketEncoder {
         let threshold = self.global.shared.compression_threshold;
@@ -299,28 +278,6 @@ where
             self.stream_id,
             self.compose,
             self.compress,
-            self.system_id,
-            world,
-        )
-    }
-}
-
-struct Multicast<'a, 'b, P> {
-    packet: &'b P,
-    ids: &'a [u64],
-    compose: &'a Compose,
-    system_id: SystemId,
-}
-
-impl<P> Multicast<'_, '_, P>
-where
-    P: valence_protocol::Packet + valence_protocol::Encode,
-{
-    fn send(&self, world: &World) -> anyhow::Result<()> {
-        self.compose.io_buf.multicast_private(
-            self.packet,
-            self.ids,
-            self.compose,
             self.system_id,
             world,
         )
@@ -479,22 +436,6 @@ impl IoBuf {
         Ok(())
     }
 
-    fn multicast_private<P>(
-        &self,
-        packet: &P,
-        ids: &[u64],
-        compose: &Compose,
-        system_id: SystemId,
-        world: &World,
-    ) -> anyhow::Result<()>
-    where
-        P: valence_protocol::Packet + valence_protocol::Encode,
-    {
-        let bytes = self.encode_packet(packet, compose, world)?;
-        self.multicast_raw(&bytes, ids, system_id, world);
-        Ok(())
-    }
-
     fn broadcast_local_raw(
         &self,
         data: &[u8],
@@ -589,16 +530,6 @@ impl IoBuf {
         let new_len = buffer.len();
         let packet_len = u64::try_from(new_len - len - size_of::<u64>()).unwrap();
         buffer[len..(len + 8)].copy_from_slice(&packet_len.to_be_bytes());
-    }
-
-    pub(crate) fn multicast_raw(
-        &self,
-        data: &[u8],
-        streams: &[u64],
-        system_id: SystemId,
-        world: &World,
-    ) {
-        unimplemented!()
     }
 
     pub(crate) fn set_receive_broadcasts(&self, stream: NetworkStreamRef, world: &World) {

@@ -1,7 +1,6 @@
 use std::borrow::Cow;
 
 use anyhow::Context;
-use base64::{engine::general_purpose, Engine};
 use colored::Colorize;
 use flecs_ecs::prelude::*;
 use hyperion_utils::EntityExt;

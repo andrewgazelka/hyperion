@@ -17,13 +17,9 @@
     clippy::future_not_send
 )]
 
-use std::{
-    fmt::Debug,
-    io::Cursor,
-    sync::{atomic::AtomicBool, Arc},
-};
+use std::{fmt::Debug, sync::atomic::AtomicBool};
 
-use anyhow::{bail, Context};
+use anyhow::Context;
 use hyperion_proto::ArchivedServerToProxyMessage;
 use rustc_hash::FxBuildHasher;
 use tokio::{
@@ -108,7 +104,7 @@ async fn connect_to_server_and_run_proxy(
     let map = papaya::HashMap::default();
     let map: &'static papaya::HashMap<u64, PlayerHandle, FxBuildHasher> = Box::leak(Box::new(map));
     let egress = Egress::new(map);
-    let mut egress = BufferedEgress::new(egress);
+    let egress = BufferedEgress::new(egress);
 
     let mut handler = IngressHandler::new(BufReader::new(server_read), egress);
 

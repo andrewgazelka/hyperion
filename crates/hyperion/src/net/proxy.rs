@@ -2,14 +2,10 @@
 
 use std::{collections::HashMap, io::Cursor, net::SocketAddr, process::Command, sync::Arc};
 
-use anyhow::bail;
 use bytes::{Buf, BytesMut};
 use flecs_ecs::macros::Component;
-use hyperion_proto::{
-    ArchivedProxyToServerMessage, PlayerConnect, PlayerDisconnect, ProxyToServerMessage,
-};
+use hyperion_proto::ArchivedProxyToServerMessage;
 use parking_lot::Mutex;
-use prost::{encoding::decode_varint, Message};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tracing::{error, info, warn};
 

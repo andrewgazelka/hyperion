@@ -2,7 +2,7 @@ use std::{ops::Range, sync::Arc};
 
 use bvh::{Bvh, Data, Point};
 use glam::I16Vec2;
-use hyperion_proto::{ArchivedServerToProxyMessage, BroadcastGlobal, UpdatePlayerChunkPositions};
+use hyperion_proto::{ArchivedServerToProxyMessage, BroadcastGlobal};
 use rustc_hash::FxBuildHasher;
 
 use crate::egress::{BroadcastLocalInstruction, Egress};
@@ -149,8 +149,6 @@ pub struct BufferedEgress {
 
     /// Manages player-specific exclusions.
     exclusion_manager: GlobalExclusionsManager,
-    /// Stores pending chunk position updates.
-    queued_position_update: Option<UpdatePlayerChunkPositions>,
     /// Reference to the underlying egress handler.
     egress: Egress,
     /// Tracks the current broadcast order.
@@ -167,7 +165,6 @@ impl BufferedEgress {
             raw_local_broadcast_data: vec![],
             local_broadcast_buffer: Vec::default(),
             exclusion_manager: GlobalExclusionsManager::default(),
-            queued_position_update: None,
             egress,
             current_broadcast_order: None,
             local_flush_counter: 0,
@@ -225,9 +222,6 @@ impl BufferedEgress {
                     range_start: before_len,
                     range_end: after_len,
                 });
-            }
-            ArchivedServerToProxyMessage::Multicast(_) => {
-                // TODO: Implement handling for these message types
             }
             ArchivedServerToProxyMessage::Unicast(unicast) => {
                 self.egress.handle_unicast(unicast);

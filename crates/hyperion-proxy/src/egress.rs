@@ -1,16 +1,12 @@
-use std::{
-    convert::Infallible,
-    sync::{atomic::Ordering, Arc},
-};
+use std::sync::{atomic::Ordering, Arc};
 
 use bvh::{Aabb, Bvh};
 use bytes::Bytes;
 use glam::I16Vec2;
 use hyperion_proto::{
-    ArchivedMulticast, ArchivedServerToProxyMessage, ArchivedSetReceiveBroadcasts, ArchivedUnicast,
-    ArchivedUpdatePlayerChunkPositions, ChunkPosition,
+    ArchivedSetReceiveBroadcasts, ArchivedUnicast, ArchivedUpdatePlayerChunkPositions,
+    ChunkPosition,
 };
-use rkyv::Deserialize;
 use rustc_hash::FxBuildHasher;
 use tracing::{debug, error, instrument, warn};
 
@@ -28,7 +24,7 @@ pub struct Egress {
 
 pub struct BroadcastLocalInstruction {
     pub order: u32,
-    pub bvh: Arc<Bvh<bytes::Bytes>>,
+    pub bvh: Arc<Bvh<Bytes>>,
 }
 
 impl Egress {
@@ -153,25 +149,6 @@ impl Egress {
                 }
             })
             .unwrap();
-    }
-
-    #[instrument(skip(self, pkt))]
-    pub fn handle_multicast(&self, pkt: &ArchivedMulticast<'_>) {
-        unimplemented!()
-        // let players = self.player_registry.pin_owned();
-        // let data = pkt.data;
-        //
-        //
-        // tokio::spawn(async move {
-        //     let players = pkt.stream.iter().filter_map(|id| players.get(id));
-        //     for player in players {
-        //         let to_send = OrderedBytes::no_order(data.clone());
-        //         // todo: handle error; kick player if cannot send (buffer full)
-        //         if let Err(e) = player.writer.try_send(to_send) {
-        //             debug!("Failed to send data to player: {:?}", e);
-        //         }
-        //     }
-        // });
     }
 
     // #[instrument(skip(self, pkt))]

@@ -46,7 +46,6 @@ no_denormals.workspace = true
 once_cell.workspace = true
 ouroboros.workspace = true
 parking_lot.workspace = true
-prost.workspace = true
 rayon.workspace = true
 reqwest = { workspace = true, features = ["blocking"] }
 roaring = { workspace = true, features = ["simd"] }

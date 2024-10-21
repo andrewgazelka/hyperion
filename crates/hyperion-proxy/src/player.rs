@@ -27,7 +27,7 @@ pub fn initiate_player_connection(
     socket: TcpStream,
     mut shutdown_signal: tokio::sync::watch::Receiver<bool>,
     player_id: u64,
-    mut incoming_packet_receiver: kanal::AsyncReceiver<OrderedBytes>,
+    incoming_packet_receiver: kanal::AsyncReceiver<OrderedBytes>,
     server_sender: ServerSender,
 ) -> JoinHandle<()> {
     let (mut socket_reader, socket_writer) = socket.into_split();

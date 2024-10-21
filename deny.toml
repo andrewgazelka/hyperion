@@ -223,6 +223,7 @@ skip = [
     "clap",
     "itertools",
     "miniz_oxide",
+    "rustc-hash",
 
     #{ crate = "ansi_term@0.11.0", reason = "you can specify a reason why it can't be updated/removed" },
 ]
