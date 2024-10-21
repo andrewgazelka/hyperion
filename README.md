@@ -25,6 +25,7 @@ Note: performance has improved since this video was recorded.
 | 10      | 0.30           | 10.3           | 0.74                      |
 | 100     | 0.46           | 10.7           | 0.76                      |
 | 1000    | 0.40           | 15.3           | 1.09                      |
+| 5000    | 1.42           | 35.6           | 2.54                      |
 
 **Test Environment:**
 
