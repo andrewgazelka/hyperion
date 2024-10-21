@@ -25,17 +25,15 @@ use std::{
 use anyhow::{bail, Context};
 use hyperion_proto::{ServerToProxy, ServerToProxyMessage};
 use prost::{encoding::decode_varint, Message};
+use rustc_hash::FxBuildHasher;
 use tokio::{
     io::{AsyncReadExt, BufReader},
     net::{TcpListener, TcpStream, ToSocketAddrs},
 };
-use tracing::{debug, error, instrument, trace, trace_span, Instrument};
+use tracing::{debug, error, info_span, instrument, trace, Instrument};
 
 use crate::{
-    cache::BufferedEgress,
-    data::{PlayerHandle, PlayerRegistry},
-    egress::Egress,
-    player::initiate_player_connection,
+    cache::BufferedEgress, data::PlayerHandle, egress::Egress, player::initiate_player_connection,
     server_sender::launch_server_writer,
 };
 
@@ -68,14 +66,17 @@ pub async fn run_proxy(
 
     let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
 
-    tokio::spawn({
-        let shutdown_tx = shutdown_tx.clone();
-        async move {
-            tokio::signal::ctrl_c().await.unwrap();
-            println!("ctrl-c received, shutting down");
-            shutdown_tx.send(true).unwrap();
-        }
-    });
+    tokio::task::Builder::new()
+        .name("ctrl-c")
+        .spawn({
+            let shutdown_tx = shutdown_tx.clone();
+            async move {
+                tokio::signal::ctrl_c().await.unwrap();
+                println!("ctrl-c received, shutting down");
+                shutdown_tx.send(true).unwrap();
+            }
+        })
+        .unwrap();
 
     loop {
         let mut shutdown_rx2 = shutdown_rx.clone();
@@ -104,14 +105,17 @@ async fn connect_to_server_and_run_proxy(
     let (server_read, server_write) = server_socket.into_split();
     let server_sender = launch_server_writer(server_write);
     let mut reader = ServerReader::new(BufReader::new(server_read));
-    let player_registry = Arc::new(PlayerRegistry::default());
 
-    tokio::spawn({
-        let player_registry = player_registry.clone();
+    let map = papaya::HashMap::default();
+    let map: &'static papaya::HashMap<u64, PlayerHandle, FxBuildHasher> = Box::leak(Box::new(map));
+
+    tokio::task::Builder::new()
+        .name("s2prox")
+        .spawn({
         let mut shutdown_rx = shutdown_rx.clone();
 
         async move {
-            let egress = Egress::new(player_registry);
+            let egress = Egress::new(map);
             let egress = Arc::new(egress);
             let mut egress = BufferedEgress::new(egress);
 
@@ -141,8 +145,10 @@ async fn connect_to_server_and_run_proxy(
 
             shutdown_tx.send(true).unwrap();
         }
-        .instrument(trace_span!("server_reader_loop"))
-    });
+        .instrument(info_span!("server_reader_loop"))
+    }).unwrap();
+
+    let mut id_on = 0;
 
     loop {
         let mut shutdown_rx = shutdown_rx.clone();
@@ -156,22 +162,27 @@ async fn connect_to_server_and_run_proxy(
             }
         };
 
+        let registry = map.pin();
+
         let (tx, rx) = tokio::sync::mpsc::channel(1024);
-        let id = player_registry.write().unwrap().insert(PlayerHandle {
+        registry.insert(id_on, PlayerHandle {
             writer: tx,
             can_receive_broadcasts: AtomicBool::new(false),
         });
 
-        debug!("got player with id {id:?}");
+        // todo: some SlotMap like thing
+        debug!("got player with id {id_on:?}");
 
         initiate_player_connection(
             socket,
             shutdown_rx.clone(),
-            id,
+            id_on,
             rx,
             server_sender.clone(),
-            player_registry.clone(),
+            // player_registry.clone(),
         );
+
+        id_on += 1;
     }
 }
 
@@ -195,7 +206,7 @@ impl ServerReader {
         }
     }
 
-    #[instrument(level = "trace")]
+    // #[instrument(level = "info", skip_all, name = "ServerReader::next")]
     pub async fn next(&mut self) -> anyhow::Result<ServerToProxyMessage> {
         let len = self.read_varint().await?;
 

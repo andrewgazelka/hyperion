@@ -32,7 +32,13 @@ impl RegionManager {
         let root = save.join("region");
         let (sender, receiver) = mpsc::channel(100);
 
-        runtime.spawn(RegionManagerTask::new(root.clone(), receiver).run());
+        tokio::task::Builder::new()
+            .name("region_manager")
+            .spawn_on(
+                RegionManagerTask::new(root.clone(), receiver).run(),
+                runtime.handle(),
+            )
+            .unwrap();
 
         Ok(Self { root, sender })
     }

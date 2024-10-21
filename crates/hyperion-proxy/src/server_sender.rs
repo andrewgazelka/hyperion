@@ -12,30 +12,33 @@ pub type ServerSender = tokio::sync::mpsc::Sender<ProxyToServerMessage>;
 pub fn launch_server_writer(mut write: tokio::net::tcp::OwnedWriteHalf) -> ServerSender {
     let (tx, mut rx) = tokio::sync::mpsc::channel(65_536);
 
-    tokio::spawn(
-        async move {
-            let mut bytes = Vec::with_capacity(8 * 1024);
-            while let Some(message) = rx.recv().await {
-                write_message(&mut bytes, message);
+    tokio::task::Builder::new()
+        .name("server_writer")
+        .spawn(
+            async move {
+                let mut bytes = Vec::with_capacity(8 * 1024);
+                while let Some(message) = rx.recv().await {
+                    write_message(&mut bytes, message);
 
-                loop {
-                    if bytes.len() >= THRESHOLD_SEND {
-                        break;
+                    loop {
+                        if bytes.len() >= THRESHOLD_SEND {
+                            break;
+                        }
+
+                        let Ok(message) = rx.try_recv() else {
+                            break;
+                        };
+
+                        write_message(&mut bytes, message);
                     }
 
-                    let Ok(message) = rx.try_recv() else {
-                        break;
-                    };
-
-                    write_message(&mut bytes, message);
+                    write.write_all(&bytes).await.unwrap();
+                    bytes.clear();
                 }
-
-                write.write_all(&bytes).await.unwrap();
-                bytes.clear();
             }
-        }
-        .instrument(trace_span!("server_writer_loop")),
-    );
+            .instrument(trace_span!("server_writer_loop")),
+        )
+        .unwrap();
 
     tx
 }

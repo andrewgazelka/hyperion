@@ -123,26 +123,30 @@ fn process_login(
 
     let skins = comms.skins_tx.clone();
     let id = entity.id();
-    tasks.spawn(
-        #[expect(clippy::unwrap_used, reason = "we are panicking in a spawned task")]
-        async move {
-            let mojang = MojangClient::default();
 
-            let skin = match PlayerSkin::from_uuid(uuid, &mojang, &skins_collection).await {
-                Ok(Some(skin)) => skin,
-                Err(e) => {
-                    error!("failed to get skin {e}. Using empty skin");
-                    PlayerSkin::EMPTY
-                }
-                Ok(None) => {
-                    error!("failed to get skin. Using empty skin");
-                    PlayerSkin::EMPTY
-                }
-            };
+    tokio::task::Builder::new()
+        .name("player_join")
+        .spawn_on(
+            async move {
+                let mojang = MojangClient::default();
 
-            skins.send((id, skin)).unwrap();
-        },
-    );
+                let skin = match PlayerSkin::from_uuid(uuid, &mojang, &skins_collection).await {
+                    Ok(Some(skin)) => skin,
+                    Err(e) => {
+                        error!("failed to get skin {e}. Using empty skin");
+                        PlayerSkin::EMPTY
+                    }
+                    Ok(None) => {
+                        error!("failed to get skin. Using empty skin");
+                        PlayerSkin::EMPTY
+                    }
+                };
+
+                skins.send((id, skin)).unwrap();
+            },
+            tasks.handle(),
+        )
+        .unwrap();
 
     let pkt = login::LoginSuccessS2c {
         uuid,

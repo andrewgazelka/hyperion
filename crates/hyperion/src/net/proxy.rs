@@ -75,72 +75,81 @@ async fn inner(
         Err(e) => panic!("Failed to bind to address {socket}: {e}"),
     };
 
-    tokio::spawn(
-        async move {
-            loop {
-                let (socket, _) = listener.accept().await.unwrap();
+    tokio::task::Builder::new()
+        .name("proxy_listener")
+        .spawn(
+            async move {
+                loop {
+                    let (socket, _) = listener.accept().await.unwrap();
 
-                let addr = socket.peer_addr().unwrap();
+                    let addr = socket.peer_addr().unwrap();
 
-                info!("Proxy connection established on {addr}");
+                    info!("Proxy connection established on {addr}");
 
-                let shared = shared.clone();
+                    let shared = shared.clone();
 
-                let (read, mut write) = socket.into_split();
+                    let (read, mut write) = socket.into_split();
 
-                let fst = tokio::spawn(async move {
-                    while let Some(bytes) = server_to_proxy.recv().await {
-                        if write.write_all(&bytes).await.is_err() {
-                            error!("error writing to proxy");
-                            return server_to_proxy;
-                        }
-                    }
-
-                    warn!("proxy shut down");
-
-                    server_to_proxy
-                });
-
-                tokio::spawn(async move {
-                    let mut reader = ProxyReader::new(read);
-
-                    loop {
-                        let message = match reader.next().await {
-                            Ok(message) => message,
-                            Err(err) => {
-                                error!("failed to process packet {err:?}");
-                                return;
+                    let proxy_writer_task = tokio::task::Builder::new()
+                        .name("proxy_writer")
+                        .spawn(async move {
+                            while let Some(bytes) = server_to_proxy.recv().await {
+                                if write.write_all(&bytes).await.is_err() {
+                                    error!("error writing to proxy");
+                                    return server_to_proxy;
+                                }
                             }
-                        };
 
-                        match message {
-                            ProxyToServerMessage::PlayerConnect(message) => {
-                                shared.lock().player_connect.push(message);
-                            }
-                            ProxyToServerMessage::PlayerDisconnect(message) => {
-                                shared.lock().player_disconnect.push(message);
-                            }
-                            ProxyToServerMessage::PlayerPackets(message) => {
-                                shared
-                                    .lock()
-                                    .packets
-                                    .entry(message.stream)
-                                    .or_default()
-                                    // todo: remove extra allocations
-                                    .extend_from_slice(&message.data);
-                            }
-                        }
-                    }
-                });
+                            warn!("proxy shut down");
 
-                // todo: handle player disconnects on proxy shut down
-                // Ideally, we should design for there being multiple proxies,
-                // and all proxies should store all the players on them.
-                // Then we can disconnect all those players related to that proxy.
-                server_to_proxy = fst.await.unwrap();
-            }
-        }, // .instrument(info_span!("proxy reader")),
-    );
+                            server_to_proxy
+                        })
+                        .unwrap();
+
+                    tokio::task::Builder::new()
+                        .name("proxy_reader")
+                        .spawn(async move {
+                            let mut reader = ProxyReader::new(read);
+
+                            loop {
+                                let message = match reader.next().await {
+                                    Ok(message) => message,
+                                    Err(err) => {
+                                        error!("failed to process packet {err:?}");
+                                        return;
+                                    }
+                                };
+
+                                match message {
+                                    ProxyToServerMessage::PlayerConnect(message) => {
+                                        shared.lock().player_connect.push(message);
+                                    }
+                                    ProxyToServerMessage::PlayerDisconnect(message) => {
+                                        shared.lock().player_disconnect.push(message);
+                                    }
+                                    ProxyToServerMessage::PlayerPackets(message) => {
+                                        shared
+                                            .lock()
+                                            .packets
+                                            .entry(message.stream)
+                                            .or_default()
+                                            // todo: remove extra allocations
+                                            .extend_from_slice(&message.data);
+                                    }
+                                }
+                            }
+                        })
+                        .unwrap();
+
+                    // todo: handle player disconnects on proxy shut down
+                    // Ideally, we should design for there being multiple proxies,
+                    // and all proxies should store all the players on them.
+                    // Then we can disconnect all those players related to that proxy.
+                    server_to_proxy = proxy_writer_task.await.unwrap();
+                }
+            }, // .instrument(info_span!("proxy reader")),
+        )
+        .unwrap();
 }
 
 /// A wrapper around [`ReceiveStateInner`]

@@ -1,4 +1,4 @@
-use std::sync::{atomic::AtomicBool, Arc, RwLock};
+use std::sync::{atomic::AtomicBool, Arc};
 
 use bytes::Bytes;
 use slotmap::{new_key_type, KeyData};
@@ -88,5 +88,3 @@ pub struct PlayerHandle {
     /// state and play IDs.
     pub can_receive_broadcasts: AtomicBool,
 }
-
-pub type PlayerRegistry = RwLock<slotmap::SlotMap<PlayerId, PlayerHandle>>;

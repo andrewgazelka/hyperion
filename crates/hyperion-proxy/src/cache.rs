@@ -4,13 +4,10 @@ use bvh::{Bvh, Data, Point};
 use bytes::BytesMut;
 use glam::I16Vec2;
 use hyperion_proto::{BroadcastGlobal, ServerToProxyMessage, UpdatePlayerChunkPositions};
-use slotmap::{KeyData, SecondaryMap};
+use rustc_hash::FxBuildHasher;
 use tracing::error;
 
-use crate::{
-    data::PlayerId,
-    egress::{BroadcastLocalInstruction, Egress},
-};
+use crate::egress::{BroadcastLocalInstruction, Egress};
 
 /// Represents a node in the exclusion list, containing information about the previous node
 /// and the range of the exclusion.
@@ -38,14 +35,14 @@ pub struct GlobalExclusionsManager {
     /// List of exclusion nodes.
     pub nodes: Vec<ExclusionNode>,
     /// Maps player IDs to their last exclusion node index.
-    pub player_to_last_node: SecondaryMap<PlayerId, u32>,
+    pub player_to_last_node: std::collections::HashMap<u64, u32, FxBuildHasher>,
 }
 
 impl Default for GlobalExclusionsManager {
     fn default() -> Self {
         Self {
             nodes: vec![ExclusionNode::PLACEHOLDER],
-            player_to_last_node: SecondaryMap::new(),
+            player_to_last_node: std::collections::HashMap::default(),
         }
     }
 }
@@ -58,22 +55,19 @@ impl GlobalExclusionsManager {
     }
 
     /// Returns an iterator over the exclusions for a specific player.
-    pub fn exclusions_for_player(
-        &self,
-        player_id: PlayerId,
-    ) -> impl Iterator<Item = Range<usize>> + '_ {
+    pub fn exclusions_for_player(&self, player_id: u64) -> impl Iterator<Item = Range<usize>> + '_ {
         ExclusionIterator::new(self, player_id)
     }
 
     /// Appends a new exclusion range for a player.
-    pub fn append(&mut self, player_id: PlayerId, range: Range<usize>) {
+    pub fn append(&mut self, player_id: u64, range: Range<usize>) {
         let range_start = u32::try_from(range.start).expect("Exclusion start is too large");
         let range_end = u32::try_from(range.end).expect("Exclusion end is too large");
 
         let new_node = ExclusionNode {
             prev_index: self
                 .player_to_last_node
-                .get(player_id)
+                .get(&player_id)
                 .copied()
                 .unwrap_or(0),
             range_start,
@@ -93,10 +87,10 @@ struct ExclusionIterator<'a> {
 }
 
 impl<'a> ExclusionIterator<'a> {
-    fn new(exclusions: &'a GlobalExclusionsManager, player_id: PlayerId) -> Self {
+    fn new(exclusions: &'a GlobalExclusionsManager, player_id: u64) -> Self {
         let start_index = exclusions
             .player_to_last_node
-            .get(player_id)
+            .get(&player_id)
             .copied()
             .unwrap_or_default();
 
@@ -204,27 +198,14 @@ impl BufferedEgress {
                 if packet.exclude != 0 {
                     // we need to exclude a player
                     let new_len = self.global_broadcast_buffer.len();
-                    let key = KeyData::from_ffi(packet.exclude);
-                    let player_id = PlayerId::from(key);
                     self.exclusion_manager
-                        .append(player_id, current_len..new_len);
+                        .append(packet.exclude, current_len..new_len);
                 }
 
                 // TODO: Consider implementing auto-flush based on buffer size
                 // to optimize cache usage.
             }
             ServerToProxyMessage::BroadcastLocal(packet) => {
-                // if let Some(order) = self.current_broadcast_order
-                //     && order != packet.order
-                // {
-                //     // send the current broadcasts to all players
-                //     self.flush_broadcast(order);
-                //     self.local_flush_counter += 1;
-                // }
-                //
-                //
-                // self.current_broadcast_order = Some(packet.order);
-                //
                 let Some(center) = packet.center else {
                     error!("center is required");
                     return;
@@ -271,16 +252,25 @@ impl BufferedEgress {
                     return;
                 }
 
-                let bvh = Bvh::build(local_broadcast_buffer, &self.raw_local_broadcast_data);
+                let egress = self.egress.clone();
 
-                let bvh = bvh.into_bytes();
+                let raw_local_broadcast_data = core::mem::take(&mut self.raw_local_broadcast_data);
 
-                let instruction = BroadcastLocalInstruction {
-                    order: 0,
-                    bvh: Arc::new(bvh),
-                };
+                tokio::task::Builder::new()
+                    .name("bvh")
+                    .spawn(async move {
+                        let bvh = Bvh::build(local_broadcast_buffer, &raw_local_broadcast_data);
 
-                self.egress.clone().handle_broadcast_local(instruction);
+                        let bvh = bvh.into_bytes();
+
+                        let instruction = BroadcastLocalInstruction {
+                            order: 0,
+                            bvh: Arc::new(bvh),
+                        };
+
+                        egress.clone().handle_broadcast_local(instruction);
+                    })
+                    .unwrap();
             }
         }
     }
