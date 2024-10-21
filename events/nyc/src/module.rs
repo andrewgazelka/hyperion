@@ -4,4 +4,5 @@ pub mod block;
 pub mod command;
 pub mod level;
 pub mod regeneration;
+pub mod spawn;
 pub mod stats;

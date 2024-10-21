@@ -198,7 +198,7 @@ impl Module for SyncChunksModule {
                             GetChunk::Loaded(chunk) => {
                                 compose
                                     .io_buf()
-                                    .unicast_raw(chunk.base_packet_bytes.clone(), stream_id, system_id, &world);
+                                    .unicast_raw(&chunk.base_packet_bytes, stream_id, system_id, &world);
 
                                 for packet in chunk.original_delta_packets() {
                                     if let Err(e) = compose.unicast(packet, stream_id, system_id, &world) {

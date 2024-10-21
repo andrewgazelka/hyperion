@@ -24,7 +24,7 @@ enumset.workspace = true
 fastrand.workspace = true
 flate2 = { workspace = true, features = ["zlib-ng"] }
 flecs_ecs.workspace = true
-fxhash.workspace = true
+rustc-hash.workspace = true
 glam = { workspace = true, features = ["serde"] }
 heapless.workspace = true
 heed.workspace = true
@@ -46,7 +46,6 @@ no_denormals.workspace = true
 once_cell.workspace = true
 ouroboros.workspace = true
 parking_lot.workspace = true
-prost.workspace = true
 rayon.workspace = true
 reqwest = { workspace = true, features = ["blocking"] }
 roaring = { workspace = true, features = ["simd"] }
@@ -55,9 +54,10 @@ serde_json.workspace = true
 sha2.workspace = true
 tar.workspace = true
 thiserror.workspace = true
-tokio = { workspace = true, features = ["full"] }
+tokio = { workspace = true, features = ["full", "tracing"] }
 toml.workspace = true
 tracing = { workspace = true }
+rkyv = "0.8.8"
 uuid = { workspace = true, features = ["v3"] }
 valence_anvil.workspace = true
 valence_generated.workspace = true

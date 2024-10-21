@@ -7,13 +7,12 @@ readme = "README.md"
 publish = false
 
 [dependencies]
-prost.workspace = true
+rkyv = { version = "0.8.8" }
 
 [lints]
 workspace = true
 
 [build-dependencies]
-prost-build.workspace = true
 
 [package.metadata.cargo-machete]
 ignored = ["prost"]

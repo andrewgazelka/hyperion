@@ -1,53 +1,61 @@
-include!(concat!(env!("OUT_DIR"), "/server_to_proxy.rs"));
+use rkyv::{with::InlineAsBox, Archive, Deserialize, Serialize};
 
-impl From<UpdatePlayerChunkPositions> for ServerToProxyMessage {
-    fn from(message: UpdatePlayerChunkPositions) -> Self {
-        Self::UpdatePlayerChunkPositions(message)
-    }
+use crate::ChunkPosition;
+
+#[derive(Archive, Deserialize, Serialize, Clone, PartialEq)]
+#[rkyv(derive(Debug))]
+pub struct UpdatePlayerChunkPositions {
+    pub stream: Vec<u64>,
+    pub positions: Vec<ChunkPosition>,
 }
 
-impl From<BroadcastGlobal> for ServerToProxyMessage {
-    fn from(message: BroadcastGlobal) -> Self {
-        Self::BroadcastGlobal(message)
-    }
+#[derive(Archive, Deserialize, Serialize, Clone, Copy, PartialEq)]
+#[rkyv(derive(Debug))]
+pub struct SetReceiveBroadcasts {
+    pub stream: u64,
 }
 
-impl From<BroadcastLocal> for ServerToProxyMessage {
-    fn from(message: BroadcastLocal) -> Self {
-        Self::BroadcastLocal(message)
-    }
+#[derive(Archive, Deserialize, Serialize, Clone, PartialEq)]
+pub struct BroadcastGlobal<'a> {
+    pub exclude: u64,
+    pub order: u32,
+
+    #[rkyv(with = InlineAsBox)]
+    pub data: &'a [u8],
 }
 
-impl From<Multicast> for ServerToProxyMessage {
-    fn from(message: Multicast) -> Self {
-        Self::Multicast(message)
-    }
+#[derive(Archive, Deserialize, Serialize, Clone, PartialEq)]
+// #[rkyv(derive(Debug))]
+pub struct BroadcastLocal<'a> {
+    pub center: ChunkPosition,
+    pub exclude: u64,
+    pub order: u32,
+
+    #[rkyv(with = InlineAsBox)]
+    pub data: &'a [u8],
 }
 
-impl From<Unicast> for ServerToProxyMessage {
-    fn from(message: Unicast) -> Self {
-        Self::Unicast(message)
-    }
+#[derive(Archive, Deserialize, Serialize, Clone, PartialEq)]
+// #[rkyv(derive(Debug))]
+pub struct Unicast<'a> {
+    pub stream: u64,
+    pub order: u32,
+
+    #[rkyv(with = InlineAsBox)]
+    pub data: &'a [u8],
 }
 
-impl From<SetReceiveBroadcasts> for ServerToProxyMessage {
-    fn from(message: SetReceiveBroadcasts) -> Self {
-        Self::SetReceiveBroadcasts(message)
-    }
-}
+#[derive(Archive, Deserialize, Serialize, Clone, Copy, PartialEq)]
+#[rkyv(derive(Debug))]
+pub struct Flush;
 
-impl From<Flush> for ServerToProxyMessage {
-    fn from(message: Flush) -> Self {
-        Self::Flush(message)
-    }
+#[derive(Archive, Deserialize, Serialize, Clone, PartialEq)]
+// #[rkyv(derive(Debug))]
+pub enum ServerToProxyMessage<'a> {
+    UpdatePlayerChunkPositions(UpdatePlayerChunkPositions),
+    BroadcastGlobal(BroadcastGlobal<'a>),
+    BroadcastLocal(BroadcastLocal<'a>),
+    Unicast(Unicast<'a>),
+    SetReceiveBroadcasts(SetReceiveBroadcasts),
+    Flush(Flush),
 }
-
-impl<T: Into<ServerToProxyMessage>> From<T> for ServerToProxy {
-    fn from(message: T) -> Self {
-        Self {
-            server_to_proxy_message: Some(message.into()),
-        }
-    }
-}
-
-pub use server_to_proxy::ServerToProxyMessage;

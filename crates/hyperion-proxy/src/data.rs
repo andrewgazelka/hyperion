@@ -1,9 +1,9 @@
-use std::sync::{atomic::AtomicBool, Arc, RwLock};
+use std::sync::{atomic::AtomicBool, Arc};
 
 use bytes::Bytes;
 use slotmap::{new_key_type, KeyData};
 
-use crate::cache::ExclusionManager;
+use crate::cache::GlobalExclusionsManager;
 
 new_key_type! {
     pub struct PlayerId;
@@ -22,7 +22,7 @@ pub struct OrderedBytes {
     /// todo: handle wrapping around
     pub order: u32,
     pub data: Bytes,
-    pub exclusions: Option<Arc<ExclusionManager>>,
+    pub exclusions: Option<Arc<GlobalExclusionsManager>>,
 }
 
 impl OrderedBytes {
@@ -47,7 +47,7 @@ impl OrderedBytes {
     pub const fn with_exclusions(
         order: u32,
         data: Bytes,
-        exclusions: Arc<ExclusionManager>,
+        exclusions: Arc<GlobalExclusionsManager>,
     ) -> Self {
         Self {
             order,
@@ -78,7 +78,7 @@ impl Ord for OrderedBytes {
 
 #[derive(Debug)]
 pub struct PlayerHandle {
-    pub writer: tokio::sync::mpsc::Sender<OrderedBytes>,
+    pub writer: kanal::AsyncSender<OrderedBytes>,
 
     /// Whether the player is allowed to send broadcasts.
     ///
@@ -88,5 +88,3 @@ pub struct PlayerHandle {
     /// state and play IDs.
     pub can_receive_broadcasts: AtomicBool,
 }
-
-pub type PlayerRegistry = RwLock<slotmap::SlotMap<PlayerId, PlayerHandle>>;

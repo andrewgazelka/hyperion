@@ -1,17 +1,17 @@
 //! Constructs for working with blocks.
 
-use std::{ops::Try, sync::Arc};
+use std::{future::Future, ops::Try, pin::Pin, sync::Arc};
 
 use bytes::Bytes;
 use chunk::LoadedChunk;
 use flecs_ecs::{core::Entity, macros::Component};
-use fxhash::FxBuildHasher;
 use glam::{IVec2, IVec3};
 use indexmap::IndexMap;
 use loader::{launch_manager, LaunchHandle};
 use roaring::RoaringBitmap;
+use rustc_hash::FxBuildHasher;
 use shared::Shared;
-use tracing::instrument;
+use tracing::error;
 use valence_generated::block::BlockState;
 use valence_registry::BiomeRegistry;
 use valence_server::layer::chunk::Chunk;
@@ -104,11 +104,10 @@ impl Blocks {
         &mut self.chunk_cache
     }
 
-    /// get_and_wait can only be called if a chunk has not already been loaded
-    #[instrument(skip_all)]
-    pub unsafe fn get_and_wait(&self, position: IVec2, tasks: &AsyncRuntime) -> Bytes {
+    #[must_use]
+    pub fn get_and_wait(&self, position: IVec2) -> Pin<Box<dyn Future<Output = Bytes> + Send>> {
         if let Some(cached) = self.get_cached(position) {
-            return cached;
+            return Box::pin(core::future::ready(cached));
         }
 
         // get_and_wait is called infrequently, ideally this would be a oneshot channel
@@ -117,14 +116,23 @@ impl Blocks {
         // todo: potential race condition where this is called twice
         self.launch_manager.send(position, tx);
 
-        let result = tasks.block_on(async move { rx.recv().await.unwrap() });
+        let blocks_tx = self.tx_loaded_chunks.clone();
 
-        let bytes = result.base_packet_bytes.clone();
+        let result = async move {
+            let Some(result) = rx.recv().await else {
+                error!("failed to get chunk from cache");
+                return Bytes::new();
+            };
 
-        // forward to the main channel
-        self.tx_loaded_chunks.send(result).unwrap();
+            let bytes = result.base_packet_bytes.clone();
 
-        bytes
+            // forward to the main channel
+            blocks_tx.send(result).unwrap();
+
+            bytes
+        };
+
+        Box::pin(result)
     }
 
     pub fn load_pending(&mut self) {

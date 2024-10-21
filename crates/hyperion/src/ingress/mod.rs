@@ -1,7 +1,6 @@
 use std::borrow::Cow;
 
 use anyhow::Context;
-use base64::{engine::general_purpose, Engine};
 use colored::Colorize;
 use flecs_ecs::prelude::*;
 use hyperion_utils::EntityExt;
@@ -33,7 +32,6 @@ use crate::{
     storage::{Events, GlobalEventHandlers, PlayerJoinServer, SkinHandler},
     system_registry::{SystemId, RECV_DATA, REMOVE_PLAYER_FROM_VISIBILITY},
     util::{mojang::MojangClient, SendableRef, TracingExt},
-    PLAYER_SPAWN_POSITION,
 };
 
 #[derive(Component, Debug)]
@@ -61,10 +59,7 @@ fn process_handshake(
 
     let handshake: packets::handshaking::HandshakeC2s<'_> = packet.decode()?;
 
-    // info!("received handshake: {:?}", handshake);
-
     // todo: check version is correct
-
     match handshake.next_state {
         HandshakeNextState::Status => {
             *login_state = PacketState::Status;
@@ -120,36 +115,37 @@ fn process_login(
 
     decoder.set_compression(global.shared.compression_threshold);
 
-    let pose = Position::player(PLAYER_SPAWN_POSITION);
     let username = Box::from(username);
-
     let uuid = offline_uuid(&username);
-
     let uuid_s = format!("{uuid:?}").dimmed();
     println!("{username} {uuid_s}");
 
     let skins = comms.skins_tx.clone();
     let id = entity.id();
-    tasks.spawn(
-        #[expect(clippy::unwrap_used, reason = "we are panicking in a spawned task")]
-        async move {
-            let mojang = MojangClient::default();
 
-            let skin = match PlayerSkin::from_uuid(uuid, &mojang, &skins_collection).await {
-                Ok(Some(skin)) => skin,
-                Err(e) => {
-                    error!("failed to get skin {e}. Using empty skin");
-                    PlayerSkin::EMPTY
-                }
-                Ok(None) => {
-                    error!("failed to get skin. Using empty skin");
-                    PlayerSkin::EMPTY
-                }
-            };
+    tokio::task::Builder::new()
+        .name("player_join")
+        .spawn_on(
+            async move {
+                let mojang = MojangClient::default();
 
-            skins.send((id, skin)).unwrap();
-        },
-    );
+                let skin = match PlayerSkin::from_uuid(uuid, &mojang, &skins_collection).await {
+                    Ok(Some(skin)) => skin,
+                    Err(e) => {
+                        error!("failed to get skin {e}. Using empty skin");
+                        PlayerSkin::EMPTY
+                    }
+                    Ok(None) => {
+                        error!("failed to get skin. Using empty skin");
+                        PlayerSkin::EMPTY
+                    }
+                };
+
+                skins.send((id, skin)).unwrap();
+            },
+            tasks.handle(),
+        )
+        .unwrap();
 
     let pkt = login::LoginSuccessS2c {
         uuid,
@@ -164,13 +160,11 @@ fn process_login(
     *login_state = PacketState::Play;
 
     entity
-        .set(pose)
         .set(InGameName::from(username))
         .add::<AiTargetable>()
         .set(ImmuneStatus::default())
         .set(Uuid::from(uuid))
         .set(Health::default())
-        .set(Position::player(PLAYER_SPAWN_POSITION))
         .set(ChunkSendQueue::default())
         .set(ChunkPosition::null())
         .set(EntityReaction::default());
@@ -208,10 +202,10 @@ fn process_status(
         packets::status::QueryRequestC2s::ID => {
             let query_request: packets::status::QueryRequestC2s = packet.decode()?;
 
-            let img_bytes = include_bytes!("data/hyperion.png");
+            // let img_bytes = include_bytes!("data/hyperion.png");
 
-            let favicon = general_purpose::STANDARD.encode(img_bytes);
-            let favicon = format!("data:image/png;base64,{favicon}");
+            // let favicon = general_purpose::STANDARD.encode(img_bytes);
+            // let favicon = format!("data:image/png;base64,{favicon}");
 
             let online = compose
                 .global()
@@ -230,7 +224,7 @@ fn process_status(
                     "sample": [],
                 },
                 "description": "Getting 10k Players to PvP at Once on a Minecraft Server to Break the Guinness World Record",
-                "favicon": favicon,
+                // "favicon": favicon,
             });
 
             let json = serde_json::to_string_pretty(&json)?;
@@ -289,7 +283,7 @@ impl Module for IngressModule {
                 info!("player_connect");
                 let view = world
                     .entity()
-                    .set(NetworkStreamRef::new(connect.stream))
+                    .set(NetworkStreamRef::new(connect))
                     .set(hyperion_inventory::PlayerInventory::default())
                     .set(ConfirmBlockSequences::default())
                     .set(PacketState::Handshake)
@@ -298,13 +292,13 @@ impl Module for IngressModule {
                     .set(PacketDecoder::default())
                     .add::<Player>();
 
-                lookup.insert(connect.stream, view.id());
+                lookup.insert(connect, view.id());
             }
 
             for disconnect in recv.player_disconnect.drain(..) {
                 // will initiate the removal of entity
                 info!("queue pending remove");
-                let Some(id) = lookup.get(&disconnect.stream).copied() else {
+                let Some(id) = lookup.get(&disconnect).copied() else {
                     error!("failed to get id for disconnect stream {disconnect:?}");
                     continue;
                 };

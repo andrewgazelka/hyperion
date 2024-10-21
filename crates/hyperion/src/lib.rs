@@ -18,6 +18,7 @@
 #![feature(coroutines)]
 #![feature(array_try_map)]
 #![feature(split_array)]
+#![feature(never_type)]
 
 // todo: deny more and completely fix panics
 // #![deny(
@@ -36,8 +37,6 @@
 
 pub const NUM_THREADS: usize = 8;
 pub const CHUNK_HEIGHT_SPAN: u32 = 384; // 512; // usually 384
-                                        // pub const PLAYER_SPAWN_POSITION: Vec3 = Vec3::new(-8_526_209_f32, 100f32, -6_028_464f32);
-pub const PLAYER_SPAWN_POSITION: Vec3 = Vec3::new(0.0, 100.0, 0.0);
 
 use std::{alloc::Allocator, cell::RefCell, fmt::Debug, io::Write, net::ToSocketAddrs, sync::Arc};
 
@@ -45,7 +44,6 @@ use anyhow::{bail, Context};
 use derive_more::{Deref, DerefMut};
 use egress::EgressModule;
 use flecs_ecs::prelude::*;
-use glam::Vec3;
 use ingress::IngressModule;
 #[cfg(unix)]
 use libc::{getrlimit, setrlimit, RLIMIT_NOFILE};
@@ -168,7 +166,7 @@ impl Hyperion {
         #[cfg(unix)]
         adjust_file_descriptor_limits(32_768).context("failed to set file limits")?;
 
-        let shared = Arc::new(common::Shared {
+        let shared = Arc::new(Shared {
             compression_threshold: CompressionThreshold(256),
             compression_level: CompressionLvl::new(2)
                 .map_err(|_| anyhow::anyhow!("failed to create compression level"))?,

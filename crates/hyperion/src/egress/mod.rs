@@ -1,6 +1,7 @@
+use byteorder::WriteBytesExt;
 use flecs_ecs::prelude::*;
-use hyperion_proto::Flush;
-use prost::Message;
+use hyperion_proto::{Flush, ServerToProxyMessage, UpdatePlayerChunkPositions};
+use rkyv::util::AlignedVec;
 use tracing::{error, trace_span};
 use valence_protocol::{packets::play, VarInt};
 
@@ -17,7 +18,11 @@ use stats::StatsModule;
 use sync_chunks::SyncChunksModule;
 use sync_position::SyncPositionModule;
 
-use crate::{net::NetworkStreamRef, simulation::blocks::Blocks, system_registry::SystemId};
+use crate::{
+    net::NetworkStreamRef,
+    simulation::{blocks::Blocks, ChunkPosition},
+    system_registry::SystemId,
+};
 
 #[derive(Component)]
 pub struct EgressModule;
@@ -25,22 +30,19 @@ pub struct EgressModule;
 impl Module for EgressModule {
     fn module(world: &World) {
         let flush = {
-            let mut data = Vec::new();
+            let flush = ServerToProxyMessage::Flush(Flush);
 
-            #[expect(
-                clippy::unwrap_used,
-                reason = "this is only called once on startup; it should be fine. we mostly care \
-                          about crashing during server execution"
-            )]
-            hyperion_proto::ServerToProxy::from(Flush {})
-                .encode_length_delimited(&mut data)
-                .unwrap();
+            let mut v: AlignedVec = AlignedVec::new();
+            // length
+            v.write_u64::<byteorder::BigEndian>(0).unwrap();
 
-            // We are turning it into a `Box` first because we want to make sure the allocation is as small as possible.
-            // See `Vec::leak` for more information.
-            let data = data.into_boxed_slice();
-            let data = Box::leak(data);
-            bytes::Bytes::from_static(data)
+            rkyv::api::high::to_bytes_in::<_, rkyv::rancor::Error>(&flush, &mut v).unwrap();
+
+            let len = u64::try_from(v.len() - size_of::<u64>()).unwrap();
+            v[0..8].copy_from_slice(&len.to_be_bytes());
+
+            let s = Box::leak(v.into_boxed_slice());
+            bytes::Bytes::from_static(s)
         };
 
         let pipeline = world
@@ -92,6 +94,8 @@ impl Module for EgressModule {
             }
         });
 
+        let player_location_query = world.new_query::<(&NetworkStreamRef, &ChunkPosition)>();
+
         system!(
             "egress",
             world,
@@ -100,19 +104,61 @@ impl Module for EgressModule {
         )
         .kind_id(pipeline)
         .each(move |(compose, egress)| {
-            let span = tracing::trace_span!("egress");
+            let span = trace_span!("egress");
             let _enter = span.enter();
+
+            {
+                let span = trace_span!("chunk_positions");
+                let _enter = span.enter();
+
+                let mut stream = Vec::new();
+                let mut positions = Vec::new();
+
+                player_location_query.each(|(io, pos)| {
+                    stream.push(io.inner());
+
+                    let position = hyperion_proto::ChunkPosition {
+                        x: i16::try_from(pos.0.x).unwrap(),
+                        z: i16::try_from(pos.0.y).unwrap(),
+                    };
+
+                    positions.push(position);
+                });
+
+                let packet = UpdatePlayerChunkPositions { stream, positions };
+
+                let chunk_positions = ServerToProxyMessage::UpdatePlayerChunkPositions(packet);
+
+                let mut v: AlignedVec = AlignedVec::new();
+                // length
+                v.write_u64::<byteorder::BigEndian>(0).unwrap();
+
+                rkyv::api::high::to_bytes_in::<_, rkyv::rancor::Error>(&chunk_positions, &mut v)
+                    .unwrap();
+
+                let len = u64::try_from(v.len() - size_of::<u64>()).unwrap();
+                v[0..8].copy_from_slice(&len.to_be_bytes());
+
+                let v = v.into_boxed_slice();
+                let bytes = bytes::Bytes::from(v);
+
+                if let Err(e) = egress.send(bytes) {
+                    error!("failed to send egress: {e}");
+                }
+            }
+
             let io = compose.io_buf_mut();
             for bytes in io.reset_and_split() {
                 if bytes.is_empty() {
                     continue;
                 }
-                if let Err(e) = egress.send(bytes.freeze()) {
+                if let Err(e) = egress.send(bytes) {
                     error!("failed to send egress: {e}");
                 }
             }
 
             if let Err(e) = egress.send(flush.clone()) {
+                println!("QUEUE FLUSH");
                 error!("failed to send flush: {e}");
             }
         });

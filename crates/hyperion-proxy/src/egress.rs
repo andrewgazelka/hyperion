@@ -1,200 +1,175 @@
 use std::sync::{atomic::Ordering, Arc};
 
-use arc_swap::ArcSwap;
-use bvh::{Aabb, Bvh, Data, Point};
+use bvh::{Aabb, Bvh};
+use bytes::Bytes;
 use glam::I16Vec2;
-use hyperion_proto::ServerToProxyMessage;
-use slotmap::KeyData;
-use tracing::{debug, error, info, instrument, warn};
+use hyperion_proto::{
+    ArchivedSetReceiveBroadcasts, ArchivedUnicast, ArchivedUpdatePlayerChunkPositions,
+    ChunkPosition,
+};
+use rustc_hash::FxBuildHasher;
+use tracing::{debug, error, instrument, warn};
 
 use crate::{
-    cache::ExclusionManager,
-    data::{OrderedBytes, PlayerId, PlayerRegistry},
+    cache::GlobalExclusionsManager,
+    data::{OrderedBytes, PlayerHandle},
 };
 
-#[derive(Default)]
+#[derive(Copy, Clone)]
 pub struct Egress {
-    bvh: ArcSwap<Bvh<u64>>,
-    registry: Arc<PlayerRegistry>,
+    // todo: can we do some type of EntityId and SlotMap
+    player_registry: &'static papaya::HashMap<u64, PlayerHandle, FxBuildHasher>,
+    positions: &'static papaya::HashMap<u64, ChunkPosition, FxBuildHasher>,
+}
+
+pub struct BroadcastLocalInstruction {
+    pub order: u32,
+    pub bvh: Arc<Bvh<Bytes>>,
 }
 
 impl Egress {
     #[must_use]
-    #[instrument]
-    pub fn new(registry: Arc<PlayerRegistry>) -> Self {
+    pub fn new(registry: &'static papaya::HashMap<u64, PlayerHandle, FxBuildHasher>) -> Self {
         Self {
-            bvh: ArcSwap::default(),
-            registry,
-        }
-    }
-
-    pub fn handle_packet(self: &Arc<Self>, packet: ServerToProxyMessage) {
-        match packet {
-            ServerToProxyMessage::UpdatePlayerChunkPositions(pkt) => {
-                self.handle_update_player_chunk_positions(&pkt);
-            }
-            ServerToProxyMessage::BroadcastGlobal(_pkt) => {
-                todo!();
-                // self.handle_broadcast_global(pkt);
-            }
-            ServerToProxyMessage::BroadcastLocal(pkt) => {
-                self.clone().handle_broadcast_local(pkt);
-            }
-            ServerToProxyMessage::Multicast(pkt) => {
-                self.handle_multicast(pkt);
-            }
-            ServerToProxyMessage::Unicast(pkt) => {
-                self.handle_unicast(pkt);
-            }
-            ServerToProxyMessage::SetReceiveBroadcasts(pkt) => {
-                self.handle_set_receive_broadcasts(pkt);
-            }
-            ServerToProxyMessage::Flush(_) => {}
+            player_registry: registry,
+            positions: Box::leak(Box::new(papaya::HashMap::default())),
         }
     }
 
     #[instrument(skip(self, pkt))]
     pub fn handle_update_player_chunk_positions(
-        &self,
-        pkt: &hyperion_proto::UpdatePlayerChunkPositions,
+        &mut self,
+        pkt: &ArchivedUpdatePlayerChunkPositions,
     ) {
-        // todo: handle case where we are getting updates too fast
-        let positions: Vec<_> = (0..pkt.positions.len())
-            .map(|i| PlayerChunkPosRef {
-                parent: pkt,
-                idx: i,
-            })
-            .collect();
+        let positions = self.positions.pin();
+        for (stream, position) in pkt.stream.iter().zip(pkt.positions.iter()) {
+            let Ok(stream) = rkyv::deserialize::<u64, !>(stream);
 
-        let len = positions.len();
-        let bvh = Bvh::build(positions, len);
+            // todo: can I just grab the whole thing as Infallible?
+            let Ok(position_x) = rkyv::deserialize::<_, !>(&position.x);
+            let Ok(position_z) = rkyv::deserialize::<_, !>(&position.z);
 
-        self.bvh.store(Arc::new(bvh));
-        info!("Updated player chunk positions and stored new BVH");
+            let position = ChunkPosition {
+                x: position_x,
+                z: position_z,
+            };
+
+            positions.insert(stream, position);
+        }
     }
 
     #[instrument(skip(self, pkt, exclusions), level = "trace")]
     pub fn handle_broadcast_global(
         &self,
-        pkt: hyperion_proto::BroadcastGlobal,
-        exclusions: ExclusionManager,
+        pkt: hyperion_proto::BroadcastGlobal<'_>,
+        exclusions: GlobalExclusionsManager,
     ) {
+        // todo: why cannot I pin_owned inside the spawn
+        let players = self.player_registry.pin_owned();
         let data = pkt.data;
+        let data = Bytes::copy_from_slice(data);
 
-        let players = self.registry.read().unwrap();
+        tokio::task::Builder::new()
+            .name("broadcast_global")
+            .spawn(async move {
+                let exclusions = Arc::new(exclusions);
 
-        let exclusions = Arc::new(exclusions);
+                // imo it makes sense to read once... it is a fast loop
+                #[allow(clippy::significant_drop_in_scrutinee)]
+                for player in players.values() {
+                    if !player.can_receive_broadcasts.load(Ordering::Relaxed) {
+                        continue;
+                    }
 
-        // imo it makes sense to read once... it is a fast loop
-        #[allow(clippy::significant_drop_in_scrutinee)]
-        for player in players.values() {
-            if !player.can_receive_broadcasts.load(Ordering::Relaxed) {
-                continue;
-            }
+                    let to_send =
+                        OrderedBytes::with_exclusions(pkt.order, data.clone(), exclusions.clone());
 
-            let to_send =
-                OrderedBytes::with_exclusions(pkt.order, data.clone(), exclusions.clone());
-
-            if let Err(e) = player.writer.try_send(to_send) {
-                debug!("Failed to send data to player: {:?}", e);
-            }
-        }
+                    if let Err(e) = player.writer.try_send(to_send) {
+                        debug!("Failed to send data to player: {:?}", e);
+                    }
+                }
+            })
+            .unwrap();
     }
 
     #[instrument(skip_all)]
     pub fn handle_flush(&self) {
-        let players = self.registry.read().unwrap();
+        let players = self.player_registry.pin_owned();
 
-        for player in players.values() {
-            if let Err(e) = player.writer.try_send(OrderedBytes::FLUSH) {
-                warn!("Failed to send data to player: {:?}", e);
-            }
-        }
-    }
-
-    #[instrument(skip(self, pkt))]
-    pub fn handle_broadcast_local(self: Arc<Self>, pkt: hyperion_proto::BroadcastLocal) {
-        let center = pkt.center.expect("center is required");
-        let radius = pkt.taxicab_radius as i16;
-
-        let center = I16Vec2::new(center.x as i16, center.z as i16);
-        let min = center - I16Vec2::splat(radius);
-        let max = center + I16Vec2::splat(radius);
-
-        let aabb = Aabb::new(min, max);
-        let data = pkt.data;
-
-        // we are spawning because it is rather intensive to call get_in_slices on a bvh
-        #[allow(clippy::significant_drop_tightening)]
         tokio::spawn(async move {
-            // todo: ArrayVec might overflow
-            let bvh = self.bvh.load();
-            let player_ids = bvh.get_in_slices(aabb).into_iter().flatten();
-
-            let players = self.registry.read().unwrap();
-            for id in player_ids {
-                let id = KeyData::from_ffi(*id);
-                let id = PlayerId::from(id);
-
-                let Some(player) = players.get(id) else {
-                    // expected to still happen infrequently
-                    debug!("Player not found for id {id:?}");
-                    continue;
-                };
-
-                if !player.can_receive_broadcasts.load(Ordering::Relaxed) {
-                    continue;
-                }
-
-                let to_send = OrderedBytes::no_order(data.clone());
-
-                // todo: handle error; kick player if cannot send (buffer full)
-                if let Err(e) = player.writer.try_send(to_send) {
-                    debug!("Failed to send data to player: {:?}", e);
+            for player in players.values() {
+                if let Err(e) = player.writer.try_send(OrderedBytes::FLUSH) {
+                    warn!("Failed to send data to player: {:?}", e);
                 }
             }
         });
     }
 
-    #[instrument(skip(self, pkt))]
-    pub fn handle_multicast(&self, pkt: hyperion_proto::Multicast) {
-        let players = self.registry.read().unwrap();
-        let data = pkt.data;
+    pub fn handle_broadcast_local(self, instruction: BroadcastLocalInstruction) {
+        let order = instruction.order;
+        let bvh = instruction.bvh;
 
-        // todo: ArrayVec might overflow
-        let players = pkt
-            .stream
-            .iter()
-            .map(|id| KeyData::from_ffi(*id))
-            .map(PlayerId::from)
-            .filter_map(|id| players.get(id));
+        let positions = self.positions.pin_owned();
+        // we are spawning because it is rather intensive to call get_in_slices on a bvh
+        // #[allow(clippy::significant_drop_tightening)]
+        tokio::task::Builder::new()
+            .name("broadcast_local")
+            .spawn(async move {
+                const RADIUS: i16 = 8;
 
-        for player in players {
-            let to_send = OrderedBytes::no_order(data.clone());
-            // todo: handle error; kick player if cannot send (buffer full)
-            if let Err(e) = player.writer.try_send(to_send) {
-                debug!("Failed to send data to player: {:?}", e);
-            }
-        }
+                let players = self.player_registry.pin();
+
+                for (id, &position) in &positions {
+                    let Some(player) = players.get(id) else {
+                        // expected to still happen infrequently
+                        debug!("Player not found for id {id:?}");
+                        continue;
+                    };
+
+                    if !player.can_receive_broadcasts.load(Ordering::Relaxed) {
+                        continue;
+                    }
+
+                    let position = I16Vec2::new(position.x, position.z);
+                    let min = position - I16Vec2::splat(RADIUS);
+                    let max = position + I16Vec2::splat(RADIUS);
+
+                    let aabb = Aabb::new(min, max);
+                    let byte_slices = bvh.get_in_slices_bytes(aabb);
+
+                    for data in byte_slices {
+                        if let Err(e) = player.writer.try_send(OrderedBytes {
+                            order,
+                            data,
+                            exclusions: None,
+                        }) {
+                            debug!("Failed to send data to player: {:?}", e);
+                        }
+                    }
+                }
+            })
+            .unwrap();
     }
 
     // #[instrument(skip(self, pkt))]
-    pub fn handle_unicast(&self, pkt: hyperion_proto::Unicast) {
-        let data = pkt.data;
+    pub fn handle_unicast(&self, pkt: &ArchivedUnicast<'_>) {
+        let data = &pkt.data;
+        let data = data.to_vec();
+        let data = bytes::Bytes::from(data);
+
+        let Ok(order) = rkyv::deserialize::<u32, !>(&pkt.order);
 
         let ordered = OrderedBytes {
-            order: pkt.order,
+            order,
             data,
             exclusions: None,
         };
 
-        let id = pkt.stream;
+        let Ok(id) = rkyv::deserialize::<u64, !>(&pkt.stream);
 
-        let id = KeyData::from_ffi(id);
-        let id = PlayerId::from(id);
+        let players = self.player_registry.pin();
 
-        let players = self.registry.read().unwrap();
-        let Some(player) = players.get(id) else {
+        let Some(player) = players.get(&id) else {
             // expected to still happen infrequently
             debug!("Player not found for id {id:?}");
             return;
@@ -208,40 +183,16 @@ impl Egress {
         drop(players);
     }
 
-    pub fn handle_set_receive_broadcasts(&self, pkt: hyperion_proto::SetReceiveBroadcasts) {
-        let registry = self.registry.clone();
-        let players = registry.read().unwrap();
-        let stream = pkt.stream;
-        let stream = KeyData::from_ffi(stream);
-        let stream = PlayerId::from(stream);
+    pub fn handle_set_receive_broadcasts(&self, pkt: &ArchivedSetReceiveBroadcasts) {
+        let player_registry = self.player_registry;
+        let players = player_registry.pin();
+        let Ok(stream) = rkyv::deserialize::<u64, !>(&pkt.stream);
 
-        let Some(player) = players.get(stream) else {
-            drop(players);
+        let Some(player) = players.get(&stream) else {
             error!("Player not found for stream {stream:?}");
             return;
         };
 
         player.can_receive_broadcasts.store(true, Ordering::Relaxed);
-    }
-}
-
-struct PlayerChunkPosRef<'a> {
-    parent: &'a hyperion_proto::UpdatePlayerChunkPositions,
-    idx: usize,
-}
-
-impl Point for PlayerChunkPosRef<'_> {
-    fn point(&self) -> I16Vec2 {
-        let position = &self.parent.positions[self.idx].clone();
-        I16Vec2::new(position.x as i16, position.z as i16)
-    }
-}
-
-impl Data for PlayerChunkPosRef<'_> {
-    type Unit = u64;
-
-    fn data(&self) -> &[Self::Unit] {
-        let elem = &self.parent.stream[self.idx];
-        core::slice::from_ref(elem)
     }
 }

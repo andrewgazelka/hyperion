@@ -1,12 +1,12 @@
-use std::{borrow::Cow, cell::RefCell, collections::HashSet, io::Write, sync::Arc};
+use std::{borrow::Cow, cell::RefCell, io::Write, sync::Arc};
 
 use anyhow::{bail, Context};
 use bytes::BytesMut;
-use fxhash::FxHashSet;
 use glam::IVec2;
 use itertools::Itertools;
 use libdeflater::{CompressionLvl, Compressor};
 use parse::ChunkData;
+use rustc_hash::FxHashSet;
 use tracing::warn;
 use valence_generated::block::BlockState;
 use valence_nbt::{compound, List};
@@ -69,19 +69,25 @@ impl LaunchHandle {
 pub fn launch_manager(shared: Arc<Shared>, runtime: &AsyncRuntime) -> LaunchHandle {
     let (tx_load_chunk_requests, rx_load_chunk_requests) = tokio::sync::mpsc::unbounded_channel();
 
-    runtime.spawn({
-        let runtime = runtime.clone();
-        async move {
-            LaunchManager {
-                rx_load_chunk_requests,
-                received_request: HashSet::default(),
-                shared,
-                runtime,
-            }
-            .run()
-            .await;
-        }
-    });
+    tokio::task::Builder::new()
+        .name("launch_manager")
+        .spawn_on(
+            {
+                let runtime = runtime.clone();
+                async move {
+                    LaunchManager {
+                        rx_load_chunk_requests,
+                        received_request: FxHashSet::default(),
+                        shared,
+                        runtime,
+                    }
+                    .run()
+                    .await;
+                }
+            },
+            runtime.handle(),
+        )
+        .unwrap();
 
     LaunchHandle {
         tx_load_chunk_requests,

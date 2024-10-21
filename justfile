@@ -32,10 +32,13 @@ fmt:
     cargo fmt
 
 proxy:
-    ulimit -Sn {{fds}} && cargo run --bin hyperion-proxy --release
+    ulimit -Sn {{fds}} && cargo run --profile release-full --bin hyperion-proxy
 
 nyc:
     cargo run --bin nyc --release
+
+nyc-full:
+    cargo run --bin nyc --profile release-full
 
 # cargo machete
 unused-deps:
@@ -67,7 +70,7 @@ release-full:
 # run a given number of bots to connect to hyperion
 bots count='1000':
     cargo install -q --git https://github.com/andrewgazelka/rust-mc-bot --branch optimize
-    ulimit -Sn {{fds}} && rust-mc-bot 127.0.0.1:25565 {{count}} 2
+    ulimit -Sn {{fds}} && rust-mc-bot 127.0.0.1:25565 {{count}} 3
 
 # run in release mode with tracy
 run:

@@ -1,5 +1,9 @@
 use clap::Parser;
 use hyperion_proxy::run_proxy;
+use jemallocator::Jemalloc;
+
+#[global_allocator]
+static GLOBAL: Jemalloc = Jemalloc;
 
 #[derive(Parser)]
 struct Params {
@@ -12,37 +16,18 @@ struct Params {
 
 #[tokio::main]
 async fn main() {
-    tracing_subscriber::fmt::init();
-
-    // tracing::subscriber::set_global_default(
-    //     tracing_subscriber::registry().with(tracing_tracy::TracyLayer::default()),
-    // )
-    // .expect("setup tracy layer");
-
-    // tracing_subscriber::fmt()
-    //     .with_span_events(FmtSpan::CLOSE)
-    //     .with_target(false)
-    //     // .with_env_filter(EnvFilter::from_default_env().add_directive(tracing::Level::INFO.into()))
-    //     .with_max_level(Level::INFO)
-    //     .with_level(false)
-    //     .init();
-
-    // let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
-    //
-    // tracing_subscriber::fmt()
-    //     .with_env_filter(filter)
-    //     // .pretty()
-    //     .with_timer(tracing_subscriber::fmt::time::ChronoLocal::new(
-    //         "%H:%M:%S %3fms".to_owned(),
-    //     ))
-    //     .with_file(false)
-    //     .with_line_number(false)
-    //     .with_target(false)
-    //     .try_init()
-    //     .expect("setup tracing");
+    // console_subscriber::init();
 
     let params = Params::parse();
-    run_proxy(params.proxy_addr, params.server_addr)
-        .await
+
+    let handle = tokio::task::Builder::new()
+        .name("proxy")
+        .spawn(async move {
+            run_proxy(params.proxy_addr, params.server_addr)
+                .await
+                .unwrap();
+        })
         .unwrap();
+
+    handle.await.unwrap();
 }

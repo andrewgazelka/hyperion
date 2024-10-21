@@ -14,7 +14,48 @@ pub struct Config {
     pub view_distance: i32,
     pub simulation_distance: i32,
     pub server_desc: String,
+    pub spawn: Spawn,
 }
+
+#[derive(Serialize, Deserialize, Debug, Component)]
+pub struct Spawn {
+    pub kind: Radius,
+    pub radius: i32,
+    pub x: i32,
+    pub y: i32,
+    pub z: i32,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
+pub enum Radius {
+    Chebyshev,
+    Euclidean,
+}
+
+// impl Radius {
+//     #[allow(clippy::cast_possible_truncation)]
+//     pub fn get_random_2d(self) -> IVec2 {
+//         match self {
+//             Self::Chebyshev(radius) => {
+//                 let x = fastrand::i32(-radius..radius);
+//                 let z = fastrand::i32(-radius..radius);
+//                 IVec2::new(x, z)
+//             }
+//             Self::Euclidean(radius) => {
+//                 let r = fastrand::f32() * radius as f32;
+//                 let theta = fastrand::f32() * 2.0 * std::f32::consts::PI;
+//
+//                 let x = r * theta.cos();
+//                 let z = r * theta.sin();
+//
+//                 let x = x as i32;
+//                 let z = z as i32;
+//
+//                 IVec2::new(x, z)
+//             }
+//         }
+//     }
+// }
 
 impl Default for Config {
     fn default() -> Self {
@@ -24,44 +65,61 @@ impl Default for Config {
             view_distance: 32,
             simulation_distance: 10,
             server_desc: "Hyperion Test Server".to_owned(),
+            spawn: Spawn::default(),
+        }
+    }
+}
+
+impl Default for Spawn {
+    fn default() -> Self {
+        Self {
+            radius: 1000,
+            kind: Radius::Chebyshev,
+            x: 0,
+            y: 64,
+            z: 0,
         }
     }
 }
 
 impl Config {
     #[instrument]
-    pub fn load<P: AsRef<Path> + Debug>(path: P) -> anyhow::Result<Self> {
+    pub fn load<P>(path: P) -> anyhow::Result<Self>
+    where
+        P: AsRef<Path> + Debug,
+    {
         info!("loading configuration file");
+
         if path.as_ref().exists() {
             let mut file = File::open(path)?;
             let mut contents = String::default();
             file.read_to_string(&mut contents)?;
             let config = toml::from_str::<Self>(contents.as_str())?;
-            Ok(config)
-        } else {
-            info!("configuration file not found, using defaults");
-
-            // make required folders
-            if let Some(parent) = path.as_ref().parent() {
-                if let Err(e) = std::fs::create_dir_all(parent) {
-                    // this might happen on a read-only filesystem (i.e.,
-                    // when running on a CI, profiling in Instruments, etc.)
-                    warn!(
-                        "failed to create parent directories for {:?}: {}, using defaults",
-                        path.as_ref(),
-                        e
-                    );
-                    return Ok(Self::default());
-                }
-            };
-
-            // write default config to file
-            let default_config = Self::default();
-            std::fs::write(&path, toml::to_string(&default_config)?.as_bytes())?;
-
-            info!("wrote default configuration to {:?}", path.as_ref());
-
-            Ok(Self::default())
+            return Ok(config);
         }
+
+        info!("configuration file not found, using defaults");
+
+        // make required folders
+        if let Some(parent) = path.as_ref().parent() {
+            if let Err(e) = std::fs::create_dir_all(parent) {
+                // this might happen on a read-only filesystem (i.e.,
+                // when running on a CI, profiling in Instruments, etc.)
+                warn!(
+                    "failed to create parent directories for {:?}: {}, using defaults",
+                    path.as_ref(),
+                    e
+                );
+                return Ok(Self::default());
+            }
+        };
+
+        // write default config to file
+        let default_config = Self::default();
+        std::fs::write(&path, toml::to_string(&default_config)?.as_bytes())?;
+
+        info!("wrote default configuration to {:?}", path.as_ref());
+
+        Ok(Self::default())
     }
 }

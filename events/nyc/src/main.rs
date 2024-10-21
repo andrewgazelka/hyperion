@@ -1,7 +1,6 @@
 use clap::Parser;
 use jemallocator::Jemalloc;
 use nyc::init_game;
-use tracing_subscriber::EnvFilter;
 
 #[global_allocator]
 static GLOBAL: Jemalloc = Jemalloc;
@@ -25,23 +24,25 @@ fn print_nyc() {
 fn main() {
     dotenvy::dotenv().ok();
 
+    // console_subscriber::init();
+
     let Args { ip, port } = Args::parse();
 
     print_nyc();
 
-    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
+    // let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
 
-    tracing_subscriber::fmt()
-        .with_env_filter(filter)
-        // .pretty()
-        .with_timer(tracing_subscriber::fmt::time::ChronoLocal::new(
-            "%H:%M:%S %3fms".to_owned(),
-        ))
-        .with_file(false)
-        .with_line_number(false)
-        .with_target(false)
-        .try_init()
-        .expect("setup tracing");
+    // tracing_subscriber::fmt()
+    //     .with_env_filter(filter)
+    //     // .pretty()
+    //     .with_timer(tracing_subscriber::fmt::time::ChronoLocal::new(
+    //         "%H:%M:%S %3fms".to_owned(),
+    //     ))
+    //     .with_file(false)
+    //     .with_line_number(false)
+    //     .with_target(false)
+    //     .try_init()
+    //     .expect("setup tracing");
 
     let address = format!("{ip}:{port}");
 
