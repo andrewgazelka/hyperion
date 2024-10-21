@@ -4,7 +4,10 @@ use std::io::IoSlice;
 
 use hyperion_proto::{PlayerConnect, PlayerDisconnect, PlayerPackets, ProxyToServerMessage};
 use rkyv::ser::allocator::Arena;
-use tokio::{io::AsyncReadExt, net::TcpStream, task::JoinHandle};
+use tokio::{
+    io::{AsyncReadExt, AsyncWrite},
+    task::JoinHandle,
+};
 use tracing::{debug, instrument, warn};
 
 use crate::{
@@ -24,13 +27,16 @@ const DEFAULT_READ_BUFFER_SIZE: usize = 8 * 1024;
 /// It also handles player disconnection and shutdown scenarios.
 #[instrument(skip_all)]
 pub fn initiate_player_connection(
-    socket: TcpStream,
+    socket: impl tokio::io::AsyncRead + tokio::io::AsyncWrite + Send + 'static,
     mut shutdown_signal: tokio::sync::watch::Receiver<bool>,
     player_id: u64,
     incoming_packet_receiver: kanal::AsyncReceiver<OrderedBytes>,
     server_sender: ServerSender,
 ) -> JoinHandle<()> {
-    let (mut socket_reader, socket_writer) = socket.into_split();
+    let (socket_reader, socket_writer) = tokio::io::split(socket);
+
+    let mut socket_reader = Box::pin(socket_reader);
+    let socket_writer = Box::pin(socket_writer);
 
     // Task for handling incoming packets (player -> proxy)
     let mut packet_reader_task = tokio::task::Builder::new()
@@ -145,18 +151,18 @@ pub fn initiate_player_connection(
 }
 
 /// Manages the writing of packets to a player's connection.
-struct PlayerPacketWriter {
-    tcp_writer: tokio::net::tcp::OwnedWriteHalf,
+struct PlayerPacketWriter<W> {
+    writer: W,
     player_id: u64,
     pending_packets: Vec<OrderedBytes>,
     io_vecs: Vec<IoSlice<'static>>,
 }
 
-impl PlayerPacketWriter {
+impl<W: AsyncWrite + Unpin> PlayerPacketWriter<W> {
     /// Creates a new [`PlayerPacketWriter`] instance.
-    const fn new(tcp_writer: tokio::net::tcp::OwnedWriteHalf, player_id: u64) -> Self {
+    const fn new(writer: W, player_id: u64) -> Self {
         Self {
-            tcp_writer,
+            writer,
             player_id,
             pending_packets: Vec::new(),
             io_vecs: vec![],
@@ -182,9 +188,7 @@ impl PlayerPacketWriter {
             return Ok(());
         }
 
-        self.tcp_writer
-            .write_vectored_all(&mut self.io_vecs)
-            .await?;
+        self.writer.write_vectored_all(&mut self.io_vecs).await?;
         self.pending_packets.clear();
         self.io_vecs.clear();
 

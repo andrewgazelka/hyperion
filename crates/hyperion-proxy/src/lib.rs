@@ -26,6 +26,7 @@ use tokio::{
     io::{AsyncReadExt, BufReader},
     net::{TcpListener, TcpStream, ToSocketAddrs},
 };
+use tokio_util::net::Listener;
 use tracing::{debug, error, info_span, instrument, trace, Instrument};
 
 use crate::{
@@ -92,12 +93,16 @@ pub async fn run_proxy(
 }
 
 #[tracing::instrument(level = "trace", skip_all)]
-async fn connect_to_server_and_run_proxy(
-    listener: &mut TcpListener,
+async fn connect_to_server_and_run_proxy<L>(
+    listener: &mut L,
     server_socket: TcpStream,
     shutdown_rx: tokio::sync::watch::Receiver<bool>,
     shutdown_tx: tokio::sync::watch::Sender<bool>,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<()>
+where
+    L: Listener,
+    L::Io: Send + 'static,
+{
     let (server_read, server_write) = server_socket.into_split();
     let server_sender = launch_server_writer(server_write);
 
@@ -148,7 +153,7 @@ async fn connect_to_server_and_run_proxy(
 
     loop {
         let mut shutdown_rx = shutdown_rx.clone();
-        let socket: TcpStream = tokio::select! {
+        let socket = tokio::select! {
             _ = shutdown_rx.wait_for(|value| *value) => {
                 return Ok(())
             }
