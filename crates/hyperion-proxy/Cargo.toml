@@ -20,6 +20,7 @@ glam.workspace = true
 #evmap = "11.0.0-alpha.7"
 papaya = "0.1.4"
 slotmap.workspace = true
+tracing-subscriber.workspace = true
 tracing.workspace = true
 bytes.workspace = true
 kanal = "0.1.0-pre8"
