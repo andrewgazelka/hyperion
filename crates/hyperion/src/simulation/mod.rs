@@ -7,7 +7,6 @@ use glam::{IVec2, IVec3, Vec3};
 use serde::{Deserialize, Serialize};
 use skin::PlayerSkin;
 use uuid;
-use valence_protocol::BlockPos;
 
 use crate::Global;
 
@@ -353,14 +352,11 @@ impl Position {
 
     /// Get the start and end block positions of the player's bounding box.
     #[must_use]
-    pub fn block_pose_range(&self) -> (BlockPos, BlockPos) {
+    pub fn block_bounds(&self) -> (IVec3, IVec3) {
         let min = self.bounding.min.floor().as_ivec3();
         let max = self.bounding.max.ceil().as_ivec3();
 
-        (
-            BlockPos::new(min.x, min.y, min.z),
-            BlockPos::new(max.x, max.y, max.z),
-        )
+        (min, max)
     }
 
     /// Get the chunk position of the center of the player's bounding box.

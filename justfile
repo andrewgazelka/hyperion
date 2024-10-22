@@ -1,7 +1,15 @@
 default: debug
 
-# runs all CI checks.
-ci: fmt unused-deps deny lint test doc-once
+# runs all CI checks in parallel where possible
+ci:
+    #!/usr/bin/env bash
+    just fmt & # can run independently
+    just unused-deps & # can run independently
+    just deny & # can run independently
+    wait
+    just lint # depends on compilation, but not on other tasks
+    just test # run tests last since they depend on compilation
+    just doc-once
 
 project_root := `git rev-parse --show-toplevel`
 arch := `uname -m`
@@ -59,7 +67,7 @@ debug:
 release:
     #!/usr/bin/env -S parallel --shebang --ungroup --jobs 3
     RUN_MODE=release-{{arch}} cargo watch --postpone --no-vcs-ignores -w {{project_root}}/.trigger-release -s './target/release/nyc'
-    ulimit -Sn {{fds}} && cargo run --bin hyperion-proxy --release
+    ulimit -Sn {{fds}} && cargo run --profile release-full --bin hyperion-proxy
     cargo watch -w '{{project_root}}/crates/hyperion' -w '{{project_root}}/events/nyc' -s 'cargo check -p nyc && cargo build --release -p nyc' -s 'touch {{project_root}}/.trigger-release'
 
 release-full:
@@ -70,7 +78,7 @@ release-full:
 # run a given number of bots to connect to hyperion
 bots count='1000':
     cargo install -q --git https://github.com/andrewgazelka/rust-mc-bot --branch optimize
-    ulimit -Sn {{fds}} && rust-mc-bot "unix://abc" {{count}} 3
+    ulimit -Sn {{fds}} && rust-mc-bot 127.0.0.1:25565 {{count}} 3
 
 # run in release mode with tracy
 run:

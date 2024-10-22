@@ -18,6 +18,7 @@ use valence_protocol::{
     },
     Decode, Hand, Packet, VarInt,
 };
+use valence_text::IntoText;
 
 use super::{
     animation::{self, ActiveAnimation},
@@ -58,68 +59,104 @@ fn full(query: &mut PacketSwitchQuery<'_>, mut data: &[u8]) -> anyhow::Result<()
 fn change_position_or_correct_client(query: &mut PacketSwitchQuery<'_>, proposed: Vec3) {
     let pose = &mut *query.pose;
 
-    if try_change_position(proposed, pose, query.blocks) {
-        return;
+    if let Err(e) = try_change_position(proposed, pose, query.blocks) {
+        // Send error message to player
+        let msg = format!("§c{e}");
+        let pkt = play::GameMessageS2c {
+            chat: msg.into_cow_text(),
+            overlay: false,
+        };
+
+        if let Err(e) = query
+            .compose
+            .unicast(&pkt, query.io_ref, query.system_id, query.world)
+        {
+            warn!("Failed to send error message to player: {e}");
+        }
+
+        // Correct client position
+        let pkt = play::PlayerPositionLookS2c {
+            position: pose.position.as_dvec3(),
+            yaw: pose.yaw,
+            pitch: pose.pitch,
+            flags: PlayerPositionLookFlags::default(),
+            teleport_id: VarInt(fastrand::i32(..)),
+        };
+
+        if let Err(e) = query
+            .compose
+            .unicast(&pkt, query.io_ref, query.system_id, query.world)
+        {
+            warn!("Failed to correct client position: {e}");
+        }
     }
-
-    let pkt = play::PlayerPositionLookS2c {
-        // set to previous position
-        position: pose.position.as_dvec3(),
-        yaw: pose.yaw,
-        pitch: pose.pitch,
-        flags: PlayerPositionLookFlags::default(),
-        teleport_id: VarInt(fastrand::i32(..)),
-    };
-
-    query
-        .compose
-        .unicast(&pkt, query.io_ref, query.system_id, query.world)
-        .unwrap();
 }
 
 /// Returns true if the position was changed, false if it was not.
-fn try_change_position(proposed: Vec3, pose: &mut Position, _blocks: &Blocks) -> bool {
-    /// 100.0 m/tick; this is the same as the vanilla server
-    const MAX_BLOCKS_PER_TICK: f32 = 100.0;
-    let current = pose.position;
-    let delta = proposed - current;
+/// The vanilla server has a max speed of 100 blocks per tick.
+/// However, we are much more conservative.
+const MAX_BLOCKS_PER_TICK: f32 = 5.0;
 
-    if delta.length_squared() > MAX_BLOCKS_PER_TICK.powi(2) {
-        // error!("Player is moving too fast max speed: {MAX_SPEED_PER_TICK}");
-        return false;
-    }
+/// Returns true if the position was changed, false if it was not.
+///
+/// Movement validity rules:
+/// ```text
+///   From  |   To    | Allowed
+/// --------|---------|--------
+/// in  🧱  | in  🧱  |   ✅
+/// in  🧱  | out 🌫️  |   ✅  
+/// out 🌫️  | in  🧱  |   ❌
+/// out 🌫️  | out 🌫️  |   ✅
+/// ```
+/// Only denies movement if starting outside a block and moving into a block.
+/// This prevents players from glitching into blocks while allowing them to move out.
+fn try_change_position(proposed: Vec3, pose: &mut Position, blocks: &Blocks) -> anyhow::Result<()> {
+    is_within_speed_limits(pose.position, proposed)?;
 
     let mut proposed_pose = *pose;
     proposed_pose.move_to(proposed);
 
-    // let (min, max) = proposed_pose.block_pose_range();
-    //
-    // // so no improper collisions
-    // let shrunk = proposed_pose.bounding.shrink(0.01);
-    //
-    // let res = blocks.get_blocks(min, max, |pos, block| {
-    //     let pos = Vec3::new(pos.x as f32, pos.y as f32, pos.z as f32);
-    //
-    //     for aabb in block.collision_shapes() {
-    //         // convert to our aabb
-    //         let aabb = Aabb::new(aabb.min().as_vec3(), aabb.max().as_vec3());
-    //         let aabb = aabb.move_by(pos);
-    //
-    //         if shrunk.collides(&aabb) {
-    //             return ControlFlow::Break(false);
-    //         }
-    //     }
-    //
-    //     ControlFlow::Continue(())
-    // });
-    //
-    // if res.is_break() {
-    //     return false;
-    // }
-    //
-    *pose = proposed_pose;
+    // Only check collision if we're starting outside a block
+    if !has_collision(pose, blocks) && has_collision(&proposed_pose, blocks) {
+        return Err(anyhow::anyhow!("Cannot move into solid blocks"));
+    }
 
-    true
+    *pose = proposed_pose;
+    Ok(())
+}
+
+fn is_within_speed_limits(current: Vec3, proposed: Vec3) -> anyhow::Result<()> {
+    let delta = proposed - current;
+    if delta.length_squared() > MAX_BLOCKS_PER_TICK.powi(2) {
+        return Err(anyhow::anyhow!(
+            "Moving too fast! Maximum speed is {MAX_BLOCKS_PER_TICK} blocks per tick"
+        ));
+    }
+    Ok(())
+}
+
+fn has_collision(pose: &Position, blocks: &Blocks) -> bool {
+    use std::ops::ControlFlow;
+
+    let (min, max) = pose.block_bounds();
+    let shrunk = pose.bounding.shrink(0.01);
+
+    let res = blocks.get_blocks(min, max, |pos, block| {
+        let pos = Vec3::new(pos.x as f32, pos.y as f32, pos.z as f32);
+
+        for aabb in block.collision_shapes() {
+            let aabb = Aabb::new(aabb.min().as_vec3(), aabb.max().as_vec3());
+            let aabb = aabb.move_by(pos);
+
+            if shrunk.collides(&aabb) {
+                return ControlFlow::Break(false);
+            }
+        }
+
+        ControlFlow::Continue(())
+    });
+
+    res.is_break()
 }
 
 fn look_and_on_ground(mut data: &[u8], full_entity_pose: &mut Position) -> anyhow::Result<()> {
