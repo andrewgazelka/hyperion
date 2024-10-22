@@ -11,11 +11,9 @@ I would greatly appreciate the contribution.
 To see what to work on check the [issues page](https://github.com/andrewgazelka/hyperion/issues) or
 join [Hyperion's Discord](https://discord.gg/sTN8mdRQ) for the latest updates on development.
 
-# Demo Usage using Block API
+![2024-10-21_19 00 03](https://github.com/user-attachments/assets/5371c38f-5c56-4654-98d9-8d93f75ae2e0)
 
-Note: performance has improved since this video was recorded.
 
-[hyperion.webm](https://github.com/user-attachments/assets/5ea4bdec-25a8-4bb5-a670-0cb81bf88d7e)
 
 # Benchmarks
 
@@ -26,6 +24,9 @@ Note: performance has improved since this video was recorded.
 | 100     | 0.46           | 10.7           | 0.76                      |
 | 1000    | 0.40           | 15.3           | 1.09                      |
 | 5000    | 1.42           | 35.6           | 2.54                      |
+| 10000   | 12.39*         | 100-200        |                           |
+
+*= with UNIX sockets, not TCP sockets. Once I get better tests, I will fill in core usage and CPU utilization.
 
 **Test Environment:**
 
@@ -70,7 +71,7 @@ This list is not comprehensive. Feel free to PR or file an issue if something is
 | Language                                                                             | Rust                                          | Rust                | Rust                | Rust        | Java             |
 | Goal                                                                                 | game engine for massive events                | 1:1 vanilla re-impl | 1:1 vanilla re-impl | game engine | game engine      |
 | Structure                                                                            | flecs ECS                                     | custom ECS          | custom ECS          | bevy ECS    | non-ECS paradigm |
-| Major Dependencies                                                                   | valence**                                     |                     |                     |             |                  |
+| Major Dependencies                                                                   | valence                                       |                     |                     |             |                  |
 | Can handle 10k players                                                               | ✅                                             | ❌                   | ❌                   | ❌           | ❌                |
 | Used in production                                                                   | ❌                                             | ❌                   | ❌                   | ❌           | ✅                |
 | Stable and large adoption                                                            | ❌                                             | ❌                   | ❌                   | ❌           | ✅                |
@@ -100,23 +101,3 @@ This list is not comprehensive. Feel free to PR or file an issue if something is
 `*` = Minestom has many more features than we've mentioned here. If you're comfortable using Java and want to run a
 minigame Minecraft server in a production environment, Minestom is a good choice. It's especially recommended if you
 don't need to support an extremely large number of players (like thousands).
-
-`**` = we depend on these (forked) crates from valence
-
-```text
-valence_anvil
-valence_build_utils
-valence_entity
-valence_generated
-valence_ident
-valence_ident_macros
-valence_math
-valence_nbt
-valence_protocol
-valence_protocol_macros
-valence_registry
-valence_server
-valence_server_common
-valence_text
-```
-
