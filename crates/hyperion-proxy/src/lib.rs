@@ -24,7 +24,7 @@ use hyperion_proto::ArchivedServerToProxyMessage;
 use rustc_hash::FxBuildHasher;
 use tokio::{
     io::{AsyncReadExt, BufReader},
-    net::{TcpListener, TcpStream, ToSocketAddrs},
+    net::{TcpListener, TcpStream, ToSocketAddrs, UnixSocket},
 };
 use tokio_util::net::Listener;
 use tracing::{debug, error, info_span, instrument, trace, Instrument};
@@ -55,12 +55,14 @@ pub async fn connect(addr: impl ToSocketAddrs + Debug + Clone) -> TcpStream {
 }
 
 #[tracing::instrument(level = "trace", skip_all)]
-pub async fn run_proxy(
-    proxy_addr: impl ToSocketAddrs + Debug + Clone,
+pub async fn run_proxy<L>(
+    mut listener: L,
     server_addr: impl ToSocketAddrs + Debug + Clone,
-) -> anyhow::Result<()> {
-    let mut listener = TcpListener::bind(proxy_addr).await?;
-
+) -> anyhow::Result<()>
+where
+    L: Listener,
+    L::Io: Send + 'static,
+{
     let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
 
     tokio::task::Builder::new()
