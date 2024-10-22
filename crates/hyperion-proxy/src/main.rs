@@ -2,7 +2,9 @@ use std::{net::SocketAddr, path::PathBuf};
 
 use clap::Parser;
 use hyperion_proxy::run_proxy;
-use tokio::net::{TcpListener, UnixListener};
+use tokio::net::TcpListener;
+#[cfg(unix)]
+use tokio::net::UnixListener;
 use tracing::{error, info};
 
 #[cfg(not(target_env = "msvc"))]
@@ -21,6 +23,7 @@ struct Params {
 #[derive(Debug)]
 enum ProxyAddress {
     Tcp(SocketAddr),
+    #[cfg(unix)]
     Unix(PathBuf),
 }
 
@@ -29,7 +32,14 @@ impl ProxyAddress {
         if addr.contains(':') {
             Ok(Self::Tcp(addr.parse()?))
         } else {
-            Ok(Self::Unix(PathBuf::from(addr)))
+            #[cfg(unix)]
+            {
+                Ok(Self::Unix(PathBuf::from(addr)))
+            }
+            #[cfg(not(unix))]
+            {
+                Err("Unix sockets are not supported on this platform".into())
+            }
         }
     }
 }
@@ -56,6 +66,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         .await
                         .unwrap();
                 }
+                #[cfg(unix)]
                 ProxyAddress::Unix(path) => {
                     info!("Binding to Unix socket: {:?}", path);
                     run_proxy(UnixListener::bind(path).unwrap(), server_addr)
