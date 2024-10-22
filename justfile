@@ -5,7 +5,7 @@ ci: fmt unused-deps deny lint test doc-once
 
 project_root := `git rev-parse --show-toplevel`
 arch := `uname -m`
-fds := "8192"
+fds := "32768"
 
 # builds in release mode
 build:
@@ -70,7 +70,7 @@ release-full:
 # run a given number of bots to connect to hyperion
 bots count='1000':
     cargo install -q --git https://github.com/andrewgazelka/rust-mc-bot --branch optimize
-    ulimit -Sn {{fds}} && rust-mc-bot 127.0.0.1:25565 {{count}} 3
+    ulimit -Sn {{fds}} && rust-mc-bot "unix://abc" {{count}} 3
 
 # run in release mode with tracy
 run:

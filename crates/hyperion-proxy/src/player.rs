@@ -8,7 +8,7 @@ use tokio::{
     io::{AsyncReadExt, AsyncWrite},
     task::JoinHandle,
 };
-use tracing::{debug, instrument, warn};
+use tracing::{debug, info, instrument, warn};
 
 use crate::{
     cache::GlobalExclusionsManager, data::OrderedBytes, server_sender::ServerSender,
@@ -25,7 +25,7 @@ const DEFAULT_READ_BUFFER_SIZE: usize = 8 * 1024;
 /// 2. A writer task that sends outgoing packets to the player.
 ///
 /// It also handles player disconnection and shutdown scenarios.
-#[instrument(skip_all)]
+#[instrument(skip_all, fields(player_id = player_id))]
 pub fn initiate_player_connection(
     socket: impl tokio::io::AsyncRead + tokio::io::AsyncWrite + Send + 'static,
     mut shutdown_signal: tokio::sync::watch::Receiver<bool>,
@@ -33,6 +33,7 @@ pub fn initiate_player_connection(
     incoming_packet_receiver: kanal::AsyncReceiver<OrderedBytes>,
     server_sender: ServerSender,
 ) -> JoinHandle<()> {
+    info!("Initiating player connection");
     let (socket_reader, socket_writer) = tokio::io::split(socket);
 
     let mut socket_reader = Box::pin(socket_reader);
@@ -123,6 +124,7 @@ pub fn initiate_player_connection(
 
             tokio::select! {
                 () = shutdown_received => {
+                    info!("Shutting down player connection due to server shutdown");
                     packet_reader_task.abort();
                     packet_writer_task.abort();
                 }
@@ -133,10 +135,7 @@ pub fn initiate_player_connection(
                     };
                     packet_writer_task.abort();
 
-                    // Handle player disconnection
-                    // player_registry.write().unwrap().remove(player_id);
-
-                    debug!("Player disconnected: {player_id:?}");
+                    info!("Player disconnected: {player_id:?}");
 
                     let disconnect = rkyv::to_bytes::<rkyv::rancor::Error>(
                         &ProxyToServerMessage::PlayerDisconnect(PlayerDisconnect {

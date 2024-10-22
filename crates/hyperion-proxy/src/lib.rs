@@ -24,10 +24,10 @@ use hyperion_proto::ArchivedServerToProxyMessage;
 use rustc_hash::FxBuildHasher;
 use tokio::{
     io::{AsyncReadExt, BufReader},
-    net::{TcpListener, TcpStream, ToSocketAddrs, UnixSocket},
+    net::{TcpStream, ToSocketAddrs},
 };
 use tokio_util::net::Listener;
-use tracing::{debug, error, info_span, instrument, trace, Instrument};
+use tracing::{debug, error, info, info_span, instrument, trace, Instrument};
 
 use crate::{
     cache::BufferedEgress, data::PlayerHandle, egress::Egress, player::initiate_player_connection,
@@ -62,7 +62,9 @@ pub async fn run_proxy<L>(
 where
     L: Listener,
     L::Io: Send + 'static,
+    L::Addr: Debug,
 {
+    info!("Starting proxy server");
     let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
 
     tokio::task::Builder::new()
@@ -104,7 +106,9 @@ async fn connect_to_server_and_run_proxy<L>(
 where
     L: Listener,
     L::Io: Send + 'static,
+    L::Addr: Debug,
 {
+    info!("Connected to server, initializing proxy");
     let (server_read, server_write) = server_socket.into_split();
     let server_sender = launch_server_writer(server_write);
 
@@ -157,10 +161,11 @@ where
         let mut shutdown_rx = shutdown_rx.clone();
         let socket = tokio::select! {
             _ = shutdown_rx.wait_for(|value| *value) => {
+                info!("Received shutdown signal, stopping proxy");
                 return Ok(())
             }
-            Ok((socket, _)) = listener.accept() => {
-                // todo: think there are some unhandled cases here
+            Ok((socket, addr)) = listener.accept() => {
+                info!("New client connection from {addr:?}");
                 socket
             }
         };
