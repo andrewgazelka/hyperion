@@ -11,7 +11,7 @@ pub struct StatsModule;
 
 impl Module for StatsModule {
     fn module(world: &World) {
-        let mut players = world.new_query::<&Play>();
+        let players = world.new_query::<&Play>();
 
         // let last_frame_time_total = 0.0;
 

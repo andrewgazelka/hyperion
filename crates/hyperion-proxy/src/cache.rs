@@ -237,20 +237,22 @@ impl BufferedEgress {
                 self.egress.handle_flush();
                 self.local_flush_counter = 0;
 
-                let local_broadcast_buffer = core::mem::take(&mut self.local_broadcast_buffer);
-
-                if local_broadcast_buffer.is_empty() {
+                if self.local_broadcast_buffer.is_empty() {
                     return;
                 }
 
-                let raw_local_broadcast_data = core::mem::take(&mut self.raw_local_broadcast_data);
+                let bvh = Bvh::build(
+                    &mut self.local_broadcast_buffer,
+                    &self.raw_local_broadcast_data,
+                );
+
+                self.local_broadcast_buffer.clear();
+                self.raw_local_broadcast_data.clear();
 
                 let egress = self.egress;
                 tokio::task::Builder::new()
                     .name("bvh")
                     .spawn(async move {
-                        let bvh = Bvh::build(local_broadcast_buffer, &raw_local_broadcast_data);
-
                         let bvh = bvh.into_bytes();
 
                         let instruction = BroadcastLocalInstruction {
