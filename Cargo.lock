@@ -135,6 +135,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "approx"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cab112f0a86d568ea0e627cc1d6be74a1e9cd55214684db5561995f6dad897c6"
+dependencies = [
+ "num-traits",
+]
+
+[[package]]
 name = "arrayvec"
 version = "0.7.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -461,7 +470,7 @@ dependencies = [
  "ordered-float",
  "plotters",
  "plotters-bitmap",
- "rand",
+ "rand 0.8.5",
  "rayon",
  "serde",
  "tango-bench",
@@ -1765,6 +1774,16 @@ name = "hyperion-scheduled"
 version = "0.1.0"
 
 [[package]]
+name = "hyperion-stats"
+version = "0.1.0"
+dependencies = [
+ "approx",
+ "divan",
+ "ndarray",
+ "rand 0.9.0-alpha.2",
+]
+
+[[package]]
 name = "hyperion-text"
 version = "0.1.0"
 dependencies = [
@@ -2434,7 +2453,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "48e4cc64c2ad9ebe670cb8fd69dd50ae301650392e81c05f9bfcb2d5bdbc24b0"
 dependencies = [
  "phf_shared",
- "rand",
+ "rand 0.8.5",
 ]
 
 [[package]]
@@ -2644,8 +2663,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "34af8d1a0e25924bc5b7c43c079c942339d8f0a8b57c39049bef581b46327404"
 dependencies = [
  "libc",
- "rand_chacha",
- "rand_core",
+ "rand_chacha 0.3.1",
+ "rand_core 0.6.4",
+]
+
+[[package]]
+name = "rand"
+version = "0.9.0-alpha.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c3e256ff62cee3e03def855c4d4260106d2bb1696fdc01af03e9935b993720a5"
+dependencies = [
+ "rand_chacha 0.9.0-alpha.2",
+ "rand_core 0.9.0-alpha.2",
+ "zerocopy",
 ]
 
 [[package]]
@@ -2655,7 +2685,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e6c10a63a0fa32252be49d21e7709d4d4baf8d231c2dbce1eaa8141b9b127d88"
 dependencies = [
  "ppv-lite86",
- "rand_core",
+ "rand_core 0.6.4",
+]
+
+[[package]]
+name = "rand_chacha"
+version = "0.9.0-alpha.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d299e9db34f6623b2a9e86c015d6e173d5f46d64d4b9b8cc46ae8a982a50b04c"
+dependencies = [
+ "ppv-lite86",
+ "rand_core 0.9.0-alpha.2",
 ]
 
 [[package]]
@@ -2665,6 +2705,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ec0be4795e2f6a28069bec0b5ff3e2ac9bafc99e6a9a7dc3547996c5c816922c"
 dependencies = [
  "getrandom",
+]
+
+[[package]]
+name = "rand_core"
+version = "0.9.0-alpha.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f4e93f5a5e3c528cda9acb0928c31b2ba868c551cc46e67b778075e34aab9906"
+dependencies = [
+ "getrandom",
+ "zerocopy",
 ]
 
 [[package]]
@@ -3292,7 +3342,7 @@ dependencies = [
  "libloading",
  "log",
  "num-traits",
- "rand",
+ "rand 0.8.5",
  "scroll",
  "tempfile",
  "thiserror",
@@ -3882,7 +3932,7 @@ dependencies = [
  "bytes",
  "derive_more",
  "parking_lot",
- "rand",
+ "rand 0.8.5",
  "rustc-hash 1.1.0",
  "tracing",
  "uuid",
@@ -3903,7 +3953,7 @@ dependencies = [
  "bevy_app",
  "bevy_ecs",
  "derive_more",
- "rand",
+ "rand 0.8.5",
  "uuid",
  "valence_protocol",
 ]
