@@ -18,6 +18,7 @@ use crate::{
     data::{OrderedBytes, PlayerHandle},
     server_sender::ServerSender,
     util::AsyncWriteVectoredExt,
+    ShutdownType,
 };
 
 /// Default buffer size for reading player packets, set to 8 KiB.
@@ -32,8 +33,8 @@ const DEFAULT_READ_BUFFER_SIZE: usize = 8 * 1024;
 /// It also handles player disconnection and shutdown scenarios.
 #[instrument(skip_all, fields(player_id = player_id))]
 pub fn initiate_player_connection(
-    socket: impl tokio::io::AsyncRead + tokio::io::AsyncWrite + Send + 'static,
-    mut shutdown_signal: tokio::sync::watch::Receiver<bool>,
+    socket: impl tokio::io::AsyncRead + AsyncWrite + Send + 'static,
+    mut shutdown_signal: tokio::sync::watch::Receiver<Option<ShutdownType>>,
     player_id: u64,
     incoming_packet_receiver: kanal::AsyncReceiver<OrderedBytes>,
     server_sender: ServerSender,
@@ -126,7 +127,7 @@ pub fn initiate_player_connection(
         .name("player_disconnect")
         .spawn(async move {
             let shutdown_received = async move {
-                shutdown_signal.wait_for(|value| *value).await.unwrap();
+                shutdown_signal.wait_for(Option::is_some).await.unwrap();
             };
 
             tokio::select! {

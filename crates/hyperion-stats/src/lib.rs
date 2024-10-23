@@ -4,9 +4,6 @@
 
 use std::simd::{f64x4, num::SimdFloat};
 
-#[deprecated = "this is solely for benchmarks"]
-pub mod nd;
-
 #[derive(Debug, Clone)]
 pub struct ParallelStats {
     counts: Vec<u64>,

@@ -56,6 +56,23 @@ unused-deps:
 deny:
     cargo deny check
 
+# Watch and rebuild release version
+watch-nyc:
+    RUN_MODE="release-{{arch}}" cargo watch \
+        --postpone \
+        --no-vcs-ignores \
+        -w {{project_root}}/.trigger-release \
+        -s './target/release/nyc'
+
+
+# Watch Hyperion changes and rebuild
+watch:
+    cargo watch \
+        -w '{{project_root}}/crates/hyperion' \
+        -w '{{project_root}}/events/nyc' \
+        -s 'cargo check -p nyc && cargo build --release -p nyc' \
+        -s 'touch {{project_root}}/.trigger-release'
+
 # run in debug mode with tracy; auto-restarts on changes
 debug:
     #!/usr/bin/env -S parallel --shebang --ungroup --jobs 3
