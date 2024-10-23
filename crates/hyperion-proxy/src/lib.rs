@@ -20,7 +20,7 @@
 use std::{fmt::Debug, sync::atomic::AtomicBool};
 
 use anyhow::Context;
-use hyperion_proto::ArchivedServerToProxyMessage;
+use hyperion_proto::{ArchivedServerToProxyMessage, ChunkPosition};
 use rustc_hash::FxBuildHasher;
 use tokio::{
     io::{AsyncReadExt, BufReader},
@@ -112,9 +112,16 @@ where
     let (server_read, server_write) = server_socket.into_split();
     let server_sender = launch_server_writer(server_write);
 
-    let map = papaya::HashMap::default();
-    let map: &'static papaya::HashMap<u64, PlayerHandle, FxBuildHasher> = Box::leak(Box::new(map));
-    let egress = Egress::new(map);
+    let player_registry = papaya::HashMap::default();
+    let player_registry: &'static papaya::HashMap<u64, PlayerHandle, FxBuildHasher> =
+        Box::leak(Box::new(player_registry));
+
+    let player_positions = papaya::HashMap::default();
+    let player_positions: &'static papaya::HashMap<u64, ChunkPosition, FxBuildHasher> =
+        Box::leak(Box::new(player_positions));
+
+    let egress = Egress::new(player_registry, player_positions);
+
     let egress = BufferedEgress::new(egress);
 
     let mut handler = IngressHandler::new(BufReader::new(server_read), egress);
@@ -170,7 +177,7 @@ where
             }
         };
 
-        let registry = map.pin();
+        let registry = player_registry.pin();
 
         let (tx, rx) = kanal::bounded_async(1024);
         registry.insert(id_on, PlayerHandle {
@@ -187,7 +194,8 @@ where
             id_on,
             rx,
             server_sender.clone(),
-            // player_registry.clone(),
+            player_registry,
+            player_positions,
         );
 
         id_on += 1;

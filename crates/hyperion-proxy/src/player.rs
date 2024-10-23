@@ -2,8 +2,11 @@
 
 use std::io::IoSlice;
 
-use hyperion_proto::{PlayerConnect, PlayerDisconnect, PlayerPackets, ProxyToServerMessage};
+use hyperion_proto::{
+    ChunkPosition, PlayerConnect, PlayerDisconnect, PlayerPackets, ProxyToServerMessage,
+};
 use rkyv::ser::allocator::Arena;
+use rustc_hash::FxBuildHasher;
 use tokio::{
     io::{AsyncReadExt, AsyncWrite},
     task::JoinHandle,
@@ -11,7 +14,9 @@ use tokio::{
 use tracing::{debug, info, instrument, warn};
 
 use crate::{
-    cache::GlobalExclusionsManager, data::OrderedBytes, server_sender::ServerSender,
+    cache::GlobalExclusionsManager,
+    data::{OrderedBytes, PlayerHandle},
+    server_sender::ServerSender,
     util::AsyncWriteVectoredExt,
 };
 
@@ -32,6 +37,8 @@ pub fn initiate_player_connection(
     player_id: u64,
     incoming_packet_receiver: kanal::AsyncReceiver<OrderedBytes>,
     server_sender: ServerSender,
+    player_registry: &'static papaya::HashMap<u64, PlayerHandle, FxBuildHasher>,
+    player_positions: &'static papaya::HashMap<u64, ChunkPosition, FxBuildHasher>,
 ) -> JoinHandle<()> {
     info!("Initiating player connection");
     let (socket_reader, socket_writer) = tokio::io::split(socket);
@@ -141,6 +148,12 @@ pub fn initiate_player_connection(
                         &ProxyToServerMessage::PlayerDisconnect(PlayerDisconnect {
                             stream: player_id,
                         })).unwrap();
+
+                    let map_ref = player_registry.pin_owned();
+                    map_ref.remove(&player_id);
+
+                    let map_ref = player_positions.pin_owned();
+                    map_ref.remove(&player_id);
 
                     server_sender.send(disconnect).await.unwrap();
                 }
