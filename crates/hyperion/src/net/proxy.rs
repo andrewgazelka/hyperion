@@ -79,6 +79,7 @@ async fn inner(
             async move {
                 loop {
                     let (socket, _) = listener.accept().await.unwrap();
+                    socket.set_nodelay(true).unwrap();
 
                     let addr = socket.peer_addr().unwrap();
 

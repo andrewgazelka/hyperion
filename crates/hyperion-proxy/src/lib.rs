@@ -101,6 +101,8 @@ pub async fn run_proxy(
                 info!("⏳ Binding to server... {binding_help}");
 
                 let server_socket = connect(server_addr.clone()).await;
+                server_socket.set_nodelay(true).unwrap();
+
                 if let Err(e) = connect_to_server_and_run_proxy(&mut listener, server_socket, shutdown_rx.clone(), shutdown_tx.clone()).await {
                     error!("Error connecting to server: {e:?}");
                 }

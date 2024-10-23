@@ -28,9 +28,13 @@ enum ProxyAddress {
     Unix(PathBuf),
 }
 
-use std::fmt::Display;
+use std::{
+    fmt::Display,
+    task::{Context, Poll},
+};
 
 use colored::Colorize;
+use tokio_util::net::Listener;
 
 impl Display for ProxyAddress {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -92,13 +96,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .spawn(async move {
             match &proxy_addr {
                 ProxyAddress::Tcp(addr) => {
-                    let socket = TcpListener::bind(addr).await.unwrap();
+                    let listener = TcpListener::bind(addr).await.unwrap();
+                    let socket = NoDelayTcp { listener };
                     run_proxy(socket, server_addr).await.unwrap();
                 }
                 #[cfg(unix)]
                 ProxyAddress::Unix(path) => {
-                    let socket = UnixListener::bind(path).unwrap();
-                    run_proxy(socket, server_addr).await.unwrap();
+                    let listener = UnixListener::bind(path).unwrap();
+                    run_proxy(listener, server_addr).await.unwrap();
                 }
             }
         })
@@ -110,4 +115,35 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         info!("Proxy task completed successfully");
     }
     Ok(())
+}
+
+struct NoDelayTcp {
+    listener: TcpListener,
+}
+
+impl Listener for NoDelayTcp {
+    type Addr = <TcpListener as Listener>::Addr;
+    type Io = <TcpListener as Listener>::Io;
+
+    fn poll_accept(
+        &mut self,
+        cx: &mut Context<'_>,
+    ) -> Poll<std::io::Result<(Self::Io, Self::Addr)>> {
+        let Poll::Ready(result) = self.listener.poll_accept(cx) else {
+            return Poll::Pending;
+        };
+
+        let Ok((socket, addr)) = result else {
+            return Poll::Ready(result);
+        };
+
+        match socket.set_nodelay(true) {
+            Ok(..) => Poll::Ready(Ok((socket, addr))),
+            Err(e) => Poll::Ready(Err(e)),
+        }
+    }
+
+    fn local_addr(&self) -> std::io::Result<Self::Addr> {
+        self.listener.local_addr()
+    }
 }
