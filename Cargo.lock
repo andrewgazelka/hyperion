@@ -447,7 +447,7 @@ checksum = "79296716171880943b8470b5f8d03aa55eb2e645a4874bdbb28adb49162e012c"
 [[package]]
 name = "bvh"
 version = "0.1.0"
-source = "git+https://github.com/andrewgazelka/bvh-data#6be5a445f978136ea855a6778a5be2cc252d19ae"
+source = "git+https://github.com/andrewgazelka/bvh-data#4d4776c0fc0d89d2f24e00e506826f9d64725ece"
 dependencies = [
  "arrayvec",
  "bytes",
@@ -1131,7 +1131,7 @@ dependencies = [
 [[package]]
 name = "flecs_ecs"
 version = "0.1.3"
-source = "git+https://github.com/Indra-db/Flecs-Rust#32626cba12fc498893a9354d4886c4f6443638c6"
+source = "git+https://github.com/Indra-db/Flecs-Rust#947b9765237b392145c8ead118dc63fcd50083a2"
 dependencies = [
  "bitflags 2.6.0",
  "compact_str",
@@ -1143,7 +1143,7 @@ dependencies = [
 [[package]]
 name = "flecs_ecs_derive"
 version = "0.1.0"
-source = "git+https://github.com/Indra-db/Flecs-Rust#32626cba12fc498893a9354d4886c4f6443638c6"
+source = "git+https://github.com/Indra-db/Flecs-Rust#947b9765237b392145c8ead118dc63fcd50083a2"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1153,7 +1153,7 @@ dependencies = [
 [[package]]
 name = "flecs_ecs_sys"
 version = "0.1.2"
-source = "git+https://github.com/Indra-db/Flecs-Rust#32626cba12fc498893a9354d4886c4f6443638c6"
+source = "git+https://github.com/Indra-db/Flecs-Rust#947b9765237b392145c8ead118dc63fcd50083a2"
 dependencies = [
  "bindgen",
  "cc",
@@ -1768,6 +1768,7 @@ dependencies = [
  "heapless",
  "hyperion-proto",
  "kanal",
+ "more-asserts",
  "papaya",
  "rkyv",
  "rustc-hash 2.0.0",
@@ -2612,9 +2613,9 @@ dependencies = [
 
 [[package]]
 name = "prettyplease"
-version = "0.2.24"
+version = "0.2.25"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "910d41a655dac3b764f1ade94821093d3610248694320cd072303a8eedcf221d"
+checksum = "64d1ec885c64d0457d564db4ec299b2dae3f9c02808b8ad9c3a089c591b18033"
 dependencies = [
  "proc-macro2",
  "syn",
@@ -3324,9 +3325,9 @@ dependencies = [
 
 [[package]]
 name = "syn"
-version = "2.0.82"
+version = "2.0.85"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "83540f837a8afc019423a8edb95b52a8effe46957ee402287f4292fae35be021"
+checksum = "5023162dfcd14ef8f32034d8bcd4cc5ddc61ef7a247c024a33e24e1f24d21b56"
 dependencies = [
  "proc-macro2",
  "quote",

@@ -59,7 +59,6 @@ enumset = "1.1.5"
 fastrand = "2.1.0"
 flate2 = { version = "1.0.30", default-features = false }
 flecs_ecs = { git = "https://github.com/Indra-db/Flecs-Rust" }
-rustc-hash = "2.0.0"
 glam = "0.26.0"
 heapless = "0.8.0"
 heed = "0.20.5"
@@ -76,7 +75,6 @@ hyperion-text = { path = "crates/hyperion-text" }
 hyperion-utils = { path = "crates/hyperion-utils" }
 indexmap = "2.6.0"
 itertools = "0.13.0"
-tikv-jemallocator = "0.6.0"
 kanal = "0.1.0-pre8"
 libc = "0.2.155"
 libdeflater = "1.20.0"
@@ -94,6 +92,7 @@ rand = "0.8.5"
 rayon = "1.10.0"
 reqwest = "0.12.5"
 roaring = { version = "0.10.6", features = ["simd"] }
+rustc-hash = "2.0.0"
 rustc_version = "0.4.0"
 serde = "1.0.203"
 serde_json = "1.0.117"
@@ -103,6 +102,7 @@ snafu = "0.8.5"
 tango-bench = "0.6.0"
 tar = "0.4.41"
 thiserror = "1.0.63"
+tikv-jemallocator = "0.6.0"
 tokio = "1.40.0"
 toml = "0.8.14"
 tracing = { version = "0.1.40", features = ["release_max_level_info"] }

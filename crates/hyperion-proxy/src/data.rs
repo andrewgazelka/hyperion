@@ -3,7 +3,7 @@ use std::sync::{atomic::AtomicBool, Arc};
 use bytes::Bytes;
 use slotmap::{new_key_type, KeyData};
 
-use crate::cache::GlobalExclusionsManager;
+use crate::cache::ExclusionsManager;
 
 new_key_type! {
     pub struct PlayerId;
@@ -17,17 +17,25 @@ impl From<u64> for PlayerId {
 }
 
 pub struct OrderedBytes {
-    /// The player's order will need to be >= the order of the packet to send. Each packet sent
-    /// will increase the order by 1.
-    /// todo: handle wrapping around
+    /// The order number for this packet. Packets can be received in any order,
+    /// but will be reordered before being written to ensure monotonically increasing order.
+    /// Each packet is assigned a sequence number that determines its final ordering.
     pub order: u32,
+    pub offset: u32,
     pub data: Bytes,
-    pub exclusions: Option<Arc<GlobalExclusionsManager>>,
+    pub exclusions: Option<Arc<ExclusionsManager>>,
 }
 
 impl OrderedBytes {
+    pub const DEFAULT: Self = Self {
+        order: 0,
+        offset: 0,
+        data: Bytes::from_static(b""),
+        exclusions: None,
+    };
     pub const FLUSH: Self = Self {
         order: 0,
+        offset: 0,
         data: Bytes::from_static(b"flush"),
         exclusions: None,
     };
@@ -39,6 +47,7 @@ impl OrderedBytes {
     pub const fn no_order(data: Bytes) -> Self {
         Self {
             order: 0,
+            offset: 0,
             data,
             exclusions: None,
         }
@@ -47,10 +56,11 @@ impl OrderedBytes {
     pub const fn with_exclusions(
         order: u32,
         data: Bytes,
-        exclusions: Arc<GlobalExclusionsManager>,
+        exclusions: Arc<ExclusionsManager>,
     ) -> Self {
         Self {
             order,
+            offset: 0,
             data,
             exclusions: Some(exclusions),
         }

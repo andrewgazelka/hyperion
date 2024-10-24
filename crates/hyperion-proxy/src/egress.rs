@@ -11,7 +11,7 @@ use rustc_hash::FxBuildHasher;
 use tracing::{debug, error, info_span, instrument, warn, Instrument};
 
 use crate::{
-    cache::GlobalExclusionsManager,
+    cache::ExclusionsManager,
     data::{OrderedBytes, PlayerHandle},
 };
 
@@ -27,6 +27,7 @@ pub struct Egress {
 pub struct BroadcastLocalInstruction {
     pub order: u32,
     pub bvh: Arc<Bvh<Bytes>>,
+    pub exclusions: Arc<ExclusionsManager>,
 }
 
 impl Egress {
@@ -67,7 +68,7 @@ impl Egress {
     pub fn handle_broadcast_global(
         &self,
         pkt: hyperion_proto::BroadcastGlobal<'_>,
-        exclusions: GlobalExclusionsManager,
+        exclusions: ExclusionsManager,
     ) {
         // todo: why cannot I pin_owned inside the spawn
         let players = self.player_registry.pin_owned();
@@ -123,6 +124,7 @@ impl Egress {
     pub fn handle_broadcast_local(self, instruction: BroadcastLocalInstruction) {
         let order = instruction.order;
         let bvh = instruction.bvh;
+        let exclusions = instruction.exclusions;
 
         let positions = self.positions.pin_owned();
         // we are spawning because it is rather intensive to call get_in_slices on a bvh
@@ -151,13 +153,22 @@ impl Egress {
                         let max = position + I16Vec2::splat(RADIUS);
 
                         let aabb = Aabb::new(min, max);
-                        let byte_slices = bvh.get_in_slices_bytes(aabb);
 
-                        for data in byte_slices {
+                        let slices = bvh.get_in(aabb);
+
+                        for slice in slices {
+                            let (_, data) = bvh.inner();
+
+                            let start = slice.start as usize;
+                            let end = slice.end as usize;
+
+                            let data = data.slice(start..end);
+
                             if let Err(e) = player.writer.try_send(OrderedBytes {
                                 order,
+                                offset: slice.start,
                                 data,
-                                exclusions: None,
+                                exclusions: Some(exclusions.clone()),
                             }) {
                                 warn!("Failed to send data to player: {:?}", e);
                             }
@@ -180,7 +191,7 @@ impl Egress {
         let ordered = OrderedBytes {
             order,
             data,
-            exclusions: None,
+            ..OrderedBytes::DEFAULT
         };
 
         let Ok(id) = rkyv::deserialize::<u64, !>(&pkt.stream);

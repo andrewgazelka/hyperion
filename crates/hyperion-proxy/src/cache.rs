@@ -3,6 +3,7 @@ use std::{ops::Range, sync::Arc};
 use bvh::{Bvh, Data, Point};
 use glam::I16Vec2;
 use hyperion_proto::{ArchivedServerToProxyMessage, BroadcastGlobal};
+use more_asserts::debug_assert_le;
 use rustc_hash::FxBuildHasher;
 
 use crate::egress::{BroadcastLocalInstruction, Egress};
@@ -12,31 +13,54 @@ use crate::egress::{BroadcastLocalInstruction, Egress};
 #[derive(Default, Copy, Clone)]
 pub struct ExclusionNode {
     /// Index of the previous node in the exclusion list.
-    pub prev_index: u32,
+    pub prev_node_index: u32,
     /// Start of the exclusion range.
-    pub range_start: u32,
+    pub byte_range_start: u32,
     /// End of the exclusion range.
-    pub range_end: u32,
+    pub byte_range_end: u32,
 }
 
 impl ExclusionNode {
     /// A placeholder node used as the initial element in the exclusion list.
     const PLACEHOLDER: Self = Self {
-        prev_index: 0,
-        range_start: 0,
-        range_end: 0,
+        prev_node_index: 0,
+        byte_range_start: 0,
+        byte_range_end: 0,
     };
 }
 
 /// Manages global exclusions for players.
-pub struct GlobalExclusionsManager {
+pub struct ExclusionsManager {
     /// List of exclusion nodes.
     pub nodes: Vec<ExclusionNode>,
     /// Maps player IDs to their last exclusion node index.
     pub player_to_last_node: std::collections::HashMap<u64, u32, FxBuildHasher>,
 }
 
-impl Default for GlobalExclusionsManager {
+impl std::fmt::Debug for ExclusionsManager {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut debug_map = f.debug_map();
+
+        for (&player_id, &last_node_idx) in &self.player_to_last_node {
+            let mut exclusions = Vec::new();
+            let mut current_idx = last_node_idx;
+
+            while current_idx != 0 {
+                let node = &self.nodes[current_idx as usize];
+                exclusions.push(node.byte_range_start..node.byte_range_end);
+                current_idx = node.prev_node_index;
+            }
+
+            // Reverse so exclusions are in chronological order
+            exclusions.reverse();
+            debug_map.entry(&player_id, &exclusions);
+        }
+
+        debug_map.finish()
+    }
+}
+
+impl Default for ExclusionsManager {
     fn default() -> Self {
         Self {
             nodes: vec![ExclusionNode::PLACEHOLDER],
@@ -45,7 +69,7 @@ impl Default for GlobalExclusionsManager {
     }
 }
 
-impl GlobalExclusionsManager {
+impl ExclusionsManager {
     /// Takes ownership of the current exclusion data and resets the manager.
     #[must_use]
     pub fn take(&mut self) -> Self {
@@ -58,18 +82,30 @@ impl GlobalExclusionsManager {
     }
 
     /// Appends a new exclusion range for a player.
-    pub fn append(&mut self, player_id: u64, range: Range<usize>) {
+    pub fn append_exclusion(&mut self, player_id: u64, range: Range<usize>) {
         let range_start = u32::try_from(range.start).expect("Exclusion start is too large");
         let range_end = u32::try_from(range.end).expect("Exclusion end is too large");
 
+        let prev_node_index = self
+            .player_to_last_node
+            .get(&player_id)
+            .copied()
+            .unwrap_or(0);
+
+        if prev_node_index != 0 {
+            let prev_node = &mut self.nodes[prev_node_index as usize];
+
+            if prev_node.byte_range_end == range_start {
+                // merge
+                prev_node.byte_range_end = range_end;
+                return;
+            }
+        }
+
         let new_node = ExclusionNode {
-            prev_index: self
-                .player_to_last_node
-                .get(&player_id)
-                .copied()
-                .unwrap_or(0),
-            range_start,
-            range_end,
+            prev_node_index,
+            byte_range_start: range_start,
+            byte_range_end: range_end,
         };
 
         let new_index = self.nodes.len() as u32;
@@ -80,12 +116,12 @@ impl GlobalExclusionsManager {
 
 /// Iterator for traversing exclusions for a specific player.
 struct ExclusionIterator<'a> {
-    exclusions: &'a GlobalExclusionsManager,
+    exclusions: &'a ExclusionsManager,
     current_index: u32,
 }
 
 impl<'a> ExclusionIterator<'a> {
-    fn new(exclusions: &'a GlobalExclusionsManager, player_id: u64) -> Self {
+    fn new(exclusions: &'a ExclusionsManager, player_id: u64) -> Self {
         let start_index = exclusions
             .player_to_last_node
             .get(&player_id)
@@ -108,10 +144,10 @@ impl Iterator for ExclusionIterator<'_> {
         }
 
         let node = self.exclusions.nodes.get(self.current_index as usize)?;
-        let start = usize::try_from(node.range_start).expect("Exclusion start is too large");
-        let end = usize::try_from(node.range_end).expect("Exclusion end is too large");
+        let start = usize::try_from(node.byte_range_start).expect("Exclusion start is too large");
+        let end = usize::try_from(node.byte_range_end).expect("Exclusion end is too large");
 
-        self.current_index = node.prev_index;
+        self.current_index = node.prev_node_index;
 
         Some(start..end)
     }
@@ -122,6 +158,14 @@ struct LocalBroadcastData {
     position: I16Vec2,
     range_start: usize,
     range_end: usize,
+    player_id_to_exclude: u64,
+}
+
+impl LocalBroadcastData {
+    fn len(&self) -> usize {
+        debug_assert_le!(self.range_start, self.range_end);
+        self.range_end - self.range_start
+    }
 }
 
 impl Point for LocalBroadcastData {
@@ -148,7 +192,7 @@ pub struct BufferedEgress {
     local_broadcast_buffer: Vec<LocalBroadcastData>,
 
     /// Manages player-specific exclusions.
-    exclusion_manager: GlobalExclusionsManager,
+    exclusion_manager: ExclusionsManager,
     /// Reference to the underlying egress handler.
     egress: Egress,
     /// Tracks the current broadcast order.
@@ -164,7 +208,7 @@ impl BufferedEgress {
             global_broadcast_buffer: Vec::new(),
             raw_local_broadcast_data: vec![],
             local_broadcast_buffer: Vec::default(),
-            exclusion_manager: GlobalExclusionsManager::default(),
+            exclusion_manager: ExclusionsManager::default(),
             egress,
             current_broadcast_order: None,
             local_flush_counter: 0,
@@ -199,7 +243,7 @@ impl BufferedEgress {
                     // we need to exclude a player
                     let new_len = self.global_broadcast_buffer.len();
                     self.exclusion_manager
-                        .append(packet_exclude, current_len..new_len);
+                        .append_exclusion(packet_exclude, current_len..new_len);
                 }
 
                 // TODO: Consider implementing auto-flush based on buffer size
@@ -208,6 +252,7 @@ impl BufferedEgress {
             ArchivedServerToProxyMessage::BroadcastLocal(packet) => {
                 let Ok(center_x) = rkyv::deserialize::<i16, !>(&packet.center.x);
                 let Ok(center_z) = rkyv::deserialize::<i16, !>(&packet.center.z);
+                let Ok(player_id_to_exclude) = rkyv::deserialize::<u64, !>(&packet.exclude);
 
                 let position = I16Vec2::new(center_x, center_z);
 
@@ -216,11 +261,14 @@ impl BufferedEgress {
                     .extend_from_slice(&packet.data);
                 let after_len = self.raw_local_broadcast_data.len();
 
+                // println!("broadcast local with {player_id_to_exclude} to {center_x} {center_z}");
+
                 self.local_broadcast_buffer.push(LocalBroadcastData {
                     // todo: checked
                     position,
                     range_start: before_len,
                     range_end: after_len,
+                    player_id_to_exclude,
                 });
             }
             ArchivedServerToProxyMessage::Unicast(unicast) => {
@@ -246,6 +294,21 @@ impl BufferedEgress {
                     &self.raw_local_broadcast_data,
                 );
 
+                let mut exclusions = ExclusionsManager::default();
+                let mut idx_on = 0;
+
+                for packet in &self.local_broadcast_buffer {
+                    // todo: is there a more idiomatic way to do this?
+                    let packet_len = packet.len();
+                    let range = idx_on..idx_on + packet_len;
+
+                    if packet.player_id_to_exclude != 0 {
+                        exclusions.append_exclusion(packet.player_id_to_exclude, range);
+                    }
+
+                    idx_on += packet_len;
+                }
+
                 self.local_broadcast_buffer.clear();
                 self.raw_local_broadcast_data.clear();
 
@@ -258,6 +321,7 @@ impl BufferedEgress {
                         let instruction = BroadcastLocalInstruction {
                             order: 0,
                             bvh: Arc::new(bvh),
+                            exclusions: Arc::new(exclusions),
                         };
 
                         egress.handle_broadcast_local(instruction);

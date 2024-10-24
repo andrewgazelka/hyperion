@@ -7,24 +7,24 @@ readme = "README.md"
 publish = false
 
 [dependencies]
-
 anyhow.workspace = true
+bvh.workspace = true
+bytes.workspace = true
+clap.workspace = true
+colored = "2.1.0"
+glam.workspace = true
+heapless.workspace = true
+hyperion-proto.workspace = true
+kanal = "0.1.0-pre8"
+more-asserts.workspace = true
+papaya = "0.1.4"
 rkyv = "0.8.8"
 rustc-hash = "2.0.0"
+slotmap.workspace = true
 tokio = { workspace = true, features = ["full", "tracing"] }
 tokio-util = { version = "0.7.12", features = ["full"] }
-bvh.workspace = true
-glam.workspace = true
-papaya = "0.1.4"
-slotmap.workspace = true
 tracing-subscriber.workspace = true
 tracing.workspace = true
-bytes.workspace = true
-kanal = "0.1.0-pre8"
-hyperion-proto.workspace = true
-heapless.workspace = true
-colored = "2.1.0"
-clap.workspace = true
 
 [target.'cfg(not(target_os = "windows"))'.dependencies]
 tikv-jemallocator.workspace = true

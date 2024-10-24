@@ -171,7 +171,8 @@ async fn connect_to_server_and_run_proxy(
         .instrument(info_span!("server_reader_loop"))
     }).unwrap();
 
-    let mut id_on = 0;
+    // 0 is reserved for "None" value
+    let mut player_id_on = 1;
 
     loop {
         let mut shutdown_rx = shutdown_rx.clone();
@@ -188,25 +189,25 @@ async fn connect_to_server_and_run_proxy(
         let registry = player_registry.pin();
 
         let (tx, rx) = kanal::bounded_async(1024);
-        registry.insert(id_on, PlayerHandle {
+        registry.insert(player_id_on, PlayerHandle {
             writer: tx,
             can_receive_broadcasts: AtomicBool::new(false),
         });
 
         // todo: some SlotMap like thing
-        debug!("got player with id {id_on:?}");
+        debug!("got player with id {player_id_on:?}");
 
         initiate_player_connection(
             socket,
             shutdown_rx.clone(),
-            id_on,
+            player_id_on,
             rx,
             server_sender.clone(),
             player_registry,
             player_positions,
         );
 
-        id_on += 1;
+        player_id_on += 1;
     }
 }
 

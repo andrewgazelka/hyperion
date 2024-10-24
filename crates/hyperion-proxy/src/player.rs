@@ -11,10 +11,10 @@ use tokio::{
     io::{AsyncReadExt, AsyncWrite},
     task::JoinHandle,
 };
-use tracing::{debug, info, instrument, warn};
+use tracing::{info, info_span, instrument, warn};
 
 use crate::{
-    cache::GlobalExclusionsManager,
+    cache::ExclusionsManager,
     data::{OrderedBytes, PlayerHandle},
     server_sender::ServerSender,
     util::AsyncWriteVectoredExt,
@@ -41,6 +41,9 @@ pub fn initiate_player_connection(
     player_registry: &'static papaya::HashMap<u64, PlayerHandle, FxBuildHasher>,
     player_positions: &'static papaya::HashMap<u64, ChunkPosition, FxBuildHasher>,
 ) -> JoinHandle<()> {
+    let span = info_span!("player_connection", player_id);
+    let _enter = span.enter();
+
     info!("Initiating player connection");
     let (socket_reader, socket_writer) = tokio::io::split(socket);
 
@@ -72,13 +75,13 @@ pub fn initiate_player_connection(
                 let bytes_read = match socket_reader.read_buf(&mut read_buffer).await {
                     Ok(n) => n,
                     Err(e) => {
-                        debug!("Error reading from player: {e:?}");
+                        warn!("Error reading from player: {e:?}");
                         return server_sender;
                     }
                 };
 
                 if bytes_read == 0 {
-                    debug!("End of stream reached for player");
+                    warn!("End of stream reached for player");
                     return server_sender;
                 }
 
@@ -96,9 +99,8 @@ pub fn initiate_player_connection(
                 read_buffer.clear();
 
                 if let Err(e) = server_sender.try_send(aligned_vec) {
-                    debug!("Error forwarding player packets to server: {e:?}");
+                    warn!("Error forwarding player packets to server: {e:?}");
                     panic!("Error forwarding player packets to server: {e:?}");
-                    // return server_sender;
                 }
             }
         })
@@ -113,7 +115,7 @@ pub fn initiate_player_connection(
             while let Ok(outgoing_packet) = incoming_packet_receiver.recv().await {
                 if outgoing_packet.is_flush() {
                     if let Err(e) = packet_writer.flush_pending_packets().await {
-                        debug!("Error flushing packets to player: {e:?}");
+                        warn!("Error flushing packets to player: {e:?}");
                         return;
                     }
                 } else {
@@ -201,6 +203,14 @@ impl<W: AsyncWrite + Unpin> PlayerPacketWriter<W> {
             return Ok(());
         }
 
+        #[cfg(debug_assertions)]
+        {
+            // assert none are empty
+            for iovec in &self.io_vecs {
+                debug_assert!(!iovec.is_empty());
+            }
+        }
+
         self.writer.write_vectored_all(&mut self.io_vecs).await?;
         self.pending_packets.clear();
         self.io_vecs.clear();
@@ -218,14 +228,20 @@ fn prepare_io_vectors(
 
     packet_queue.iter_mut().flat_map(move |packet| {
         let packet_data = packet.data.as_ref();
-        apply_exclusions(packet_data, packet.exclusions.as_deref(), player_id)
+        apply_exclusions(
+            packet.offset,
+            packet_data,
+            packet.exclusions.as_deref(),
+            player_id,
+        )
     })
 }
 
 /// Generates IO vectors to right given ranges of data that shuold be excluded.
 fn apply_exclusions<'a>(
+    offset: u32,
     packet_data: &'a [u8],
-    exclusions: Option<&'a GlobalExclusionsManager>,
+    exclusions: Option<&'a ExclusionsManager>,
     player_id: u64,
 ) -> impl Iterator<Item = IoSlice<'a>> + 'a {
     let coroutine = #[coroutine]
@@ -239,7 +255,8 @@ fn apply_exclusions<'a>(
             // By reversing, we process exclusions from the start of the packet to the end.
             let mut exclusion_ranges: heapless::Vec<_, 16> = heapless::Vec::new();
 
-            for range in exclusions.exclusions_for_player(player_id) {
+            for mut range in exclusions.exclusions_for_player(player_id) {
+                range.move_left(offset);
                 exclusion_ranges.push(range).unwrap();
             }
 
@@ -263,5 +280,27 @@ fn apply_exclusions<'a>(
         }
     };
 
-    core::iter::from_coroutine(coroutine)
+    core::iter::from_coroutine(coroutine).filter(|iovec| !iovec.is_empty())
+}
+
+trait RangeExt {
+    fn move_left(&mut self, offset: u32);
+}
+
+impl RangeExt for std::ops::Range<usize> {
+    fn move_left(&mut self, offset: u32) {
+        if offset > 0 {
+            let offset = offset as usize;
+            if self.start >= offset {
+                self.start -= offset;
+            } else {
+                self.start = 0;
+            }
+            if self.end >= offset {
+                self.end -= offset;
+            } else {
+                self.end = 0;
+            }
+        }
+    }
 }
