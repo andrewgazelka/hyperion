@@ -15,8 +15,9 @@ use rustc_hash::FxHashMap;
 pub struct SpawnModule;
 
 const MIN_RADIUS: i32 = 0;
-const MAX_RADIUS: i32 = 2;
-const SPAWN_Y: f32 = -21.0;
+const MAX_RADIUS: i32 = 1000;
+// const SPAWN_Y: f32 = -21.0;
+const SPAWN_Y: f32 = 100.0;
 
 fn random_position() -> Vec3 {
     let r = fastrand::i32(MIN_RADIUS..=MAX_RADIUS) as f32;

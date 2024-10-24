@@ -13,12 +13,16 @@ use tracing_subscriber::EnvFilter;
 static GLOBAL: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
 
 #[derive(Parser)]
+#[clap(version)]
 struct Params {
-    #[clap(default_value = "0.0.0.0:25565")]
+    /// The address for the proxy to listen on. Can be either:
+    /// - A TCP address like "127.0.0.1:25565"
+    /// - A Unix domain socket path like "/tmp/minecraft.sock" (Unix only)
     proxy_addr: String,
 
+    /// The address of the target Minecraft game server to proxy from/to
     #[clap(short, long, default_value = "127.0.0.1:35565")]
-    server_addr: String,
+    game_server_addr: String,
 }
 
 #[derive(Debug)]
@@ -81,7 +85,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let params = Params::parse();
 
     let proxy_addr = ProxyAddress::parse(&params.proxy_addr)?;
-    let server_addr: SocketAddr = params.server_addr.parse()?;
+    let server_addr: SocketAddr = params.game_server_addr.parse()?;
 
     let login_help = "~ The address to connect to".dimmed();
 
@@ -97,11 +101,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             match &proxy_addr {
                 ProxyAddress::Tcp(addr) => {
                     let listener = TcpListener::bind(addr).await.unwrap();
-                    let socket = NoDelayTcp { listener };
+                    let socket = NoDelayTcpListener { listener };
                     run_proxy(socket, server_addr).await.unwrap();
                 }
                 #[cfg(unix)]
                 ProxyAddress::Unix(path) => {
+                    // remove file if already exists
+                    let _unused = tokio::fs::remove_file(path).await;
                     let listener = UnixListener::bind(path).unwrap();
                     run_proxy(listener, server_addr).await.unwrap();
                 }
@@ -117,11 +123,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-struct NoDelayTcp {
+struct NoDelayTcpListener {
     listener: TcpListener,
 }
 
-impl Listener for NoDelayTcp {
+impl Listener for NoDelayTcpListener {
     type Addr = <TcpListener as Listener>::Addr;
     type Io = <TcpListener as Listener>::Io;
 

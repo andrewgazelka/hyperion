@@ -237,7 +237,7 @@ fn prepare_io_vectors(
     })
 }
 
-/// Generates IO vectors to right given ranges of data that shuold be excluded.
+/// Generates IO vectors to right given ranges of data that should be excluded.
 fn apply_exclusions<'a>(
     offset: u32,
     packet_data: &'a [u8],
@@ -257,6 +257,11 @@ fn apply_exclusions<'a>(
 
             for mut range in exclusions.exclusions_for_player(player_id) {
                 range.move_left(offset);
+
+                let Some(range) = range.clamp(&(0..packet_data.len())) else {
+                    continue;
+                };
+
                 exclusion_ranges.push(range).unwrap();
             }
 
@@ -285,6 +290,7 @@ fn apply_exclusions<'a>(
 
 trait RangeExt {
     fn move_left(&mut self, offset: u32);
+    fn clamp(&self, other: &std::ops::Range<usize>) -> Option<std::ops::Range<usize>>;
 }
 
 impl RangeExt for std::ops::Range<usize> {
@@ -301,6 +307,17 @@ impl RangeExt for std::ops::Range<usize> {
             } else {
                 self.end = 0;
             }
+        }
+    }
+
+    fn clamp(&self, other: &std::ops::Range<usize>) -> Option<std::ops::Range<usize>> {
+        if self.end <= other.start || self.start >= other.end {
+            None
+        } else {
+            Some(Self {
+                start: self.start.max(other.start),
+                end: self.end.min(other.end),
+            })
         }
     }
 }
