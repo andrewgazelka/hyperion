@@ -2,6 +2,7 @@
 ARG RUST_NIGHTLY_VERSION=nightly-2024-10-22
 ARG RUST_TARGET_CPU=native
 ARG RUSTFLAGS="-C target-cpu=${RUST_TARGET_CPU} -Z share-generics=y -Z threads=8 --cfg tokio_unstable"
+ARG CARGO_HOME=/usr/local/cargo
 
 # Use Ubuntu as base image
 FROM ubuntu:22.04 AS packages
@@ -26,25 +27,28 @@ RUN apt-get update && \
 FROM packages AS builder-base
 ARG RUST_NIGHTLY_VERSION
 ARG RUSTFLAGS
+ARG CARGO_HOME
 ENV RUSTFLAGS=${RUSTFLAGS}
+ENV CARGO_HOME=${CARGO_HOME}
 RUN curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain ${RUST_NIGHTLY_VERSION} && \
-    $HOME/.cargo/bin/rustup component add rust-src && \
-    $HOME/.cargo/bin/rustc --version
-ENV PATH="/root/.cargo/bin:${PATH}"
+    $CARGO_HOME/bin/rustup component add rust-src && \
+    $CARGO_HOME/bin/rustc --version
+ENV PATH="${CARGO_HOME}/bin:${PATH}"
 WORKDIR /app
 COPY Cargo.toml Cargo.lock ./
 COPY crates/ ./crates
 COPY events ./events
 
-RUN --mount=type=cache,target=/usr/local/cargo/registry \
-    --mount=type=cache,target=/usr/local/cargo/git \
+RUN --mount=type=cache,target=${CARGO_HOME}/registry \
+    --mount=type=cache,target=${CARGO_HOME}/git \
     --mount=type=cache,target=/app/target \
     cargo fetch
 
 # Debug builder
 FROM builder-base AS build-debug
-RUN --mount=type=cache,target=/usr/local/cargo/registry \
-    --mount=type=cache,target=/usr/local/cargo/git \
+ARG CARGO_HOME
+RUN --mount=type=cache,target=${CARGO_HOME}/registry \
+    --mount=type=cache,target=${CARGO_HOME}/git \
     --mount=type=cache,target=/app/target \
     cargo build --frozen && \
     mkdir -p /app/build && \
@@ -53,8 +57,9 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
 
 # Release builder
 FROM builder-base AS build-release
-RUN --mount=type=cache,target=/usr/local/cargo/registry \
-    --mount=type=cache,target=/usr/local/cargo/git \
+ARG CARGO_HOME
+RUN --mount=type=cache,target=${CARGO_HOME}/registry \
+    --mount=type=cache,target=${CARGO_HOME}/git \
     --mount=type=cache,target=/app/target \
     cargo build --profile release-full --frozen && \
     mkdir -p /app/build && \

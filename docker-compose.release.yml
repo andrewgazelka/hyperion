@@ -1,0 +1,34 @@
+version: '3.8'
+services:
+  hyperion-proxy:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: hyperion-proxy-release
+    ports:
+      - "25565:25565"
+    command: ["--server", "nyc:35565", "0.0.0.0:25565"]
+    restart: unless-stopped
+    environment:
+      - RUST_LOG=info
+    networks:
+      - proxy-network
+    depends_on:
+      - nyc
+
+  nyc:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: nyc-release
+    expose:
+      - "35565"
+    restart: unless-stopped
+    environment:
+      - RUST_LOG=info
+    networks:
+      - proxy-network
+
+networks:
+  proxy-network:
+    driver: bridge
