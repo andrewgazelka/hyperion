@@ -1,4 +1,4 @@
-use std::{io::BufReader, path::PathBuf, sync::LazyLock};
+use std::{path::PathBuf, sync::LazyLock};
 
 use anyhow::{bail, Context};
 use flate2::bufread::GzDecoder;
@@ -113,7 +113,7 @@ pub fn generate_biome_registry() -> anyhow::Result<BiomeRegistry> {
     Ok(biome_registry)
 }
 
-pub fn get_nyc_save() -> anyhow::Result<PathBuf> {
+pub async fn get_nyc_save() -> anyhow::Result<PathBuf> {
     // $HOME/.hyperion
     let home_dir = dirs_next::home_dir().context("could not find home directory")?;
 
@@ -122,7 +122,9 @@ pub fn get_nyc_save() -> anyhow::Result<PathBuf> {
     if !hyperion.exists() {
         // create
         info!("creating .hyperion");
-        std::fs::create_dir_all(&hyperion).context("failed to create .hyperion")?;
+        tokio::fs::create_dir_all(&hyperion)
+            .await
+            .context("failed to create .hyperion")?;
     }
 
     // NewYork.tar.gz
@@ -138,11 +140,18 @@ pub fn get_nyc_save() -> anyhow::Result<PathBuf> {
         // https://github.com/andrewgazelka/maps/raw/main/NewYork.tar.gz
         let url = "https://github.com/andrewgazelka/maps/raw/main/NewYork.tar.gz";
 
-        let response = reqwest::blocking::get(url).context("failed to get NewYork.tar.gz")?;
+        let response = reqwest::get(url)
+            .await
+            .context("failed to get NewYork.tar.gz")?;
+
+        let bytes = response
+            .bytes()
+            .await
+            .context("failed to get response bytes")?;
 
         info!("extracting NewYork.tar.gz");
 
-        let decompressed = GzDecoder::new(BufReader::new(response));
+        let decompressed = GzDecoder::new(bytes.as_ref());
 
         // Create a new archive from the decompressed file.
         let mut archive = Archive::new(decompressed);

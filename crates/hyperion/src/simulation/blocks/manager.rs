@@ -28,7 +28,7 @@ pub struct RegionManager {
 
 impl RegionManager {
     pub fn new(runtime: &Runtime) -> anyhow::Result<Self> {
-        let save = get_nyc_save()?;
+        let save = runtime.block_on(get_nyc_save())?;
         let root = save.join("region");
         let (sender, receiver) = mpsc::channel(100);
 

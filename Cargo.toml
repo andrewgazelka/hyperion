@@ -90,7 +90,7 @@ plotters = { version = "0.3.6", default-features = false }
 plotters-bitmap = "0.3.6"
 rand = "0.8.5"
 rayon = "1.10.0"
-reqwest = "0.12.5"
+reqwest = { version = "0.12.5", features = ["rustls-tls"] }
 roaring = { version = "0.10.6", features = ["simd"] }
 rustc-hash = "2.0.0"
 rustc_version = "0.4.0"
