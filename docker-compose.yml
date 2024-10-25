@@ -5,14 +5,11 @@ services:
       dockerfile: Dockerfile
       target: hyperion-proxy
     ports:
-      - "8080:8080"
+      - "25565:25565"
+    command: ["0.0.0.0:25565"]
     restart: unless-stopped
-#    healthcheck:
-#      test: ["CMD", "/hyperion-proxy", "--health-check"]
-#      interval: 30s
-#      timeout: 5s
-#      retries: 3
-#      start_period: 10s
+    environment:
+      - RUST_LOG=info
     deploy:
       resources:
         limits:

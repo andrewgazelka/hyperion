@@ -80,6 +80,8 @@ LABEL org.opencontainers.image.source="https://github.com/yourusername/hyperion-
 EXPOSE 8080
 # Define the entrypoint with runtime optimizations
 ENTRYPOINT ["/hyperion-proxy"]
+# Set default command (can be overridden in docker-compose.yml)
+CMD ["0.0.0.0:8080"]
 
 # Create runtime image for nyc
 FROM runtime-base AS nyc
