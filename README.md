@@ -51,15 +51,13 @@ is done in the proxy.
 ## Debug mode
 
 ```bash
-brew install just
-just
+docker compose -f docker-compose.debug.yml up --build
 ```
 
 ## Release mode
 
-```
-brew install just
-just release
+```bash
+docker compose -f docker-compose.release.yml up --build
 ```
 
 # Feature Support Matrix
