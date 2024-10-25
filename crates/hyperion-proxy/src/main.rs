@@ -22,7 +22,7 @@ struct Params {
 
     /// The address of the target Minecraft game server to proxy from/to
     #[clap(short, long, default_value = "127.0.0.1:35565")]
-    game_server_addr: String,
+    server: String,
 }
 
 #[derive(Debug)]
@@ -32,10 +32,7 @@ enum ProxyAddress {
     Unix(PathBuf),
 }
 
-use std::{
-    fmt::Display,
-    task::{Context, Poll},
-};
+use std::{fmt::Display, task::Poll};
 
 use colored::Colorize;
 use tokio_util::net::Listener;
@@ -85,7 +82,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let params = Params::parse();
 
     let proxy_addr = ProxyAddress::parse(&params.proxy_addr)?;
-    let server_addr: SocketAddr = params.game_server_addr.parse()?;
+
+    let server_addr: SocketAddr = tokio::net::lookup_host(&params.server)
+        .await?
+        .next()
+        .ok_or_else(|| anyhow::anyhow!("Could not resolve hostname: {}", params.server))?;
 
     let login_help = "~ The address to connect to".dimmed();
 
@@ -133,7 +134,7 @@ impl Listener for NoDelayTcpListener {
 
     fn poll_accept(
         &mut self,
-        cx: &mut Context<'_>,
+        cx: &mut core::task::Context<'_>,
     ) -> Poll<std::io::Result<(Self::Io, Self::Addr)>> {
         let Poll::Ready(result) = self.listener.poll_accept(cx) else {
             return Poll::Pending;

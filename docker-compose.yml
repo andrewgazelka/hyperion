@@ -1,3 +1,4 @@
+version: '3.8'
 services:
   hyperion-proxy:
     build:
@@ -6,51 +7,29 @@ services:
       target: hyperion-proxy
     ports:
       - "25565:25565"
-    command: ["0.0.0.0:25565"]
+    command: ["--server", "nyc:35565", "0.0.0.0:25565"]  # Fixed argument order and format
     restart: unless-stopped
     environment:
       - RUST_LOG=info
-    deploy:
-      resources:
-        limits:
-          memory: 256M
-        reservations:
-          memory: 128M
-      restart_policy:
-        condition: on-failure
-        delay: 5s
-        max_attempts: 3
-        window: 120s
+    networks:
+      - proxy-network
+    depends_on:
+      - nyc
+
   nyc:
     build:
       context: .
       dockerfile: Dockerfile
       target: nyc
-    ports:
-      - "8081:8080"
+    expose: # Use expose instead of ports since this should only be accessible internally
+      - "35565"
+    command: [ ] # ["--ip", "0.0.0.0", "--port", "35565"]
     restart: unless-stopped
-#    healthcheck:
-#      test: ["CMD", "/nyc", "--health-check"]
-#      interval: 30s
-#      timeout: 5s
-#      retries: 3
-#      start_period: 10s
-    deploy:
-      resources:
-        limits:
-          memory: 256M
-        reservations:
-          memory: 128M
-      restart_policy:
-        condition: on-failure
-        delay: 5s
-        max_attempts: 3
-        window: 120s
+    environment:
+      - RUST_LOG=info
+    networks:
+      - proxy-network
 
-#networks:
-#  default:
-#    driver: bridge
-#    ipam:
-#      driver: default
-#      config:
-#        - subnet: 172.28.0.0/16
+networks:
+  proxy-network:
+    driver: bridge

@@ -91,3 +91,5 @@ LABEL org.opencontainers.image.source="https://github.com/yourusername/nyc" \
       org.opencontainers.image.version="1.0.0"
 # Define the entrypoint with runtime optimizations
 ENTRYPOINT ["/nyc"]
+# Set default command (can be overridden in docker-compose.yml)
+CMD ["--ip", "0.0.0.0", "--port", "35565"]
