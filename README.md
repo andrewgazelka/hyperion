@@ -51,7 +51,7 @@ is done in the proxy.
 ## Debug mode
 
 ```bash
-docker compose -f docker-compose.debug.yml up --build
+docker compose up --build
 ```
 
 ## Release mode
