@@ -123,20 +123,40 @@ jobs:
   check:
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-    runs-on: ${{ matrix.os }}
+        include:
+          # Standard platforms
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+          - os: macos-latest
+            target: x86_64-apple-darwin
+          # Linux x86_64
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+          # Linux ARM64 with native runner
+          - os: ubuntu-24.04
+            runs-on: ubuntu-24.04-arm64
+            target: aarch64-unknown-linux-gnu
+          - os: ubuntu-24.04
+            runs-on: ubuntu-24.04-arm64
+            target: aarch64-unknown-linux-musl
+    runs-on: ${{ matrix.runs-on || matrix.os }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
-
+          targets: ${{ matrix.target }}
+      - name: Install musl tools
+        if: contains(matrix.target, 'musl')
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y musl-tools
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
-
       - name: Cargo check
-        run: cargo check --workspace --all-features
+        run: cargo check --workspace --all-features --target ${{ matrix.target }}
