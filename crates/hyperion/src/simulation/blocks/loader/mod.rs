@@ -242,7 +242,6 @@ fn encode_chunk_packet(
             // if there is no sky light, let's assume it is full bright for now
             sky_light_arrays.push(FixedArray([0xff; 2048]));
         }
-
         sky_light_mask.set(i + 1, 1);
 
         if let Some(block_light) = section.block_light {

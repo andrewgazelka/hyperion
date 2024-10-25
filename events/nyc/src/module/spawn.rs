@@ -15,7 +15,7 @@ use rustc_hash::FxHashMap;
 pub struct SpawnModule;
 
 const MIN_RADIUS: i32 = 0;
-const MAX_RADIUS: i32 = 1000;
+const MAX_RADIUS: i32 = 400;
 // const SPAWN_Y: f32 = -21.0;
 const SPAWN_Y: f32 = 100.0;
 

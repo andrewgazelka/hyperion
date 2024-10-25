@@ -133,7 +133,7 @@ impl Egress {
             .name("broadcast_local")
             .spawn(
                 async move {
-                    const RADIUS: i16 = 8;
+                    const RADIUS: i16 = 16;
 
                     let players = self.player_registry.pin();
 

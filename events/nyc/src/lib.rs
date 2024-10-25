@@ -19,7 +19,7 @@ use module::{
     regeneration::RegenerationModule,
 };
 
-use crate::module::{spawn::SpawnModule, stats::StatsModule};
+use crate::module::{chat::ChatModule, spawn::SpawnModule, stats::StatsModule};
 
 #[derive(Component)]
 pub struct InfectionModule;
@@ -34,6 +34,7 @@ impl Module for InfectionModule {
 
         world.import::<SpawnModule>();
         world.import::<CommandModule>();
+        world.import::<ChatModule>();
         world.import::<StatsModule>();
         world.import::<BlockModule>();
         world.import::<AttackModule>();

@@ -527,6 +527,18 @@ fn click_slot(mut data: &[u8], query: &mut PacketSwitchQuery<'_>) -> anyhow::Res
     Ok(())
 }
 
+fn chat_message(mut data: &'static [u8], query: &PacketSwitchQuery<'_>) -> anyhow::Result<()> {
+    // todo: we could technically remove allocations &[u8] exists until end of tick
+    let pkt = play::ChatMessageC2s::decode(&mut data)?;
+    let msg = pkt.message.0;
+
+    query
+        .events
+        .push(event::ChatMessage { msg, by: query.id }, query.world);
+
+    Ok(())
+}
+
 pub fn packet_switch(
     raw: BorrowedPacketFrame<'_>,
     query: &mut PacketSwitchQuery<'_>,
@@ -539,6 +551,7 @@ pub fn packet_switch(
     let data: &'static [u8] = unsafe { core::mem::transmute(data) };
 
     match packet_id {
+        play::ChatMessageC2s::ID => chat_message(data, query)?,
         play::ClickSlotC2s::ID => click_slot(data, query)?,
         play::ClientCommandC2s::ID => client_command(data, query)?,
         play::CommandExecutionC2s::ID => chat_command(data, query)?,

@@ -13,6 +13,12 @@ pub struct ItemDropEvent {
     pub location: Vec3,
 }
 
+#[derive(Debug)]
+pub struct ChatMessage<'a> {
+    pub msg: &'a str,
+    pub by: Entity,
+}
+
 /// Represents an attack action by an entity in the game.
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct AttackEntity {
