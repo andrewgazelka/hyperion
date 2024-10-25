@@ -15,7 +15,7 @@ pub struct StatsModule;
 impl Module for StatsModule {
     #[allow(clippy::excessive_nesting)]
     fn module(world: &World) {
-        let mode = std::env::var("RUN_MODE").unwrap_or_else(|_| "Unknown".to_string());
+        let mode = env!("RUN_MODE");
 
         let mut tick_times = Vec::with_capacity(20 * 60); // 20 ticks per second, 60 seconds
         let mut last_frame_time_total = 0.0;
