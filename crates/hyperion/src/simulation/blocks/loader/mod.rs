@@ -18,8 +18,11 @@ pub mod parse;
 
 use super::{chunk::LoadedChunk, shared::Shared};
 use crate::{
-    net::encoder::PacketEncoder, runtime::AsyncRuntime, simulation::util::heightmap,
-    storage::BitStorage, Scratch, CHUNK_HEIGHT_SPAN,
+    net::encoder::PacketEncoder,
+    runtime::AsyncRuntime,
+    simulation::{blocks::loader::parse::section::Section, util::heightmap},
+    storage::BitStorage,
+    Scratch, CHUNK_HEIGHT_SPAN,
 };
 
 struct TasksState {
@@ -143,7 +146,7 @@ impl LaunchManager {
 
 fn empty_chunk(position: IVec2) -> LoadedChunk {
     // height: 24
-    let unloaded = ChunkData::with_height(CHUNK_HEIGHT_SPAN);
+    let unloaded = ChunkData::new_with(CHUNK_HEIGHT_SPAN, Section::empty_sky);
 
     let bytes = STATE.with_borrow_mut(|state| {
         encode_chunk_packet(&unloaded, position, state)
@@ -210,48 +213,63 @@ fn encode_chunk_packet(
 
     // convert section_count + 2 0b1s into `u64` array
     // todo: this is jank let's do the non jank way so we can get smaller packet sizes
-    let mut all_ones = BitStorage::new(1, section_count + 2, None)?;
-
-    for i in 0..section_count + 2 {
-        all_ones.set(i, 1);
-    }
+    let mut sky_light_mask = BitStorage::new(1, section_count + 2, None)?;
+    let mut block_light_mask = BitStorage::new(1, section_count + 2, None)?;
 
     // 2048 bytes per section -> long count = 2048 / 8 = 256
-    let empty_light = FixedArray([0x00_u8; 2048]);
+    // let empty_light = FixedArray([0x00_u8; 2048]);
 
-    let mut sky_light_arrays = vec![empty_light];
-    let mut block_light_arrays = vec![empty_light];
+    let mut sky_light_arrays = vec![];
+    let mut block_light_arrays = vec![];
 
     let mut section_bytes = Vec::new();
 
-    for section in &chunk.sections {
+    sky_light_mask.set(0, 0);
+
+    block_light_mask.set(0, 0);
+
+    for (i, section) in chunk.sections.iter().enumerate() {
         use valence_protocol::Encode;
         let non_air_blocks: u16 = 42;
         non_air_blocks.encode(&mut section_bytes).unwrap();
 
         // todo: how do sky light and block light work differently?
 
-        let sky_light = section.sky_light;
-        let sky_light = FixedArray(sky_light);
+        if let Some(sky_light) = section.sky_light {
+            let sky_light = FixedArray(sky_light);
+            sky_light_arrays.push(sky_light);
+        } else {
+            // if there is no sky light, let's assume it is full bright for now
+            sky_light_arrays.push(FixedArray([0xff; 2048]));
+        }
 
-        sky_light_arrays.push(sky_light);
+        sky_light_mask.set(i + 1, 1);
 
-        let block_light = section.block_light;
-        let block_light = FixedArray(block_light);
-
-        block_light_arrays.push(block_light);
+        if let Some(block_light) = section.block_light {
+            let block_light = FixedArray(block_light);
+            block_light_arrays.push(block_light);
+            block_light_mask.set(i + 1, 1);
+        }
 
         write_block_states(&section.block_states, &mut section_bytes).unwrap();
         write_biomes(&section.biomes, &mut section_bytes).unwrap();
     }
 
+    // todo: is this right?
+    sky_light_mask.set(section_count + 1, 1);
+    sky_light_arrays.push(FixedArray([0xff; 2048]));
+
+    block_light_mask.set(section_count + 1, 0);
+
     // todo: Maybe we want the top one to actually be all Fs because I think this is just an edge case for how things are rendered.
-    sky_light_arrays.push(empty_light);
-    block_light_arrays.push(empty_light);
+    // sky_light_arrays.push(empty_light);
+    // block_light_arrays.push(empty_light);
 
-    debug_assert_eq!(sky_light_arrays.len(), section_count + 2);
+    // debug_assert_eq!(sky_light_arrays.len(), section_count + 2);
+    // debug_assert_eq!(block_light_arrays.len(), section_count + 2);
 
-    let ones_data = all_ones.into_data();
+    let sky_light_data = sky_light_mask.into_data();
+    let block_light_data = block_light_mask.into_data();
 
     let pkt = play::ChunkDataS2c {
         pos: ChunkPos::new(location.x, location.y),
@@ -263,8 +281,8 @@ fn encode_chunk_packet(
         blocks_and_biomes: &section_bytes,
         block_entities: Cow::Borrowed(&[]),
 
-        sky_light_mask: Cow::Borrowed(&ones_data),
-        block_light_mask: Cow::Borrowed(&ones_data),
+        sky_light_mask: Cow::Borrowed(&sky_light_data),
+        block_light_mask: Cow::Borrowed(&block_light_data),
 
         empty_sky_light_mask: Cow::Borrowed(&[]),
         empty_block_light_mask: Cow::Borrowed(&[]),

@@ -9,8 +9,8 @@ pub struct Section {
     pub biomes: BiomeContainer,
 
     // todo: maybe make stack array of 2048
-    pub block_light: [u8; 2048],
-    pub sky_light: [u8; 2048],
+    pub block_light: Option<[u8; 2048]>,
+    pub sky_light: Option<[u8; 2048]>,
 
     pub changed: RoaringBitmap,
     pub changed_since_last_tick: RoaringBitmap,
@@ -21,10 +21,19 @@ impl Default for Section {
         Self {
             block_states: hyperion_palette::PalettedContainer::Single(0),
             biomes: BiomeContainer::default(),
-            block_light: [0_u8; 2048],
-            sky_light: [0_u8; 2048],
+            block_light: None,
+            sky_light: None,
             changed: RoaringBitmap::new(),
             changed_since_last_tick: RoaringBitmap::new(),
+        }
+    }
+}
+
+impl Section {
+    pub fn empty_sky() -> Self {
+        Self {
+            sky_light: Some([0xff; 2048]),
+            ..Self::default()
         }
     }
 }
@@ -63,8 +72,8 @@ mod tests {
         Section {
             block_states: hyperion_palette::PalettedContainer::Single(0), // air (probably)
             biomes: BiomeContainer::new(),
-            block_light: [0; 2048],
-            sky_light: [0; 2048],
+            block_light: None,
+            sky_light: None,
             changed: RoaringBitmap::default(),
             changed_since_last_tick: RoaringBitmap::default(),
         }

@@ -85,9 +85,16 @@ pub struct ChunkData {
 }
 
 impl ChunkData {
-    pub fn with_height(height: u32) -> Self {
+    pub fn new(height: u32) -> Self {
         Self {
             sections: vec![Section::default(); height as usize / 16],
+            block_entities: BTreeMap::new(),
+        }
+    }
+
+    pub fn new_with(height: u32, f: impl Fn() -> Section) -> Self {
+        Self {
+            sections: vec![f(); height as usize / 16],
             block_entities: BTreeMap::new(),
         }
     }
@@ -221,8 +228,7 @@ pub fn parse_chunk(
 
     assert!(!nbt_sections.is_empty(), "empty sections");
 
-    let mut chunk =
-        ChunkData::with_height((nbt_sections.len() * 16).try_into().unwrap_or(u32::MAX));
+    let mut chunk = ChunkData::new((nbt_sections.len() * 16).try_into().unwrap_or(u32::MAX));
 
     let min_sect_y = nbt_sections
         .iter()
@@ -250,43 +256,37 @@ pub fn parse_chunk(
             return Err(ParseChunkError::SectionYOutOfBounds);
         }
 
-        let block_light = match section.remove("BlockLight") {
+        match section.remove("BlockLight") {
             Some(Value::ByteArray(block_light)) => {
-                if block_light.len() != 2048 {
+                let block_light = block_light.as_slice();
+                let block_light: &[u8] = bytemuck::cast_slice(block_light);
+
+                let block_light: Result<[_; 2048], _> = block_light.try_into();
+                let Ok(block_light) = block_light else {
                     return Err(ParseChunkError::InvalidBlockLight);
-                }
-                block_light
+                };
+
+                chunk.sections[idx].block_light = Some(block_light);
             }
             Some(_) => return Err(ParseChunkError::MissingBlockLight),
-            None => vec![0_i8; 2048],
+            _ => {}
         };
 
-        let block_light = block_light.as_slice();
-        let block_light: &[u8] = bytemuck::cast_slice(block_light);
-
-        chunk.sections[idx]
-            .block_light
-            .as_mut_slice()
-            .copy_from_slice(block_light);
-
-        let sky_light = match section.remove("SkyLight") {
+        match section.remove("SkyLight") {
             Some(Value::ByteArray(sky_light)) => {
-                if sky_light.len() != 2048 {
+                let sky_light = sky_light.as_slice();
+                let sky_light: &[u8] = bytemuck::cast_slice(sky_light);
+
+                let sky_light: Result<[_; 2048], _> = sky_light.try_into();
+                let Ok(sky_light) = sky_light else {
                     return Err(ParseChunkError::InvalidSkyLight);
-                }
-                sky_light
+                };
+
+                chunk.sections[idx].sky_light = Some(sky_light);
             }
             Some(_) => return Err(ParseChunkError::MissingSkyLight),
-            None => vec![0_i8; 2048],
+            _ => {}
         };
-
-        let sky_light = sky_light.as_slice();
-        let sky_light: &[u8] = bytemuck::cast_slice(sky_light);
-
-        chunk.sections[idx]
-            .sky_light
-            .as_mut_slice()
-            .copy_from_slice(sky_light);
 
         let Some(Value::Compound(mut block_states)) = section.remove("block_states") else {
             warn!("missing block states was {section:#?}");
