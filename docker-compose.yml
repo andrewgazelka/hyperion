@@ -1,0 +1,59 @@
+services:
+  hyperion-proxy:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: hyperion-proxy
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+#    healthcheck:
+#      test: ["CMD", "/hyperion-proxy", "--health-check"]
+#      interval: 30s
+#      timeout: 5s
+#      retries: 3
+#      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+        reservations:
+          memory: 128M
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s
+  nyc:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: nyc
+    ports:
+      - "8081:8080"
+    restart: unless-stopped
+#    healthcheck:
+#      test: ["CMD", "/nyc", "--health-check"]
+#      interval: 30s
+#      timeout: 5s
+#      retries: 3
+#      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+        reservations:
+          memory: 128M
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s
+
+#networks:
+#  default:
+#    driver: bridge
+#    ipam:
+#      driver: default
+#      config:
+#        - subnet: 172.28.0.0/16
