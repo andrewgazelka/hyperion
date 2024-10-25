@@ -27,6 +27,7 @@ pub enum ParsedCommand {
     Upgrade,
     Stats(Stat, f32),
     Health(f32),
+    TpHere,
 }
 
 fn parse_speed(input: &str) -> IResult<&str, ParsedCommand> {
@@ -89,6 +90,10 @@ fn parse_stat(input: &str) -> IResult<&str, ParsedCommand> {
     )(input)
 }
 
+fn parse_tphere(input: &str) -> IResult<&str, ParsedCommand> {
+    map(tag("tphere"), |_| ParsedCommand::TpHere)(input)
+}
+
 pub fn command(input: &str) -> IResult<&str, ParsedCommand> {
     alt((
         parse_dirt,
@@ -97,6 +102,7 @@ pub fn command(input: &str) -> IResult<&str, ParsedCommand> {
         parse_speed,
         parse_stat,
         parse_team,
+        parse_tphere,
         parse_upgrade,
         parse_zombie,
     ))(input)

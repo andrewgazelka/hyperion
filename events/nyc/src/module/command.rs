@@ -7,7 +7,7 @@ use hyperion::{
     simulation::{
         blocks::Blocks,
         command::{get_root_command, Command, Parser},
-        event, Health, InGameName, Uuid,
+        event, Health, InGameName, Position, Uuid,
     },
     storage::EventQueue,
     system_registry::SystemId,
@@ -20,7 +20,7 @@ use hyperion::{
         nbt,
         packets::play::{
             self, command_tree_s2c::StringArg, player_abilities_s2c::PlayerAbilitiesFlags,
-            PlayerAbilitiesS2c,
+            player_position_look_s2c::PlayerPositionLookFlags, PlayerAbilitiesS2c,
         },
         text::IntoText,
         BlockState, GameMode, ItemKind, ItemStack, VarInt,
@@ -84,10 +84,14 @@ pub fn add_to_tree(world: &World) {
         }),
         health,
     );
+
+    // Add tphere command
+    add_command(world, Command::literal("tphere"), root_command);
 }
 
 struct CommandContext<'a> {
     entity: Entity,
+    position: &'a Position,
     stream: NetworkStreamRef,
     team: &'a mut Team,
     compose: &'a Compose,
@@ -111,6 +115,7 @@ fn process_command(command: &ParsedCommand, context: &mut CommandContext<'_>) {
         ParsedCommand::Upgrade => handle_upgrade_command(context),
         ParsedCommand::Stats(stat, amount) => handle_stats(*stat, *amount, context),
         ParsedCommand::Health(amount) => handle_health_command(*amount, context),
+        ParsedCommand::TpHere => handle_tphere_command(context),
     }
 }
 
@@ -507,6 +512,56 @@ fn fly_speed_packet(amount: f32) -> PlayerAbilitiesS2c {
     }
 }
 
+fn handle_tphere_command(context: &CommandContext<'_>) {
+    // Get the executor's position
+
+    // Get all players with Position component
+    // todo: cache this
+    let mut query = context
+        .world
+        .query::<(&mut Position, &NetworkStreamRef)>()
+        .build();
+
+    let executor_pos = context.position;
+
+    query.each_entity(|entity, (position, io)| {
+        // Skip if it's the executor
+        if entity == context.entity {
+            return;
+        }
+
+        position.move_to(executor_pos.position);
+
+        // send packet
+        let pkt = play::PlayerPositionLookS2c {
+            position: executor_pos.position.as_dvec3(),
+            yaw: 0.0,
+            pitch: 0.0,
+            flags: PlayerPositionLookFlags::default(),
+
+            // todo: not sure this is really needed
+            teleport_id: VarInt(fastrand::i32(..)),
+        };
+
+        context
+            .compose
+            .unicast(&pkt, *io, context.system_id, context.world)
+            .unwrap();
+    });
+
+    // Send confirmation message to executor
+    let msg = "All players have been teleported to your location";
+    let pkt = play::GameMessageS2c {
+        chat: msg.into_cow_text(),
+        overlay: false,
+    };
+
+    context
+        .compose
+        .unicast(&pkt, context.stream, context.system_id, context.world)
+        .unwrap();
+}
+
 #[derive(Component)]
 pub struct CommandModule;
 
@@ -547,9 +602,10 @@ impl Module for CommandModule {
                         &InGameName,
                         &mut PlayerInventory,
                         &mut Level,
-                        &mut Health
+                        &mut Health,
+                        &Position,
                     )>(
-                        |(stream, team, uuid, name, inventory, level, health)| {
+                        |(stream, team, uuid, name, inventory, level, health, position)| {
                             let mut context = CommandContext {
                                 entity: event.by,
                                 stream: *stream,
@@ -562,7 +618,8 @@ impl Module for CommandModule {
                                 name,
                                 inventory,
                                 level,
-                                health
+                                health,
+                                position,
                             };
                             process_command(&command, &mut context);
                         },
