@@ -1,12 +1,9 @@
 {
   "name": "Debian",
-  "build" : {
-    "dockerfile": "Dockerfile-dev"
-  },
-  "mounts": [
-    "type=volume,target=${containerWorkspaceFolder}/target"
-  ],
   "forwardPorts": [25565],
+  "features": {
+    "ghcr.io/devcontainers/features/rust:1": {}
+  },
   "customizations": {
     "vscode": {
       "extensions": [
