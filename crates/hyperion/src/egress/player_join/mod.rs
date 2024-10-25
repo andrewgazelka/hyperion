@@ -21,6 +21,8 @@ use valence_registry::{BiomeRegistry, RegistryCodec};
 use valence_server::entity::EntityKind;
 use valence_text::IntoText;
 
+use crate::simulation::Pitch;
+
 mod list;
 pub use list::*;
 
@@ -33,7 +35,7 @@ use crate::{
         command::{get_command_packet, Command, ROOT_COMMAND},
         skin::PlayerSkin,
         util::registry_codec_raw,
-        Comms, InGameName, Play, Position, Uuid,
+        Comms, InGameName, Play, Position, Uuid, Yaw,
     },
     system_registry::{SystemId, PLAYER_JOINS},
     util::{SendableQuery, SendableRef},
@@ -50,12 +52,14 @@ pub fn player_join_world(
     uuid: uuid::Uuid,
     name: &str,
     io: NetworkStreamRef,
-    pose: &Position,
+    position: &Position,
+    yaw: &Yaw,
+    pitch: &Pitch,
     world: &WorldRef<'_>,
     skin: &PlayerSkin,
     system_id: SystemId,
     root_command: Entity,
-    query: &Query<(&Uuid, &InGameName, &Position, &PlayerSkin)>,
+    query: &Query<(&Uuid, &InGameName, &Position, &Yaw, &Pitch, &PlayerSkin)>,
     crafting_registry: &CraftingRegistry,
     config: &Config,
 ) -> anyhow::Result<()> {
@@ -100,7 +104,7 @@ pub fn player_join_world(
         .unicast(&pkt, io, system_id, world)
         .context("failed to send player spawn packet")?;
 
-    let center_chunk = pose.chunk_pos();
+    let center_chunk = position.to_chunk();
 
     let pkt = play::ChunkRenderDistanceCenterS2c {
         chunk_x: center_chunk.x.into(),
@@ -115,8 +119,8 @@ pub fn player_join_world(
     // compose.io_buf().unicast_raw(chunk, io, system_id, world);
 
     let pkt = play::PlayerSpawnPositionS2c {
-        position: pose.position.as_dvec3().into(),
-        angle: pose.yaw,
+        position: position.as_dvec3().into(),
+        angle: **yaw as f32,
     };
 
     compose.unicast(&pkt, io, system_id, world)?;
@@ -160,9 +164,9 @@ pub fn player_join_world(
     compose
         .unicast(
             &play::PlayerPositionLookS2c {
-                position: pose.position.as_dvec3(),
-                yaw: pose.yaw,
-                pitch: pose.pitch,
+                position: position.as_dvec3(),
+                yaw: **yaw as f32,
+                pitch: **pitch as f32,
                 flags: PlayerPositionLookFlags::default(),
                 teleport_id: 1.into(),
             },
@@ -182,35 +186,26 @@ pub fn player_join_world(
     {
         let scope = tracing::trace_span!("generating_skins");
         let _enter = scope.enter();
-        query.iter_stage(world).each(|(uuid, name, _, _skin)| {
-            // todo: in future, do not clone
+        query
+            .iter_stage(world)
+            .each(|(uuid, name, _, _, _, _skin)| {
+                // todo: in future, do not clone
 
-            // let PlayerSkin {
-            //     textures: value,
-            //     signature,
-            // } = skin.clone();
+                let entry = PlayerListEntry {
+                    player_uuid: uuid.0,
+                    username: name.to_string().into(),
+                    // todo: eliminate alloc
+                    properties: Cow::Owned(vec![]),
+                    chat_data: None,
+                    listed: true,
+                    ping: 20,
+                    game_mode: GameMode::Creative,
+                    display_name: Some(name.to_string().into_cow_text()),
+                };
 
-            // let _property = valence_protocol::profile::Property {
-            //     name: "textures".to_string(),
-            //     value,
-            //     signature: Some(signature),
-            // };
-
-            let entry = PlayerListEntry {
-                player_uuid: uuid.0,
-                username: name.to_string().into(),
-                // todo: eliminate alloc
-                properties: Cow::Owned(vec![]),
-                chat_data: None,
-                listed: true,
-                ping: 20,
-                game_mode: GameMode::Creative,
-                display_name: Some(name.to_string().into_cow_text()),
-            };
-
-            entries.push(entry);
-            all_player_names.push(name.to_string());
-        });
+                entries.push(entry);
+                all_player_names.push(name.to_string());
+            });
     }
 
     let all_player_names = all_player_names.iter().map(String::as_str).collect();
@@ -246,7 +241,7 @@ pub fn player_join_world(
 
         query
             .iter_stage(world)
-            .each_iter(|it, idx, (uuid, _, pose, _)| {
+            .each_iter(|it, idx, (uuid, _, position, yaw, pitch, _)| {
                 let result = || {
                     let query_entity = it.entity(idx);
 
@@ -257,9 +252,9 @@ pub fn player_join_world(
                     let pkt = play::PlayerSpawnS2c {
                         entity_id: VarInt(query_entity.minecraft_id()),
                         player_uuid: uuid.0,
-                        position: pose.position.as_dvec3(),
-                        yaw: ByteAngle::from_degrees(pose.yaw),
-                        pitch: ByteAngle::from_degrees(pose.pitch),
+                        position: position.as_dvec3(),
+                        yaw: ByteAngle::from_degrees(**yaw as f32),
+                        pitch: ByteAngle::from_degrees(**pitch as f32),
                     };
 
                     compose
@@ -346,9 +341,9 @@ pub fn player_join_world(
     let spawn_player = play::PlayerSpawnS2c {
         entity_id: current_entity_id,
         player_uuid: uuid,
-        position: pose.position.as_dvec3(),
-        yaw: ByteAngle::from_degrees(pose.yaw),
-        pitch: ByteAngle::from_degrees(pose.pitch),
+        position: position.as_dvec3(),
+        yaw: ByteAngle::from_degrees(**yaw as f32),
+        pitch: ByteAngle::from_degrees(**pitch as f32),
     };
     compose
         .broadcast(&spawn_player, system_id)
@@ -486,7 +481,9 @@ pub fn spawn_entity_packet(
     id: Entity,
     kind: EntityKind,
     uuid: Uuid,
-    pose: &Position,
+    yaw: &Yaw,
+    pitch: &Pitch,
+    position: &Position,
 ) -> play::EntitySpawnS2c {
     info!("spawning entity");
 
@@ -496,10 +493,10 @@ pub fn spawn_entity_packet(
         entity_id,
         object_uuid: *uuid,
         kind: VarInt(kind.get()),
-        position: pose.position.as_dvec3(),
-        pitch: ByteAngle::from_degrees(pose.pitch),
-        yaw: ByteAngle::from_degrees(pose.yaw),
-        head_yaw: ByteAngle::from_degrees(pose.head_yaw()),
+        position: position.as_dvec3(),
+        yaw: ByteAngle::from_degrees(**yaw as f32),
+        pitch: ByteAngle::from_degrees(**pitch as f32),
+        head_yaw: ByteAngle::from_degrees(**yaw as f32), // todo: unsure if this is correct
         data: VarInt::default(),
         velocity: Velocity([0; 3]),
     }
@@ -510,7 +507,7 @@ pub struct PlayerJoinModule;
 
 impl Module for PlayerJoinModule {
     fn module(world: &World) {
-        let query = world.new_query::<(&Uuid, &InGameName, &Position, &PlayerSkin)>();
+        let query = world.new_query::<(&Uuid, &InGameName, &Position, &Yaw, &Pitch, &PlayerSkin)>();
 
         let query = SendableQuery(query);
 
@@ -591,31 +588,38 @@ impl Module for PlayerJoinModule {
 
                 entity.add::<Play>();
 
-                entity.get::<(&Uuid, &InGameName, &Position, &NetworkStreamRef)>(
-                    |(uuid, name, pose, &stream_id)| {
-                        let query = &query;
-                        let query = &query.0;
+                entity.get::<(
+                    &Uuid,
+                    &InGameName,
+                    &Position,
+                    &Yaw,
+                    &Pitch,
+                    &NetworkStreamRef,
+                )>(|(uuid, name, position, yaw, pitch, &stream_id)| {
+                    let query = &query;
+                    let query = &query.0;
 
-                        // if we get an error joining, we should kick the player
-                        if let Err(e) = player_join_world(
-                            &entity,
-                            compose,
-                            uuid.0,
-                            name,
-                            stream_id,
-                            pose,
-                            &world,
-                            &skin,
-                            system_id,
-                            root_command,
-                            query,
-                            crafting_registry,
-                            config,
-                        ) {
-                            entity.set(PendingRemove::new(e.to_string()));
-                        };
-                    },
-                );
+                    // if we get an error joining, we should kick the player
+                    if let Err(e) = player_join_world(
+                        &entity,
+                        compose,
+                        uuid.0,
+                        name,
+                        stream_id,
+                        position,
+                        yaw,
+                        pitch,
+                        &world,
+                        &skin,
+                        system_id,
+                        root_command,
+                        query,
+                        crafting_registry,
+                        config,
+                    ) {
+                        entity.set(PendingRemove::new(e.to_string()));
+                    };
+                });
 
                 let entity = world.entity_from_id(entity);
                 entity.set(skin);

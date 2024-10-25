@@ -277,21 +277,50 @@ impl Default for RunningSpeed {
 pub struct AiTargetable;
 
 /// The full pose of an entity. This is used for both [`Player`] and [`Npc`].
-#[derive(Component, Copy, Clone, Debug, Serialize, Deserialize)]
+#[derive(
+    Component,
+    Copy,
+    Clone,
+    Debug,
+    Serialize,
+    Deserialize,
+    Deref,
+    DerefMut,
+    From
+)]
 pub struct Position {
     /// The (x, y, z) position of the entity.
     /// Note we are using [`Vec3`] instead of [`glam::DVec3`] because *cache locality* is important.
     /// However, the Notchian server uses double precision floating point numbers for the position.
-    pub position: Vec3,
+    position: Vec3,
+}
 
-    /// The yaw of the entity's head measured in degrees. (todo: probably need a separate component for body yaw, perhaps separate this out)
-    pub yaw: f32,
+#[derive(Component, Copy, Clone, Debug, Deref, DerefMut, Default)]
+pub struct Yaw {
+    yaw: f16,
+}
 
-    /// The pitch of the entity's head measured in degrees.
-    pub pitch: f32,
+#[derive(Component, Copy, Clone, Debug, Deref, DerefMut, Default)]
+pub struct Pitch {
+    pitch: f16,
+}
 
-    /// The bounding box of the entity.
-    pub bounding: Aabb,
+const PLAYER_WIDTH: f16 = 0.6;
+const PLAYER_HEIGHT: f16 = 1.8;
+
+#[derive(Component, Copy, Clone)]
+pub struct EntitySize {
+    pub half_width: f16,
+    pub height: f16,
+}
+
+impl Default for EntitySize {
+    fn default() -> Self {
+        Self {
+            half_width: PLAYER_WIDTH / 2.0,
+            height: PLAYER_HEIGHT,
+        }
+    }
 }
 
 impl Position {
@@ -299,17 +328,6 @@ impl Position {
     pub fn sound_position(&self) -> IVec3 {
         let position = self.position * 8.0;
         position.as_ivec3()
-    }
-}
-
-impl Display for Position {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let position = self.position;
-        let yaw = self.yaw;
-        let pitch = self.pitch;
-        let bounding = self.bounding;
-
-        write!(f, "@{position}, {yaw}°, {pitch}°, ({bounding})")
     }
 }
 
@@ -328,58 +346,36 @@ impl ChunkPosition {
     }
 }
 
+#[must_use]
+pub fn aabb(position: Vec3, size: EntitySize) -> Aabb {
+    let half_width = size.half_width as f32;
+    let height = size.height as f32;
+    Aabb::new(
+        position - Vec3::new(half_width, 0.0, half_width),
+        position + Vec3::new(half_width, height, half_width),
+    )
+}
+
+#[must_use]
+pub fn block_bounds(position: Vec3, size: EntitySize) -> (IVec3, IVec3) {
+    let bounding = aabb(position, size);
+    let min = bounding.min.floor().as_ivec3();
+    let max = bounding.max.ceil().as_ivec3();
+
+    (min, max)
+}
+
 /// The initial player spawn position. todo: this should not be a constant
 pub const PLAYER_SPAWN_POSITION: Vec3 = Vec3::new(-8_526_209_f32, 100f32, -6_028_464f32);
 
 impl Position {
-    // todo: possible have separate field for head yaw
-    /// The player's head yaw.
-    #[must_use]
-    pub const fn head_yaw(&self) -> f32 {
-        self.yaw
-    }
-
-    /// Create a new [`Position`] for a player given their position and head yaw.
-    #[must_use]
-    pub fn player(position: Vec3) -> Self {
-        Self {
-            position,
-            yaw: 0.0,
-            pitch: 0.0,
-            bounding: Aabb::create(position, 0.6, 1.8),
-        }
-    }
-
-    /// Get the start and end block positions of the player's bounding box.
-    #[must_use]
-    pub fn block_bounds(&self) -> (IVec3, IVec3) {
-        let min = self.bounding.min.floor().as_ivec3();
-        let max = self.bounding.max.ceil().as_ivec3();
-
-        (min, max)
-    }
-
     /// Get the chunk position of the center of the player's bounding box.
     #[must_use]
-    pub fn chunk_pos(&self) -> IVec2 {
+    pub fn to_chunk(&self) -> IVec2 {
         let position = self.position.as_ivec3();
         let x = position.x >> 4;
         let z = position.z >> 4;
         IVec2::new(x, z)
-    }
-}
-
-impl Position {
-    /// Move the pose by the given vector.
-    pub fn move_by(&mut self, vec: Vec3) {
-        self.position += vec;
-        self.bounding = self.bounding.move_by(vec);
-    }
-
-    /// Teleport the pose to the given position.
-    pub fn move_to(&mut self, pos: Vec3) {
-        self.bounding = self.bounding.move_to_feet(pos);
-        self.position = pos;
     }
 }
 

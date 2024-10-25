@@ -74,7 +74,7 @@ impl Module for ChatModule {
                             overlay: false,
                         };
 
-                        let center = position.chunk_pos();
+                        let center = position.to_chunk();
 
                         compose.broadcast_local(&packet, center, system_id)
                             .send(&world)

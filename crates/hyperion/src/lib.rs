@@ -19,6 +19,7 @@
 #![feature(array_try_map)]
 #![feature(split_array)]
 #![feature(never_type)]
+#![feature(f16)]
 
 // todo: deny more and completely fix panics
 // #![deny(
@@ -58,11 +59,14 @@ use valence_protocol::{CompressionThreshold, Encode, Packet};
 use crate::{
     net::{proxy::init_proxy_comms, Compose, Compressors, IoBuf, MAX_PACKET_SIZE},
     runtime::AsyncRuntime,
+    simulation::{Pitch, Yaw},
 };
 
 mod common;
 pub use common::*;
 use hyperion_crafting::CraftingRegistry;
+
+use crate::simulation::{EntitySize, Player};
 
 pub mod egress;
 pub mod ingress;
@@ -194,6 +198,14 @@ impl Hyperion {
         world.component::<Db>();
         world.component::<SkinHandler>();
         world.component::<Events>();
+
+        world.component::<EntitySize>();
+
+        world
+            .component::<Player>()
+            .add_trait::<(flecs::With, EntitySize)>()
+            .add_trait::<(flecs::With, Yaw)>()
+            .add_trait::<(flecs::With, Pitch)>();
 
         info!("starting hyperion");
         let config = config::Config::load("run/config.toml")?;

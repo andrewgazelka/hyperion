@@ -29,11 +29,6 @@ fn random_position() -> Vec3 {
     Vec3::new(x, SPAWN_Y, z)
 }
 
-fn random_pose() -> Position {
-    let position = random_position();
-    Position::player(position)
-}
-
 impl Module for SpawnModule {
     fn module(world: &World) {
         let positions = Rc::new(RefCell::new(FxHashMap::default()));
@@ -42,9 +37,9 @@ impl Module for SpawnModule {
             let positions = Rc::clone(&positions);
             move |entity, uuid| {
                 let mut positions = positions.borrow_mut();
-                let position = *positions.entry(uuid.0).or_insert_with(random_pose);
+                let position = *positions.entry(uuid.0).or_insert_with(random_position);
 
-                entity.set(position);
+                entity.set(Position::from(position));
 
                 println!("got uuid: {uuid:?}");
             }
@@ -54,7 +49,7 @@ impl Module for SpawnModule {
             .observer::<flecs::OnRemove, (&Uuid, &Position)>()
             .each(move |(uuid, position)| {
                 let mut positions = positions.borrow_mut();
-                positions.insert(uuid.0, *position);
+                positions.insert(uuid.0, **position);
             });
     }
 }

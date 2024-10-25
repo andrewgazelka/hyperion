@@ -55,7 +55,7 @@ impl Module for SyncChunksModule {
 
                 let last_sent_chunk = last_sent.0;
 
-                let current_chunk = pose.chunk_pos();
+                let current_chunk = pose.to_chunk();
 
                 if last_sent_chunk == current_chunk {
                     return;

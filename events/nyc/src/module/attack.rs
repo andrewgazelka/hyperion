@@ -171,7 +171,7 @@ impl Module for AttackModule {
                                                 id: ident!("minecraft:entity.player.attack.knockback").into(),
                                                 range: None,
                                             },
-                                            position: (target_position.position * 8.0).as_ivec3(),
+                                            position: (**target_position * 8.0).as_ivec3(),
                                             volume: 1.5,
                                             pitch: 0.8,
                                             seed: fastrand::i64(..),
@@ -183,7 +183,7 @@ impl Module for AttackModule {
                                         let particle_pkt = play::ParticleS2c {
                                             particle: Cow::Owned(Particle::Explosion),
                                             long_distance: true,
-                                            position: target_position.position.as_dvec3() + DVec3::new(0.0, 1.0, 0.0),
+                                            position: target_position.as_dvec3() + DVec3::new(0.0, 1.0, 0.0),
                                             max_speed: 0.5,
                                             count: 100,
                                             offset: Vec3::new(0.5, 0.5, 0.5),
@@ -193,7 +193,7 @@ impl Module for AttackModule {
                                         let particle_pkt2 = play::ParticleS2c {
                                             particle: Cow::Owned(Particle::DragonBreath),
                                             long_distance: true,
-                                            position: target_position.position.as_dvec3() + DVec3::new(0.0, 1.5, 0.0),
+                                            position: target_position.as_dvec3() + DVec3::new(0.0, 1.5, 0.0),
                                             max_speed: 0.2,
                                             count: 75,
                                             offset: Vec3::new(0.3, 0.3, 0.3),
@@ -398,8 +398,8 @@ impl Module for AttackModule {
                                     }
 
                                     // Calculate velocity change based on attack direction
-                                    let this = target_position.position;
-                                    let other = origin_pos.position;
+                                    let this = **target_position;
+                                    let other = **origin_pos;
 
                                     let delta_x = other.x - this.x;
                                     let delta_z = other.z - this.z;

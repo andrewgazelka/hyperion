@@ -22,13 +22,14 @@ use valence_text::IntoText;
 
 use super::{
     animation::{self, ActiveAnimation},
+    block_bounds,
     blocks::Blocks,
     metadata::{Metadata, Pose},
-    ConfirmBlockSequences, Position,
+    ConfirmBlockSequences, EntitySize, Position,
 };
 use crate::{
     net::{decoder::BorrowedPacketFrame, Compose, NetworkStreamRef},
-    simulation::{event, event::PluginMessage},
+    simulation::{aabb, event, event::PluginMessage, Pitch, Yaw},
     storage::Events,
     system_registry::SystemId,
 };
@@ -49,17 +50,17 @@ fn full(query: &mut PacketSwitchQuery<'_>, mut data: &[u8]) -> anyhow::Result<()
     let position = position.as_vec3();
     change_position_or_correct_client(query, position);
 
-    query.pose.yaw = yaw;
-    query.pose.pitch = pitch;
+    query.yaw.yaw = yaw as f16;
+    query.pitch.pitch = pitch as f16;
 
     Ok(())
 }
 
 // #[instrument(skip_all)]
 fn change_position_or_correct_client(query: &mut PacketSwitchQuery<'_>, proposed: Vec3) {
-    let pose = &mut *query.pose;
+    let pose = &mut *query.position;
 
-    if let Err(e) = try_change_position(proposed, pose, query.blocks) {
+    if let Err(e) = try_change_position(proposed, pose, *query.size, query.blocks) {
         // Send error message to player
         let msg = format!("§c{e}");
         let pkt = play::GameMessageS2c {
@@ -77,8 +78,8 @@ fn change_position_or_correct_client(query: &mut PacketSwitchQuery<'_>, proposed
         // Correct client position
         let pkt = play::PlayerPositionLookS2c {
             position: pose.position.as_dvec3(),
-            yaw: pose.yaw,
-            pitch: pose.pitch,
+            yaw: query.yaw.yaw as f32,
+            pitch: query.pitch.pitch as f32,
             flags: PlayerPositionLookFlags::default(),
             teleport_id: VarInt(fastrand::i32(..)),
         };
@@ -110,18 +111,20 @@ const MAX_BLOCKS_PER_TICK: f32 = 30.0;
 /// ```
 /// Only denies movement if starting outside a block and moving into a block.
 /// This prevents players from glitching into blocks while allowing them to move out.
-fn try_change_position(proposed: Vec3, pose: &mut Position, blocks: &Blocks) -> anyhow::Result<()> {
-    is_within_speed_limits(pose.position, proposed)?;
-
-    let mut proposed_pose = *pose;
-    proposed_pose.move_to(proposed);
+fn try_change_position(
+    proposed: Vec3,
+    position: &mut Position,
+    size: EntitySize,
+    blocks: &Blocks,
+) -> anyhow::Result<()> {
+    is_within_speed_limits(**position, proposed)?;
 
     // Only check collision if we're starting outside a block
-    if !has_collision(pose, blocks) && has_collision(&proposed_pose, blocks) {
+    if !has_collision(position, size, blocks) && has_collision(&proposed, size, blocks) {
         return Err(anyhow::anyhow!("Cannot move into solid blocks"));
     }
 
-    *pose = proposed_pose;
+    **position = proposed;
     Ok(())
 }
 
@@ -135,11 +138,11 @@ fn is_within_speed_limits(current: Vec3, proposed: Vec3) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn has_collision(pose: &Position, blocks: &Blocks) -> bool {
+fn has_collision(position: &Vec3, size: EntitySize, blocks: &Blocks) -> bool {
     use std::ops::ControlFlow;
 
-    let (min, max) = pose.block_bounds();
-    let shrunk = pose.bounding.shrink(0.01);
+    let (min, max) = block_bounds(*position, size);
+    let shrunk = aabb(*position, size).shrink(0.01);
 
     let res = blocks.get_blocks(min, max, |pos, block| {
         let pos = Vec3::new(pos.x as f32, pos.y as f32, pos.z as f32);
@@ -159,15 +162,13 @@ fn has_collision(pose: &Position, blocks: &Blocks) -> bool {
     res.is_break()
 }
 
-fn look_and_on_ground(mut data: &[u8], full_entity_pose: &mut Position) -> anyhow::Result<()> {
+fn look_and_on_ground(mut data: &[u8], query: &mut PacketSwitchQuery<'_>) -> anyhow::Result<()> {
     let pkt = play::LookAndOnGroundC2s::decode(&mut data)?;
-
-    // debug!("look and on ground packet: {:?}", pkt);
 
     let play::LookAndOnGroundC2s { yaw, pitch, .. } = pkt;
 
-    full_entity_pose.yaw = yaw;
-    full_entity_pose.pitch = pitch;
+    **query.yaw = yaw as f16;
+    **query.pitch = pitch as f16;
 
     Ok(())
 }
@@ -260,7 +261,10 @@ pub struct PacketSwitchQuery<'a> {
     pub view: EntityView<'a>,
     pub compose: &'a Compose,
     pub io_ref: NetworkStreamRef,
-    pub pose: &'a mut Position,
+    pub position: &'a mut Position,
+    pub yaw: &'a mut Yaw,
+    pub pitch: &'a mut Pitch,
+    pub size: &'a EntitySize,
     pub events: &'a Events,
     pub world: &'a World,
     pub blocks: &'a Blocks,
@@ -417,7 +421,8 @@ pub fn player_interact_block(
         let position_dvec3 = position.as_vec3();
 
         // todo(hack): technically players can do some crazy position stuff to abuse this probably
-        let player_aabb = query.pose.bounding.shrink(0.01);
+        // let player_aabb = query.position.bounding.shrink(0.01);
+        let player_aabb = aabb(**query.position, *query.size).shrink(0.01);
 
         let collides_player = block_state
             .collision_shapes()
@@ -559,7 +564,7 @@ pub fn packet_switch(
         play::CustomPayloadC2s::ID => custom_payload(data, query)?,
         play::FullC2s::ID => full(query, data)?,
         play::HandSwingC2s::ID => hand_swing(data, query)?,
-        play::LookAndOnGroundC2s::ID => look_and_on_ground(data, query.pose)?,
+        play::LookAndOnGroundC2s::ID => look_and_on_ground(data, query)?,
         play::PlayerActionC2s::ID => player_action(data, query)?,
         play::PlayerInteractBlockC2s::ID => player_interact_block(data, query)?,
         play::PlayerInteractEntityC2s::ID => player_interact_entity(data, query)?,

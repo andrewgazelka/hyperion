@@ -26,8 +26,8 @@ use crate::{
     simulation::{
         animation::ActiveAnimation, blocks::Blocks, handlers::PacketSwitchQuery,
         metadata::Metadata, skin::PlayerSkin, AiTargetable, ChunkPosition, Comms,
-        ConfirmBlockSequences, EntityReaction, Health, ImmuneStatus, InGameName, PacketState,
-        Player, Position, StreamLookup, Uuid,
+        ConfirmBlockSequences, EntityReaction, EntitySize, Health, ImmuneStatus, InGameName,
+        PacketState, Pitch, Player, Position, StreamLookup, Uuid, Yaw,
     },
     storage::{Events, GlobalEventHandlers, PlayerJoinServer, SkinHandler},
     system_registry::{SystemId, RECV_DATA, REMOVE_PLAYER_FROM_VISIBILITY},
@@ -439,7 +439,10 @@ impl Module for IngressModule {
             &mut PacketState,
             &NetworkStreamRef,
             &Events($),
+            &EntitySize,
             ?&mut Position,
+            &mut Yaw,
+            &mut Pitch,
             &mut ConfirmBlockSequences,
             &mut hyperion_inventory::PlayerInventory,
             &mut Metadata,
@@ -462,7 +465,10 @@ impl Module for IngressModule {
                 login_state,
                 &io_ref,
                 event_queue,
-                mut pose,
+                size,
+                mut position,
+                yaw,
+                pitch,
                 confirm_block_sequences,
                 inventory,
                 metadata,
@@ -555,7 +561,7 @@ impl Module for IngressModule {
                             // Transitioning to play is just a way to make sure that the player is officially in play before we start sending them play packets.
                             // We have a certain duration that we wait before doing this.
                             // todo: better way?
-                            if let Some(pose) = &mut pose {
+                            if let Some(position) = &mut position {
                                 let world = &world;
 
                                 let mut query = PacketSwitchQuery {
@@ -563,7 +569,10 @@ impl Module for IngressModule {
                                     view: entity,
                                     compose,
                                     io_ref,
-                                    pose,
+                                    position,
+                                    yaw,
+                                    pitch,
+                                    size,
                                     events: event_queue,
                                     world,
                                     blocks,

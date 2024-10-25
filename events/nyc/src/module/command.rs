@@ -517,7 +517,7 @@ fn handle_tphere_command(context: &CommandContext<'_>) {
 
     // Get all players with Position component
     // todo: cache this
-    let mut query = context
+    let query = context
         .world
         .query::<(&mut Position, &NetworkStreamRef)>()
         .build();
@@ -530,11 +530,11 @@ fn handle_tphere_command(context: &CommandContext<'_>) {
             return;
         }
 
-        position.move_to(executor_pos.position);
+        *position = *executor_pos;
 
         // send packet
         let pkt = play::PlayerPositionLookS2c {
-            position: executor_pos.position.as_dvec3(),
+            position: executor_pos.as_dvec3(),
             yaw: 0.0,
             pitch: 0.0,
             flags: PlayerPositionLookFlags::default(),
