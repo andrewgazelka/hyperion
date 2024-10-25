@@ -95,7 +95,7 @@ fn change_position_or_correct_client(query: &mut PacketSwitchQuery<'_>, proposed
 /// Returns true if the position was changed, false if it was not.
 /// The vanilla server has a max speed of 100 blocks per tick.
 /// However, we are much more conservative.
-const MAX_BLOCKS_PER_TICK: f32 = 15.0;
+const MAX_BLOCKS_PER_TICK: f32 = 30.0;
 
 /// Returns true if the position was changed, false if it was not.
 ///
