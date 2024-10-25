@@ -11,9 +11,73 @@ I would greatly appreciate the contribution.
 To see what to work on check the [issues page](https://github.com/andrewgazelka/hyperion/issues) or
 join [Hyperion's Discord](https://discord.gg/sTN8mdRQ) for the latest updates on development.
 
-![2024-10-21_19 00 03](https://github.com/user-attachments/assets/5371c38f-5c56-4654-98d9-8d93f75ae2e0)
+# Architecture
 
-
+```mermaid
+flowchart TB
+    subgraph GameServer["Game Server (↕️ Scaled)"]
+        direction TB
+        subgraph FlecsMT["Flecs Multi-threaded ECS"]
+            direction LR
+            IngressSys["Ingress System"] --> |"1 Game Tick (50ms)"| CoreSys["Core Systems (Game Engine)"] --> GameSys["Game Systems (Event Logic)"] --> EgressSys["Egress System"]
+        end
+        
+        TokioIO["Tokio Async I/O"]
+        TokioIO --> IngressSys
+        EgressSys --> TokioIO
+    end
+    
+    subgraph ProxyLayer["Proxy Layer (↔️ Scaled)"]
+        direction TB
+        Proxy1["Hyperion Proxy"]
+        Proxy2["Hyperion Proxy"]
+        ProxyN["Hyperion Proxy"]
+        
+        MulticastLogic["Regional Multicasting"]
+    end
+    
+    subgraph AuthLayer["Authentication"]
+        Velocity1["Velocity + ViaVersion"]
+        Velocity2["Velocity + ViaVersion"]
+        VelocityN["Velocity + ViaVersion"]
+    end
+    
+    Player1_1((Player 1))
+    Player1_2((Player 2))
+    Player2_1((Player 3))
+    Player2_2((Player 4))
+    PlayerN_1((Player N-1))
+    PlayerN_2((Player N))
+    
+    TokioIO <--> |"Rkyv-encoded"| Proxy1
+    TokioIO <--> |"Rkyv-encoded"| Proxy2
+    TokioIO <--> |"Rkyv-encoded"| ProxyN
+    
+    Proxy1 <--> Velocity1
+    Proxy2 <--> Velocity2
+    ProxyN <--> VelocityN
+    
+    Velocity1 --> Player1_1
+    Velocity1 --> Player1_2
+    Velocity2 --> Player2_1
+    Velocity2 --> Player2_2
+    VelocityN --> PlayerN_1
+    VelocityN --> PlayerN_2
+    
+    classDef server fill:#f96,stroke:#333,stroke-width:4px
+    classDef proxy fill:#9cf,stroke:#333,stroke-width:2px
+    classDef auth fill:#fcf,stroke:#333,stroke-width:2px
+    classDef ecs fill:#ff9,stroke:#333,stroke-width:3px
+    classDef system fill:#ffd,stroke:#333,stroke-width:2px
+    classDef async fill:#e7e7e7,stroke:#333,stroke-width:2px
+    
+    class GameServer server
+    class FlecsMT ecs
+    class IngressSys,CoreSys,GameSys,EgressSys system
+    class Proxy1,Proxy2,ProxyN proxy
+    class Velocity1,Velocity2,VelocityN auth
+    class TokioIO async
+```
 
 # Benchmarks
 
