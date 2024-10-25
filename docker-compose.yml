@@ -21,7 +21,7 @@ services:
       context: .
       dockerfile: Dockerfile
       target: nyc
-    expose: # Use expose instead of ports since this should only be accessible internally
+    expose:
       - "35565"
     command: [ ] # ["--ip", "0.0.0.0", "--port", "35565"]
     restart: unless-stopped
