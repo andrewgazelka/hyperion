@@ -1,6 +1,6 @@
 #![feature(portable_simd)]
 
-use std::{clone::Clone, collections::HashSet, iter::FusedIterator};
+use std::{clone::Clone, iter::FusedIterator};
 
 use roaring::RoaringBitmap;
 
@@ -118,10 +118,17 @@ impl PalettedContainer {
                 ),
             },
             Self::Direct(direct) => {
-                // Create HashSet of unique values
-                let unique: HashSet<_> = direct.iter().copied().collect::<HashSet<_>>();
+                // Use RoaringBitmap for unique values since we know they're u16
+                let mut seen = RoaringBitmap::new();
+                for value in direct.iter().copied() {
+                    seen.insert(u32::from(value));
+                }
+
                 UniqueBlockIter {
-                    inner: Box::new(unique.into_iter()),
+                    inner: Box::new(
+                        seen.into_iter()
+                            .map(|x| unsafe { u16::try_from(x).unwrap_unchecked() }),
+                    ),
                 }
             }
         }
