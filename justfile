@@ -42,11 +42,11 @@ fmt:
 proxy:
     ulimit -Sn {{fds}} && cargo run --profile release-full --bin hyperion-proxy
 
-nyc:
-    cargo run --bin nyc --release
+proof-of-concept:
+    cargo run --bin proof-of-concept --release
 
-nyc-full:
-    cargo run --bin nyc --profile release-full
+proof-of-concept-full:
+    cargo run --bin proof-of-concept --profile release-full
 
 # cargo machete
 unused-deps:
@@ -57,39 +57,39 @@ deny:
     cargo deny check
 
 # Watch and rebuild release version
-watch-nyc:
+watch-proof-of-concept:
     RUN_MODE="release-{{arch}}" cargo watch \
         --postpone \
         --no-vcs-ignores \
         -w {{project_root}}/.trigger-release \
-        -s './target/release/nyc'
+        -s './target/release/proof-of-concept'
 
 
 # Watch Hyperion changes and rebuild
 watch:
     cargo watch \
         -w '{{project_root}}/crates/hyperion' \
-        -w '{{project_root}}/events/nyc' \
-        -s 'cargo check -p nyc && cargo build --release -p nyc' \
+        -w '{{project_root}}/events/proof-of-concept' \
+        -s 'cargo check -p proof-of-concept && cargo build --release -p proof-of-concept' \
         -s 'touch {{project_root}}/.trigger-release'
 
 # run in debug mode with tracy; auto-restarts on changes
 debug:
     #!/usr/bin/env -S parallel --shebang --ungroup --jobs 3
-    RUST_BACKTRACE=full RUN_MODE=debug-{{arch}} cargo watch --postpone --no-vcs-ignores -w {{project_root}}/.trigger-debug -s './target/debug/nyc'
+    RUST_BACKTRACE=full RUN_MODE=debug-{{arch}} cargo watch --postpone --no-vcs-ignores -w {{project_root}}/.trigger-debug -s './target/debug/proof-of-concept'
     RUST_BACKTRACE=full ulimit -Sn {{fds}} && cargo run --bin hyperion-proxy --release
-    cargo watch -w '{{project_root}}/crates/hyperion' -w '{{project_root}}/events/nyc' -s 'cargo check -p nyc && cargo build -p nyc' -s 'touch {{project_root}}/.trigger-debug'
+    cargo watch -w '{{project_root}}/crates/hyperion' -w '{{project_root}}/events/proof-of-concept' -s 'cargo check -p proof-of-concept && cargo build -p proof-of-concept' -s 'touch {{project_root}}/.trigger-debug'
 
 # run in release mode with tracy; auto-restarts on changes
 release:
     #!/usr/bin/env -S parallel --shebang --ungroup --jobs 3
-    RUN_MODE=release-{{arch}} cargo watch --postpone --no-vcs-ignores -w {{project_root}}/.trigger-release -s './target/release/nyc'
+    RUN_MODE=release-{{arch}} cargo watch --postpone --no-vcs-ignores -w {{project_root}}/.trigger-release -s './target/release/proof-of-concept'
     ulimit -Sn {{fds}} && cargo run --profile release-full --bin hyperion-proxy
-    cargo watch -w '{{project_root}}/crates/hyperion' -w '{{project_root}}/events/nyc' -s 'cargo check -p nyc && cargo build --release -p nyc' -s 'touch {{project_root}}/.trigger-release'
+    cargo watch -w '{{project_root}}/crates/hyperion' -w '{{project_root}}/events/proof-of-concept' -s 'cargo check -p proof-of-concept && cargo build --release -p proof-of-concept' -s 'touch {{project_root}}/.trigger-release'
 
 release-full:
     #!/usr/bin/env -S parallel --shebang --ungroup --jobs 2
-    RUN_MODE=release-f-{{arch}} cargo run --profile release-full -p nyc'
+    RUN_MODE=release-f-{{arch}} cargo run --profile release-full -p proof-of-concept'
     ulimit -Sn {{fds}} && cargo run --bin hyperion-proxy --profile release-full
 
 # run a given number of bots to connect to hyperion

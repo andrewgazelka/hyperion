@@ -21,7 +21,7 @@ members = [
     "crates/hyperion-stats",
     "crates/hyperion-text",
     "crates/hyperion-utils",
-    "events/nyc",
+    "events/proof-of-concept",
 ]
 
 [profile.release-full]

@@ -12,7 +12,7 @@ use tokio::{
 };
 
 use super::region::Region;
-use crate::simulation::util::get_nyc_save;
+use crate::simulation::util::get_proof_of_concept_save;
 
 enum RegionRequest {
     Get {
@@ -28,7 +28,7 @@ pub struct RegionManager {
 
 impl RegionManager {
     pub fn new(runtime: &Runtime) -> anyhow::Result<Self> {
-        let save = runtime.block_on(get_nyc_save())?;
+        let save = runtime.block_on(get_proof_of_concept_save())?;
         let root = save.join("region");
         let (sender, receiver) = mpsc::channel(100);
 

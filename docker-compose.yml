@@ -7,20 +7,20 @@ services:
       target: hyperion-proxy-debug
     ports:
       - "25565:25565"
-    command: ["--server", "nyc:35565", "0.0.0.0:25565"]  # Fixed argument order and format
+    command: ["--server", "proof-of-concept:35565", "0.0.0.0:25565"]  # Fixed argument order and format
     restart: unless-stopped
     environment:
       - RUST_LOG=info
     networks:
       - proxy-network
     depends_on:
-      - nyc
+      - proof-of-concept
 
-  nyc:
+  proof-of-concept:
     build:
       context: .
       dockerfile: Dockerfile
-      target: nyc-debug
+      target: proof-of-concept-debug
     expose:
       - "35565"
     command: [ ] # ["--ip", "0.0.0.0", "--port", "35565"]

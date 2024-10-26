@@ -113,7 +113,7 @@ pub fn generate_biome_registry() -> anyhow::Result<BiomeRegistry> {
     Ok(biome_registry)
 }
 
-pub async fn get_nyc_save() -> anyhow::Result<PathBuf> {
+pub async fn get_proof_of_concept_save() -> anyhow::Result<PathBuf> {
     // $HOME/.hyperion
     let home_dir = dirs_next::home_dir().context("could not find home directory")?;
 
@@ -127,29 +127,27 @@ pub async fn get_nyc_save() -> anyhow::Result<PathBuf> {
             .context("failed to create .hyperion")?;
     }
 
-    // NewYork.tar.gz
-
-    let new_york_dir = hyperion.join("NewYork");
+    let new_york_dir = hyperion.join("ProofOfConcept");
 
     if new_york_dir.exists() {
-        info!("using cached NewYork load");
+        info!("using cached ProofOfConcept load");
     } else {
         // download
-        info!("downloading NewYork.tar.gz");
+        info!("downloading ProofOfConcept.tar.gz");
 
-        // https://github.com/andrewgazelka/maps/raw/main/NewYork.tar.gz
-        let url = "https://github.com/andrewgazelka/maps/raw/main/NewYork.tar.gz";
+        // https://github.com/andrewgazelka/maps/raw/main/ProofOfConcept.tar.gz
+        let url = "https://github.com/andrewgazelka/maps/raw/main/ProofOfConcept.tar.gz";
 
         let response = reqwest::get(url)
             .await
-            .context("failed to get NewYork.tar.gz")?;
+            .context("failed to get ProofOfConcept.tar.gz")?;
 
         let bytes = response
             .bytes()
             .await
             .context("failed to get response bytes")?;
 
-        info!("extracting NewYork.tar.gz");
+        info!("extracting ProofOfConcept.tar.gz");
 
         let decompressed = GzDecoder::new(bytes.as_ref());
 
@@ -158,7 +156,7 @@ pub async fn get_nyc_save() -> anyhow::Result<PathBuf> {
 
         archive
             .unpack(&hyperion)
-            .context("failed to unpack NewYork.tar.gz")?;
+            .context("failed to unpack ProofOfConcept.tar.gz")?;
     }
 
     Ok(new_york_dir)

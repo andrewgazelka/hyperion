@@ -1,5 +1,5 @@
 [package]
-name = "nyc"
+name = "proof-of-concept"
 version = "0.1.0"
 edition = "2021"
 authors = ["Andrew Gazelka <andrew.gazelka@gmail.com>"]

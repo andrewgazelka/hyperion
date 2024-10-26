@@ -1,5 +1,5 @@
 use clap::Parser;
-use nyc::init_game;
+use proof_of_concept::init_game;
 use tracing_subscriber::EnvFilter;
 
 #[cfg(not(target_env = "msvc"))]
