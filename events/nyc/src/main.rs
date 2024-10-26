@@ -1,5 +1,6 @@
 use clap::Parser;
 use nyc::init_game;
+use tracing_subscriber::EnvFilter;
 
 #[cfg(not(target_env = "msvc"))]
 #[global_allocator]
@@ -16,33 +17,26 @@ struct Args {
     port: u16,
 }
 
-fn print_nyc() {
-    let nyc = include_str!("nyc.txt");
-    println!("\n\n{nyc}\n");
+fn setup_logging() {
+    // Build a custom subscriber
+    tracing_subscriber::fmt()
+        .with_ansi(true)
+        .with_file(false)
+        .with_line_number(false)
+        .with_target(false)
+        // .with_max_level(tracing::Level::DEBUG)
+        .with_env_filter(EnvFilter::from_default_env())
+        .init();
 }
 
 fn main() {
     dotenvy::dotenv().ok();
 
+    setup_logging();
+
     // console_subscriber::init();
 
     let Args { ip, port } = Args::parse();
-
-    print_nyc();
-
-    // let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
-
-    // tracing_subscriber::fmt()
-    //     .with_env_filter(filter)
-    //     // .pretty()
-    //     .with_timer(tracing_subscriber::fmt::time::ChronoLocal::new(
-    //         "%H:%M:%S %3fms".to_owned(),
-    //     ))
-    //     .with_file(false)
-    //     .with_line_number(false)
-    //     .with_target(false)
-    //     .try_init()
-    //     .expect("setup tracing");
 
     let address = format!("{ip}:{port}");
 

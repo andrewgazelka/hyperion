@@ -62,10 +62,20 @@ pub struct SwingArm {
     pub hand: Hand,
 }
 
-#[derive(Debug)]
 pub struct PluginMessage<'a> {
     pub channel: &'a str,
     pub data: &'a [u8],
+}
+
+impl std::fmt::Debug for PluginMessage<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let bytes = bytes::Bytes::copy_from_slice(self.data);
+
+        f.debug_struct("PluginMessage")
+            .field("channel", &self.channel)
+            .field("data", &bytes)
+            .finish()
+    }
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]

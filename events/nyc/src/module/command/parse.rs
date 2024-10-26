@@ -28,6 +28,7 @@ pub enum ParsedCommand {
     Stats(Stat, f32),
     Health(f32),
     TpHere,
+    Tp { x: f32, y: f32, z: f32 },
 }
 
 fn parse_speed(input: &str) -> IResult<&str, ParsedCommand> {
@@ -94,6 +95,16 @@ fn parse_tphere(input: &str) -> IResult<&str, ParsedCommand> {
     map(tag("tphere"), |_| ParsedCommand::TpHere)(input)
 }
 
+fn parse_tp(input: &str) -> IResult<&str, ParsedCommand> {
+    map(
+        preceded(
+            preceded(tag("tp"), space1),
+            tuple((float, preceded(space1, float), preceded(space1, float))),
+        ),
+        |(x, y, z)| ParsedCommand::Tp { x, y, z },
+    )(input)
+}
+
 pub fn command(input: &str) -> IResult<&str, ParsedCommand> {
     alt((
         parse_dirt,
@@ -103,6 +114,7 @@ pub fn command(input: &str) -> IResult<&str, ParsedCommand> {
         parse_stat,
         parse_team,
         parse_tphere,
+        parse_tp,
         parse_upgrade,
         parse_zombie,
     ))(input)

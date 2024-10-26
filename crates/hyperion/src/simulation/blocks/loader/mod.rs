@@ -3,11 +3,12 @@ use std::{borrow::Cow, cell::RefCell, io::Write, sync::Arc};
 use anyhow::{bail, Context};
 use bytes::BytesMut;
 use glam::IVec2;
+use hyperion_nerd_font::NERD_ROCKET;
 use itertools::Itertools;
 use libdeflater::{CompressionLvl, Compressor};
 use parse::ChunkData;
 use rustc_hash::FxHashSet;
-use tracing::warn;
+use tracing::{debug, warn};
 use valence_generated::block::BlockState;
 use valence_nbt::{compound, List};
 use valence_protocol::{packets::play, ChunkPos, CompressionThreshold, FixedArray};
@@ -139,6 +140,16 @@ impl ChunkLoader {
                 }
             };
 
+            let unique_blocks = loaded_chunk
+                .chunk
+                .sections
+                .iter()
+                .flat_map(|section| section.block_states.unique_blocks())
+                .unique()
+                .count();
+
+            debug!("{NERD_ROCKET} loaded chunk {position} with {unique_blocks} unique blocks");
+
             tx_load_chunks.send(loaded_chunk).unwrap();
         });
     }
@@ -169,6 +180,7 @@ async fn load_chunk(position: IVec2, shared: &WorldShared) -> anyhow::Result<Loa
     // https://rust-lang.github.io/rust-clippy/master/index.html#/large_futures
     let Ok(region) = shared.regions.get_region_from_chunk(x, y).await else {
         // most likely the file representing the region does not exist so we will just return en empty chunk
+        warn!("region file for {position} does not exist; returning empty chunk");
         return Ok(empty_chunk(position));
     };
 

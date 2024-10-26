@@ -48,7 +48,9 @@ ouroboros.workspace = true
 parking_lot.workspace = true
 rayon.workspace = true
 reqwest.workspace = true
+pretty-hex.workspace = true
 roaring = { workspace = true, features = ["simd"] }
+hyperion-nerd-font.workspace = true
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 sha2.workspace = true

@@ -1,5 +1,5 @@
 [package]
-name = "hyperion-palette"
+name = "hyperion-nerd-font"
 version = "0.1.0"
 edition = "2021"
 authors = ["Andrew Gazelka <andrew.gazelka@gmail.com>"]
@@ -7,9 +7,6 @@ readme = "README.md"
 publish = false
 
 [dependencies]
-roaring.workspace = true
-anyhow.workspace = true
-valence_protocol.workspace = true
 
 [lints]
 workspace = true

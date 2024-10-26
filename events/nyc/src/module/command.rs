@@ -85,13 +85,15 @@ pub fn add_to_tree(world: &World) {
         health,
     );
 
+    add_command(world, Command::literal("tp"), root_command);
+
     // Add tphere command
     add_command(world, Command::literal("tphere"), root_command);
 }
 
 struct CommandContext<'a> {
     entity: Entity,
-    position: &'a Position,
+    position: &'a mut Position,
     stream: NetworkStreamRef,
     team: &'a mut Team,
     compose: &'a Compose,
@@ -116,6 +118,7 @@ fn process_command(command: &ParsedCommand, context: &mut CommandContext<'_>) {
         ParsedCommand::Stats(stat, amount) => handle_stats(*stat, *amount, context),
         ParsedCommand::Health(amount) => handle_health_command(*amount, context),
         ParsedCommand::TpHere => handle_tphere_command(context),
+        ParsedCommand::Tp { x, y, z } => handle_tp_command(*x, *y, *z, context),
     }
 }
 
@@ -522,7 +525,7 @@ fn handle_tphere_command(context: &CommandContext<'_>) {
         .query::<(&mut Position, &NetworkStreamRef)>()
         .build();
 
-    let executor_pos = context.position;
+    let executor_pos = *context.position;
 
     query.each_entity(|entity, (position, io)| {
         // Skip if it's the executor
@@ -530,7 +533,7 @@ fn handle_tphere_command(context: &CommandContext<'_>) {
             return;
         }
 
-        *position = *executor_pos;
+        *position = executor_pos;
 
         // send packet
         let pkt = play::PlayerPositionLookS2c {
@@ -559,6 +562,39 @@ fn handle_tphere_command(context: &CommandContext<'_>) {
     context
         .compose
         .unicast(&pkt, context.stream, context.system_id, context.world)
+        .unwrap();
+}
+
+fn handle_tp_command(x: f32, y: f32, z: f32, context: &mut CommandContext<'_>) {
+    // Update position
+    context.position.x = x;
+    context.position.y = y;
+    context.position.z = z;
+
+    // Send teleport packet to the player
+    let pkt = play::PlayerPositionLookS2c {
+        position: context.position.as_dvec3(),
+        yaw: 0.0,
+        pitch: 0.0,
+        flags: PlayerPositionLookFlags::default(),
+        teleport_id: VarInt(fastrand::i32(..)),
+    };
+
+    context
+        .compose
+        .unicast(&pkt, context.stream, context.system_id, context.world)
+        .unwrap();
+
+    // Send confirmation message
+    let msg = format!("Teleported to {x} {y} {z}");
+    let text_pkt = play::GameMessageS2c {
+        chat: msg.into_cow_text(),
+        overlay: false,
+    };
+
+    context
+        .compose
+        .unicast(&text_pkt, context.stream, context.system_id, context.world)
         .unwrap();
 }
 
@@ -603,7 +639,7 @@ impl Module for CommandModule {
                         &mut PlayerInventory,
                         &mut Level,
                         &mut Health,
-                        &Position,
+                        &mut Position,
                     )>(
                         |(stream, team, uuid, name, inventory, level, health, position)| {
                             let mut context = CommandContext {

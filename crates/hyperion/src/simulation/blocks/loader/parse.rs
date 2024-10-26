@@ -289,7 +289,7 @@ pub fn parse_chunk(
         };
 
         let Some(Value::Compound(mut block_states)) = section.remove("block_states") else {
-            warn!("missing block states was {section:#?}");
+            warn!("missing block states was {section:?}");
             return Err(ParseChunkError::MissingBlockStates);
         };
 

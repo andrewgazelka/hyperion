@@ -532,6 +532,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "cblas-sys"
+version = "0.1.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b6feecd82cce51b0204cf063f0041d69f24ce83f680d87514b004248e7b0fa65"
+dependencies = [
+ "libc",
+]
+
+[[package]]
 name = "cc"
 version = "1.1.31"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1640,6 +1649,7 @@ dependencies = [
  "hyperion-crafting",
  "hyperion-event-macros",
  "hyperion-inventory",
+ "hyperion-nerd-font",
  "hyperion-palette",
  "hyperion-proto",
  "hyperion-text",
@@ -1656,6 +1666,7 @@ dependencies = [
  "once_cell",
  "ouroboros",
  "parking_lot",
+ "pretty-hex",
  "rayon",
  "reqwest",
  "rkyv",
@@ -1721,10 +1732,15 @@ name = "hyperion-minecraft-proto"
 version = "0.1.0"
 
 [[package]]
+name = "hyperion-nerd-font"
+version = "0.1.0"
+
+[[package]]
 name = "hyperion-palette"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "roaring",
  "valence_protocol",
 ]
 
@@ -2167,6 +2183,8 @@ version = "0.16.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "882ed72dce9365842bf196bdeedf5055305f11fc8c03dee7bb0194a6cad34841"
 dependencies = [
+ "cblas-sys",
+ "libc",
  "matrixmultiply",
  "num-complex",
  "num-integer",
@@ -2263,6 +2281,7 @@ dependencies = [
  "tikv-jemallocator",
  "tokio",
  "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
@@ -2590,6 +2609,12 @@ checksum = "77957b295656769bb8ad2b6a6b09d897d94f05c41b069aede1fcdaa675eaea04"
 dependencies = [
  "zerocopy",
 ]
+
+[[package]]
+name = "pretty-hex"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bbc83ee4a840062f368f9096d80077a9841ec117e17e7f700df81958f1451254"
 
 [[package]]
 name = "prettyplease"
