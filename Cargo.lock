@@ -218,12 +218,6 @@ dependencies = [
 
 [[package]]
 name = "base64"
-version = "0.21.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9d297deb1925b89f2ccc13d7635fa0714f12c87adce1c75356b39ca9b7178567"
-
-[[package]]
-name = "base64"
 version = "0.22.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
@@ -382,17 +376,6 @@ dependencies = [
 
 [[package]]
 name = "bitfield-struct"
-version = "0.5.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a26b8cea8bb6a81b75a84603b9e096f05fa86db057904ef29be1deee900532bd"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
-]
-
-[[package]]
-name = "bitfield-struct"
 version = "0.9.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "aad5e1745b6082358758e26ed8cf52ed6abb11c548491cc9bc21eb0fa6c14c36"
@@ -447,7 +430,7 @@ checksum = "79296716171880943b8470b5f8d03aa55eb2e645a4874bdbb28adb49162e012c"
 [[package]]
 name = "bvh"
 version = "0.1.0"
-source = "git+https://github.com/andrewgazelka/bvh-data#4d4776c0fc0d89d2f24e00e506826f9d64725ece"
+source = "git+https://github.com/andrewgazelka/bvh-data#915b6ec0fd655b6a01f35e2d8fc658ece03496d0"
 dependencies = [
  "arrayvec",
  "bytes",
@@ -1131,7 +1114,7 @@ dependencies = [
 [[package]]
 name = "flecs_ecs"
 version = "0.1.3"
-source = "git+https://github.com/Indra-db/Flecs-Rust#947b9765237b392145c8ead118dc63fcd50083a2"
+source = "git+https://github.com/Indra-db/Flecs-Rust#3a60b40f1f010c3de3cf169b8a716e2a208d10cc"
 dependencies = [
  "bitflags 2.6.0",
  "compact_str",
@@ -1143,7 +1126,7 @@ dependencies = [
 [[package]]
 name = "flecs_ecs_derive"
 version = "0.1.0"
-source = "git+https://github.com/Indra-db/Flecs-Rust#947b9765237b392145c8ead118dc63fcd50083a2"
+source = "git+https://github.com/Indra-db/Flecs-Rust#3a60b40f1f010c3de3cf169b8a716e2a208d10cc"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1153,7 +1136,7 @@ dependencies = [
 [[package]]
 name = "flecs_ecs_sys"
 version = "0.1.2"
-source = "git+https://github.com/Indra-db/Flecs-Rust#947b9765237b392145c8ead118dc63fcd50083a2"
+source = "git+https://github.com/Indra-db/Flecs-Rust#3a60b40f1f010c3de3cf169b8a716e2a208d10cc"
 dependencies = [
  "bindgen",
  "cc",
@@ -1339,9 +1322,9 @@ checksum = "07e28edb80900c19c28f1072f2e8aeca7fa06b23cd4169cefe1af5aa3260783f"
 
 [[package]]
 name = "glam"
-version = "0.26.0"
+version = "0.29.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bebe52f2c58f1eea4d6fd3307058cf818c74181435a3620502d1651db07ff018"
+checksum = "c28091a37a5d09b555cb6628fd954da299b536433834f5b8e59eba78e0cbbf8a"
 dependencies = [
  "serde",
 ]
@@ -1634,8 +1617,8 @@ name = "hyperion"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "base64 0.22.1",
- "bitfield-struct 0.9.2",
+ "base64",
+ "bitfield-struct",
  "bitvec",
  "bumpalo",
  "bvh-region",
@@ -2904,7 +2887,7 @@ version = "0.12.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f713147fbe92361e52392c73b8c9e48c04c6625bce969ef54dc901e58e042a7b"
 dependencies = [
- "base64 0.22.1",
+ "base64",
  "bytes",
  "encoding_rs",
  "futures-core",
@@ -3884,9 +3867,9 @@ dependencies = [
 [[package]]
 name = "valence_anvil"
 version = "0.1.0"
-source = "git+https://github.com/andrewgazelka/valence?branch=feat-open#dde0fd078e806dc2f02cc1ec7a3d2313b903e503"
+source = "git+https://github.com/andrewgazelka/valence?branch=feat-open#7ed3252c1172c935f8e56df0699339ab35b08f65"
 dependencies = [
- "bitfield-struct 0.5.6",
+ "bitfield-struct",
  "bitvec",
  "byteorder",
  "flate2",
@@ -3899,7 +3882,7 @@ dependencies = [
 [[package]]
 name = "valence_build_utils"
 version = "0.2.0-alpha.1+mc.1.20.1"
-source = "git+https://github.com/andrewgazelka/valence?branch=feat-open#dde0fd078e806dc2f02cc1ec7a3d2313b903e503"
+source = "git+https://github.com/andrewgazelka/valence?branch=feat-open#7ed3252c1172c935f8e56df0699339ab35b08f65"
 dependencies = [
  "anyhow",
  "proc-macro2",
@@ -3909,19 +3892,19 @@ dependencies = [
 [[package]]
 name = "valence_entity"
 version = "0.2.0-alpha.1+mc.1.20.1"
-source = "git+https://github.com/andrewgazelka/valence?branch=feat-open#dde0fd078e806dc2f02cc1ec7a3d2313b903e503"
+source = "git+https://github.com/andrewgazelka/valence?branch=feat-open#7ed3252c1172c935f8e56df0699339ab35b08f65"
 dependencies = [
  "anyhow",
  "bevy_app",
  "bevy_ecs",
- "bitfield-struct 0.5.6",
+ "bitfield-struct",
  "derive_more",
  "heck 0.5.0",
  "indexmap",
  "paste",
  "proc-macro2",
  "quote",
- "rustc-hash 1.1.0",
+ "rustc-hash 2.0.0",
  "serde",
  "serde_json",
  "syn",
@@ -3938,7 +3921,7 @@ dependencies = [
 [[package]]
 name = "valence_generated"
 version = "0.2.0-alpha.1+mc.1.20.1"
-source = "git+https://github.com/andrewgazelka/valence?branch=feat-open#dde0fd078e806dc2f02cc1ec7a3d2313b903e503"
+source = "git+https://github.com/andrewgazelka/valence?branch=feat-open#7ed3252c1172c935f8e56df0699339ab35b08f65"
 dependencies = [
  "anyhow",
  "heck 0.5.0",
@@ -3955,7 +3938,7 @@ dependencies = [
 [[package]]
 name = "valence_ident"
 version = "0.2.0-alpha.1+mc.1.20.1"
-source = "git+https://github.com/andrewgazelka/valence?branch=feat-open#dde0fd078e806dc2f02cc1ec7a3d2313b903e503"
+source = "git+https://github.com/andrewgazelka/valence?branch=feat-open#7ed3252c1172c935f8e56df0699339ab35b08f65"
 dependencies = [
  "serde",
  "thiserror",
@@ -3965,7 +3948,7 @@ dependencies = [
 [[package]]
 name = "valence_ident_macros"
 version = "0.2.0-alpha.1+mc.1.20.1"
-source = "git+https://github.com/andrewgazelka/valence?branch=feat-open#dde0fd078e806dc2f02cc1ec7a3d2313b903e503"
+source = "git+https://github.com/andrewgazelka/valence?branch=feat-open#7ed3252c1172c935f8e56df0699339ab35b08f65"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3975,7 +3958,7 @@ dependencies = [
 [[package]]
 name = "valence_math"
 version = "0.2.0-alpha.1+mc.1.20.1"
-source = "git+https://github.com/andrewgazelka/valence?branch=feat-open#dde0fd078e806dc2f02cc1ec7a3d2313b903e503"
+source = "git+https://github.com/andrewgazelka/valence?branch=feat-open#7ed3252c1172c935f8e56df0699339ab35b08f65"
 dependencies = [
  "glam",
 ]
@@ -3983,7 +3966,7 @@ dependencies = [
 [[package]]
 name = "valence_nbt"
 version = "0.8.0"
-source = "git+https://github.com/andrewgazelka/valence?branch=feat-open#dde0fd078e806dc2f02cc1ec7a3d2313b903e503"
+source = "git+https://github.com/andrewgazelka/valence?branch=feat-open#7ed3252c1172c935f8e56df0699339ab35b08f65"
 dependencies = [
  "byteorder",
  "cesu8",
@@ -3996,12 +3979,12 @@ dependencies = [
 [[package]]
 name = "valence_protocol"
 version = "0.2.0-alpha.1+mc.1.20.1"
-source = "git+https://github.com/andrewgazelka/valence?branch=feat-open#dde0fd078e806dc2f02cc1ec7a3d2313b903e503"
+source = "git+https://github.com/andrewgazelka/valence?branch=feat-open#7ed3252c1172c935f8e56df0699339ab35b08f65"
 dependencies = [
  "anyhow",
- "base64 0.21.7",
+ "base64",
  "bevy_ecs",
- "bitfield-struct 0.5.6",
+ "bitfield-struct",
  "byteorder",
  "bytes",
  "derive_more",
@@ -4023,7 +4006,7 @@ dependencies = [
 [[package]]
 name = "valence_protocol_macros"
 version = "0.2.0-alpha.1+mc.1.20.1"
-source = "git+https://github.com/andrewgazelka/valence?branch=feat-open#dde0fd078e806dc2f02cc1ec7a3d2313b903e503"
+source = "git+https://github.com/andrewgazelka/valence?branch=feat-open#7ed3252c1172c935f8e56df0699339ab35b08f65"
 dependencies = [
  "heck 0.5.0",
  "proc-macro2",
@@ -4034,7 +4017,7 @@ dependencies = [
 [[package]]
 name = "valence_registry"
 version = "0.2.0-alpha.1+mc.1.20.1"
-source = "git+https://github.com/andrewgazelka/valence?branch=feat-open#dde0fd078e806dc2f02cc1ec7a3d2313b903e503"
+source = "git+https://github.com/andrewgazelka/valence?branch=feat-open#7ed3252c1172c935f8e56df0699339ab35b08f65"
 dependencies = [
  "anyhow",
  "bevy_app",
@@ -4052,20 +4035,20 @@ dependencies = [
 [[package]]
 name = "valence_server"
 version = "0.2.0-alpha.1+mc.1.20.1"
-source = "git+https://github.com/andrewgazelka/valence?branch=feat-open#dde0fd078e806dc2f02cc1ec7a3d2313b903e503"
+source = "git+https://github.com/andrewgazelka/valence?branch=feat-open#7ed3252c1172c935f8e56df0699339ab35b08f65"
 dependencies = [
  "anyhow",
  "arrayvec",
  "bevy_app",
  "bevy_ecs",
  "bevy_utils",
- "bitfield-struct 0.5.6",
+ "bitfield-struct",
  "byteorder",
  "bytes",
  "derive_more",
  "parking_lot",
  "rand 0.8.5",
- "rustc-hash 1.1.0",
+ "rustc-hash 2.0.0",
  "tracing",
  "uuid",
  "valence_entity",
@@ -4080,7 +4063,7 @@ dependencies = [
 [[package]]
 name = "valence_server_common"
 version = "0.2.0-alpha.1+mc.1.20.1"
-source = "git+https://github.com/andrewgazelka/valence?branch=feat-open#dde0fd078e806dc2f02cc1ec7a3d2313b903e503"
+source = "git+https://github.com/andrewgazelka/valence?branch=feat-open#7ed3252c1172c935f8e56df0699339ab35b08f65"
 dependencies = [
  "bevy_app",
  "bevy_ecs",
@@ -4093,7 +4076,7 @@ dependencies = [
 [[package]]
 name = "valence_text"
 version = "0.2.0-alpha.1+mc.1.20.1"
-source = "git+https://github.com/andrewgazelka/valence?branch=feat-open#dde0fd078e806dc2f02cc1ec7a3d2313b903e503"
+source = "git+https://github.com/andrewgazelka/valence?branch=feat-open#7ed3252c1172c935f8e56df0699339ab35b08f65"
 dependencies = [
  "serde",
  "serde_json",
