@@ -16,7 +16,7 @@ use valence_server::layer::chunk::{bit_width, BiomeContainer, Chunk};
 
 pub mod parse;
 
-use super::{chunk::LoadedChunk, shared::Shared};
+use super::{chunk::LoadedChunk, shared::WorldShared};
 use crate::{
     net::encoder::PacketEncoder,
     runtime::AsyncRuntime,
@@ -50,18 +50,18 @@ struct Message {
     tx: tokio::sync::mpsc::UnboundedSender<LoadedChunk>,
 }
 
-struct LaunchManager {
+struct ChunkLoader {
     rx_load_chunk_requests: tokio::sync::mpsc::UnboundedReceiver<Message>,
     received_request: FxHashSet<IVec2>,
-    shared: Arc<Shared>,
+    shared: Arc<WorldShared>,
     runtime: AsyncRuntime,
 }
 
-pub struct LaunchHandle {
+pub struct ChunkLoaderHandle {
     tx_load_chunk_requests: tokio::sync::mpsc::UnboundedSender<Message>,
 }
 
-impl LaunchHandle {
+impl ChunkLoaderHandle {
     pub fn send(&self, position: IVec2, tx: tokio::sync::mpsc::UnboundedSender<LoadedChunk>) {
         self.tx_load_chunk_requests
             .send(Message { position, tx })
@@ -69,7 +69,7 @@ impl LaunchHandle {
     }
 }
 
-pub fn launch_manager(shared: Arc<Shared>, runtime: &AsyncRuntime) -> LaunchHandle {
+pub fn launch_manager(shared: Arc<WorldShared>, runtime: &AsyncRuntime) -> ChunkLoaderHandle {
     let (tx_load_chunk_requests, rx_load_chunk_requests) = tokio::sync::mpsc::unbounded_channel();
 
     tokio::task::Builder::new()
@@ -78,7 +78,7 @@ pub fn launch_manager(shared: Arc<Shared>, runtime: &AsyncRuntime) -> LaunchHand
             {
                 let runtime = runtime.clone();
                 async move {
-                    LaunchManager {
+                    ChunkLoader {
                         rx_load_chunk_requests,
                         received_request: FxHashSet::default(),
                         shared,
@@ -92,12 +92,12 @@ pub fn launch_manager(shared: Arc<Shared>, runtime: &AsyncRuntime) -> LaunchHand
         )
         .unwrap();
 
-    LaunchHandle {
+    ChunkLoaderHandle {
         tx_load_chunk_requests,
     }
 }
 
-impl LaunchManager {
+impl ChunkLoader {
     async fn run(mut self) {
         while let Some(message) = self.rx_load_chunk_requests.recv().await {
             self.handle_load_chunk(message);
@@ -159,7 +159,7 @@ fn empty_chunk(position: IVec2) -> LoadedChunk {
     LoadedChunk::new(bytes.freeze(), unloaded, position)
 }
 
-async fn load_chunk(position: IVec2, shared: &Shared) -> anyhow::Result<LoadedChunk> {
+async fn load_chunk(position: IVec2, shared: &WorldShared) -> anyhow::Result<LoadedChunk> {
     let x = position.x;
     let y = position.y;
 

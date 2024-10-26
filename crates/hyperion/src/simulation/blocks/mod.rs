@@ -7,10 +7,10 @@ use chunk::LoadedChunk;
 use flecs_ecs::{core::Entity, macros::Component};
 use glam::{IVec2, IVec3};
 use indexmap::IndexMap;
-use loader::{launch_manager, LaunchHandle};
+use loader::{launch_manager, ChunkLoaderHandle};
 use roaring::RoaringBitmap;
 use rustc_hash::FxBuildHasher;
-use shared::Shared;
+use shared::WorldShared;
 use tracing::error;
 use valence_generated::block::BlockState;
 use valence_registry::BiomeRegistry;
@@ -50,7 +50,7 @@ pub struct Blocks {
     chunk_cache: IndexMap<IVec2, LoadedChunk, FxBuildHasher>,
     should_update: RoaringBitmap,
 
-    launch_manager: LaunchHandle,
+    loader_handle: ChunkLoaderHandle,
 
     tx_loaded_chunks: tokio::sync::mpsc::UnboundedSender<LoadedChunk>,
     rx_loaded_chunks: tokio::sync::mpsc::UnboundedReceiver<LoadedChunk>,
@@ -59,7 +59,7 @@ pub struct Blocks {
 
 impl Blocks {
     pub(crate) fn new(registry: &BiomeRegistry, runtime: &AsyncRuntime) -> anyhow::Result<Self> {
-        let shared = Shared::new(registry, runtime)?;
+        let shared = WorldShared::new(registry, runtime)?;
         let shared = Arc::new(shared);
 
         let (tx_loaded_chunks, rx_loaded_chunks) = tokio::sync::mpsc::unbounded_channel();
@@ -67,7 +67,7 @@ impl Blocks {
         Ok(Self {
             chunk_cache: IndexMap::default(),
             should_update: RoaringBitmap::default(),
-            launch_manager: launch_manager(shared, runtime),
+            loader_handle: launch_manager(shared, runtime),
             tx_loaded_chunks,
             rx_loaded_chunks,
             to_confirm: vec![],
@@ -114,7 +114,7 @@ impl Blocks {
         let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
 
         // todo: potential race condition where this is called twice
-        self.launch_manager.send(position, tx);
+        self.loader_handle.send(position, tx);
 
         let blocks_tx = self.tx_loaded_chunks.clone();
 
@@ -332,7 +332,7 @@ impl Blocks {
             return GetChunk::Loaded(result);
         };
 
-        self.launch_manager
+        self.loader_handle
             .send(position, self.tx_loaded_chunks.clone());
 
         GetChunk::Loading

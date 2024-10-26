@@ -8,12 +8,12 @@ use valence_registry::{biome::BiomeId, BiomeRegistry};
 use super::manager::RegionManager;
 
 /// Inner state of the [`MinecraftWorld`] component.
-pub struct Shared {
+pub struct WorldShared {
     pub regions: RegionManager,
     pub biome_to_id: BTreeMap<Ident<String>, BiomeId>,
 }
 
-impl Shared {
+impl WorldShared {
     pub(crate) fn new(biomes: &BiomeRegistry, runtime: &Runtime) -> anyhow::Result<Self> {
         let regions = RegionManager::new(runtime).context("failed to get anvil data")?;
 
