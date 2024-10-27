@@ -11,6 +11,42 @@ I would greatly appreciate the contribution.
 To see what to work on check the [issues page](https://github.com/andrewgazelka/hyperion/issues) or
 join [Hyperion's Discord](https://discord.gg/sTN8mdRQ) for the latest updates on development.
 
+# Benchmarks
+
+| Players | Tick Time (ms) | Core Usage (%) | Total CPU Utilization (%) |
+|---------|----------------|----------------|---------------------------|
+| 1       | 0.24           | 4.3            | 0.31                      |
+| 10      | 0.30           | 10.3           | 0.74                      |
+| 100     | 0.46           | 10.7           | 0.76                      |
+| 1000    | 0.40           | 15.3           | 1.09                      |
+| 5000    | 1.42           | 35.6           | 2.54                      |
+
+
+![performance](https://github.com/user-attachments/assets/d15f2e72-eeef-4cfd-af39-e90d72732968)
+
+
+*= with UNIX sockets, not TCP sockets. Once I get better tests, I will fill in core usage and CPU utilization.
+
+**Test Environment:**
+
+- Machine: 2023 MacBook Pro Max 16" (14-cores)
+- Chunk Render Distance: 32 (4225 total)
+- Commit hash `faac9117` run with `just release`
+- Bot Launch Command: `just bots {number}`
+
+**Note on Performance:**
+The system's computational costs are primarily fixed due to thread synchronization overhead. Each game tick contains
+several $O(1)$ synchronization points, meaning these operations maintain constant time complexity regardless of player
+count. This architecture explains why performance remains relatively stable even as player count increases
+significantly - the thread synchronization overhead dominates the performance profile rather than player-specific
+computations.
+
+The bulk of player-specific processing occurs in our proxy layer, which handles tasks like regional multicasting and can
+be horizontally scaled to maintain performance as player count grows.
+
+![image](https://github.com/user-attachments/assets/92448a00-43e3-4be6-ba52-1e348b3c7e49)
+
+
 # Architecture
 
 ## Overview
@@ -113,41 +149,6 @@ sequenceDiagram
     end
 ```
 
-# Benchmarks
-
-| Players | Tick Time (ms) | Core Usage (%) | Total CPU Utilization (%) |
-|---------|----------------|----------------|---------------------------|
-| 1       | 0.24           | 4.3            | 0.31                      |
-| 10      | 0.30           | 10.3           | 0.74                      |
-| 100     | 0.46           | 10.7           | 0.76                      |
-| 1000    | 0.40           | 15.3           | 1.09                      |
-| 5000    | 1.42           | 35.6           | 2.54                      |
-| 10000   | 12.39*         | 100-200        |                           |
-
-
-![performance](https://github.com/user-attachments/assets/d15f2e72-eeef-4cfd-af39-e90d72732968)
-
-
-*= with UNIX sockets, not TCP sockets. Once I get better tests, I will fill in core usage and CPU utilization.
-
-**Test Environment:**
-
-- Machine: 2023 MacBook Pro Max 16" (14-cores)
-- Chunk Render Distance: 32 (4225 total)
-- Commit hash `faac9117` run with `just release`
-- Bot Launch Command: `just bots {number}`
-
-**Note on Performance:**
-The system's computational costs are primarily fixed due to thread synchronization overhead. Each game tick contains
-several $O(1)$ synchronization points, meaning these operations maintain constant time complexity regardless of player
-count. This architecture explains why performance remains relatively stable even as player count increases
-significantly - the thread synchronization overhead dominates the performance profile rather than player-specific
-computations.
-
-The bulk of player-specific processing occurs in our proxy layer, which handles tasks like regional multicasting and can
-be horizontally scaled to maintain performance as player count grows.
-
-![image](https://github.com/user-attachments/assets/92448a00-43e3-4be6-ba52-1e348b3c7e49)
 
 # Running
 
