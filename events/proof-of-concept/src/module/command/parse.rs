@@ -23,7 +23,7 @@ pub enum ParsedCommand {
     Team,
     Zombie,
     Dirt { x: i32, y: i32, z: i32 },
-    Give,
+    Give { amount: i8 },
     Upgrade,
     Stats(Stat, f32),
     Health(f32),
@@ -61,7 +61,7 @@ fn parse_dirt(input: &str) -> IResult<&str, ParsedCommand> {
 }
 
 fn parse_give(input: &str) -> IResult<&str, ParsedCommand> {
-    map(tag("give"), |_| ParsedCommand::Give)(input)
+    map(preceded(preceded(tag("give"), space1), nom::character::complete::i8), |amount| ParsedCommand::Give { amount })(input)
 }
 
 fn parse_upgrade(input: &str) -> IResult<&str, ParsedCommand> {
