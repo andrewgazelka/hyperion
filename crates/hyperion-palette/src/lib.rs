@@ -104,7 +104,7 @@ impl PalettedContainer {
     /// The iterator is efficient for all variants:
     /// - Single: yields exactly one value
     /// - Indirect: yields from the palette
-    /// - Direct: uses a [`HashSet`] to track unique values
+    /// - Direct: uses a [`RoaringBitmap`] to track unique values
     pub fn unique_blocks(&self) -> UniqueBlockIter<'_> {
         match self {
             Self::Single(value) => UniqueBlockIter {
