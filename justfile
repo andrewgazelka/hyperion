@@ -3,12 +3,21 @@ default: debug
 # runs all CI checks in parallel where possible
 ci:
     #!/usr/bin/env bash
-    just fmt & # can run independently
-    just unused-deps & # can run independently
-    just deny & # can run independently
-    wait
-    just lint # depends on compilation, but not on other tasks
-    just test # run tests last since they depend on compilation
+    set -e  # Exit immediately if any command fails
+    
+    # Start background processes and save their PIDs
+    just fmt & fmt_pid=$!
+    just unused-deps & unused_pid=$!
+    just deny & deny_pid=$!
+    
+    # Wait for all background processes and check their exit status
+    wait $fmt_pid || exit 1
+    wait $unused_pid || exit 1
+    wait $deny_pid || exit 1
+    
+    # Only continue if all background processes succeeded
+    just lint
+    just test
     just doc-once
 
 project_root := `git rev-parse --show-toplevel`
