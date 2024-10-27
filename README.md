@@ -13,6 +13,7 @@ join [Hyperion's Discord](https://discord.gg/sTN8mdRQ) for the latest updates on
 
 # Architecture
 
+## Overview
 ```mermaid
 flowchart TB
     subgraph GameServer["Game Server (↕️ Scaled)"]
@@ -77,6 +78,39 @@ flowchart TB
     class Proxy1,Proxy2,ProxyN proxy
     class Velocity1,Velocity2,VelocityN auth
     class TokioIO async
+```
+
+## Proxy
+
+```mermaid
+sequenceDiagram
+    participant P as Player
+    participant PH as Proxy Handler
+    participant SB as Server Buffer
+    participant R as Reorderer
+    participant B as Broadcast System
+    participant S as Game Server
+
+    Note over P,S: Player → Server Flow (Direct)
+    P->>PH: Player Packet
+    PH->>S: Forward Immediately
+    
+    Note over P,S: Server → Player Flow (Buffered)
+    S->>SB: Server Packets
+    SB-->>SB: Accumulate Packets
+    S->>SB: Flush Signal
+    SB->>R: Batch Transfer
+    R-->>R: Reorder by Packet ID
+    R->>B: Ordered Packets
+    
+    Note over B: Broadcasting Decision
+    alt Local Broadcast
+        B->>P: Send to nearby players (BVH)
+    else Global Broadcast
+        B->>P: Send to all players
+    else Unicast
+        B->>P: Send to specific player
+    end
 ```
 
 # Benchmarks
