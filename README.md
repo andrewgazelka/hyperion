@@ -124,6 +124,10 @@ sequenceDiagram
 | 5000    | 1.42           | 35.6           | 2.54                      |
 | 10000   | 12.39*         | 100-200        |                           |
 
+
+![performance](https://github.com/user-attachments/assets/d15f2e72-eeef-4cfd-af39-e90d72732968)
+
+
 *= with UNIX sockets, not TCP sockets. Once I get better tests, I will fill in core usage and CPU utilization.
 
 **Test Environment:**
