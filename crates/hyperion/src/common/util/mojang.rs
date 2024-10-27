@@ -14,47 +14,73 @@ use uuid::Uuid;
 
 use crate::runtime::AsyncRuntime;
 
-/// Maximum number of requests that can be made during [`MAX_REQUESTS_INTERVAL`]. The value for this rate limit is from [wiki.vg](https://wiki.vg/Mojang_API).
-pub const MAX_REQUESTS_PER_INTERVAL: usize = 600;
-
-/// Maximum number of requests that can be made during this interval. The value for this rate limit is from [wiki.vg](https://wiki.vg/Mojang_API).
-pub const MAX_REQUESTS_INTERVAL: Duration = Duration::from_secs(600);
-
-fn username_url(username: &str) -> String {
-    format!("https://api.mojang.com/users/profiles/minecraft/{username}")
-    // format!("https://mowojang.matdoes.dev/users/profiles/minecraft/{username}")
+/// The API provider to use for Minecraft profile lookups
+#[derive(Clone, Copy)]
+pub struct ApiProvider {
+    username_base_url: &'static str,
+    uuid_base_url: &'static str,
+    max_requests: usize,
+    interval: Duration,
 }
 
-fn uuid_url(uuid: &Uuid) -> String {
-    format!("https://sessionserver.mojang.com/session/minecraft/profile/{uuid}?unsigned=false")
-    // format!("https://mowojang.matdoes.dev/session/minecraft/profile/{uuid}?unsigned=false")
+impl ApiProvider {
+    /// The matdoes.dev API mirror provider with higher rate limits
+    pub const MAT_DOES_DEV: Self = Self {
+        username_base_url: "https://mowojang.matdoes.dev/users/profiles/minecraft",
+        uuid_base_url: "https://mowojang.matdoes.dev/session/minecraft/profile",
+        max_requests: 10_000,
+        interval: Duration::from_secs(1),
+    };
+    /// The official Mojang API provider
+    pub const MOJANG: Self = Self {
+        username_base_url: "https://api.mojang.com/users/profiles/minecraft",
+        uuid_base_url: "https://sessionserver.mojang.com/session/minecraft/profile",
+        max_requests: 600,
+        interval: Duration::from_mins(10),
+    };
+
+    fn username_url(&self, username: &str) -> String {
+        format!("{}/{username}", self.username_base_url)
+    }
+
+    fn uuid_url(&self, uuid: &Uuid) -> String {
+        format!("{}/{uuid}?unsigned=false", self.uuid_base_url)
+    }
+
+    const fn max_requests(&self) -> usize {
+        self.max_requests
+    }
+
+    const fn interval(&self) -> Duration {
+        self.interval
+    }
 }
 
-/// A client to interface with the Mojang API.
+/// A client to interface with the Minecraft profile API.
 ///
-/// This uses [matdoes/mowojang](https://matdoes.dev/minecraft-uuids) as a primary source of data.
+/// Can use either the official Mojang API or [matdoes/mowojang](https://matdoes.dev/minecraft-uuids) as a data source.
 /// This does not include caching, this should be done separately probably using [`crate::storage::Db`].
-///
-/// todo: add Mojang API backup
 #[derive(Component, Clone)]
 pub struct MojangClient {
     req: reqwest::Client,
     rate_limit: Arc<Semaphore>,
+    provider: ApiProvider,
 }
 
-// todo: add cache for MojangUtils
 impl MojangClient {
     #[must_use]
-    pub fn new(tasks: &AsyncRuntime) -> Self {
-        let rate_limit = Arc::new(Semaphore::new(MAX_REQUESTS_PER_INTERVAL));
+    pub fn new(tasks: &AsyncRuntime, provider: ApiProvider) -> Self {
+        let rate_limit = Arc::new(Semaphore::new(provider.max_requests()));
+        let interval_duration = provider.interval();
 
         tokio::task::Builder::new()
             .name("reset_rate_limit")
             .spawn_on(
                 {
                     let rate_limit = Arc::downgrade(&rate_limit);
+                    let max_requests = provider.max_requests();
                     async move {
-                        let mut interval = interval(MAX_REQUESTS_INTERVAL);
+                        let mut interval = interval(interval_duration);
                         interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
 
                         loop {
@@ -65,9 +91,7 @@ impl MojangClient {
                             };
 
                             let available = rate_limit.available_permits();
-
-                            // Reset the number of available permits to MAX_REQUEST_PER_INTERVAL.
-                            rate_limit.add_permits(MAX_REQUESTS_PER_INTERVAL - available);
+                            rate_limit.add_permits(max_requests - available);
                         }
                     }
                 },
@@ -78,12 +102,13 @@ impl MojangClient {
         Self {
             req: reqwest::Client::new(),
             rate_limit,
+            provider,
         }
     }
 
     /// Gets a player's UUID from their username.
     pub async fn get_uuid(&self, username: &str) -> anyhow::Result<Uuid> {
-        let url = username_url(username);
+        let url = self.provider.username_url(username);
         let json_object = self.response_raw(&url).await?;
 
         let id = json_object
@@ -97,7 +122,7 @@ impl MojangClient {
 
     /// Gets a player's username from their UUID.
     pub async fn get_username(&self, uuid: Uuid) -> anyhow::Result<String> {
-        let url = uuid_url(&uuid);
+        let url = self.provider.uuid_url(&uuid);
         let json_object = self.response_raw(&url).await?;
 
         json_object
@@ -110,20 +135,17 @@ impl MojangClient {
 
     /// Gets player data from their UUID.
     pub async fn data_from_uuid(&self, uuid: &Uuid) -> anyhow::Result<Value> {
-        let url = uuid_url(uuid);
+        let url = self.provider.uuid_url(uuid);
         self.response_raw(&url).await
     }
 
     /// Gets player data from their username.
     pub async fn data_from_username(&self, username: &str) -> anyhow::Result<Value> {
-        let url = username_url(username);
+        let url = self.provider.username_url(username);
         self.response_raw(&url).await
     }
 
     async fn response_raw(&self, url: &str) -> anyhow::Result<Value> {
-        // Counts this request towards the current MAX_REQUESTS_PER_INTERVAL. If the max
-        // requests per interval have already been reached, this will wait until the next
-        // interval to do the request.
         self.rate_limit
             .acquire()
             .await
@@ -132,9 +154,10 @@ impl MojangClient {
 
         if self.rate_limit.available_permits() == 0 {
             warn!(
-                "rate limiting will be applied: {MAX_REQUESTS_PER_INTERVAL} requests have been \
-                 sent in the past {MAX_REQUESTS_INTERVAL:?} interval; new requests will be \
-                 delayed until the next {MAX_REQUESTS_INTERVAL:?} interval"
+                "rate limiting will be applied: {} requests have been sent in the past {:?} \
+                 interval",
+                self.provider.max_requests(),
+                self.provider.interval()
             );
         }
 
@@ -143,17 +166,14 @@ impl MojangClient {
         if response.status().is_success() {
             let body = response.text().await?;
             let json_object = serde_json::from_str::<Value>(&body)
-                .with_context(|| format!("failed to parse json from mojang response: {body:?}"))?;
+                .with_context(|| format!("failed to parse json from response: {body:?}"))?;
 
             if let Some(error) = json_object.get("error") {
-                bail!(
-                    "Mojang API Error: {}",
-                    error.as_str().unwrap_or("Unknown error")
-                );
+                bail!("API Error: {}", error.as_str().unwrap_or("Unknown error"));
             };
             Ok(json_object)
         } else {
-            bail!("Failed to retrieve data from Mojang API");
+            bail!("Failed to retrieve data from API");
         }
     }
 }
@@ -163,12 +183,15 @@ impl MojangClient {
 mod tests {
     use std::str::FromStr;
 
-    use crate::{runtime::AsyncRuntime, util::mojang::MojangClient};
+    use crate::{
+        runtime::AsyncRuntime,
+        util::mojang::{ApiProvider, MojangClient},
+    };
 
     #[test]
     fn test_get_uuid() {
         let tasks = AsyncRuntime::default();
-        let mojang = MojangClient::new(&tasks);
+        let mojang = MojangClient::new(&tasks, ApiProvider::MAT_DOES_DEV);
 
         let uuid = tasks.block_on(mojang.get_uuid("Emerald_Explorer")).unwrap();
         let expected = uuid::Uuid::from_str("86271406-1188-44a5-8496-7af10c906204").unwrap();
@@ -178,7 +201,7 @@ mod tests {
     #[test]
     fn test_get_username() {
         let tasks = AsyncRuntime::default();
-        let mojang = MojangClient::new(&tasks);
+        let mojang = MojangClient::new(&tasks, ApiProvider::MAT_DOES_DEV);
 
         let username = tasks
             .block_on(mojang.get_username(
@@ -191,7 +214,7 @@ mod tests {
     #[test]
     fn test_retrieve_username() {
         let tasks = AsyncRuntime::default();
-        let mojang = MojangClient::new(&tasks);
+        let mojang = MojangClient::new(&tasks, ApiProvider::MAT_DOES_DEV);
 
         let res = tasks
             .block_on(mojang.data_from_uuid(

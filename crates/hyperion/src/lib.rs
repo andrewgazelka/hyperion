@@ -20,7 +20,7 @@
 #![feature(split_array)]
 #![feature(never_type)]
 #![feature(f16)]
-
+#![feature(duration_constructors)]
 // todo: deny more and completely fix panics
 // #![deny(
 //     clippy::expect_used,
@@ -67,7 +67,10 @@ mod common;
 pub use common::*;
 use hyperion_crafting::CraftingRegistry;
 
-use crate::simulation::{EntitySize, Player};
+use crate::{
+    simulation::{EntitySize, Player},
+    util::mojang::ApiProvider,
+};
 
 pub mod egress;
 pub mod ingress;
@@ -225,7 +228,7 @@ impl Hyperion {
         world.set(db);
         world.set(skins);
 
-        world.set(MojangClient::new(&runtime));
+        world.set(MojangClient::new(&runtime, ApiProvider::MAT_DOES_DEV));
 
         let (receive_state, egress_comm) = init_proxy_comms(&runtime, address);
 
