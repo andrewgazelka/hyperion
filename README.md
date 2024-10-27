@@ -100,13 +100,14 @@ flowchart TB
 - Bot Launch Command: `just bots {number}`
 
 **Note on Performance:**
-Most of the computational cost is fixed due to synchronization with all threads. A couple of $$O(1)$$ cost sync points (
-with respect to player count) during each game tick. This explains why performance is not strongly correlated with the
-number of players. The overhead of thread synchronization dominates the performance profile, resulting in relatively
-stable tick times even as the player count increases significantly.
+The system's computational costs are primarily fixed due to thread synchronization overhead. Each game tick contains
+several $O(1)$ synchronization points, meaning these operations maintain constant time complexity regardless of player
+count. This architecture explains why performance remains relatively stable even as player count increases
+significantly - the thread synchronization overhead dominates the performance profile rather than player-specific
+computations.
 
-The primary burden relies on our proxy that can be horizontally scaled. A lot of logic including regional multicasting
-is done in the proxy.
+The bulk of player-specific processing occurs in our proxy layer, which handles tasks like regional multicasting and can
+be horizontally scaled to maintain performance as player count grows.
 
 ![image](https://github.com/user-attachments/assets/92448a00-43e3-4be6-ba52-1e348b3c7e49)
 
