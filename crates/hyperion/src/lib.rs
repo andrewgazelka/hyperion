@@ -45,6 +45,7 @@ use anyhow::{bail, Context};
 use derive_more::{Deref, DerefMut};
 use egress::EgressModule;
 use flecs_ecs::prelude::*;
+pub use glam;
 use ingress::IngressModule;
 #[cfg(unix)]
 use libc::{getrlimit, setrlimit, RLIMIT_NOFILE};
@@ -54,7 +55,13 @@ use storage::{Db, Events, GlobalEventHandlers, SkinHandler, ThreadLocal};
 use tracing::info;
 use util::mojang::MojangClient;
 pub use uuid;
+// todo: slowly move more and more things to arbitrary module
+// and then eventually do not re-export valence_protocol
 pub use valence_protocol;
+pub use valence_protocol::{
+    block::{BlockKind, BlockState},
+    ItemKind, ItemStack, Particle,
+};
 use valence_protocol::{CompressionThreshold, Encode, Packet};
 
 use crate::{
@@ -66,6 +73,7 @@ use crate::{
 mod common;
 pub use common::*;
 use hyperion_crafting::CraftingRegistry;
+pub use valence_ident;
 
 use crate::{
     simulation::{EntitySize, Player},

@@ -1685,6 +1685,7 @@ dependencies = [
  "uuid",
  "valence_anvil",
  "valence_generated",
+ "valence_ident",
  "valence_nbt",
  "valence_protocol",
  "valence_registry",
