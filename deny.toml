@@ -14,7 +14,12 @@
 # The graph table configures how the dependency graph is constructed and thus
 # which crates the checks are performed against
 [graph]
-targets = ["aarch64-apple-darwin", "x86_64-apple-darwin", "aarch64-unknown-linux-gnu", "x86_64-unknown-linux-gnu"]
+targets = [
+  "aarch64-apple-darwin",
+  "x86_64-apple-darwin",
+  "aarch64-unknown-linux-gnu",
+  "x86_64-unknown-linux-gnu",
+]
 
 # When creating the dependency graph used as the source of truth when checks are
 # executed, this field can be used to prune crates from the graph, removing them
@@ -55,10 +60,10 @@ feature-depth = 1
 # A list of advisory IDs to ignore. Note that ignored advisories will still
 # output a note when they are encountered.
 ignore = [
-    #"RUSTSEC-0000-0000",
-    #{ id = "RUSTSEC-0000-0000", reason = "you can specify a reason the advisory is ignored" },
-    #"a-crate-that-is-yanked@0.1.1", # you can also ignore yanked crate versions if you wish
-    #{ crate = "a-crate-that-is-yanked@0.1.1", reason = "you can specify why you are ignoring the yanked crate" },
+  #"RUSTSEC-0000-0000",
+  #{ id = "RUSTSEC-0000-0000", reason = "you can specify a reason the advisory is ignored" },
+  #"a-crate-that-is-yanked@0.1.1", # you can also ignore yanked crate versions if you wish
+  #{ crate = "a-crate-that-is-yanked@0.1.1", reason = "you can specify why you are ignoring the yanked crate" },
 ]
 # If this is true, then cargo deny will use the git executable to fetch advisory database.
 # If this is false, then it uses a built-in git library.
@@ -76,16 +81,16 @@ unused-allowed-license = "allow"
 # [possible values: any SPDX 3.11 short identifier (+ optional exception)].
 # todo: is MPL ok?
 allow = [
-    "MIT",
-    "Apache-2.0",
-    "Unicode-DFS-2016",
-    "BSD-3-Clause",
-    "Zlib",
-    "Unicode-3.0",
-    "OpenSSL",
-    "ISC",
-    "MPL-2.0",
-    "BSD-2-Clause",
+  "MIT",
+  "Apache-2.0",
+  "Unicode-DFS-2016",
+  "BSD-3-Clause",
+  "Zlib",
+  "Unicode-3.0",
+  "OpenSSL",
+  "ISC",
+  "MPL-2.0",
+  "BSD-2-Clause",
 ]
 # The confidence threshold for detecting a license from license text.
 # The higher the value, the more closely the license text must be to the
@@ -95,11 +100,13 @@ confidence-threshold = 0.6
 # Allow 1 or more licenses on a per-crate basis, so that particular licenses
 # aren't accepted for every possible crate as with the normal allow list
 exceptions = [
-    # Each entry is the crate and version constraint, and its specific allow
-    # list
-    #{ allow = ["Zlib"], crate = "adler32" },
-    # TODO: this is an OR clause I am confused I think we are taking the MPL verion
-    { allow = ["ISC"], crate = "libloading" },
+  # Each entry is the crate and version constraint, and its specific allow
+  # list
+  #{ allow = ["Zlib"], crate = "adler32" },
+  # TODO: this is an OR clause I am confused I think we are taking the MPL verion
+  { allow = [
+    "ISC",
+  ], crate = "libloading" },
 ]
 
 # Some crates don't have (easily) machine readable licensing information,
@@ -130,7 +137,7 @@ ignore = true
 # is only published to private registries, and ignore is true, the crate will
 # not have its license(s) checked
 registries = [
-    #"https://sekretz.com/registry
+  #"https://sekretz.com/registry
 ]
 
 # This section is considered when running `cargo deny check bans`.
@@ -157,16 +164,16 @@ workspace-default-features = "allow"
 external-default-features = "allow"
 # List of crates that are allowed. Use with care!
 allow = [
-    #"ansi_term@0.11.0",
-    #{ crate = "ansi_term@0.11.0", reason = "you can specify a reason it is allowed" },
+  #"ansi_term@0.11.0",
+  #{ crate = "ansi_term@0.11.0", reason = "you can specify a reason it is allowed" },
 ]
 # List of crates to deny
 deny = [
-    #"ansi_term@0.11.0",
-    #{ crate = "ansi_term@0.11.0", reason = "you can specify a reason it is banned" },
-    # Wrapper crates can optionally be specified to allow the crate when it
-    # is a direct dependency of the otherwise banned crate
-    #{ crate = "ansi_term@0.11.0", wrappers = ["this-crate-directly-depends-on-ansi_term"] },
+  #"ansi_term@0.11.0",
+  #{ crate = "ansi_term@0.11.0", reason = "you can specify a reason it is banned" },
+  # Wrapper crates can optionally be specified to allow the crate when it
+  # is a direct dependency of the otherwise banned crate
+  #{ crate = "ansi_term@0.11.0", wrappers = ["this-crate-directly-depends-on-ansi_term"] },
 ]
 
 # List of features to allow/deny
@@ -194,46 +201,46 @@ deny = [
 
 # Certain crates/versions that will be skipped when doing duplicate detection.
 skip = [
-    "smallvec",
-    "syn",
-    "futures-lite",
-    "fastrand",
-    "event-listener",
-    "base64",
-    "regex-syntax",
-    "regex-automata",
-    "bitflags",
-    "toml_edit",
-    "parking_lot_core",
-    "parking_lot",
-    "indexmap",
-    "hashbrown",
-    "winnow",
-    "derive_more",
-    "bitfield-struct",
-    "heck",
-    "idna",
-    "strsim",
-    "socket2",
-    "semver",
-    "rustls-pemfile",
-    "rustc_version",
-    "compact_str",
-    "zerocopy",
-    "clap",
-    "itertools",
-    "miniz_oxide",
-    "rustc-hash",
+  "smallvec",
+  "syn",
+  "futures-lite",
+  "fastrand",
+  "event-listener",
+  "base64",
+  "regex-syntax",
+  "regex-automata",
+  "bitflags",
+  "toml_edit",
+  "parking_lot_core",
+  "parking_lot",
+  "indexmap",
+  "hashbrown",
+  "winnow",
+  "derive_more",
+  "bitfield-struct",
+  "heck",
+  "idna",
+  "strsim",
+  "socket2",
+  "semver",
+  "rustls-pemfile",
+  "rustc_version",
+  "compact_str",
+  "zerocopy",
+  "clap",
+  "itertools",
+  "miniz_oxide",
+  "rustc-hash",
 
-    #{ crate = "ansi_term@0.11.0", reason = "you can specify a reason why it can't be updated/removed" },
+  #{ crate = "ansi_term@0.11.0", reason = "you can specify a reason why it can't be updated/removed" },
 ]
 # Similarly to `skip` allows you to skip certain crates during duplicate
 # detection. Unlike skip, it also includes the entire tree of transitive
 # dependencies starting at the specified crate, up to a certain depth, which is
 # by default infinite.
 skip-tree = [
-    #"ansi_term@0.11.0", # will be skipped along with _all_ of its direct and transitive dependencies
-    #{ crate = "ansi_term@0.11.0", depth = 20 },
+  #"ansi_term@0.11.0", # will be skipped along with _all_ of its direct and transitive dependencies
+  #{ crate = "ansi_term@0.11.0", depth = 20 },
 ]
 
 # This section is considered when running `cargo deny check sources`.
@@ -251,9 +258,9 @@ unknown-git = "warn"
 allow-registry = ["https://github.com/rust-lang/crates.io-index"]
 # List of URLs for allowed Git repositories
 allow-git = [
-    "https://github.com/andrewgazelka/valence",
-    "https://github.com/andrewgazelka/bvh-data",
-    "https://github.com/Indra-db/Flecs-Rust",
+  "https://github.com/andrewgazelka/valence",
+  "https://github.com/andrewgazelka/bvh-data",
+  "https://github.com/Indra-db/Flecs-Rust",
 ]
 
 [sources.allow-org]

@@ -17,7 +17,10 @@ rayon.workspace = true
 arrayvec.workspace = true
 ordered-float.workspace = true
 itertools.workspace = true
-plotters = { workspace = true, features = ["plotters-bitmap", "image"], optional = true}
+plotters = { workspace = true, features = [
+  "plotters-bitmap",
+  "image",
+], optional = true }
 plotters-bitmap = { workspace = true, optional = true }
 tracing.workspace = true
 serde = { workspace = true, features = ["derive"] }

@@ -1,5 +1,5 @@
 [package]
-name = "hyperion-utils"
+name = "hyperion-circle-buf"
 version = "0.1.0"
 edition = "2021"
 authors = ["Andrew Gazelka <andrew.gazelka@gmail.com>"]
@@ -7,7 +7,6 @@ readme = "README.md"
 publish = false
 
 [dependencies]
-flecs_ecs.workspace = true
 
 [lints]
 workspace = true

@@ -1,149 +1,270 @@
-# https://doc.rust-lang.org/rustc/profile-guided-optimization.html
-# https://nikolaivazquez.com/blog/divan/#measure-allocations
-# https://doc.rust-lang.org/cargo/reference/profiles.html
-# https://doc.rust-lang.org/rustc/profile-guided-optimization.html
-
-[workspace]
-resolver = "2"
-
-members = [
-    "crates/bvh-region",
-    "crates/hyperion",
-    "crates/hyperion-crafting",
-    "crates/hyperion-event-macros",
-    "crates/hyperion-inventory",
-    "crates/hyperion-minecraft-proto",
-    "crates/hyperion-nerd-font",
-    "crates/hyperion-palette",
-    "crates/hyperion-proto",
-    "crates/hyperion-proxy",
-    "crates/hyperion-scheduled",
-    "crates/hyperion-stats",
-    "crates/hyperion-text",
-    "crates/hyperion-utils",
-    "events/proof-of-concept",
-]
+[profile]
+[profile.release-debug]
+debug = true
+inherits = 'release'
 
 [profile.release-full]
-inherits = "release"
-debug = false
-lto = "fat"
 codegen-units = 1
-panic = "abort"
+debug = false
+inherits = 'release'
+lto = 'fat'
+panic = 'abort'
 
-# custom release-debug profile
-[profile.release-debug]
-inherits = "release"
-debug = true
+[workspace]
+members = [
+  'crates/bvh-region',
+  'crates/hyperion',
+  'crates/hyperion-crafting',
+  'crates/hyperion-event-macros',
+  'crates/hyperion-inventory',
+  'crates/hyperion-minecraft-proto',
+  'crates/hyperion-nerd-font',
+  'crates/hyperion-palette',
+  'crates/hyperion-proto',
+  'crates/hyperion-proxy',
+  'crates/hyperion-scheduled',
+  'crates/hyperion-stats',
+  'crates/hyperion-text',
+  'crates/hyperion-utils',
+  'events/proof-of-concept',
+  'crates/hyperion-circle-buf',
+]
+resolver = '2'
 
 [workspace.dependencies]
-anyhow = "1.0.86"
-approx = "0.5.1"
-arrayvec = "0.7.4"
-base64 = "0.22.1"
-bitfield-struct = "0.9.2"
-bitvec = "1.0.1"
-bumpalo = "3.16"
-bvh = { git = "https://github.com/andrewgazelka/bvh-data" }
-bvh-region = { path = "crates/bvh-region" }
-bytemuck = { version = "1.19.0", features = ["derive"] }
-byteorder = "1.5.0"
-bytes = "1.8.0"
-clap = { version = "4.5.7", features = ["derive"] }
-compact_str = "0.8.0"
-criterion = "0.5.1"
-derive-build = "0.1.1"
-derive_more = { version = "1.0.0-beta.7", features = ["display", "from", "deref", "deref_mut", "debug", "constructor"] }
-dirs-next = "2.0.0"
-divan = "0.1.14"
-enumset = "1.1.5"
-fastrand = "2.1.0"
-flate2 = { version = "1.0.30", default-features = false }
-flecs_ecs = { git = "https://github.com/Indra-db/Flecs-Rust" }
-glam = "0.29.0"
-heapless = "0.8.0"
-heed = "0.20.5"
-hex = "0.4.3"
-hyperion = { path = "crates/hyperion" }
-hyperion-crafting = { path = "crates/hyperion-crafting" }
-hyperion-event-macros = { path = "crates/hyperion-event-macros" }
-hyperion-inventory = { path = "crates/hyperion-inventory" }
-hyperion-minecraft-proto = { path = "crates/hyperion-minecraft-proto" }
-hyperion-palette = { path = "crates/hyperion-palette" }
-hyperion-proto = { path = "crates/hyperion-proto" }
-hyperion-scheduled = { path = "crates/hyperion-scheduled" }
-hyperion-text = { path = "crates/hyperion-text" }
-hyperion-utils = { path = "crates/hyperion-utils" }
-hyperion-nerd-font = { path = "crates/hyperion-nerd-font" }
-indexmap = "2.6.0"
-itertools = "0.13.0"
-kanal = "0.1.0-pre8"
-libc = "0.2.155"
-libdeflater = "1.20.0"
-memmap2 = "0.9.5"
-more-asserts = "0.3.1"
-nalgebra = { version = "0.33.1" }
-ndarray = { version = "0.16.1" , features = ["blas"] }
-no_denormals = "0.1.2"
-once_cell = "1.19.0"
-ordered-float = "4.2.0"
-ouroboros = "0.18.4"
-parking_lot = "0.12.3"
-plotters = { version = "0.3.6", default-features = false }
-plotters-bitmap = "0.3.6"
-rand = "0.8.5"
-rayon = "1.10.0"
-reqwest = { version = "0.12.5", features = ["rustls-tls"] }
-roaring = { version = "0.10.6", features = ["simd"] }
-rustc-hash = "2.0.0"
-rustc_version = "0.4.0"
-serde = "1.0.203"
-serde_json = "1.0.117"
-sha2 = { version = "0.10.8" }
-slotmap = "1.0.7"
-snafu = "0.8.5"
-tango-bench = "0.6.0"
-tar = "0.4.41"
-thiserror = "1.0.63"
-tikv-jemallocator = "0.6.0"
-tokio = "1.40.0"
-toml = "0.8.14"
-tracing = { version = "0.1.40", features = ["release_max_level_info"] }
-tracing-subscriber = { version = "0.3.18", features = ["env-filter", "time"] }
-pretty-hex = "0.4.1"
-uuid = "1.8.0"
-valence_anvil = { git = "https://github.com/andrewgazelka/valence", features = ["parsing"], branch = "feat-open" }
-valence_generated = { git = "https://github.com/andrewgazelka/valence", branch = "feat-open" }
-valence_nbt = { git = "https://github.com/andrewgazelka/valence", features = ["serde"], branch = "feat-open" }
-valence_protocol = { git = "https://github.com/andrewgazelka/valence", features = ["compression"], branch = "feat-open" }
-valence_registry = { git = "https://github.com/andrewgazelka/valence", branch = "feat-open" }
-valence_server = { git = "https://github.com/andrewgazelka/valence", branch = "feat-open" }
-valence_text = { git = "https://github.com/andrewgazelka/valence", branch = "feat-open" }
+anyhow = '1.0.86'
+approx = '0.5.1'
+arrayvec = '0.7.4'
+base64 = '0.22.1'
+bitfield-struct = '0.9.2'
+bitvec = '1.0.1'
+bumpalo = '3.16'
+byteorder = '1.5.0'
+bytes = '1.8.0'
+compact_str = '0.8.0'
+criterion = '0.5.1'
+derive-build = '0.1.1'
+dirs-next = '2.0.0'
+divan = '0.1.14'
+enumset = '1.1.5'
+fastrand = '2.1.0'
+glam = '0.29.0'
+heapless = '0.8.0'
+heed = '0.20.5'
+hex = '0.4.3'
+indexmap = '2.6.0'
+itertools = '0.13.0'
+kanal = '0.1.0-pre8'
+libc = '0.2.155'
+libdeflater = '1.20.0'
+memmap2 = '0.9.5'
+more-asserts = '0.3.1'
+no_denormals = '0.1.2'
+once_cell = '1.19.0'
+ordered-float = '4.2.0'
+ouroboros = '0.18.4'
+parking_lot = '0.12.3'
+plotters-bitmap = '0.3.6'
+pretty-hex = '0.4.1'
+rand = '0.8.5'
+rayon = '1.10.0'
+rustc-hash = '2.0.0'
+rustc_version = '0.4.0'
+serde = '1.0.203'
+serde_json = '1.0.117'
+slotmap = '1.0.7'
+snafu = '0.8.5'
+tango-bench = '0.6.0'
+tar = '0.4.41'
+thiserror = '1.0.63'
+thread_local = { version = "1.1.8", features = ["nightly"] }
+tikv-jemallocator = '0.6.0'
+tokio = '1.40.0'
+toml = '0.8.14'
+uuid = '1.8.0'
+
+[workspace.dependencies.bvh]
+git = 'https://github.com/andrewgazelka/bvh-data'
+
+[workspace.dependencies.hyperion-circle-buf]
+path = 'crates/hyperion-circle-buf'
+
+[workspace.dependencies.bvh-region]
+path = 'crates/bvh-region'
+
+[workspace.dependencies.bytemuck]
+features = ['derive']
+version = '1.19.0'
+
+[workspace.dependencies.clap]
+features = ['derive']
+version = '4.5.7'
+
+[workspace.dependencies.derive_more]
+features = ['display', 'from', 'deref', 'deref_mut', 'debug', 'constructor']
+version = '1.0.0-beta.7'
+
+[workspace.dependencies.flate2]
+default-features = false
+version = '1.0.30'
+
+[workspace.dependencies.flecs_ecs]
+git = 'https://github.com/Indra-db/Flecs-Rust'
+
+[workspace.dependencies.hyperion]
+path = 'crates/hyperion'
+
+[workspace.dependencies.hyperion-crafting]
+path = 'crates/hyperion-crafting'
+
+[workspace.dependencies.hyperion-event-macros]
+path = 'crates/hyperion-event-macros'
+
+[workspace.dependencies.hyperion-inventory]
+path = 'crates/hyperion-inventory'
+
+[workspace.dependencies.hyperion-minecraft-proto]
+path = 'crates/hyperion-minecraft-proto'
+
+[workspace.dependencies.hyperion-nerd-font]
+path = 'crates/hyperion-nerd-font'
+
+[workspace.dependencies.hyperion-palette]
+path = 'crates/hyperion-palette'
+
+[workspace.dependencies.hyperion-proto]
+path = 'crates/hyperion-proto'
+
+[workspace.dependencies.hyperion-scheduled]
+path = 'crates/hyperion-scheduled'
+
+[workspace.dependencies.hyperion-text]
+path = 'crates/hyperion-text'
+
+[workspace.dependencies.hyperion-utils]
+path = 'crates/hyperion-utils'
+
+[workspace.dependencies.nalgebra]
+version = '0.33.1'
+
+[workspace.dependencies.ndarray]
+features = ['blas']
+version = '0.16.1'
+
+[workspace.dependencies.plotters]
+default-features = false
+version = '0.3.6'
+
+[workspace.dependencies.reqwest]
+features = ['rustls-tls']
+version = '0.12.5'
+
+[workspace.dependencies.roaring]
+features = ['simd']
+version = '0.10.6'
+
+[workspace.dependencies.sha2]
+version = '0.10.8'
+
+[workspace.dependencies.tracing]
+features = ['release_max_level_info']
+version = '0.1.40'
+
+[workspace.dependencies.tracing-subscriber]
+features = ['env-filter', 'time']
+version = '0.3.18'
+
+[workspace.dependencies.valence_anvil]
+branch = 'feat-open'
+features = ['parsing']
+git = 'https://github.com/andrewgazelka/valence'
+
+[workspace.dependencies.valence_generated]
+branch = 'feat-open'
+git = 'https://github.com/andrewgazelka/valence'
+
+[workspace.dependencies.valence_nbt]
+branch = 'feat-open'
+features = ['serde']
+git = 'https://github.com/andrewgazelka/valence'
+
+[workspace.dependencies.valence_protocol]
+branch = 'feat-open'
+features = ['compression']
+git = 'https://github.com/andrewgazelka/valence'
+
+[workspace.dependencies.valence_registry]
+branch = 'feat-open'
+git = 'https://github.com/andrewgazelka/valence'
+
+[workspace.dependencies.valence_server]
+branch = 'feat-open'
+git = 'https://github.com/andrewgazelka/valence'
+
+[workspace.dependencies.valence_text]
+branch = 'feat-open'
+git = 'https://github.com/andrewgazelka/valence'
+
+[workspace.lints]
+[workspace.lints.clippy]
+cast_precision_loss = 'allow'
+future_not_send = 'allow'
+missing_errors_doc = 'allow'
+missing_panics_doc = 'allow'
+module_name_repetitions = 'allow'
+single_match_else = 'allow'
+too_long_first_doc_paragraph = 'allow'
+too_many_lines = 'allow'
+
+[workspace.lints.clippy.complexity]
+level = 'deny'
+priority = -1
+
+[workspace.lints.clippy.nursery]
+level = 'deny'
+priority = -1
+
+[workspace.lints.clippy.pedantic]
+level = 'deny'
+priority = -1
+
+[workspace.lints.clippy.perf]
+level = 'deny'
+priority = -1
+
+[workspace.lints.clippy.style]
+level = 'deny'
+priority = -1
+
+[workspace.lints.clippy.suspicious]
+level = 'deny'
+priority = -1
 
 [workspace.lints.rust]
-future_incompatible = { level = "deny", priority = -1 }
-keyword_idents = { level = "deny", priority = -1 }
-let_underscore = { level = "deny", priority = -1 }
-nonstandard_style = { level = "deny", priority = -1 }
-refining_impl_trait = { level = "deny", priority = -1 }
-rust_2018_idioms = { level = "deny", priority = -1 }
-rust_2024_compatibility = { level = "deny", priority = -1 }
+[workspace.lints.rust.future_incompatible]
+level = 'deny'
+priority = -1
 
-[workspace.lints.clippy]
-complexity = { level = "deny", priority = -1 }
-nursery = { level = "deny", priority = -1 }
-pedantic = { level = "deny", priority = -1 }
-perf = { level = "deny", priority = -1 }
-style = { level = "deny", priority = -1 }
-suspicious = { level = "deny", priority = -1 }
+[workspace.lints.rust.keyword_idents]
+level = 'deny'
+priority = -1
 
-cast_precision_loss = "allow"
-missing_errors_doc = "allow"
-missing_panics_doc = "allow"
-module_name_repetitions = "allow"
-single_match_else = "allow"
-too_long_first_doc_paragraph = "allow"
-too_many_lines = "allow"
-future_not_send = "allow"
+[workspace.lints.rust.let_underscore]
+level = 'deny'
+priority = -1
 
+[workspace.lints.rust.nonstandard_style]
+level = 'deny'
+priority = -1
 
+[workspace.lints.rust.refining_impl_trait]
+level = 'deny'
+priority = -1
+
+[workspace.lints.rust.rust_2018_idioms]
+level = 'deny'
+priority = -1
+
+[workspace.lints.rust.rust_2024_compatibility]
+level = 'deny'
+priority = -1

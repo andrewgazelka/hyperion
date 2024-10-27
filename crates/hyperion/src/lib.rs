@@ -140,6 +140,13 @@ impl Hyperion {
         address: impl ToSocketAddrs + Send + Sync + 'static,
         handlers: impl FnOnce(&World) + Send + Sync + 'static,
     ) -> anyhow::Result<()> {
+        
+        
+        
+        
+        
+        
+        
         // Denormals (numbers very close to 0) are flushed to zero because doing computations on them
         // is slow.
         rayon::ThreadPoolBuilder::new()

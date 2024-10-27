@@ -1693,6 +1693,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "hyperion-circle-buf"
+version = "0.1.0"
+
+[[package]]
 name = "hyperion-crafting"
 version = "0.1.0"
 dependencies = [
