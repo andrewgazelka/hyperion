@@ -1666,7 +1666,6 @@ dependencies = [
  "once_cell",
  "ouroboros",
  "parking_lot",
- "pretty-hex",
  "rayon",
  "reqwest",
  "rkyv",
@@ -2584,12 +2583,6 @@ checksum = "77957b295656769bb8ad2b6a6b09d897d94f05c41b069aede1fcdaa675eaea04"
 dependencies = [
  "zerocopy",
 ]
-
-[[package]]
-name = "pretty-hex"
-version = "0.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bbc83ee4a840062f368f9096d80077a9841ec117e17e7f700df81958f1451254"
 
 [[package]]
 name = "prettyplease"
