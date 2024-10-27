@@ -61,13 +61,23 @@ pub struct PacketDecoder {
 unsafe impl Send for PacketDecoder {}
 unsafe impl Sync for PacketDecoder {}
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone)]
 pub struct BorrowedPacketFrame<'a> {
     /// The ID of the decoded packet.
     pub id: i32,
     /// The contents of the packet after the leading [`VarInt`] ID.
     pub body: &'a [u8],
 }
+
+impl std::fmt::Debug for BorrowedPacketFrame<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("BorrowedPacketFrame")
+            .field("id", &format!("0x{:x}", self.id))
+            .field("body", &bytes::Bytes::copy_from_slice(self.body))
+            .finish()
+    }
+}
+
 
 impl<'a> BorrowedPacketFrame<'a> {
     /// Attempts to decode this packet as type `P`. An error is returned if the

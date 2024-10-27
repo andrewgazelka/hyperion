@@ -588,7 +588,7 @@ impl Module for IngressModule {
                                 if let Err(err) =
                                     crate::simulation::handlers::packet_switch(frame, &mut query)
                                 {
-                                    error!("failed to process packet {:?}: {err}", frame);
+                                    error!("failed to process packet {frame:?}: {err}");
                                 }
                                 // });
                             }
