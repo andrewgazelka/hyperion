@@ -52,6 +52,7 @@ use libdeflater::CompressionLvl;
 use simulation::{blocks::Blocks, util::generate_biome_registry, Comms, SimModule, StreamLookup};
 use storage::{Db, Events, GlobalEventHandlers, SkinHandler, ThreadLocal};
 use tracing::info;
+use util::mojang::MojangClient;
 pub use uuid;
 pub use valence_protocol;
 use valence_protocol::{CompressionThreshold, Encode, Packet};
@@ -197,6 +198,7 @@ impl Hyperion {
 
         world.component::<Db>();
         world.component::<SkinHandler>();
+        world.component::<MojangClient>();
         world.component::<Events>();
 
         world.component::<EntitySize>();
@@ -222,6 +224,8 @@ impl Hyperion {
 
         world.set(db);
         world.set(skins);
+
+        world.set(MojangClient::new(&runtime));
 
         let (receive_state, egress_comm) = init_proxy_comms(&runtime, address);
 
