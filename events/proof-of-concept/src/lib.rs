@@ -4,6 +4,7 @@
 #![feature(stmt_expr_attributes)]
 #![feature(coroutine_trait)]
 #![feature(iter_from_coroutine)]
+#![feature(exact_size_is_empty)]
 
 use std::net::ToSocketAddrs;
 

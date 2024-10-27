@@ -8,7 +8,7 @@ use valence_protocol::{
 
 use crate::{
     simulation::blocks::{
-        chunk::{LoadedChunk, START_Y},
+        chunk::{Column, START_Y},
         loader::parse::section::Section,
     },
     PacketBundle,
@@ -96,18 +96,18 @@ impl PacketBundle for DeltaPacket<'_> {
     }
 }
 
-impl LoadedChunk {
+impl Column {
     pub fn delta_drain_packets(&mut self) -> impl Iterator<Item = DeltaDrainPacket<'_>> + '_ {
         let IVec2 { x, y: z } = self.position;
 
-        self.chunk
+        self.data
             .sections
             .iter_mut()
             .enumerate()
             .filter(|(_, section)| !section.changed_since_last_tick.is_empty())
             .map(move |(i, section)| {
                 let y = i32::try_from(i).unwrap();
-                let y = y + (START_Y >> 4);
+                let y = y + i32::from(START_Y >> 4);
 
                 DeltaDrainPacket {
                     position: ChunkSectionPos::new(x, y, z),
@@ -119,14 +119,14 @@ impl LoadedChunk {
     pub fn original_delta_packets(&self) -> impl Iterator<Item = DeltaPacket<'_>> + '_ {
         let IVec2 { x, y: z } = self.position;
 
-        self.chunk
+        self.data
             .sections
             .iter()
             .enumerate()
             .filter(|(_, section)| !section.changed.is_empty())
             .map(move |(i, section)| {
                 let y = i32::try_from(i).unwrap();
-                let y = y + (START_Y >> 4);
+                let y = y + i32::from(START_Y >> 4);
 
                 DeltaPacket {
                     position: ChunkSectionPos::new(x, y, z),

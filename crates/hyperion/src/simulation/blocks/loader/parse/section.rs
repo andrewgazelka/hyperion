@@ -44,6 +44,19 @@ impl Section {
         unsafe { BlockState::from_raw(prev).unwrap_unchecked() }
     }
 
+    pub fn blocks_states(&self) -> impl Iterator<Item = (glam::U16Vec3, BlockState)> + '_ {
+        self.block_states.iter().enumerate().map(|(idx, data)| {
+            let idx = unsafe { u16::try_from(idx).unwrap_unchecked() };
+            let x = idx & 0xF;
+            let z = idx >> 4 & 0xF;
+            let y = (idx >> 8) & 0xF;
+
+            (glam::U16Vec3::new(x, y, z), unsafe {
+                BlockState::from_raw(data).unwrap_unchecked()
+            })
+        })
+    }
+
     // returns true if the block state was changed
     pub fn set_delta(&mut self, idx: u16, new: BlockState) -> BlockState {
         debug_assert_lt!(idx, 4096);

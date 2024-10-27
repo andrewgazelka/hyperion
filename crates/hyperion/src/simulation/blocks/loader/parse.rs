@@ -79,12 +79,12 @@ pub enum ParseChunkError {
 pub mod section;
 
 #[derive(Clone, Default, Debug)]
-pub struct ChunkData {
+pub struct ColumnData {
     pub sections: Vec<Section>,
     pub block_entities: BTreeMap<u32, Compound>,
 }
 
-impl ChunkData {
+impl ColumnData {
     pub fn new(height: u32) -> Self {
         Self {
             sections: vec![Section::default(); height as usize / 16],
@@ -113,7 +113,7 @@ impl ChunkData {
     }
 }
 
-impl Chunk for ChunkData {
+impl Chunk for ColumnData {
     fn height(&self) -> u32 {
         u32::try_from(self.sections.len()).unwrap() * 16
     }
@@ -221,14 +221,14 @@ impl Chunk for ChunkData {
 pub fn parse_chunk(
     mut nbt: Compound,
     biome_map: &BTreeMap<Ident<String>, BiomeId>, // TODO: replace with biome registry arg.
-) -> Result<ChunkData, ParseChunkError> {
+) -> Result<ColumnData, ParseChunkError> {
     let Some(Value::List(List::Compound(nbt_sections))) = nbt.remove("sections") else {
         return Err(ParseChunkError::MissingSections);
     };
 
     assert!(!nbt_sections.is_empty(), "empty sections");
 
-    let mut chunk = ChunkData::new((nbt_sections.len() * 16).try_into().unwrap_or(u32::MAX));
+    let mut chunk = ColumnData::new((nbt_sections.len() * 16).try_into().unwrap_or(u32::MAX));
 
     let min_sect_y = nbt_sections
         .iter()

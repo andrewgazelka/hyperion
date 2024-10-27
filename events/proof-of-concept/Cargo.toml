@@ -18,6 +18,7 @@ hyperion-inventory.workspace = true
 hyperion-scheduled.workspace = true
 hyperion-text.workspace = true
 hyperion-utils.workspace = true
+roaring.workspace = true
 hyperion.workspace = true
 ndarray = "0.16.1"
 nom = "7.1.3"

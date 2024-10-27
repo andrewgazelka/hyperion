@@ -36,7 +36,8 @@ unsafe impl Send for Consumer {}
 unsafe impl Send for RingBuf {}
 unsafe impl Sync for RingBuf {}
 
-#[must_use] pub fn new_pair(capacity: usize) -> (Producer, Consumer) {
+#[must_use]
+pub fn new_pair(capacity: usize) -> (Producer, Consumer) {
     let ring = RingBuf::new(capacity);
     RingBuf::split(Box::new(ring))
 }
@@ -272,7 +273,7 @@ mod tests {
                 if !data.is_empty() {
                     // Verify data
                     for (i, &byte) in data.iter().enumerate() {
-                        assert_eq!(byte, (total_read + i) as u8);
+                        assert_eq!(byte, u8::try_from(total_read + i).unwrap());
                     }
                     let len = data.len();
                     consumer.commit(data.len());

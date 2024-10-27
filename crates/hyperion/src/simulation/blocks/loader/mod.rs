@@ -6,7 +6,7 @@ use glam::IVec2;
 use hyperion_nerd_font::NERD_ROCKET;
 use itertools::Itertools;
 use libdeflater::{CompressionLvl, Compressor};
-use parse::ChunkData;
+use parse::ColumnData;
 use rustc_hash::FxHashSet;
 use tracing::{debug, warn};
 use valence_generated::block::BlockState;
@@ -17,7 +17,7 @@ use valence_server::layer::chunk::{bit_width, BiomeContainer, Chunk};
 
 pub mod parse;
 
-use super::{chunk::LoadedChunk, shared::WorldShared};
+use super::{chunk::Column, shared::WorldShared};
 use crate::{
     net::encoder::PacketEncoder,
     runtime::AsyncRuntime,
@@ -48,7 +48,7 @@ thread_local! {
 
 struct Message {
     position: IVec2,
-    tx: tokio::sync::mpsc::UnboundedSender<LoadedChunk>,
+    tx: tokio::sync::mpsc::UnboundedSender<Column>,
 }
 
 struct ChunkLoader {
@@ -63,7 +63,7 @@ pub struct ChunkLoaderHandle {
 }
 
 impl ChunkLoaderHandle {
-    pub fn send(&self, position: IVec2, tx: tokio::sync::mpsc::UnboundedSender<LoadedChunk>) {
+    pub fn send(&self, position: IVec2, tx: tokio::sync::mpsc::UnboundedSender<Column>) {
         self.tx_load_chunk_requests
             .send(Message { position, tx })
             .unwrap();
@@ -121,7 +121,7 @@ impl ChunkLoader {
         self.runtime.spawn(async move {
             let loaded_chunk = match load_chunk(position, &shared).await {
                 Ok(loaded_chunk) => {
-                    let chunk_height = loaded_chunk.chunk.height();
+                    let chunk_height = loaded_chunk.data.height();
                     if chunk_height == CHUNK_HEIGHT_SPAN {
                         loaded_chunk
                     } else {
@@ -141,7 +141,7 @@ impl ChunkLoader {
             };
 
             let unique_blocks = loaded_chunk
-                .chunk
+                .data
                 .sections
                 .iter()
                 .flat_map(|section| section.block_states.unique_blocks())
@@ -155,9 +155,9 @@ impl ChunkLoader {
     }
 }
 
-fn empty_chunk(position: IVec2) -> LoadedChunk {
+fn empty_chunk(position: IVec2) -> Column {
     // height: 24
-    let unloaded = ChunkData::new_with(CHUNK_HEIGHT_SPAN, Section::empty_sky);
+    let unloaded = ColumnData::new_with(CHUNK_HEIGHT_SPAN, Section::empty_sky);
 
     let bytes = STATE.with_borrow_mut(|state| {
         encode_chunk_packet(&unloaded, position, state)
@@ -167,10 +167,10 @@ fn empty_chunk(position: IVec2) -> LoadedChunk {
 
     debug_assert_eq!(unloaded.height(), CHUNK_HEIGHT_SPAN);
 
-    LoadedChunk::new(bytes.freeze(), unloaded, position)
+    Column::new(bytes.freeze(), unloaded, position)
 }
 
-async fn load_chunk(position: IVec2, shared: &WorldShared) -> anyhow::Result<LoadedChunk> {
+async fn load_chunk(position: IVec2, shared: &WorldShared) -> anyhow::Result<Column> {
     let x = position.x;
     let y = position.y;
 
@@ -203,7 +203,7 @@ async fn load_chunk(position: IVec2, shared: &WorldShared) -> anyhow::Result<Loa
             bail!("failed to encode chunk {position:?}");
         };
 
-        let loaded_chunk = LoadedChunk::new(bytes.freeze(), chunk, position);
+        let loaded_chunk = Column::new(bytes.freeze(), chunk, position);
 
         Ok(loaded_chunk)
     })
@@ -211,7 +211,7 @@ async fn load_chunk(position: IVec2, shared: &WorldShared) -> anyhow::Result<Loa
 
 // #[instrument(skip_all, level = "trace", fields(location = ?location))]
 fn encode_chunk_packet(
-    chunk: &ChunkData,
+    chunk: &ColumnData,
     location: IVec2,
     state: &mut TasksState,
 ) -> anyhow::Result<Option<BytesMut>> {

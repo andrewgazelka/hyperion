@@ -78,7 +78,6 @@ impl std::fmt::Debug for BorrowedPacketFrame<'_> {
     }
 }
 
-
 impl<'a> BorrowedPacketFrame<'a> {
     /// Attempts to decode this packet as type `P`. An error is returned if the
     /// packet ID does not match, the body of the packet failed to decode, or

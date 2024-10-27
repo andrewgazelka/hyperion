@@ -45,9 +45,10 @@ impl Blocks {
 
                 self.should_update.insert(idx as u32);
 
-                let chunk = &mut loaded_chunk.chunk;
+                let chunk = &mut loaded_chunk.data;
 
                 for section_y in start_chunk.y..=end_chunk.y {
+                    let section_y = section_y as i16;
                     let section_idx = (section_y - (START_Y / 16)) as usize;
 
                     let section = &mut chunk.sections[section_idx];
@@ -55,7 +56,8 @@ impl Blocks {
                     // idx is yzx
                     // todo: section.set_delta(idx, block)
                     // Calculate the bounds for this section
-                    let section_start = IVec3::new(section_x * 16, section_y * 16, section_z * 16);
+                    let section_start =
+                        IVec3::new(section_x * 16, i32::from(section_y * 16), section_z * 16);
                     let section_end = section_start + IVec3::new(15, 15, 15);
 
                     // Iterate over the intersection of the frame and this section

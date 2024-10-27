@@ -3,7 +3,7 @@
 use std::{future::Future, ops::Try, pin::Pin, sync::Arc};
 
 use bytes::Bytes;
-use chunk::LoadedChunk;
+use chunk::Column;
 use flecs_ecs::{core::Entity, macros::Component};
 use glam::{IVec2, IVec3};
 use indexmap::IndexMap;
@@ -28,7 +28,7 @@ mod region;
 mod shared;
 
 pub enum GetChunk<'a> {
-    Loaded(&'a LoadedChunk),
+    Loaded(&'a Column),
     Loading,
 }
 
@@ -47,13 +47,13 @@ pub enum TrySetBlockDeltaError {
 #[derive(Component)]
 pub struct Blocks {
     /// Map to a Chunk by Entity ID
-    chunk_cache: IndexMap<IVec2, LoadedChunk, FxBuildHasher>,
+    chunk_cache: IndexMap<IVec2, Column, FxBuildHasher>,
     should_update: RoaringBitmap,
 
     loader_handle: ChunkLoaderHandle,
 
-    tx_loaded_chunks: tokio::sync::mpsc::UnboundedSender<LoadedChunk>,
-    rx_loaded_chunks: tokio::sync::mpsc::UnboundedReceiver<LoadedChunk>,
+    tx_loaded_chunks: tokio::sync::mpsc::UnboundedSender<Column>,
+    rx_loaded_chunks: tokio::sync::mpsc::UnboundedReceiver<Column>,
     pub to_confirm: Vec<EntityAndSequence>,
 }
 
@@ -74,7 +74,7 @@ impl Blocks {
         })
     }
 
-    pub fn for_each_to_update_mut(&mut self, mut f: impl FnMut(&mut LoadedChunk)) {
+    pub fn for_each_to_update_mut(&mut self, mut f: impl FnMut(&mut Column)) {
         let should_update = &mut self.should_update;
         let chunk_cache = &mut self.chunk_cache;
 
@@ -85,7 +85,7 @@ impl Blocks {
         }
     }
 
-    pub fn for_each_to_update(&self, mut f: impl FnMut(&LoadedChunk)) {
+    pub fn for_each_to_update(&self, mut f: impl FnMut(&Column)) {
         let should_update = &self.should_update;
         let chunk_cache = &self.chunk_cache;
 
@@ -100,8 +100,14 @@ impl Blocks {
         self.should_update.clear();
     }
 
-    pub fn cache_mut(&mut self) -> &mut IndexMap<IVec2, LoadedChunk, FxBuildHasher> {
+    pub fn cache_mut(&mut self) -> &mut IndexMap<IVec2, Column, FxBuildHasher> {
         &mut self.chunk_cache
+    }
+
+    pub fn block_and_load(&mut self, column_location: IVec2, tasks: &AsyncRuntime) {
+        tasks.block_on(async { self.get_and_wait(column_location).await });
+
+        self.load_pending();
     }
 
     #[must_use]
@@ -149,11 +155,11 @@ impl Blocks {
     // I wonder if we can just implement something, where we can return an `impl Deref`
     // and see if this would make more sense or not.
     #[must_use]
-    pub fn get_loaded_chunk(&self, chunk_position: IVec2) -> Option<&LoadedChunk> {
+    pub fn get_loaded_chunk(&self, chunk_position: IVec2) -> Option<&Column> {
         self.chunk_cache.get(&chunk_position)
     }
 
-    pub fn get_loaded_chunk_mut(&mut self, chunk_position: IVec2) -> Option<&mut LoadedChunk> {
+    pub fn get_loaded_chunk_mut(&mut self, chunk_position: IVec2) -> Option<&mut Column> {
         self.chunk_cache.get_mut(&chunk_position)
     }
 
@@ -219,7 +225,7 @@ impl Blocks {
                     continue;
                 };
 
-                let chunk = &chunk.chunk;
+                let chunk = &chunk.data;
                 for x in start.x..=end.x {
                     for z in start.y..=end.y {
                         for y in y_start..=y_end {
@@ -264,7 +270,7 @@ impl Blocks {
 
         let chunk = self.get_loaded_chunk(chunk_pos)?;
 
-        let chunk = &chunk.chunk;
+        let chunk = &chunk.data;
         // todo: is this right for negative numbers?
         // I have no idea... let's test
         // non-absolute difference should work as well, but we want a u32
@@ -300,7 +306,7 @@ impl Blocks {
         let y = u32::try_from(position.y - START_Y).unwrap();
         let z = u32::try_from(position.z - chunk_start_block[1]).unwrap();
 
-        let old_state = chunk.chunk.set_delta(x, y, z, state);
+        let old_state = chunk.data.set_delta(x, y, z, state);
 
         if old_state != state {
             self.should_update.insert(u32::try_from(chunk_idx).unwrap());

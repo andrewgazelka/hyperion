@@ -2637,6 +2637,7 @@ dependencies = [
  "hyperion-utils",
  "ndarray",
  "nom",
+ "roaring",
  "rustc-hash 2.0.0",
  "serde_json",
  "tikv-jemallocator",
