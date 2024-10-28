@@ -3,7 +3,7 @@ use std::borrow::Cow;
 use flecs_ecs::prelude::*;
 use hyperion::{
     egress::player_join::{PlayerListActions, PlayerListEntry, PlayerListS2c},
-    net::{Compose, NetworkStreamRef},
+    net::{agnostic::chat, Compose, NetworkStreamRef},
     simulation::{
         blocks::Blocks,
         command::{get_root_command, Command, Parser},
@@ -29,7 +29,7 @@ use hyperion::{
 use hyperion_inventory::PlayerInventory;
 use parse::Stat;
 use tracing::{debug, trace_span};
-use hyperion::net::agnostic::chat;
+
 use crate::{
     component::team::Team,
     module::{attack::CombatStats, command::parse::ParsedCommand, level::Level},
@@ -49,30 +49,25 @@ pub fn add_to_tree(world: &World) {
     add_command(world, Command::literal("zombie"), root_command);
     add_command(world, Command::literal("upgrade"), root_command);
 
-
     let give = add_command(world, Command::literal("give"), root_command);
     let player = add_command(
         world,
         Command::argument("player", Parser::Entity {
             single: false,
-            only_players: true
+            only_players: true,
         }),
-        give
+        give,
     );
-    
-    let block = add_command(
-        world,
-        Command::argument("", Parser::ItemStack),
-        player
-    );
+
+    let block = add_command(world, Command::argument("", Parser::ItemStack), player);
 
     add_command(
         world,
         Command::argument("count", Parser::Integer {
             min: None,
-            max: None
+            max: None,
         }),
-        block
+        block,
     );
 
     let speed = add_command(world, Command::literal("speed"), root_command);
@@ -138,7 +133,11 @@ fn process_command(command: &ParsedCommand, context: &mut CommandContext<'_>) {
         ParsedCommand::Team => handle_team_command(context),
         ParsedCommand::Zombie => handle_zombie_command(context),
         ParsedCommand::Dirt { x, y, z } => handle_dirt_command(*x, *y, *z, context),
-        ParsedCommand::Give { entity, item, count } => handle_give_command(entity.clone(), item.clone(), *count, context), // TODO: cloning cringe ig?
+        ParsedCommand::Give {
+            entity,
+            item,
+            count,
+        } => handle_give_command(entity, item, *count, context),
         ParsedCommand::Upgrade => handle_upgrade_command(context),
         ParsedCommand::Stats(stat, amount) => handle_stats(*stat, *amount, context),
         ParsedCommand::Health(amount) => handle_health_command(*amount, context),
@@ -380,24 +379,27 @@ fn handle_stats(stat: Stat, amount: f32, context: &CommandContext<'_>) {
         });
 }
 
-fn handle_give_command(entity: String, item_name: String, count: i8, context: &mut CommandContext<'_>) {
-    let Some(item) = ItemKind::from_str(item_name.as_str()) else {
-            let packet = chat(format!("Unknown item '{item_name:?}'"));
-            context.compose
-                .unicast(packet, context.stream, context.system_id, context.world)
-                .unwrap();
-            return;
-        };
-    
+fn handle_give_command(entity: &str, item_name: &str, count: i8, context: &mut CommandContext<'_>) {
+    let Some(item) = ItemKind::from_str(item_name) else {
+        let packet = chat(format!("Unknown item '{item_name:?}'"));
+        context
+            .compose
+            .unicast(packet, context.stream, context.system_id, context.world)
+            .unwrap();
+        return;
+    };
+
     context
         .inventory
         .try_add_item(ItemStack::new(item, count, None));
-    
+
     let name = item.to_str();
-    
+
     let packet = chat(format!("Gave {count} [{name}] to {entity}"));
-    context.compose
-        .unicast(packet, context.stream, context.system_id, context.world).unwrap();
+    context
+        .compose
+        .unicast(packet, context.stream, context.system_id, context.world)
+        .unwrap();
 }
 
 fn handle_dirt_command(x: i32, y: i32, z: i32, context: &mut CommandContext<'_>) {

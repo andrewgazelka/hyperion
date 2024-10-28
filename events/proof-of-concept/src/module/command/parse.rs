@@ -1,10 +1,8 @@
-use nom::bytes::complete::take_while1;
-use nom::combinator::opt;
 use nom::{
     branch::alt,
-    bytes::complete::{tag, take_until},
+    bytes::complete::{tag, take_until, take_while1},
     character::complete::space1,
-    combinator::{map, map_res},
+    combinator::{map, map_res, opt},
     error::ErrorKind,
     number::complete::float,
     sequence::{preceded, tuple},
@@ -24,13 +22,25 @@ pub enum ParsedCommand {
     Speed(f32),
     Team,
     Zombie,
-    Dirt { x: i32, y: i32, z: i32 },
-    Give { entity: String, item: String, count: i8 },
+    Dirt {
+        x: i32,
+        y: i32,
+        z: i32,
+    },
+    Give {
+        entity: String,
+        item: String,
+        count: i8,
+    },
     Upgrade,
     Stats(Stat, f32),
     Health(f32),
     TpHere,
-    Tp { x: f32, y: f32, z: f32 },
+    Tp {
+        x: f32,
+        y: f32,
+        z: f32,
+    },
 }
 
 fn is_valid_player_char(c: char) -> bool {
@@ -71,18 +81,22 @@ fn parse_dirt(input: &str) -> IResult<&str, ParsedCommand> {
 }
 
 fn parse_give(input: &str) -> IResult<&str, ParsedCommand> {
-    map(tuple(
-        (
+    map(
+        tuple((
             tag("give"),
             preceded(space1_str as fn(_) -> _, take_while1(is_valid_player_char)),
-            preceded(space1_str, preceded(opt(tag("minecraft:")), take_while1(is_valid_player_char))),
-            preceded(space1_str, nom::character::complete::i8)
-        )
-    ), |(_, entity, item, count)| ParsedCommand::Give {
-        entity: entity.to_string(),
-        item: item.to_string(),
-        count
-    })(input)
+            preceded(
+                space1_str,
+                preceded(opt(tag("minecraft:")), take_while1(is_valid_player_char)),
+            ),
+            preceded(space1_str, nom::character::complete::i8),
+        )),
+        |(_, entity, item, count)| ParsedCommand::Give {
+            entity: entity.to_string(),
+            item: item.to_string(),
+            count,
+        },
+    )(input)
 }
 
 fn parse_upgrade(input: &str) -> IResult<&str, ParsedCommand> {
@@ -140,7 +154,6 @@ pub fn command(input: &str) -> IResult<&str, ParsedCommand> {
         parse_zombie,
     ))(input)
 }
-
 
 #[cfg(test)]
 mod tests {
