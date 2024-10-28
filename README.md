@@ -7,10 +7,6 @@ Record ([8825 by
 EVE Online](https://www.guinnessworldrecords.com/world-records/105603-largest-videogame-pvp-battle)). The
 architecture is ECS-driven using [Flecs Rust](https://github.com/Indra-db/Flecs-Rust).
 
-I would greatly appreciate the contribution.
-To see what to work on check the [issues page](https://github.com/andrewgazelka/hyperion/issues) or
-join [Hyperion's Discord](https://discord.gg/sTN8mdRQ) for the latest updates on development.
-
 # Benchmarks
 
 | Players | Tick Time (ms) | Core Usage (%) | Total CPU Utilization (%) |
