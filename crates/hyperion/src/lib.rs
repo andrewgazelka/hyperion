@@ -20,7 +20,7 @@
 #![feature(split_array)]
 #![feature(never_type)]
 #![feature(f16)]
-
+#![feature(duration_constructors)]
 // todo: deny more and completely fix panics
 // #![deny(
 //     clippy::expect_used,
@@ -45,6 +45,7 @@ use anyhow::{bail, Context};
 use derive_more::{Deref, DerefMut};
 use egress::EgressModule;
 use flecs_ecs::prelude::*;
+pub use glam;
 use ingress::IngressModule;
 #[cfg(unix)]
 use libc::{getrlimit, setrlimit, RLIMIT_NOFILE};
@@ -52,8 +53,15 @@ use libdeflater::CompressionLvl;
 use simulation::{blocks::Blocks, util::generate_biome_registry, Comms, SimModule, StreamLookup};
 use storage::{Db, Events, GlobalEventHandlers, SkinHandler, ThreadLocal};
 use tracing::info;
+use util::mojang::MojangClient;
 pub use uuid;
+// todo: slowly move more and more things to arbitrary module
+// and then eventually do not re-export valence_protocol
 pub use valence_protocol;
+pub use valence_protocol::{
+    block::{BlockKind, BlockState},
+    ItemKind, ItemStack, Particle,
+};
 use valence_protocol::{CompressionThreshold, Encode, Packet};
 
 use crate::{
@@ -65,8 +73,12 @@ use crate::{
 mod common;
 pub use common::*;
 use hyperion_crafting::CraftingRegistry;
+pub use valence_ident;
 
-use crate::simulation::{EntitySize, Player};
+use crate::{
+    simulation::{EntitySize, Player},
+    util::mojang::ApiProvider,
+};
 
 pub mod egress;
 pub mod ingress;
@@ -197,6 +209,7 @@ impl Hyperion {
 
         world.component::<Db>();
         world.component::<SkinHandler>();
+        world.component::<MojangClient>();
         world.component::<Events>();
 
         world.component::<EntitySize>();
@@ -222,6 +235,8 @@ impl Hyperion {
 
         world.set(db);
         world.set(skins);
+
+        world.set(MojangClient::new(&runtime, ApiProvider::MAT_DOES_DEV));
 
         let (receive_state, egress_comm) = init_proxy_comms(&runtime, address);
 

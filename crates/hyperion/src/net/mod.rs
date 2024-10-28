@@ -23,6 +23,7 @@ use crate::{
     Global, PacketBundle, Scratch, Scratches,
 };
 
+pub mod agnostic;
 pub mod decoder;
 pub mod encoder;
 pub mod packets;

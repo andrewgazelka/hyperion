@@ -3,10 +3,7 @@ use flecs_ecs::{
     macros::{system, Component},
     prelude::Module,
 };
-use hyperion::{
-    simulation::blocks::Blocks,
-    valence_protocol::{math::IVec3, BlockState},
-};
+use hyperion::{glam::IVec3, simulation::blocks::Blocks, BlockState};
 use ndarray::Array3;
 use tracing::trace_span;
 

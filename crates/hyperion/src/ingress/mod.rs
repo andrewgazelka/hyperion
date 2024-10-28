@@ -80,6 +80,7 @@ fn process_login(
     decoder: &PacketDecoder,
     comms: &Comms,
     skins_collection: SkinHandler,
+    mojang: MojangClient,
     packet: &BorrowedPacketFrame<'_>,
     stream_id: NetworkStreamRef,
     compose: &Compose,
@@ -127,8 +128,6 @@ fn process_login(
         .name("player_join")
         .spawn_on(
             async move {
-                let mojang = MojangClient::default();
-
                 let skin = match PlayerSkin::from_uuid(uuid, &mojang, &skins_collection).await {
                     Ok(Some(skin)) => skin,
                     Err(e) => {
@@ -434,6 +433,7 @@ impl Module for IngressModule {
             &AsyncRuntime($),
             &Comms($),
             &SkinHandler($),
+            &MojangClient($),
             &GlobalEventHandlers($),
             &mut PacketDecoder,
             &mut PacketState,
@@ -460,6 +460,7 @@ impl Module for IngressModule {
                 tasks,
                 comms,
                 skins_collection,
+                mojang,
                 handlers,
                 decoder,
                 login_state,
@@ -524,6 +525,7 @@ impl Module for IngressModule {
                                 decoder,
                                 comms,
                                 skins_collection.clone(),
+                                mojang.clone(),
                                 &frame,
                                 io_ref,
                                 compose,

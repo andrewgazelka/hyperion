@@ -205,6 +205,10 @@ git = 'https://github.com/andrewgazelka/valence'
 branch = 'feat-open'
 git = 'https://github.com/andrewgazelka/valence'
 
+[workspace.dependencies.valence_ident]
+branch = 'feat-open'
+git = 'https://github.com/andrewgazelka/valence'
+
 [workspace.lints]
 [workspace.lints.clippy]
 cast_precision_loss = 'allow'

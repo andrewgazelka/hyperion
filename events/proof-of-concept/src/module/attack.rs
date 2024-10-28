@@ -11,6 +11,7 @@ use flecs_ecs::{
 };
 use hyperion::{
     net::{
+        agnostic,
         packets::{BossBarAction, BossBarS2c},
         Compose, NetworkStreamRef,
     },
@@ -30,7 +31,6 @@ use hyperion::{
                 entity_attributes_s2c::AttributeProperty,
             },
         },
-        sound::{SoundCategory, SoundId},
         ItemKind, ItemStack, Particle, VarInt,
     },
 };
@@ -164,20 +164,15 @@ impl Module for AttackModule {
 
                                     health.damage(damage_after_protection);
                                     if health.is_dead() {
+                                        let sound = agnostic::sound(
+                                            ident!("minecraft:entity.player.attack.knockback"),
+                                            **target_position,
+                                        ).volume(1.5)
+                                            .pitch(0.8)
+                                            .seed(fastrand::i64(..))
+                                            .build();
 
-                                        // Play a sound at the attacker's position
-                                        let sound_pkt = play::PlaySoundS2c {
-                                            id: SoundId::Direct {
-                                                id: ident!("minecraft:entity.player.attack.knockback").into(),
-                                                range: None,
-                                            },
-                                            position: (**target_position * 8.0).as_ivec3(),
-                                            volume: 1.5,
-                                            pitch: 0.8,
-                                            seed: fastrand::i64(..),
-                                            category: SoundCategory::Player,
-                                        };
-                                        compose.broadcast(&sound_pkt, SystemId(999)).send(&world).unwrap();
+                                        compose.broadcast(&sound, SystemId(999)).send(&world).unwrap();
 
                                         // Create particle effect at the attacker's position
                                         let particle_pkt = play::ParticleS2c {
