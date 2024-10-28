@@ -36,12 +36,16 @@ pub fn add_command(world: &World, command: Command, parent: Entity) -> Entity {
 ///     cmd.literal("verbose", None);
 /// });
 /// ```
-pub fn cmd<'a, F>(world: &'a World, name: &str, f: F)
+pub fn cmd_with<'a, F>(world: &'a World, name: &str, f: F)
 where
     F: FnOnce(&mut CommandScope<'a>),
 {
     let mut scope = CommandScope::new(world);
-    scope.literal(name, f);
+    scope.literal_with(name, f);
+}
+
+pub fn cmd<F>(world: &World, name: &str) {
+    cmd_with(world, name, |_| {});
 }
 
 #[must_use]
@@ -61,7 +65,7 @@ impl<'a> CommandScope<'a> {
     }
 
     /// Adds a literal command. Accepts an optional closure to define nested commands.
-    pub fn literal<F>(&mut self, name: &str, f: F) -> &mut Self
+    pub fn literal_with<F>(&mut self, name: &str, f: F) -> &mut Self
     where
         F: FnOnce(&mut Self),
     {
@@ -77,8 +81,21 @@ impl<'a> CommandScope<'a> {
         self.end()
     }
 
+    pub fn literal(&mut self, name: &str) -> &mut Self {
+        self.literal_with(name, |_| {})
+    }
+
+    pub fn argument(&mut self, name: &str, parser: Parser) -> &mut Self {
+        self.argument_with(name, parser, |_| {})
+    }
+
     /// Adds an argument command. Accepts an optional closure to define nested commands.
-    pub fn argument(&mut self, name: &str, parser: Parser, f: impl FnOnce(&mut Self)) -> &mut Self {
+    pub fn argument_with(
+        &mut self,
+        name: &str,
+        parser: Parser,
+        f: impl FnOnce(&mut Self),
+    ) -> &mut Self {
         let command = Command::argument(name, parser);
         let entity = add_command(self.world, command, self.current);
         self.parents.insert(entity, self.current);

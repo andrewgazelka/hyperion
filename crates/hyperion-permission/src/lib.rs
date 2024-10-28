@@ -3,7 +3,7 @@ use flecs_ecs::{
     macros::Component,
     prelude::Module,
 };
-use hyperion::{simulation::command::cmd, storage::LocalDb};
+use hyperion::{simulation::command::cmd_with, storage::LocalDb};
 use valence_protocol::packets::play::command_tree_s2c::Parser;
 
 #[derive(Component)]
@@ -13,17 +13,13 @@ mod storage;
 
 impl Module for PermissionModule {
     fn module(world: &World) {
-        cmd(world, "perms", |scope| {
-            scope.argument(
-                "player",
-                Parser::Entity {
-                    single: true,
-                    only_players: true,
-                },
-                |_| {},
-            );
+        cmd_with(world, "perms", |scope| {
+            scope.argument("player", Parser::Entity {
+                single: true,
+                only_players: true,
+            });
 
-            scope.literal("verbose", |_| {});
+            scope.literal("verbose");
         });
 
         // based on luckperms https://luckperms.net/wiki/Command-Usage
