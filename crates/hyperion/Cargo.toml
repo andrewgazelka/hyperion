@@ -1,7 +1,9 @@
+cargo-features = ["edition2024"]
+
 [package]
 name = "hyperion"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 authors = ["Andrew Gazelka <andrew.gazelka@gmail.com>"]
 readme = "README.md"
 publish = false
@@ -75,7 +77,7 @@ fastrand.workspace = true
 hex.workspace = true
 rustc_version.workspace = true
 tango-bench.workspace = true
-tracing-subscriber.workspace = true
+#tracing-subscriber.workspace = true
 
 [[bench]]
 name = "set"

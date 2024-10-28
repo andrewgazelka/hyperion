@@ -93,7 +93,7 @@ fn process_login(
         "process_login called with invalid state: {login_state:?}"
     );
 
-    let login::LoginHelloC2s { username, .. } = packet.decode()?;
+    let login::LoginHelloC2s { username, profile_id } = packet.decode()?;
 
     let username = username.0;
 
@@ -117,9 +117,10 @@ fn process_login(
     decoder.set_compression(global.shared.compression_threshold);
 
     let username = Box::from(username);
-    let uuid = offline_uuid(&username);
+    
+    let uuid = profile_id.unwrap_or_else(|| offline_uuid(&username));
     let uuid_s = format!("{uuid:?}").dimmed();
-    println!("{username} {uuid_s}");
+    info!("Starting login: {username} {uuid_s}");
 
     let skins = comms.skins_tx.clone();
     let id = entity.id();

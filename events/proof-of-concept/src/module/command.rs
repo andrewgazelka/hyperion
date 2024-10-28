@@ -1,3 +1,4 @@
+use hyperion::simulation::command::add_command;
 use std::borrow::Cow;
 
 use flecs_ecs::prelude::*;
@@ -36,10 +37,6 @@ use crate::{
 };
 
 pub mod parse;
-
-fn add_command(world: &World, command: Command, parent: Entity) -> Entity {
-    world.entity().set(command).child_of_id(parent).id()
-}
 
 pub fn add_to_tree(world: &World) {
     let root_command = get_root_command();

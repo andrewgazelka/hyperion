@@ -19,7 +19,7 @@ pub fn chat(chat: impl Into<String>) -> Chat {
     }
 }
 
-impl PacketBundle for Chat {
+impl PacketBundle for &Chat {
     fn encode_including_ids(self, mut w: impl Write) -> anyhow::Result<()> {
         self.raw.encode_including_ids(&mut w)
     }

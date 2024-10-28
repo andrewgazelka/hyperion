@@ -51,7 +51,7 @@ use ingress::IngressModule;
 use libc::{getrlimit, setrlimit, RLIMIT_NOFILE};
 use libdeflater::CompressionLvl;
 use simulation::{blocks::Blocks, util::generate_biome_registry, Comms, SimModule, StreamLookup};
-use storage::{Db, Events, GlobalEventHandlers, SkinHandler, ThreadLocal};
+use storage::{LocalDb, Events, GlobalEventHandlers, SkinHandler, ThreadLocal};
 use tracing::info;
 use util::mojang::MojangClient;
 pub use uuid;
@@ -207,7 +207,7 @@ impl Hyperion {
             .next()
             .context("could not get first address")?;
 
-        world.component::<Db>();
+        world.component::<LocalDb>();
         world.component::<SkinHandler>();
         world.component::<MojangClient>();
         world.component::<Events>();
@@ -229,8 +229,8 @@ impl Hyperion {
         world.set(GlobalEventHandlers::default());
 
         info!("initializing database");
-        let db = Db::new()?;
-        let skins = SkinHandler::new(db.clone());
+        let db = LocalDb::new()?;
+        let skins = SkinHandler::new(&db)?;
         info!("database initialized");
 
         world.set(db);

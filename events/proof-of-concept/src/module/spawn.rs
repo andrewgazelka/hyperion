@@ -18,7 +18,7 @@ use rustc_hash::FxHashMap;
 #[derive(Component)]
 pub struct SpawnModule;
 
-const RADIUS: i32 = 1000;
+const RADIUS: i32 = 0;
 const SPAWN_MIN_Y: i16 = 40;
 const SPAWN_MAX_Y: i16 = 100;
 
@@ -47,6 +47,7 @@ fn random_chunk_in_radius() -> IVec2 {
 
 use hyperion::valence_protocol::BlockState;
 use roaring::RoaringBitmap;
+use tracing::info;
 
 fn avoid_blocks() -> RoaringBitmap {
     let mut blocks = RoaringBitmap::new();
@@ -126,7 +127,7 @@ fn try_chunk_for_spawn(
         .collect();
 
     let (position, state) = *fastrand::choice(&candidate_positions)?;
-    println!("spawned at {position:?} with state {state:?}");
+    info!("spawned at {position:?} with state {state:?}");
 
     let position = IVec3::new(0, 1, 0) + position;
     let position = position.as_vec3() + Vec3::new(0.5, 0.0, 0.5);

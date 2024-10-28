@@ -26,6 +26,8 @@ rustc-hash.workspace = true
 serde_json = "1.0.128"
 tracing-subscriber.workspace = true
 tracing.workspace = true
+tracing-tracy.workspace = true
+
 [dev-dependencies]
 tokio = { workspace = true, features = ["full"] }
 tracing = { workspace = true, features = ["release_max_level_info"] }

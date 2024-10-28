@@ -71,6 +71,7 @@ pub struct EgressComm {
 #[derive(Component, Deref, From, Display, Debug)]
 pub struct InGameName(Box<str>);
 
+
 /// This component is added to all players once they reach the play state. See [`PacketState::Play`].
 #[derive(Component, Default)]
 pub struct Play;

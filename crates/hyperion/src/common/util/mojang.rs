@@ -59,7 +59,7 @@ impl ApiProvider {
 /// A client to interface with the Minecraft profile API.
 ///
 /// Can use either the official Mojang API or [matdoes/mowojang](https://matdoes.dev/minecraft-uuids) as a data source.
-/// This does not include caching, this should be done separately probably using [`crate::storage::Db`].
+/// This does not include caching, this should be done separately probably using [`crate::storage::LocalDb`].
 #[derive(Component, Clone)]
 pub struct MojangClient {
     req: reqwest::Client,

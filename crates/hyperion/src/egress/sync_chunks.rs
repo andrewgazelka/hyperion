@@ -3,7 +3,7 @@ use std::cmp::Ordering;
 use derive_more::derive::{Deref, DerefMut};
 use flecs_ecs::prelude::*;
 use glam::IVec2;
-use tracing::{error, trace_span};
+use tracing::{debug, debug_span, error, info, trace_span};
 use valence_protocol::{
     packets::play::{self},
     ChunkPos,
@@ -11,10 +11,10 @@ use valence_protocol::{
 
 use crate::{
     config::Config,
-    net::{Compose, NetworkStreamRef},
+    net::{agnostic, Compose, NetworkStreamRef},
     simulation::{
         blocks::{Blocks, GetChunk},
-        ChunkPosition, Play, Position,
+        ChunkPosition, InGameName, Play, Position,
     },
     system_registry::{GENERATE_CHUNK_CHANGES, SEND_FULL_LOADED_CHUNKS},
     util::TracingExt,
@@ -46,6 +46,7 @@ impl Module for SyncChunksModule {
             &NetworkStreamRef,
             &mut ChunkSendQueue,
         )
+        .with::<Play>()
         .kind::<flecs::pipeline::OnUpdate>()
         .multi_threaded()
         .tracing_each_entity(
@@ -156,7 +157,8 @@ impl Module for SyncChunksModule {
 
         let system_id = SEND_FULL_LOADED_CHUNKS;
 
-        system!("send_full_loaded_chunks", world, &Blocks($), &Compose($), &NetworkStreamRef, &mut ChunkSendQueue, Play)
+        system!("send_full_loaded_chunks", world, &Blocks($), &Compose($), &NetworkStreamRef, &mut ChunkSendQueue)
+            .with::<Play>()
             .kind::<flecs::pipeline::OnUpdate>()
             .multi_threaded()
             .each_entity(
@@ -169,7 +171,10 @@ impl Module for SyncChunksModule {
 
                     let mut iter_count = 0;
 
-                    #[expect(clippy::cast_possible_wrap, reason = "realistically queue.changes.len() will never be large enough to wrap")]
+                    #[expect(
+                        clippy::cast_possible_wrap,
+                        reason = "realistically queue.changes.len() will never be large enough to wrap"
+                    )]
                     let mut idx = (queue.changes.len() as isize) - 1;
 
                     while idx >= 0 {

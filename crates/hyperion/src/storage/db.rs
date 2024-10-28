@@ -3,23 +3,21 @@
 use std::path::Path;
 
 use byteorder::NativeEndian;
+use derive_more::Deref;
 use flecs_ecs::macros::Component;
 use heed::{types, Database, Env, EnvOpenOptions};
 use uuid::Uuid;
 
-use crate::simulation::skin::PlayerSkin;
+use crate::simulation::skin::{ArchivedPlayerSkin, PlayerSkin};
 
 /// A wrapper around a `Heed` database
-#[derive(Component, Debug, Clone)]
-pub struct Db {
+#[derive(Component, Debug, Clone, Deref)]
+pub struct LocalDb {
     env: Env,
-
-    // mapping of UUID to Skin
-    skins: Database<types::U128<NativeEndian>, types::SerdeBincode<PlayerSkin>>,
 }
 
-impl Db {
-    /// Creates a new [`Db`]
+impl LocalDb {
+    /// Creates a new [`LocalDb`]
     pub fn new() -> anyhow::Result<Self> {
         let path = Path::new("db").join("heed.mdb");
 
@@ -31,29 +29,33 @@ impl Db {
                 .max_dbs(1)
                 .open(&path)?
         };
-        // We open the default unnamed database
-        let inner = {
-            let mut wtxn = env.write_txn()?;
-            let db = env.create_database(&mut wtxn, Some("uuid-to-skins"))?;
-            wtxn.commit()?;
-            db
-        };
 
-        Ok(Self { skins: inner, env })
+        Ok(Self { env })
     }
 }
 
 /// A handler for player skin operations
 #[derive(Component, Debug, Clone)]
 pub struct SkinHandler {
-    db: Db,
+    env: Env,
+    skins: Database<types::U128<NativeEndian>, types::Bytes>,
 }
 
 impl SkinHandler {
-    /// Creates a new [`SkinHandler`] from a given [`Db`].
-    #[must_use]
-    pub const fn new(db: Db) -> Self {
-        Self { db }
+    /// Creates a new [`SkinHandler`] from a given [`LocalDb`].
+    pub fn new(db: &LocalDb) -> anyhow::Result<Self> {
+        // We open the default unnamed database
+        let skins = {
+            let mut wtxn = db.write_txn()?;
+            let db = db.create_database(&mut wtxn, Some("uuid-to-skins"))?;
+            wtxn.commit()?;
+            db
+        };
+
+        Ok(Self {
+            env: db.env.clone(),
+            skins,
+        })
     }
 
     /// Finds a [`PlayerSkin`] by its UUID.
@@ -62,13 +64,15 @@ impl SkinHandler {
 
         let uuid = uuid.as_u128();
 
-        let rtxn = self.db.env.read_txn()?;
-        let skin = self.db.skins.get(&rtxn, &uuid);
+        let rtxn = self.env.read_txn()?;
+        let skin = self.skins.get(&rtxn, &uuid);
 
         let Some(skin) = skin? else {
             return Ok(None);
         };
 
+        let skin = unsafe { rkyv::access_unchecked::<ArchivedPlayerSkin>(skin) };
+        let skin = rkyv::deserialize::<_, rkyv::rancor::Error>(skin).unwrap();
         Ok(Some(skin))
     }
 
@@ -76,8 +80,11 @@ impl SkinHandler {
     pub fn insert(&self, uuid: Uuid, skin: &PlayerSkin) -> anyhow::Result<()> {
         let uuid = uuid.as_u128();
 
-        let mut wtxn = self.db.env.write_txn()?;
-        self.db.skins.put(&mut wtxn, &uuid, skin)?;
+        let mut wtxn = self.env.write_txn()?;
+
+        let skin = rkyv::to_bytes::<rkyv::rancor::Error>(skin).unwrap();
+
+        self.skins.put(&mut wtxn, &uuid, &skin)?;
         wtxn.commit()?;
 
         Ok(())
