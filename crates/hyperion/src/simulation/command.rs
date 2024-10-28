@@ -2,6 +2,7 @@ use flecs_ecs::{
     core::{Entity, EntityViewGet, IdOperations, World},
     macros::Component,
 };
+use rustc_hash::FxHashMap;
 use tracing::warn;
 pub use valence_protocol::packets::play::command_tree_s2c::Parser;
 use valence_protocol::{
@@ -19,85 +20,78 @@ pub fn add_command(world: &World, command: Command, parent: Entity) -> Entity {
     world.entity().set(command).child_of_id(parent).id()
 }
 
+/// Entry point for defining commands using the DSL.
+///
+/// # Arguments
+///
+/// * `world` - A reference to the `World` where commands are being added.
+/// * `name` - The name of the command.
+/// * `f` - A closure that defines nested commands within this command.
+///
+/// # Example
+///
+/// ```rust
+/// cmd(&world, "start", |cmd| {
+///     cmd.argument("config", Parser::ConfigParser, None);
+///     cmd.literal("verbose", None);
+/// });
+/// ```
+pub fn cmd<'a, F>(world: &'a World, name: &str, f: F)
+where
+    F: FnOnce(&mut CommandScope<'a>),
+{
+    let mut scope = CommandScope::new(world);
+    scope.literal(name, f);
+}
+
 #[must_use]
-pub struct CommandDsl<'a> {
+pub struct CommandScope<'a> {
     world: &'a World,
     current: Entity,
-    parents: rustc_hash::FxHashMap<Entity, Entity>,
+    parents: FxHashMap<Entity, Entity>,
 }
 
-#[macro_export]
-macro_rules! commands {
-    ($world:expr => {
-        $($body:tt)*
-    }) => {{
-        let mut builder = CommandDsl::new($world);
-        $crate::commands_inner!(builder, $($body)*);
-        builder
-    }};
-}
+impl<'a> CommandScope<'a> {
+    fn new(world: &'a World) -> Self {
+        Self {
+            world,
+            current: *ROOT_COMMAND.get().expect("Root command not initialized"),
+            parents: FxHashMap::default(),
+        }
+    }
 
-#[macro_export]
-macro_rules! commands_inner {
-    // Empty case
-    ($builder:expr,) => {};
-    
-    // Literal with struct-like block
-    ($builder:expr, $name:literal : { $($field:ident : $value:expr),* $(,)* } $($rest:tt)*) => {{
-        let builder = $builder.literal($name);
-        $( let builder = builder.$field($value); )*
-        let builder = builder.end();
-        commands_inner!(builder, $($rest)*);
-    }};
-
-    // Literal with nested block
-    ($builder:expr, $name:literal { $($body:tt)* } $($rest:tt)*) => {{
-        let builder = $builder.literal($name);
-        commands_inner!(builder, $($body)*);
-        let builder = builder.end();
-        commands_inner!(builder, $($rest)*);
-    }};
-
-    // Argument with struct-like block
-    ($builder:expr, $name:literal : $parser:expr, { $($field:ident : $value:expr),* $(,)* } $($rest:tt)*) => {{
-        let builder = $builder.argument($name, $parser);
-        $( let builder = builder.$field($value); )*
-        let builder = builder.end();
-        commands_inner!(builder, $($rest)*);
-    }};
-
-    // Literal without block
-    ($builder:expr, $name:literal $($rest:tt)*) => {{
-        let builder = $builder.literal($name);
-        let builder = builder.end();
-        commands_inner!(builder, $($rest)*);
-    }};
-
-    // Argument without block
-    ($builder:expr, $name:literal : $parser:expr, $($rest:tt)*) => {{
-        let builder = $builder.argument($name, $parser);
-        let builder = builder.end();
-        commands_inner!(builder, $($rest)*);
-    }};
-}
-
-impl CommandDsl<'_> {
-    pub fn literal(&mut self, name: &str) -> &mut Self {
+    /// Adds a literal command. Accepts an optional closure to define nested commands.
+    pub fn literal<F>(&mut self, name: &str, f: F) -> &mut Self
+    where
+        F: FnOnce(&mut Self),
+    {
         let command = Command::literal(name);
         let entity = add_command(self.world, command, self.current);
         self.parents.insert(entity, self.current);
         self.current = entity;
-        self
+
+        // Execute the closure to define nested commands
+        f(self);
+
+        // Return to the parent command
+        self.end()
     }
 
-    pub fn argument(&mut self, name: &str, parser: Parser) -> &mut Self {
+    /// Adds an argument command. Accepts an optional closure to define nested commands.
+    pub fn argument(&mut self, name: &str, parser: Parser, f: impl FnOnce(&mut Self)) -> &mut Self {
         let command = Command::argument(name, parser);
         let entity = add_command(self.world, command, self.current);
         self.parents.insert(entity, self.current);
         self.current = entity;
-        self
+
+        // Execute the closure to define nested commands
+        f(self);
+
+        // Return to the parent command
+        self.end()
     }
 
+    /// Ends the current command scope, returning to the parent command.
     pub fn end(&mut self) -> &mut Self {
         if let Some(parent) = self.parents.get(&self.current).copied() {
             self.current = parent;

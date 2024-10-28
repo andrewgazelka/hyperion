@@ -2691,6 +2691,7 @@ dependencies = [
  "flecs_ecs",
  "hyperion",
  "hyperion-inventory",
+ "hyperion-permission",
  "hyperion-scheduled",
  "hyperion-text",
  "hyperion-utils",

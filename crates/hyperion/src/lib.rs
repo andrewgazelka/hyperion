@@ -79,12 +79,15 @@ use crate::{
     simulation::{EntitySize, Player},
     util::mojang::ApiProvider,
 };
+pub use crate::simulation::command::CommandScope;
 
 pub mod egress;
 pub mod ingress;
 pub mod net;
 pub mod simulation;
 pub mod storage;
+
+
 
 pub trait PacketBundle {
     fn encode_including_ids(self, w: impl Write) -> anyhow::Result<()>;

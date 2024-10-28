@@ -41,6 +41,7 @@ impl Module for ProofOfConceptModule {
         world.import::<AttackModule>();
         world.import::<LevelModule>();
         world.import::<RegenerationModule>();
+        world.import::<hyperion_permission::PermissionModule>();
     }
 }
 
