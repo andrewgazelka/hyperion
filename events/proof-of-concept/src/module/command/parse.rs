@@ -1,3 +1,5 @@
+use nom::bytes::complete::take_while1;
+use nom::combinator::opt;
 use nom::{
     branch::alt,
     bytes::complete::{tag, take_until},
@@ -23,12 +25,20 @@ pub enum ParsedCommand {
     Team,
     Zombie,
     Dirt { x: i32, y: i32, z: i32 },
-    Give { amount: i8 },
+    Give { entity: String, item: String, count: i8 },
     Upgrade,
     Stats(Stat, f32),
     Health(f32),
     TpHere,
     Tp { x: f32, y: f32, z: f32 },
+}
+
+fn is_valid_player_char(c: char) -> bool {
+    c.is_alphanumeric() || c == '_'
+}
+
+fn space1_str(input: &str) -> IResult<&str, &str> {
+    space1::<&str, nom::error::Error<&str>>(input)
 }
 
 fn parse_speed(input: &str) -> IResult<&str, ParsedCommand> {
@@ -61,7 +71,18 @@ fn parse_dirt(input: &str) -> IResult<&str, ParsedCommand> {
 }
 
 fn parse_give(input: &str) -> IResult<&str, ParsedCommand> {
-    map(preceded(preceded(tag("give"), space1), nom::character::complete::i8), |amount| ParsedCommand::Give { amount })(input)
+    map(tuple(
+        (
+            tag("give"),
+            preceded(space1_str as fn(_) -> _, take_while1(is_valid_player_char)),
+            preceded(space1_str, preceded(opt(tag("minecraft:")), take_while1(is_valid_player_char))),
+            preceded(space1_str, nom::character::complete::i8)
+        )
+    ), |(_, entity, item, count)| ParsedCommand::Give {
+        entity: entity.to_string(),
+        item: item.to_string(),
+        count
+    })(input)
 }
 
 fn parse_upgrade(input: &str) -> IResult<&str, ParsedCommand> {
@@ -118,4 +139,24 @@ pub fn command(input: &str) -> IResult<&str, ParsedCommand> {
         parse_upgrade,
         parse_zombie,
     ))(input)
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_give_command() {
+        let input = "give Cuz_Im_Clicks minecraft:dirt 64";
+        let result = parse_give(input);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_parse_give_command_no_minecraft() {
+        let input = "give Cuz_Im_Clicks acacia_button 64";
+        let result = parse_give(input);
+        assert!(result.is_ok());
+    }
 }

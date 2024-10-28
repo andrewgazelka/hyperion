@@ -29,7 +29,7 @@ use hyperion::{
 use hyperion_inventory::PlayerInventory;
 use parse::Stat;
 use tracing::{debug, trace_span};
-
+use hyperion::net::agnostic::chat;
 use crate::{
     component::team::Team,
     module::{attack::CombatStats, command::parse::ParsedCommand, level::Level},
@@ -47,8 +47,33 @@ pub fn add_to_tree(world: &World) {
     // add to tree
     add_command(world, Command::literal("team"), root_command);
     add_command(world, Command::literal("zombie"), root_command);
-    add_command(world, Command::literal("give"), root_command);
     add_command(world, Command::literal("upgrade"), root_command);
+
+
+    let give = add_command(world, Command::literal("give"), root_command);
+    let player = add_command(
+        world,
+        Command::argument("player", Parser::Entity {
+            single: false,
+            only_players: true
+        }),
+        give
+    );
+    
+    let block = add_command(
+        world,
+        Command::argument("", Parser::ItemStack),
+        player
+    );
+
+    add_command(
+        world,
+        Command::argument("count", Parser::Integer {
+            min: None,
+            max: None
+        }),
+        block
+    );
 
     let speed = add_command(world, Command::literal("speed"), root_command);
     add_command(
@@ -113,7 +138,7 @@ fn process_command(command: &ParsedCommand, context: &mut CommandContext<'_>) {
         ParsedCommand::Team => handle_team_command(context),
         ParsedCommand::Zombie => handle_zombie_command(context),
         ParsedCommand::Dirt { x, y, z } => handle_dirt_command(*x, *y, *z, context),
-        ParsedCommand::Give => handle_give_command(context),
+        ParsedCommand::Give { entity, item, count } => handle_give_command(entity.clone(), item.clone(), *count, context), // TODO: cloning cringe ig?
         ParsedCommand::Upgrade => handle_upgrade_command(context),
         ParsedCommand::Stats(stat, amount) => handle_stats(*stat, *amount, context),
         ParsedCommand::Health(amount) => handle_health_command(*amount, context),
@@ -355,24 +380,24 @@ fn handle_stats(stat: Stat, amount: f32, context: &CommandContext<'_>) {
         });
 }
 
-fn handle_give_command(context: &mut CommandContext<'_>) {
-    let mut blue_wool_nbt = nbt::Compound::new();
-
-    let can_place_on = [
-        "minecraft:stone",
-        "minecraft:dirt",
-        "minecraft:grass_block",
-        "minecraft:blue_wool",
-    ]
-    .into_iter()
-    .map(std::convert::Into::into)
-    .collect();
-
-    blue_wool_nbt.insert("CanPlaceOn", nbt::List::String(can_place_on));
-
+fn handle_give_command(entity: String, item_name: String, count: i8, context: &mut CommandContext<'_>) {
+    let Some(item) = ItemKind::from_str(item_name.as_str()) else {
+            let packet = chat(format!("Unknown item '{item_name:?}'"));
+            context.compose
+                .unicast(packet, context.stream, context.system_id, context.world)
+                .unwrap();
+            return;
+        };
+    
     context
         .inventory
-        .try_add_item(ItemStack::new(ItemKind::BlueWool, 4, Some(blue_wool_nbt)));
+        .try_add_item(ItemStack::new(item, count, None));
+    
+    let name = item.to_str();
+    
+    let packet = chat(format!("Gave {count} [{name}] to {entity}"));
+    context.compose
+        .unicast(packet, context.stream, context.system_id, context.world).unwrap();
 }
 
 fn handle_dirt_command(x: i32, y: i32, z: i32, context: &mut CommandContext<'_>) {
