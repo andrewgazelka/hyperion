@@ -7,7 +7,7 @@ readme = "README.md"
 publish = false
 
 [dependencies]
-serde = { version = "1.0.210", features = ["derive"] }
+serde = { version = "1.0.214", features = ["derive"] }
 thiserror = "1.0.64"
 uuid = { version = "1.10.0", features = ["v4", "serde"] }
 valence_protocol.workspace = true
