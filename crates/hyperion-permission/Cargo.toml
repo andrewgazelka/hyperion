@@ -8,10 +8,14 @@ publish = false
 
 [dependencies]
 enumset.workspace = true
+num-traits = "0.2.19"
+num-derive = "0.4.2"
 anyhow.workspace = true
 uuid.workspace = true
 derive_more.workspace = true
 flecs_ecs.workspace = true
+tracing.workspace = true
+nom.workspace = true
 hyperion.workspace = true
 rustc-hash.workspace = true
 valence_protocol.workspace = true

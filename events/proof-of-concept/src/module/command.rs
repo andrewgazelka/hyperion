@@ -1,4 +1,3 @@
-use hyperion::simulation::command::add_command;
 use std::borrow::Cow;
 
 use flecs_ecs::prelude::*;
@@ -7,7 +6,7 @@ use hyperion::{
     net::{Compose, NetworkStreamRef},
     simulation::{
         blocks::Blocks,
-        command::{get_root_command, Command, Parser},
+        command::{add_command, get_root_command, Command, Parser},
         event, Health, InGameName, Position, Uuid,
     },
     storage::EventQueue,

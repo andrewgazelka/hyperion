@@ -41,31 +41,31 @@ pub const CHUNK_HEIGHT_SPAN: u32 = 384; // 512; // usually 384
 
 use std::{alloc::Allocator, cell::RefCell, fmt::Debug, io::Write, net::ToSocketAddrs, sync::Arc};
 
-use anyhow::{bail, Context};
+use anyhow::{Context, bail};
 use derive_more::{Deref, DerefMut};
 use egress::EgressModule;
 use flecs_ecs::prelude::*;
 pub use glam;
 use ingress::IngressModule;
 #[cfg(unix)]
-use libc::{getrlimit, setrlimit, RLIMIT_NOFILE};
+use libc::{RLIMIT_NOFILE, getrlimit, setrlimit};
 use libdeflater::CompressionLvl;
-use simulation::{blocks::Blocks, util::generate_biome_registry, Comms, SimModule, StreamLookup};
-use storage::{LocalDb, Events, GlobalEventHandlers, SkinHandler, ThreadLocal};
+use simulation::{Comms, SimModule, StreamLookup, blocks::Blocks, util::generate_biome_registry};
+use storage::{Events, GlobalEventHandlers, LocalDb, SkinHandler, ThreadLocal};
 use tracing::info;
 use util::mojang::MojangClient;
 pub use uuid;
 // todo: slowly move more and more things to arbitrary module
 // and then eventually do not re-export valence_protocol
 pub use valence_protocol;
-pub use valence_protocol::{
-    block::{BlockKind, BlockState},
-    ItemKind, ItemStack, Particle,
-};
 use valence_protocol::{CompressionThreshold, Encode, Packet};
+pub use valence_protocol::{
+    ItemKind, ItemStack, Particle,
+    block::{BlockKind, BlockState},
+};
 
 use crate::{
-    net::{proxy::init_proxy_comms, Compose, Compressors, IoBuf, MAX_PACKET_SIZE},
+    net::{Compose, Compressors, IoBuf, MAX_PACKET_SIZE, proxy::init_proxy_comms},
     runtime::AsyncRuntime,
     simulation::{Pitch, Yaw},
 };
@@ -75,19 +75,17 @@ pub use common::*;
 use hyperion_crafting::CraftingRegistry;
 pub use valence_ident;
 
+pub use crate::simulation::command::CommandScope;
 use crate::{
     simulation::{EntitySize, Player},
     util::mojang::ApiProvider,
 };
-pub use crate::simulation::command::CommandScope;
 
 pub mod egress;
 pub mod ingress;
 pub mod net;
 pub mod simulation;
 pub mod storage;
-
-
 
 pub trait PacketBundle {
     fn encode_including_ids(self, w: impl Write) -> anyhow::Result<()>;

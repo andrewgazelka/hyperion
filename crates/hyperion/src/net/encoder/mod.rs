@@ -16,7 +16,7 @@ use anyhow::ensure;
 use tracing::trace;
 use valence_protocol::{CompressionThreshold, Encode, VarInt};
 
-use crate::{net::MAX_PACKET_SIZE, storage::Buf, PacketBundle, ScratchBuffer};
+use crate::{PacketBundle, ScratchBuffer, net::MAX_PACKET_SIZE, storage::Buf};
 
 mod util;
 

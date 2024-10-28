@@ -2,11 +2,11 @@ use std::{borrow::Cow, io::Write};
 
 use uuid::Uuid;
 use valence_protocol::{
+    Decode, Encode, ItemStack, Packet, VarInt,
     packets::play::{
         boss_bar_s2c::{BossBarColor, BossBarDivision, BossBarFlags},
         entity_equipment_update_s2c::EquipmentEntry,
     },
-    Decode, Encode, ItemStack, Packet, VarInt,
 };
 
 #[derive(Clone, PartialEq, Debug, Packet)]

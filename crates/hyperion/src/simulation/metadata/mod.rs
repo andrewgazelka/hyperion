@@ -81,12 +81,12 @@ impl Deref for MetadataView<'_> {
     type Target = [u8];
 
     fn deref(&self) -> &Self::Target {
-        &self.0 .0
+        &self.0.0
     }
 }
 
 impl Drop for MetadataView<'_> {
     fn drop(&mut self) {
-        self.0 .0.clear();
+        self.0.0.clear();
     }
 }

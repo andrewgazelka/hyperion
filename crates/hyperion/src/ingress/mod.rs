@@ -8,30 +8,29 @@ use serde_json::json;
 use sha2::Digest;
 use tracing::{error, info, trace, trace_span, warn};
 use valence_protocol::{
-    packets,
+    Bounded, Packet, VarInt, packets,
     packets::{
         handshaking::handshake_c2s::HandshakeNextState, login, login::LoginCompressionS2c, play,
     },
-    Bounded, Packet, VarInt,
 };
 use valence_text::IntoText;
 
 use crate::{
     egress::sync_chunks::ChunkSendQueue,
     net::{
-        decoder::BorrowedPacketFrame, proxy::ReceiveState, Compose, NetworkStreamRef,
-        PacketDecoder, MINECRAFT_VERSION, PROTOCOL_VERSION,
+        Compose, MINECRAFT_VERSION, NetworkStreamRef, PROTOCOL_VERSION, PacketDecoder,
+        decoder::BorrowedPacketFrame, proxy::ReceiveState,
     },
     runtime::AsyncRuntime,
     simulation::{
-        animation::ActiveAnimation, blocks::Blocks, handlers::PacketSwitchQuery,
-        metadata::Metadata, skin::PlayerSkin, AiTargetable, ChunkPosition, Comms,
-        ConfirmBlockSequences, EntityReaction, EntitySize, Health, ImmuneStatus, InGameName,
-        PacketState, Pitch, Player, Position, StreamLookup, Uuid, Yaw,
+        AiTargetable, ChunkPosition, Comms, ConfirmBlockSequences, EntityReaction, EntitySize,
+        Health, ImmuneStatus, InGameName, PacketState, Pitch, Player, Position, StreamLookup, Uuid,
+        Yaw, animation::ActiveAnimation, blocks::Blocks, handlers::PacketSwitchQuery,
+        metadata::Metadata, skin::PlayerSkin,
     },
     storage::{Events, GlobalEventHandlers, PlayerJoinServer, SkinHandler},
-    system_registry::{SystemId, RECV_DATA, REMOVE_PLAYER_FROM_VISIBILITY},
-    util::{mojang::MojangClient, SendableRef, TracingExt},
+    system_registry::{RECV_DATA, REMOVE_PLAYER_FROM_VISIBILITY, SystemId},
+    util::{SendableRef, TracingExt, mojang::MojangClient},
 };
 
 #[derive(Component, Debug)]
@@ -93,7 +92,10 @@ fn process_login(
         "process_login called with invalid state: {login_state:?}"
     );
 
-    let login::LoginHelloC2s { username, profile_id } = packet.decode()?;
+    let login::LoginHelloC2s {
+        username,
+        profile_id,
+    } = packet.decode()?;
 
     let username = username.0;
 
@@ -117,7 +119,7 @@ fn process_login(
     decoder.set_compression(global.shared.compression_threshold);
 
     let username = Box::from(username);
-    
+
     let uuid = profile_id.unwrap_or_else(|| offline_uuid(&username));
     let uuid_s = format!("{uuid:?}").dimmed();
     info!("Starting login: {username} {uuid_s}");

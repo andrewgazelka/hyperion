@@ -3,7 +3,7 @@ use tracing::{error, trace_span};
 
 use crate::{
     net::Compose,
-    simulation::{blocks::Blocks, Play},
+    simulation::{Play, blocks::Blocks},
 };
 
 #[derive(Component)]

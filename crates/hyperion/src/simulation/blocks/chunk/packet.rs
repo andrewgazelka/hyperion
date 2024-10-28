@@ -2,16 +2,16 @@ use std::io::Write;
 
 use glam::IVec2;
 use valence_protocol::{
-    packets::play::{chunk_delta_update_s2c::ChunkDeltaUpdateEntry, ChunkDeltaUpdateS2c},
     ChunkSectionPos, Encode, Packet, VarInt,
+    packets::play::{ChunkDeltaUpdateS2c, chunk_delta_update_s2c::ChunkDeltaUpdateEntry},
 };
 
 use crate::{
+    PacketBundle,
     simulation::blocks::{
         chunk::{Column, START_Y},
         loader::parse::section::Section,
     },
-    PacketBundle,
 };
 
 #[derive(derive_more::Debug)]

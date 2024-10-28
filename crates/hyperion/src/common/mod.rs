@@ -1,6 +1,6 @@
 //! Defined the [`Global`] struct which is used to store global data which defines a [`crate::Hyperion`]
 use std::{
-    sync::{atomic::AtomicUsize, Arc},
+    sync::{Arc, atomic::AtomicUsize},
     time::Duration,
 };
 

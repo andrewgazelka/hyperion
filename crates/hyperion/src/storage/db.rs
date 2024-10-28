@@ -5,7 +5,7 @@ use std::path::Path;
 use byteorder::NativeEndian;
 use derive_more::Deref;
 use flecs_ecs::macros::Component;
-use heed::{types, Database, Env, EnvOpenOptions};
+use heed::{Database, Env, EnvOpenOptions, types};
 use uuid::Uuid;
 
 use crate::simulation::skin::{ArchivedPlayerSkin, PlayerSkin};
@@ -26,7 +26,7 @@ impl LocalDb {
         let env = unsafe {
             EnvOpenOptions::new()
                 .map_size(10 * 1024 * 1024) // 10MB
-                .max_dbs(1)
+                .max_dbs(8) // todo: why is this needed/configurable? ideally would be infinite...
                 .open(&path)?
         };
 

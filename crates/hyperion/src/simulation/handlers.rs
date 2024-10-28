@@ -2,7 +2,7 @@
 
 use std::borrow::Cow;
 
-use anyhow::{bail, Context};
+use anyhow::{Context, bail};
 use bvh_region::aabb::Aabb;
 use flecs_ecs::core::{Entity, EntityView, World};
 use glam::{IVec3, Vec3};
@@ -10,26 +10,25 @@ use hyperion_utils::EntityExt;
 use tracing::{info, instrument, trace, warn};
 use valence_generated::block::{BlockKind, BlockState, PropName};
 use valence_protocol::{
-    nbt,
+    Decode, Hand, Packet, VarInt, nbt,
     packets::play::{
         self, click_slot_c2s::SlotChange, client_command_c2s::ClientCommand,
         player_action_c2s::PlayerAction, player_interact_entity_c2s::EntityInteraction,
         player_position_look_s2c::PlayerPositionLookFlags,
     },
-    Decode, Hand, Packet, VarInt,
 };
 use valence_text::IntoText;
 
 use super::{
+    ConfirmBlockSequences, EntitySize, Position,
     animation::{self, ActiveAnimation},
     block_bounds,
     blocks::Blocks,
     metadata::{Metadata, Pose},
-    ConfirmBlockSequences, EntitySize, Position,
 };
 use crate::{
-    net::{decoder::BorrowedPacketFrame, Compose, NetworkStreamRef},
-    simulation::{aabb, event, event::PluginMessage, Pitch, Yaw},
+    net::{Compose, NetworkStreamRef, decoder::BorrowedPacketFrame},
+    simulation::{Pitch, Yaw, aabb, event, event::PluginMessage},
     storage::Events,
     system_registry::SystemId,
 };
@@ -200,11 +199,10 @@ fn position_and_on_ground(
 //     Ok(())
 // }
 
-fn chat_command(mut data: &[u8], query: &PacketSwitchQuery<'_>) -> anyhow::Result<()> {
-    // todo: we could technically remove allocations &[u8] exists until end of tick
+fn chat_command(mut data: &'static [u8], query: &PacketSwitchQuery<'_>) -> anyhow::Result<()> {
     let pkt = play::CommandExecutionC2s::decode(&mut data)?;
 
-    let command = pkt.command.0.to_owned();
+    let command = pkt.command.0;
 
     query.events.push(
         event::Command {
@@ -499,7 +497,7 @@ pub fn custom_payload(
 
     let event = PluginMessage {
         channel: borrow,
-        data: packet.data.0 .0,
+        data: packet.data.0.0,
     };
 
     query.events.push(event, query.world);

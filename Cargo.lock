@@ -561,7 +561,7 @@ version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6fac387a98bb7c37292057cffc56d62ecb629900026402633ae9160df93a8766"
 dependencies = [
- "nom",
+ "nom 7.1.3",
 ]
 
 [[package]]
@@ -1777,9 +1777,13 @@ dependencies = [
  "heed",
  "hyperion",
  "log",
+ "nom 8.0.0-alpha2",
+ "num-derive",
+ "num-traits",
  "radix_trie",
  "rkyv",
  "rustc-hash 2.0.0",
+ "tracing",
  "uuid",
  "valence_protocol",
 ]
@@ -2273,6 +2277,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "nom"
+version = "8.0.0-alpha2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c2785486691910e746b3d84220af18362bd15ba71f9b7bc0a47ac549550b7fe2"
+dependencies = [
+ "memchr",
+]
+
+[[package]]
 name = "nonmax"
 version = "0.5.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2302,6 +2315,17 @@ name = "num-conv"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "51d515d32fb182ee37cda2ccdcb92950d6a3c2893aa280e540671c2cd0f3b1d9"
+
+[[package]]
+name = "num-derive"
+version = "0.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ed3955f1a9c7c0c15e092f9c887db08b1fc683305fdf6eb6684f22555355e202"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
 
 [[package]]
 name = "num-integer"
@@ -2696,7 +2720,7 @@ dependencies = [
  "hyperion-text",
  "hyperion-utils",
  "ndarray",
- "nom",
+ "nom 7.1.3",
  "roaring",
  "rustc-hash 2.0.0",
  "serde_json",

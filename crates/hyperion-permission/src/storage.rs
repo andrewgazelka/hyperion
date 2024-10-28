@@ -3,15 +3,9 @@ use enumset::{EnumSet, EnumSetType};
 use flecs_ecs::macros::Component;
 use heed::{byteorder::NativeEndian, types, Database, Env};
 use hyperion::storage::LocalDb;
+use num_traits::{FromPrimitive, ToPrimitive};
 
-#[derive(EnumSetType, Display)]
-enum Group {
-    Banned,
-    Spectator,
-    Player,
-    Moderator,
-    Admin,
-}
+use crate::Group;
 
 #[derive(Component)]
 pub struct PermissionStorage {
@@ -35,50 +29,25 @@ impl PermissionStorage {
         })
     }
 
-    pub fn get(&self, uuid: uuid::Uuid) -> EnumSet<Group> {
+    pub fn get(&self, uuid: uuid::Uuid) -> Group {
         let uuid = uuid.as_u128();
         let rtxn = self.env.read_txn().unwrap();
         let Some(perms) = self.perms.get(&rtxn, &uuid).unwrap() else {
-            return EnumSet::empty();
+            return Group::default();
         };
 
-        EnumSet::from_u8(perms)
-    }
-
-    pub fn add(&self, uuid: uuid::Uuid, group: Group) -> anyhow::Result<()> {
-        let uuid = uuid.as_u128();
-        let mut wtxn = self.env.write_txn()?;
-
-        let mut groups =
-            (self.perms.get(&wtxn, &uuid)?).map_or_else(EnumSet::empty, EnumSet::from_u8);
-
-        groups.insert(group);
-
-        self.perms.put(&mut wtxn, &uuid, &groups.as_u8())?;
-        wtxn.commit()?;
-        Ok(())
-    }
-
-    pub fn set(&self, uuid: uuid::Uuid, groups: EnumSet<Group>) -> anyhow::Result<()> {
-        let uuid = uuid.as_u128();
-        let mut wtxn = self.env.write_txn()?;
-        self.perms.put(&mut wtxn, &uuid, &groups.as_u8())?;
-        wtxn.commit()?;
-        Ok(())
-    }
-
-    pub fn remove(&self, uuid: uuid::Uuid, group: Group) -> anyhow::Result<()> {
-        let uuid = uuid.as_u128();
-        let mut wtxn = self.env.write_txn()?;
-
-        let mut groups = match self.perms.get(&wtxn, &uuid)? {
-            Some(perms) => EnumSet::from_u8(perms),
-            None => return Ok(()), // Nothing to remove
+        let Some(group) = Group::from_u8(perms) else {
+            tracing::error!("invalid group {perms:?}");
+            return Group::default();
         };
 
-        groups.remove(group);
+        group
+    }
 
-        self.perms.put(&mut wtxn, &uuid, &groups.as_u8())?;
+    pub fn set(&self, uuid: uuid::Uuid, group: Group) -> anyhow::Result<()> {
+        let uuid = uuid.as_u128();
+        let mut wtxn = self.env.write_txn()?;
+        self.perms.put(&mut wtxn, &uuid, &group.to_u8().unwrap())?;
         wtxn.commit()?;
         Ok(())
     }

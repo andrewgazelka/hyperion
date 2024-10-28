@@ -1,7 +1,7 @@
 use std::marker::PhantomData;
 
 use flecs_ecs::{
-    core::{flecs, ComponentId, ComponentType, DataComponent, Struct, World, WorldGet},
+    core::{ComponentId, ComponentType, DataComponent, Struct, World, WorldGet, flecs},
     macros::Component,
 };
 
@@ -47,7 +47,7 @@ fn register_and_pointer<T: ComponentId + DataComponent + ComponentType<Struct>>(
 define_events! {
     event::AttackEntity,
     event::ChatMessage<'static>,
-    event::Command,
+    event::Command<'static>,
     event::DestroyBlock,
     event::ItemDropEvent,
     event::PlaceBlock,

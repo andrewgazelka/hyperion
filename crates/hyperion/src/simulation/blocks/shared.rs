@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use anyhow::Context;
 use tokio::runtime::Runtime;
 use valence_protocol::Ident;
-use valence_registry::{biome::BiomeId, BiomeRegistry};
+use valence_registry::{BiomeRegistry, biome::BiomeId};
 
 use super::manager::RegionManager;
 

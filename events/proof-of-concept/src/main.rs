@@ -1,7 +1,6 @@
 use clap::Parser;
 use proof_of_concept::init_game;
-use tracing_subscriber::EnvFilter;
-use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::{layer::SubscriberExt, EnvFilter};
 
 #[cfg(not(target_env = "msvc"))]
 #[global_allocator]
@@ -30,8 +29,9 @@ fn setup_logging() {
     //     .init();
 
     tracing::subscriber::set_global_default(
-        tracing_subscriber::registry().with(tracing_tracy::TracyLayer::default())
-    ).expect("setup tracy layer");
+        tracing_subscriber::registry().with(tracing_tracy::TracyLayer::default()),
+    )
+    .expect("setup tracy layer");
 }
 
 fn main() {
