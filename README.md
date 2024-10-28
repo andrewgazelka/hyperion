@@ -164,42 +164,34 @@ docker compose up --build
 docker compose -f docker-compose.release.yml up --build
 ```
 
-# Feature Support Matrix
+# Features
 
-This list is not comprehensive. Feel free to PR or file an issue if something is missing/incorrect.
+**Language:** Rust
 
-| Feature                                                                              | Hyperion                                      | Pumpkin             | FerrumC             | Valence     | Minestom*        |
-|--------------------------------------------------------------------------------------|-----------------------------------------------|---------------------|---------------------|-------------|------------------|
-| Language                                                                             | Rust                                          | Rust                | Rust                | Rust        | Java             |
-| Goal                                                                                 | game engine for massive events                | 1:1 vanilla re-impl | 1:1 vanilla re-impl | game engine | game engine      |
-| Structure                                                                            | flecs ECS                                     | custom ECS          | custom ECS          | bevy ECS    | non-ECS paradigm |
-| Major Dependencies                                                                   | valence                                       |                     |                     |             |                  |
-| Can handle 10k players                                                               | ✅                                             | ❌                   | ❌                   | ❌           | ❌                |
-| Used in production                                                                   | ❌                                             | ❌                   | ❌                   | ❌           | ✅                |
-| Stable and large adoption                                                            | ❌                                             | ❌                   | ❌                   | ❌           | ✅                |
-| Proximity Voice ([Simple Voice Chat](https://modrinth.com/plugin/simple-voice-chat)) | ✅                                             | ❌                   | ❌                   | ❌           | ✅                |
-| Lighting                                                                             | ✅                                             | ❌                   | ✅                   | ❌           | ✅                |
-| Placing blocks                                                                       | ✅                                             | ❌                   | ❌                   | ?           | ✅                |
-| Breaking blocks                                                                      | ✅                                             | ❌                   | ❌                   | ?           | ✅                |
-| Blocks physics                                                                       | ✅                                             | ❌                   | ❌                   | ❌           | ✅                |
-| Entity-entity collisions                                                             | ✅                                             | ❌                   | ❌                   | ❌           | ✅                |
-| Block-entity collisions                                                              | ✅                                             | ❌                   | ❌                   | ✅           | ✅                |
-| World borders                                                                        | ✅                                             | ❌                   | ❌                   | ✅           | ✅                |
-| Block Edit API (think WorldEdit)                                                     | ✅                                             | ❌                   | ❌                   | ✅           | ✅                |
-| PvP                                                                                  | ✅                                             | ❌                   | ❌                   | ✅           | ✅                |
-| Vertical scaling (fully multi-threaded)                                              | ✅                                             | ❌                   | ❌                   | ✅           | ✅                |
-| Horizontal scaling                                                                   | ✅                                             | ❌                   | ❌                   | ❌           | ❌                |
-| Advanced tracing support                                                             | ✅ ([tracy](https://github.com/wolfpld/tracy)) | ❌                   | ❌                   | ✅           | ❌                |
-| Set Resource Packets                                                                 | ❌                                             | ❌                   | ?                   | ✅           | ✅                |
-| Minecraft 1.20.1                                                                     | ✅                                             | ❌                   | ✅                   | ✅           | ✅                |
-| Minecraft 1.21.x                                                                     | ❌                                             | ✅                   | ❌                   | ❌           | ✅                |
-| Proxy Support (Velocity)                                                             | ✅                                             | ✅                   | ?                   | ✅           | ✅                |
-| Inventory                                                                            | ✅                                             | ✅                   | ?                   | ✅           | ✅                |
-| Particle Support                                                                     | ✅                                             | ✅                   | ?                   | ✅           | ✅                |
-| RCON                                                                                 | ❌                                             | ✅                   | ❌                   | ?           | ✅                |
-| Chat Support                                                                         | ❌                                             | ✅                   | ?                   | ✅           | ✅                |
-| Command Support                                                                      | ✅                                             | ✅                   | ?                   | ✅           | ✅                |
+**Goal:** Game engine for massive events
 
-`*` = Minestom has many more features than we've mentioned here. If you're comfortable using Java and want to run a
-minigame Minecraft server in a production environment, Minestom is a good choice. It's especially recommended if you
-don't need to support an extremely large number of players (like thousands).
+**Structure:** flecs ECS
+
+**Platform Details:**
+  - Version: Minecraft 1.20.1
+  - Proxy Support: Velocity
+  - Proximity Voice: Simple Voice Chat
+  - Max estimated player count: ~176,056
+
+**Core Features:**
+- Lighting
+- Block mechanics (placing, breaking, physics)
+- Collisions (entity-entity and block-entity)
+- World borders
+- Block Edit API (WorldEdit-like)
+- PvP
+- Inventory system
+- Particle Support
+- Chat Support
+- Command Support
+
+**Technical Features:**
+- Vertical scaling (fully multi-threaded)
+- Horizontal scaling
+- Advanced tracing support (tracy)
+- Proxy Support (Velocity)
