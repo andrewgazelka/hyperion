@@ -9,7 +9,7 @@ use flecs_ecs::{
     prelude::Module,
 };
 use hyperion::{
-    net::{Compose, NetworkStreamRef},
+    net::{agnostic, Compose, NetworkStreamRef},
     simulation::{
         blocks::{Blocks, EntityAndSequence},
         event,
@@ -21,7 +21,6 @@ use hyperion::{
         ident,
         math::{DVec3, IVec3, Vec3},
         packets::play,
-        sound::{SoundCategory, SoundId},
         text::IntoText,
         BlockPos, BlockState, ItemStack, Particle, VarInt,
     },
@@ -72,16 +71,14 @@ impl Module for BlockModule {
                             .unwrap();
 
                         let center_block = position.as_dvec3() + DVec3::splat(0.5);
-                        let ident = ident!("minecraft:block.stone.break");
-                        let pkt = play::PlaySoundS2c {
-                            id: SoundId::Direct { id: ident.into(), range: None },
-                            position: (center_block * 8.0).as_ivec3(),
-                            volume: 0.35,
-                            pitch: f32::from(stage).mul_add(0.1, 1.0),
-                            seed: 0,
-                            category: SoundCategory::Block,
-                        };
-                        compose.broadcast(&pkt, SystemId(999))
+                        let sound = agnostic::sound(
+                            ident!("minecraft:block.stone.break"),
+                            center_block.as_vec3(),
+                        ).volume(0.35)
+                            .pitch(f32::from(stage).mul_add(0.1, 1.0))
+                            .build();
+
+                        compose.broadcast(&sound, SystemId(999))
                             .send(&world)
                             .unwrap();
                     }
@@ -102,16 +99,15 @@ impl Module for BlockModule {
                             .send(&world)
                             .unwrap();
 
-                            let ident = ident!("minecraft:entity.zombie.break_wooden_door");
-                            let pkt = play::PlaySoundS2c {
-                                id: SoundId::Direct { id: ident.into(), range: None },
-                                position: (center_block * 8.0).as_ivec3(),
-                                volume: 1.0,
-                                pitch: 0.8,
-                                seed: fastrand::i64(..),// random for seed variation
-                                category: SoundCategory::Block,
-                            };
-                            compose.broadcast(&pkt, SystemId(999))
+                            let sound = agnostic::sound(
+                                ident!("minecraft:entity.zombie.break_wooden_door"),
+                                center_block.as_vec3(),
+                            ).volume(1.0)
+                                .pitch(0.8)
+                                .seed(fastrand::i64(..))
+                                .build();
+
+                            compose.broadcast(&sound, SystemId(999))
                                 .send(&world)
                                 .unwrap();
 
@@ -159,20 +155,15 @@ impl Module for BlockModule {
                         compose.unicast(&pkt, net, system_id, &world).unwrap();
 
                         let position = event.position;
-                        let position = IVec3::new(position.x << 3, position.y << 3, position.z << 3);
 
+                        let sound = agnostic::sound(
+                            ident!("minecraft:block.note_block.harp"),
+                            position.as_vec3() + Vec3::splat(0.5),
+                        ).volume(1.0)
+                            .pitch(1.0)
+                            .build();
 
-                        let ident = ident!("minecraft:block.note_block.harp");
-                        // Send a note sound when breaking a block
-                        let pkt = play::PlaySoundS2c {
-                            id: SoundId::Direct { id: ident.into(), range: None },
-                            position,
-                            volume: 1.0,
-                            pitch: 1.0,
-                            seed: 0,
-                            category: SoundCategory::Block,
-                        };
-                        compose.unicast(&pkt, net, system_id, &world).unwrap();
+                        compose.unicast(&sound, net, system_id, &world).unwrap();
 
                         inventory.try_add_item(diff);
                     });
