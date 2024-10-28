@@ -157,7 +157,7 @@ version = '0.3.6'
 
 [workspace.dependencies.reqwest]
 features = ['rustls-tls']
-version = '0.12.5'
+version = '0.12.9'
 
 [workspace.dependencies.roaring]
 features = ['simd']
