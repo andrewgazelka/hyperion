@@ -44,7 +44,7 @@ computations.
 The bulk of player-specific processing occurs in our proxy layer, which handles tasks like regional multicasting and can
 be horizontally scaled to maintain performance as player count grows.
 
-![image](https://github.com/user-attachments/assets/92448a00-43e3-4be6-ba52-1e348b3c7e49)
+![image](https://github.com/user-attachments/assets/65fc6d7b-7e73-44e0-afac-cae928d443b6)
 
 
 # Architecture
