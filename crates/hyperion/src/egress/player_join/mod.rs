@@ -586,8 +586,6 @@ impl Module for PlayerJoinModule {
 
                 let entity = world.entity_from_id(entity);
 
-                entity.add::<Play>();
-
                 entity.get::<(
                     &Uuid,
                     &InGameName,
@@ -623,6 +621,8 @@ impl Module for PlayerJoinModule {
 
                 let entity = world.entity_from_id(entity);
                 entity.set(skin);
+
+                entity.add::<Play>();
             });
         });
     }

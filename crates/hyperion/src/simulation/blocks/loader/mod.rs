@@ -194,7 +194,7 @@ async fn load_chunk(position: IVec2, shared: &WorldShared) -> anyhow::Result<Col
     let chunk = match parse::parse_chunk(raw_chunk.data, &shared.biome_to_id) {
         Ok(chunk) => chunk,
         Err(err) => {
-            bail!("failed to parse chunk {position:?}: {err}");
+            bail!("failed to parse chunk {position}: {err}");
         }
     };
 

@@ -1,4 +1,4 @@
-use std::borrow::Cow;
+use std::{borrow::Cow, sync::Arc};
 
 use anyhow::Context;
 use colored::Colorize;
@@ -26,8 +26,8 @@ use crate::{
     simulation::{
         animation::ActiveAnimation, blocks::Blocks, handlers::PacketSwitchQuery,
         metadata::Metadata, skin::PlayerSkin, AiTargetable, ChunkPosition, Comms,
-        ConfirmBlockSequences, EntityReaction, EntitySize, Health, ImmuneStatus, InGameName,
-        PacketState, Pitch, Player, Position, StreamLookup, Uuid, Yaw,
+        ConfirmBlockSequences, EntityReaction, EntitySize, Health, IgnMap, ImmuneStatus,
+        InGameName, PacketState, Pitch, Player, Position, StreamLookup, Uuid, Yaw,
     },
     storage::{Events, GlobalEventHandlers, PlayerJoinServer, SkinHandler},
     system_registry::{SystemId, RECV_DATA, REMOVE_PLAYER_FROM_VISIBILITY},
@@ -87,13 +87,17 @@ fn process_login(
     entity: &EntityView<'_>,
     system_id: SystemId,
     handlers: &GlobalEventHandlers,
+    ign_map: &IgnMap,
 ) -> anyhow::Result<()> {
     debug_assert!(
         *login_state == PacketState::Login,
         "process_login called with invalid state: {login_state:?}"
     );
 
-    let login::LoginHelloC2s { username, .. } = packet.decode()?;
+    let login::LoginHelloC2s {
+        username,
+        profile_id,
+    } = packet.decode()?;
 
     let username = username.0;
 
@@ -116,10 +120,11 @@ fn process_login(
 
     decoder.set_compression(global.shared.compression_threshold);
 
-    let username = Box::from(username);
-    let uuid = offline_uuid(&username);
+    let username = Arc::from(username);
+
+    let uuid = profile_id.unwrap_or_else(|| offline_uuid(&username));
     let uuid_s = format!("{uuid:?}").dimmed();
-    println!("{username} {uuid_s}");
+    info!("Starting login: {username} {uuid_s}");
 
     let skins = comms.skins_tx.clone();
     let id = entity.id();
@@ -157,6 +162,8 @@ fn process_login(
         .context("failed to send login success packet")?;
 
     *login_state = PacketState::Play;
+
+    ign_map.insert(username.clone(), entity.id(), world);
 
     entity
         .set(InGameName::from(username))
@@ -261,6 +268,15 @@ pub struct IngressModule;
 impl Module for IngressModule {
     #[expect(clippy::too_many_lines)]
     fn module(world: &World) {
+        system!(
+            "update_ign_map",
+            world,
+            &mut IgnMap($),
+        )
+        .each_iter(|_, _, ign_map| {
+            ign_map.update();
+        });
+
         system!(
             "generate_ingress_events",
             world,
@@ -448,6 +464,7 @@ impl Module for IngressModule {
             &mut Metadata,
             &mut ActiveAnimation,
             &hyperion_crafting::CraftingRegistry($),
+            &IgnMap($)
         )
         .kind::<flecs::pipeline::OnUpdate>()
         .multi_threaded()
@@ -475,6 +492,7 @@ impl Module for IngressModule {
                 metadata,
                 animation,
                 crafting_registry,
+                ign_map,
             )| {
                 let world = entity.world();
                 let bump = compose.bump.get(&world);
@@ -532,6 +550,7 @@ impl Module for IngressModule {
                                 &entity,
                                 system_id,
                                 handlers,
+                                ign_map,
                             ) {
                                 error!("failed to process login packet");
                                 let msg = format!(

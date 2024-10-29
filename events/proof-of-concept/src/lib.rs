@@ -23,9 +23,9 @@ use module::{
 use crate::module::{chat::ChatModule, spawn::SpawnModule, stats::StatsModule};
 
 #[derive(Component)]
-pub struct InfectionModule;
+pub struct ProofOfConceptModule;
 
-impl Module for InfectionModule {
+impl Module for ProofOfConceptModule {
     fn module(world: &World) {
         world.component::<component::team::Team>();
 
@@ -41,12 +41,13 @@ impl Module for InfectionModule {
         world.import::<AttackModule>();
         world.import::<LevelModule>();
         world.import::<RegenerationModule>();
+        world.import::<hyperion_permission::PermissionModule>();
     }
 }
 
 pub fn init_game(address: impl ToSocketAddrs + Send + Sync + 'static) -> anyhow::Result<()> {
     Hyperion::init_with(address, |world| {
-        world.import::<InfectionModule>();
+        world.import::<ProofOfConceptModule>();
     })?;
 
     Ok(())

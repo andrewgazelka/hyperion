@@ -51,7 +51,7 @@ use ingress::IngressModule;
 use libc::{getrlimit, setrlimit, RLIMIT_NOFILE};
 use libdeflater::CompressionLvl;
 use simulation::{blocks::Blocks, util::generate_biome_registry, Comms, SimModule, StreamLookup};
-use storage::{Db, Events, GlobalEventHandlers, SkinHandler, ThreadLocal};
+use storage::{Events, GlobalEventHandlers, LocalDb, SkinHandler, ThreadLocal};
 use tracing::info;
 use util::mojang::MojangClient;
 pub use uuid;
@@ -75,8 +75,9 @@ pub use common::*;
 use hyperion_crafting::CraftingRegistry;
 pub use valence_ident;
 
+pub use crate::simulation::command::CommandScope;
 use crate::{
-    simulation::{EntitySize, Player},
+    simulation::{EntitySize, IgnMap, Player},
     util::mojang::ApiProvider,
 };
 
@@ -207,12 +208,14 @@ impl Hyperion {
             .next()
             .context("could not get first address")?;
 
-        world.component::<Db>();
+        world.component::<LocalDb>();
         world.component::<SkinHandler>();
         world.component::<MojangClient>();
         world.component::<Events>();
 
         world.component::<EntitySize>();
+
+        world.set(IgnMap::default());
 
         world
             .component::<Player>()
@@ -229,8 +232,8 @@ impl Hyperion {
         world.set(GlobalEventHandlers::default());
 
         info!("initializing database");
-        let db = Db::new()?;
-        let skins = SkinHandler::new(db.clone());
+        let db = LocalDb::new()?;
+        let skins = SkinHandler::new(&db)?;
         info!("database initialized");
 
         world.set(db);

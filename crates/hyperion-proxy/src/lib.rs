@@ -188,7 +188,9 @@ async fn connect_to_server_and_run_proxy(
 
         let registry = player_registry.pin();
 
-        let (tx, rx) = kanal::bounded_async(1024);
+        // todo: re-add bounding but issues if have MASSIVE number of packets
+        // let (tx, rx) = kanal::bounded_async(1024);
+        let (tx, rx) = kanal::unbounded_async();
         registry.insert(player_id_on, PlayerHandle {
             writer: tx,
             can_receive_broadcasts: AtomicBool::new(false),
