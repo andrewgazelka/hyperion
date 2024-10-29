@@ -3,7 +3,7 @@ use std::borrow::Cow;
 use flecs_ecs::prelude::*;
 use hyperion::{
     chat, egress::player_join::{PlayerListActions, PlayerListEntry, PlayerListS2c}, net::{Compose, NetworkStreamRef}, simulation::{
-        blocks::Blocks, command::{add_command, get_root_command, Command, Parser}, event, Health, IgnMap, InGameName, Position, Uuid
+        blocks::Blocks, command::{add_command, cmd_with, get_root_command, Command, Parser}, event, Health, IgnMap, InGameName, Position, Uuid
     }, storage::EventQueue, system_registry::SystemId, uuid, valence_ident::ident, valence_protocol::{
         self, game_mode::OptGameMode, math::IVec3, nbt, packets::play::{
             self, command_tree_s2c::StringArg, player_abilities_s2c::PlayerAbilitiesFlags,
@@ -30,26 +30,20 @@ pub fn add_to_tree(world: &World) {
     add_command(world, Command::literal("zombie"), root_command);
     add_command(world, Command::literal("upgrade"), root_command);
 
-    let give = add_command(world, Command::literal("give"), root_command);
-    let player = add_command(
-        world,
-        Command::argument("player", Parser::Entity {
-            single: false,
-            only_players: true,
-        }),
-        give,
-    );
-
-    let block = add_command(world, Command::argument("", Parser::ItemStack), player);
-
-    add_command(
-        world,
-        Command::argument("count", Parser::Integer {
-            min: None,
-            max: None,
-        }),
-        block,
-    );
+    cmd_with(world, "give", |scope| {
+        scope.argument_with("player", Parser::Entity { 
+            single: true,
+            only_players: true
+        },
+        |scope| {
+            scope.argument_with("", Parser::ItemStack, |scope| {
+                scope.argument("count", Parser::Integer { 
+                    min: None,
+                    max: None
+                });
+            });
+        });
+    });
 
     let speed = add_command(world, Command::literal("speed"), root_command);
     add_command(
