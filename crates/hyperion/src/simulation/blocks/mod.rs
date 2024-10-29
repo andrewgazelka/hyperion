@@ -7,7 +7,7 @@ use chunk::Column;
 use flecs_ecs::{core::Entity, macros::Component};
 use glam::{IVec2, IVec3};
 use indexmap::IndexMap;
-use loader::{ChunkLoaderHandle, launch_manager};
+use loader::{launch_manager, ChunkLoaderHandle};
 use roaring::RoaringBitmap;
 use rustc_hash::FxBuildHasher;
 use shared::WorldShared;
@@ -16,7 +16,7 @@ use valence_generated::block::BlockState;
 use valence_registry::BiomeRegistry;
 use valence_server::layer::chunk::Chunk;
 
-use crate::{CHUNK_HEIGHT_SPAN, runtime::AsyncRuntime};
+use crate::{runtime::AsyncRuntime, CHUNK_HEIGHT_SPAN};
 
 pub mod chunk;
 

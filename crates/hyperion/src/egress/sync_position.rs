@@ -7,19 +7,19 @@ use hyperion_inventory::PlayerInventory;
 use hyperion_utils::EntityExt;
 use tracing::{error, trace_span};
 use valence_protocol::{
-    ByteAngle, GameMode, RawBytes, VarInt, Velocity,
     game_mode::OptGameMode,
     ident,
     packets::{play, play::entity_equipment_update_s2c::EquipmentEntry},
     sound::{SoundCategory, SoundId},
+    ByteAngle, GameMode, RawBytes, VarInt, Velocity,
 };
 
 use crate::{
     egress::metadata::show_all,
     net::{Compose, NetworkStreamRef},
     simulation::{
-        EntityReaction, Health, Pitch, Position, Yaw, animation::ActiveAnimation,
-        metadata::Metadata,
+        animation::ActiveAnimation, metadata::Metadata, EntityReaction, Health, Pitch, Position,
+        Yaw,
     },
     system_registry::SYNC_ENTITY_POSITION,
     util::TracingExt,

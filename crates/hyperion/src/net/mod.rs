@@ -17,10 +17,10 @@ use libdeflater::CompressionLvl;
 use rkyv::util::AlignedVec;
 
 use crate::{
-    Global, PacketBundle, Scratch, Scratches,
-    net::encoder::{PacketEncoder, append_packet_without_compression},
+    net::encoder::{append_packet_without_compression, PacketEncoder},
     storage::ThreadLocal,
     system_registry::SystemId,
+    Global, PacketBundle, Scratch, Scratches,
 };
 
 pub mod agnostic;

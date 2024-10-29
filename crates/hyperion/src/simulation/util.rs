@@ -1,14 +1,14 @@
 use std::{path::PathBuf, sync::LazyLock};
 
-use anyhow::{Context, bail};
+use anyhow::{bail, Context};
 use flate2::bufread::GzDecoder;
 use serde::Deserialize;
 use tar::Archive;
 use tracing::info;
-use valence_nbt::{Compound, Value, value::ValueRef};
+use valence_nbt::{value::ValueRef, Compound, Value};
 use valence_registry::{
-    BiomeRegistry,
     biome::{Biome, BiomeEffects},
+    BiomeRegistry,
 };
 use valence_server::Ident;
 

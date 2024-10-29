@@ -45,7 +45,7 @@ pub fn read_to_end<R: Read + ?Sized, A: Allocator>(
 mod tests {
     use std::io::{Cursor, Read};
 
-    use flate2::{Compression, read::ZlibEncoder};
+    use flate2::{read::ZlibEncoder, Compression};
 
     use crate::net::encoder::util::read_to_end;
 

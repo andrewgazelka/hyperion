@@ -1,6 +1,6 @@
 use clap::Parser;
 use proof_of_concept::init_game;
-use tracing_subscriber::{layer::SubscriberExt, EnvFilter};
+use tracing_subscriber::layer::SubscriberExt;
 
 #[cfg(not(target_env = "msvc"))]
 #[global_allocator]

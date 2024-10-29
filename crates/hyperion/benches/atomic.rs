@@ -5,7 +5,7 @@ use std::hint::black_box;
 use divan::Bencher;
 use flecs_ecs::prelude::World;
 use hyperion::{
-    storage::{ThreadHeaplessVec, ThreadLocalSoaVec, ThreadLocalVec, raw::RawQueue},
+    storage::{raw::RawQueue, ThreadHeaplessVec, ThreadLocalSoaVec, ThreadLocalVec},
     util::SendableRef,
 };
 

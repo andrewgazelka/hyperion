@@ -7,7 +7,7 @@ use valence_generated::block::{BlockKind, BlockState, PropName, PropValue};
 use valence_nbt::{Compound, List, Value};
 use valence_protocol::Ident;
 use valence_registry::biome::BiomeId;
-use valence_server::layer::chunk::{Chunk, check_biome_oob, check_block_oob, check_section_oob};
+use valence_server::layer::chunk::{check_biome_oob, check_block_oob, check_section_oob, Chunk};
 
 use crate::simulation::blocks::loader::parse::section::Section;
 

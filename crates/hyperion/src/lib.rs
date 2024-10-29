@@ -41,16 +41,16 @@ pub const CHUNK_HEIGHT_SPAN: u32 = 384; // 512; // usually 384
 
 use std::{alloc::Allocator, cell::RefCell, fmt::Debug, io::Write, net::ToSocketAddrs, sync::Arc};
 
-use anyhow::{Context, bail};
+use anyhow::{bail, Context};
 use derive_more::{Deref, DerefMut};
 use egress::EgressModule;
 use flecs_ecs::prelude::*;
 pub use glam;
 use ingress::IngressModule;
 #[cfg(unix)]
-use libc::{RLIMIT_NOFILE, getrlimit, setrlimit};
+use libc::{getrlimit, setrlimit, RLIMIT_NOFILE};
 use libdeflater::CompressionLvl;
-use simulation::{Comms, SimModule, StreamLookup, blocks::Blocks, util::generate_biome_registry};
+use simulation::{blocks::Blocks, util::generate_biome_registry, Comms, SimModule, StreamLookup};
 use storage::{Events, GlobalEventHandlers, LocalDb, SkinHandler, ThreadLocal};
 use tracing::info;
 use util::mojang::MojangClient;
@@ -58,14 +58,14 @@ pub use uuid;
 // todo: slowly move more and more things to arbitrary module
 // and then eventually do not re-export valence_protocol
 pub use valence_protocol;
-use valence_protocol::{CompressionThreshold, Encode, Packet};
 pub use valence_protocol::{
-    ItemKind, ItemStack, Particle,
     block::{BlockKind, BlockState},
+    ItemKind, ItemStack, Particle,
 };
+use valence_protocol::{CompressionThreshold, Encode, Packet};
 
 use crate::{
-    net::{Compose, Compressors, IoBuf, MAX_PACKET_SIZE, proxy::init_proxy_comms},
+    net::{proxy::init_proxy_comms, Compose, Compressors, IoBuf, MAX_PACKET_SIZE},
     runtime::AsyncRuntime,
     simulation::{Pitch, Yaw},
 };
@@ -77,7 +77,7 @@ pub use valence_ident;
 
 pub use crate::simulation::command::CommandScope;
 use crate::{
-    simulation::{EntitySize, Player},
+    simulation::{EntitySize, IgnMap, Player},
     util::mojang::ApiProvider,
 };
 
@@ -214,6 +214,8 @@ impl Hyperion {
         world.component::<Events>();
 
         world.component::<EntitySize>();
+
+        world.set(IgnMap::default());
 
         world
             .component::<Player>()

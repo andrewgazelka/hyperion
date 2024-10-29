@@ -3,18 +3,18 @@ use std::cmp::Ordering;
 use derive_more::derive::{Deref, DerefMut};
 use flecs_ecs::prelude::*;
 use glam::IVec2;
-use tracing::{debug, debug_span, error, info, trace_span};
+use tracing::{error, trace_span};
 use valence_protocol::{
-    ChunkPos,
     packets::play::{self},
+    ChunkPos,
 };
 
 use crate::{
     config::Config,
-    net::{Compose, NetworkStreamRef, agnostic},
+    net::{Compose, NetworkStreamRef},
     simulation::{
-        ChunkPosition, InGameName, Play, Position,
         blocks::{Blocks, GetChunk},
+        ChunkPosition, Play, Position,
     },
     system_registry::{GENERATE_CHUNK_CHANGES, SEND_FULL_LOADED_CHUNKS},
     util::TracingExt,

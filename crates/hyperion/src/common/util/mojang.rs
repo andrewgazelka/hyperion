@@ -2,12 +2,12 @@
 
 use std::{sync::Arc, time::Duration};
 
-use anyhow::{Context, bail};
+use anyhow::{bail, Context};
 use flecs_ecs::macros::Component;
 use serde_json::Value;
 use tokio::{
     sync::Semaphore,
-    time::{MissedTickBehavior, interval},
+    time::{interval, MissedTickBehavior},
 };
 use tracing::warn;
 use uuid::Uuid;

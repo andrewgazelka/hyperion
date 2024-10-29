@@ -1,7 +1,7 @@
 //! Utilities for working with the Entity Metadata packet.
 
 use ouroboros::self_referencing;
-use valence_protocol::{Encode, RawBytes, VarInt, packets::play};
+use valence_protocol::{packets::play, Encode, RawBytes, VarInt};
 
 #[self_referencing]
 pub struct ShowAll {

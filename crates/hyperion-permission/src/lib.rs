@@ -1,15 +1,16 @@
 use flecs_ecs::{
-    core::{QueryBuilderImpl, SystemAPI, TermBuilderImpl, World, WorldGet},
+    core::{EntityViewGet, QueryBuilderImpl, SystemAPI, TermBuilderImpl, World, WorldGet},
     macros::{observer, system, Component},
     prelude::{flecs, Module, TableIter},
 };
 use hyperion::{
+    chat,
     net::Compose,
     simulation::{command::cmd_with, event, Uuid},
     storage::{EventQueue, LocalDb},
 };
 use num_derive::{FromPrimitive, ToPrimitive};
-use valence_protocol::packets::play::command_tree_s2c::Parser;
+use valence_protocol::packets::play::command_tree_s2c::{Parser, StringArg};
 
 #[derive(Component)]
 pub struct PermissionModule;
@@ -36,12 +37,13 @@ pub enum Group {
     Admin,
 }
 
+use hyperion::{net::NetworkStreamRef, simulation::IgnMap, system_registry::SystemId};
 use nom::{
     branch::alt,
-    bytes::complete::tag,
-    character::complete::{alpha1, space0},
+    bytes::complete::{is_a, tag},
+    character::complete::space0,
     combinator::{map, value},
-    sequence::{preceded, tuple},
+    sequence::preceded,
     IResult, Parser as NomParser,
 };
 
@@ -56,20 +58,27 @@ fn parse_group(input: &str) -> IResult<&str, Group> {
 
 fn parse_set_command(input: &str) -> IResult<&str, (&str, Group)> {
     (
-        preceded((tag("set"), space0), alpha1),
+        preceded(
+            (tag("set"), space0),
+            is_a("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_"),
+        ),
         preceded(space0, parse_group),
     )
         .parse(input)
+}
+
+fn parse_get_command(input: &str) -> IResult<&str, &str> {
+    preceded(
+        (tag("get"), space0),
+        is_a("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_"),
+    )
+    .parse(input)
 }
 
 #[derive(Debug, Eq, PartialEq)]
 pub enum Command<'a> {
     Set { player: &'a str, group: Group },
     Get { player: &'a str },
-}
-
-fn parse_get_command(input: &str) -> IResult<&str, &str> {
-    preceded((tag("get"), space0), alpha1).parse(input)
 }
 
 pub fn parse_command(input: &str) -> IResult<&str, Command<'_>> {
@@ -83,14 +92,24 @@ pub fn parse_command(input: &str) -> IResult<&str, Command<'_>> {
     .parse(input)
 }
 
+pub fn parse_perms_command(input: &str) -> IResult<&str, Command<'_>> {
+    preceded(tag("perms "), parse_command).parse(input)
+}
+
 impl Module for PermissionModule {
     fn module(world: &World) {
         cmd_with(world, "perms", |scope| {
             scope.literal_with("set", |scope| {
-                scope.argument("player", Parser::Entity {
-                    single: true,
-                    only_players: true,
-                });
+                scope.argument_with(
+                    "player",
+                    Parser::Entity {
+                        single: true,
+                        only_players: true,
+                    },
+                    |scope| {
+                        scope.argument("group", Parser::String(StringArg::SingleWord));
+                    },
+                );
             });
 
             scope.literal_with("get", |scope| {
@@ -106,28 +125,66 @@ impl Module for PermissionModule {
             world.set(storage);
         });
 
-        observer!(world, flecs::OnSet, &Uuid, &storage::PermissionStorage($)).each(
-            |(uuid, permissions)| {
-                let res = permissions.get(**uuid);
+        observer!(world, flecs::OnSet, &Uuid, &storage::PermissionStorage($)).each_entity(
+            |entity, (uuid, permissions)| {
+                let group = permissions.get(**uuid);
+                entity.set(group);
             },
         );
 
-        system!("perms_command", world, &Compose($), &mut EventQueue<event::Command>($))
+        observer!(world, flecs::OnRemove, &Uuid, &Group, &storage::PermissionStorage($)).each(
+            |(uuid, group, permissions)| {
+                permissions.set(**uuid, *group).unwrap();
+            },
+        );
+
+        system!("perms_command", world, &Compose($), &mut EventQueue<event::Command<'_>>($), &IgnMap($))
             .kind::<flecs::pipeline::OnUpdate>()
-            .each_iter(move |it: TableIter<'_, false>, _, (compose, queue)| {
+            .each_iter(move |it: TableIter<'_, false>, _, (compose, queue, ign_map)| {
                 let world = it.world();
 
                 for command in queue.drain() {
                     let by = command.by;
 
-                    let Ok((assert_none, command)) = parse_command(command.raw) else {
+                    // todo: assert as none probably
+                    let Ok((_assert_none, command)) = parse_perms_command(command.raw) else {
+                        println!("not parsed");
                         continue;
                     };
 
-                    match command {
-                        Command::Set { player, group } => {}
-                        Command::Get { player } => {}
-                    }
+                    println!("parsed");
+
+                    world.entity_from_id(by)
+                        .get::<&NetworkStreamRef>(|io| {
+                            match command {
+                                Command::Set { player, group } => {
+                                    let Some(result) = ign_map.get(player) else {
+                                        let chat = chat!("Player {player} does not exist");
+                                        compose.unicast(&chat, *io, SystemId(8), &world).unwrap();
+                                        return;
+                                    };
+
+                                    world.entity_from_id(*result).get::<&mut Group>(|group_ptr| {
+                                        *group_ptr = group;
+                                    });
+
+                                    let chat = chat!("Set group of {player} to {group:?}");
+                                    compose.unicast(&chat, *io, SystemId(8), &world).unwrap();
+                                }
+                                Command::Get { player } => {
+                                    let Some(result) = ign_map.get(player) else {
+                                        let chat = chat!("Player {player} does not exist");
+                                        compose.unicast(&chat, *io, SystemId(8), &world).unwrap();
+                                        return;
+                                    };
+
+                                    world.entity_from_id(*result).get::<&Group>(|group_ptr| {
+                                        let chat = chat!("Group of {player} is {group_ptr:?}");
+                                        compose.unicast(&chat, *io, SystemId(8), &world).unwrap();
+                                    });
+                                }
+                            }
+                        });
                 }
             });
 

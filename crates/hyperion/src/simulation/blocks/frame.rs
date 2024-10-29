@@ -3,7 +3,7 @@ use glam::{IVec2, IVec3};
 use ndarray::ArrayView3;
 use valence_generated::block::BlockState;
 
-use crate::simulation::blocks::{Blocks, chunk::START_Y};
+use crate::simulation::blocks::{chunk::START_Y, Blocks};
 
 impl Blocks {
     #[deprecated = "this is called automatically"]

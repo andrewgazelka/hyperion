@@ -157,6 +157,10 @@ impl<T> ThreadLocalVec<T> {
             .flat_map(|x| x.drain(..))
     }
 
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut T> + '_ {
+        self.inner.iter_mut().flat_map(SyncUnsafeCell::get_mut)
+    }
+
     pub fn is_empty(&mut self) -> bool {
         self.inner
             .iter_mut()

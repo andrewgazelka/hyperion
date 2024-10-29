@@ -1,7 +1,7 @@
 use std::marker::PhantomData;
 
 use flecs_ecs::{
-    core::{ComponentId, ComponentType, DataComponent, Struct, World, WorldGet, flecs},
+    core::{flecs, ComponentId, ComponentType, DataComponent, Struct, World, WorldGet},
     macros::Component,
 };
 

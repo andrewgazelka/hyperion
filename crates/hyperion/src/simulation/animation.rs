@@ -1,6 +1,6 @@
 use enumset::{EnumSet, EnumSetType};
 use flecs_ecs::prelude::Component;
-use valence_protocol::{VarInt, packets::play::EntityAnimationS2c};
+use valence_protocol::{packets::play::EntityAnimationS2c, VarInt};
 
 #[derive(EnumSetType)]
 #[repr(u8)]

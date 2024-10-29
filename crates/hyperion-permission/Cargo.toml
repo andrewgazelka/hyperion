@@ -7,21 +7,15 @@ readme = "README.md"
 publish = false
 
 [dependencies]
-enumset.workspace = true
 num-traits = "0.2.19"
 num-derive = "0.4.2"
 anyhow.workspace = true
 uuid.workspace = true
-derive_more.workspace = true
 flecs_ecs.workspace = true
 tracing.workspace = true
 nom.workspace = true
 hyperion.workspace = true
-rustc-hash.workspace = true
 valence_protocol.workspace = true
-log = "0.4.22"
-radix_trie = "0.2.1"
-rkyv = "0.8.8"
 heed = "0.20.5"
 
 [lints]

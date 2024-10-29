@@ -1,6 +1,6 @@
 //! Constructs for obtaining a player's skin.
 use anyhow::Context;
-use base64::{Engine as _, engine::general_purpose};
+use base64::{engine::general_purpose, Engine as _};
 use flecs_ecs::macros::Component;
 use rkyv::Archive;
 use tracing::info;

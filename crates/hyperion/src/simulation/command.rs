@@ -6,8 +6,8 @@ use rustc_hash::FxHashMap;
 use tracing::warn;
 pub use valence_protocol::packets::play::command_tree_s2c::Parser;
 use valence_protocol::{
-    VarInt,
     packets::play::command_tree_s2c::{Node, NodeData},
+    VarInt,
 };
 
 #[derive(Component)]

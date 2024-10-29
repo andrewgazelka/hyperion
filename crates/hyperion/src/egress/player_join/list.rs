@@ -2,7 +2,7 @@ use std::{borrow::Cow, io::Write};
 
 use bitfield_struct::bitfield;
 use uuid::Uuid;
-use valence_protocol::{Decode, Encode, GameMode, Packet, VarInt, profile::Property};
+use valence_protocol::{profile::Property, Decode, Encode, GameMode, Packet, VarInt};
 use valence_text::Text;
 
 #[derive(Clone, Debug, Packet)]

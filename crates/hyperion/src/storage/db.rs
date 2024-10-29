@@ -5,7 +5,7 @@ use std::path::Path;
 use byteorder::NativeEndian;
 use derive_more::Deref;
 use flecs_ecs::macros::Component;
-use heed::{Database, Env, EnvOpenOptions, types};
+use heed::{types, Database, Env, EnvOpenOptions};
 use uuid::Uuid;
 
 use crate::simulation::skin::{ArchivedPlayerSkin, PlayerSkin};

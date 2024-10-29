@@ -603,23 +603,15 @@ impl Module for CommandModule {
 
         let system_id = SystemId(8);
 
-        system!("handle_infection_custom_messages", world, &mut EventQueue<event::PluginMessage<'static>>($))
-            .multi_threaded()
-            .each_iter(move |_it: TableIter<'_, false>, _, event_queue| {
-                for msg in event_queue.drain() {
-                    debug!("msg {msg:?}");
-                }
-            });
-
-        system!("handle_infection_events_player", world, &Compose($), &mut EventQueue<event::Command>($), &mut Blocks($))
+        system!("handle_poc_events_player", world, &Compose($), &mut EventQueue<event::Command<'_>>($), &mut Blocks($))
             .multi_threaded()
             .each_iter(move |it: TableIter<'_, false>, _, (compose, event_queue, mc)| {
-                let span = trace_span!("handle_infection_events_player");
+                let span = trace_span!("handle_poc_events_player");
                 let _enter = span.enter();
 
                 let world = it.world();
-                for event in event_queue.drain() {
-                    let executed = event.raw.as_str();
+                for event in event_queue.iter_mut() {
+                    let executed = event.raw;
 
                     debug!("executed: {executed}");
 
