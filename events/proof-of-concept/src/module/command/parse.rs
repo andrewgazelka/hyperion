@@ -84,7 +84,7 @@ fn parse_dirt(input: &str) -> IResult<&str, ParsedCommand> {
 
 fn parse_give(input: &str) -> IResult<&str, ParsedCommand> {
     map(
-        tuple((
+        (
             tag("give"),
             preceded(space1_str, take_while1(is_valid_player_char)),
             preceded(
@@ -92,13 +92,13 @@ fn parse_give(input: &str) -> IResult<&str, ParsedCommand> {
                 preceded(opt(tag("minecraft:")), take_while1(is_valid_player_char)),
             ),
             preceded(space1_str, nom::character::complete::i8),
-        )),
+        ),
         |(_, entity, item, count)| ParsedCommand::Give {
             entity: entity.to_string(),
             item: item.to_string(),
             count,
         },
-    )(input)
+    ).parse(input)
 }
 
 fn parse_upgrade(input: &str) -> IResult<&str, ParsedCommand> {
