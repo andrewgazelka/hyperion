@@ -21,21 +21,6 @@ pub fn add_command(world: &World, command: Command, parent: Entity) -> Entity {
 }
 
 /// Entry point for defining commands using the DSL.
-///
-/// # Arguments
-///
-/// * `world` - A reference to the `World` where commands are being added.
-/// * `name` - The name of the command.
-/// * `f` - A closure that defines nested commands within this command.
-///
-/// # Example
-///
-/// ```rust
-/// cmd(&world, "start", |cmd| {
-///     cmd.argument("config", Parser::ConfigParser, None);
-///     cmd.literal("verbose", None);
-/// });
-/// ```
 pub fn cmd_with<'a, F>(world: &'a World, name: &str, f: F)
 where
     F: FnOnce(&mut CommandScope<'a>),
