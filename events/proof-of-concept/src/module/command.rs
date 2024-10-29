@@ -380,7 +380,7 @@ fn handle_give_command(entity: &str, item_name: &str, count: i8, context: &mut C
         let packet = chat(format!("Unknown item '{item_name:?}'"));
         context
             .compose
-            .unicast(packet, context.stream, context.system_id, context.world)
+            .unicast(&packet, context.stream, context.system_id, context.world)
             .unwrap();
         return;
     };
@@ -394,7 +394,7 @@ fn handle_give_command(entity: &str, item_name: &str, count: i8, context: &mut C
     let packet = chat(format!("Gave {count} [{name}] to {entity}"));
     context
         .compose
-        .unicast(packet, context.stream, context.system_id, context.world)
+        .unicast(&packet, context.stream, context.system_id, context.world)
         .unwrap();
 }
 
