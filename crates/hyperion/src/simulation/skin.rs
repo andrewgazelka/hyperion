@@ -2,12 +2,13 @@
 use anyhow::Context;
 use base64::{engine::general_purpose, Engine as _};
 use flecs_ecs::macros::Component;
-use serde::{Deserialize, Serialize};
+use rkyv::Archive;
+use tracing::info;
 
 use crate::{storage::SkinHandler, util::mojang::MojangClient};
 
 /// A signed player skin.
-#[derive(Debug, Clone, Serialize, Deserialize, Component)]
+#[derive(Debug, Clone, Archive, Component, rkyv::Deserialize, rkyv::Serialize)]
 pub struct PlayerSkin {
     /// The textures of the player skin, usually obtained from the [`MojangClient`] as a base64 string.
     pub textures: String,
@@ -43,10 +44,11 @@ impl PlayerSkin {
         skins: &SkinHandler,
     ) -> anyhow::Result<Option<Self>> {
         if let Some(skin) = skins.find(uuid)? {
+            info!("Returning cached skin");
             return Ok(Some(skin));
         }
 
-        println!("player skin cache miss for {uuid}");
+        info!("player skin cache miss for {uuid}");
 
         let json_object = mojang.data_from_uuid(&uuid).await?;
         let properties_array = json_object["properties"]

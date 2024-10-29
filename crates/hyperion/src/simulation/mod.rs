@@ -1,14 +1,15 @@
-use std::collections::HashMap;
+use std::{borrow::Borrow, collections::HashMap, hash::Hash, sync::Arc};
 
 use bvh_region::{aabb::Aabb, HasAabb};
 use derive_more::{Deref, DerefMut, Display, From};
 use flecs_ecs::prelude::*;
 use glam::{IVec2, IVec3, Vec3};
+use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 use skin::PlayerSkin;
 use uuid;
 
-use crate::Global;
+use crate::{storage::ThreadLocalVec, Global};
 
 pub mod animation;
 pub mod blocks;
@@ -67,9 +68,59 @@ pub struct EgressComm {
     tx: tokio::sync::mpsc::UnboundedSender<bytes::Bytes>,
 }
 
+#[derive(Debug)]
+pub struct DeferredMap<K, V> {
+    to_add: ThreadLocalVec<(K, V)>,
+    to_remove: ThreadLocalVec<K>,
+    map: FxHashMap<K, V>,
+}
+
+impl<K, V> Default for DeferredMap<K, V> {
+    fn default() -> Self {
+        Self {
+            to_add: ThreadLocalVec::default(),
+            to_remove: ThreadLocalVec::default(),
+            map: HashMap::default(),
+        }
+    }
+}
+
+impl<K: Eq + Hash, V> DeferredMap<K, V> {
+    pub fn insert(&self, key: K, value: V, world: &World) {
+        self.to_add.push((key, value), world);
+    }
+
+    pub fn get<Q>(&self, key: &Q) -> Option<&V>
+    where
+        K: Borrow<Q>,
+        Q: Hash + Eq + ?Sized,
+    {
+        self.map.get(key)
+    }
+
+    pub fn remove(&self, key: K, world: &World) {
+        self.to_remove.push(key, world);
+    }
+}
+
+impl<K: Eq + Hash, V> DeferredMap<K, V> {
+    pub fn update(&mut self) {
+        for (key, value) in self.to_add.drain() {
+            self.map.insert(key, value);
+        }
+
+        for key in self.to_remove.drain() {
+            self.map.remove(&key);
+        }
+    }
+}
+
 /// The in-game name of a player.
 #[derive(Component, Deref, From, Display, Debug)]
-pub struct InGameName(Box<str>);
+pub struct InGameName(Arc<str>);
+
+#[derive(Component, Deref, DerefMut, From, Debug, Default)]
+pub struct IgnMap(DeferredMap<Arc<str>, Entity>);
 
 /// This component is added to all players once they reach the play state. See [`PacketState::Play`].
 #[derive(Component, Default)]

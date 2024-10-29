@@ -200,11 +200,10 @@ fn position_and_on_ground(
 //     Ok(())
 // }
 
-fn chat_command(mut data: &[u8], query: &PacketSwitchQuery<'_>) -> anyhow::Result<()> {
-    // todo: we could technically remove allocations &[u8] exists until end of tick
+fn chat_command(mut data: &'static [u8], query: &PacketSwitchQuery<'_>) -> anyhow::Result<()> {
     let pkt = play::CommandExecutionC2s::decode(&mut data)?;
 
-    let command = pkt.command.0.to_owned();
+    let command = pkt.command.0;
 
     query.events.push(
         event::Command {

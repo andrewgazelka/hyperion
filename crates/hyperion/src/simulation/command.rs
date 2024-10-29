@@ -2,6 +2,7 @@ use flecs_ecs::{
     core::{Entity, EntityViewGet, IdOperations, World},
     macros::Component,
 };
+use rustc_hash::FxHashMap;
 use tracing::warn;
 pub use valence_protocol::packets::play::command_tree_s2c::Parser;
 use valence_protocol::{
@@ -12,6 +13,108 @@ use valence_protocol::{
 #[derive(Component)]
 pub struct Command {
     data: NodeData,
+}
+
+#[allow(clippy::must_use_candidate)]
+pub fn add_command(world: &World, command: Command, parent: Entity) -> Entity {
+    world.entity().set(command).child_of_id(parent).id()
+}
+
+/// Entry point for defining commands using the DSL.
+///
+/// # Arguments
+///
+/// * `world` - A reference to the `World` where commands are being added.
+/// * `name` - The name of the command.
+/// * `f` - A closure that defines nested commands within this command.
+///
+/// # Example
+///
+/// ```rust
+/// cmd(&world, "start", |cmd| {
+///     cmd.argument("config", Parser::ConfigParser, None);
+///     cmd.literal("verbose", None);
+/// });
+/// ```
+pub fn cmd_with<'a, F>(world: &'a World, name: &str, f: F)
+where
+    F: FnOnce(&mut CommandScope<'a>),
+{
+    let mut scope = CommandScope::new(world);
+    scope.literal_with(name, f);
+}
+
+pub fn cmd<F>(world: &World, name: &str) {
+    cmd_with(world, name, |_| {});
+}
+
+#[must_use]
+pub struct CommandScope<'a> {
+    world: &'a World,
+    current: Entity,
+    parents: FxHashMap<Entity, Entity>,
+}
+
+impl<'a> CommandScope<'a> {
+    fn new(world: &'a World) -> Self {
+        Self {
+            world,
+            current: *ROOT_COMMAND.get().expect("Root command not initialized"),
+            parents: FxHashMap::default(),
+        }
+    }
+
+    /// Adds a literal command. Accepts an optional closure to define nested commands.
+    pub fn literal_with<F>(&mut self, name: &str, f: F) -> &mut Self
+    where
+        F: FnOnce(&mut Self),
+    {
+        let command = Command::literal(name);
+        let entity = add_command(self.world, command, self.current);
+        self.parents.insert(entity, self.current);
+        self.current = entity;
+
+        // Execute the closure to define nested commands
+        f(self);
+
+        // Return to the parent command
+        self.end()
+    }
+
+    pub fn literal(&mut self, name: &str) -> &mut Self {
+        self.literal_with(name, |_| {})
+    }
+
+    pub fn argument(&mut self, name: &str, parser: Parser) -> &mut Self {
+        self.argument_with(name, parser, |_| {})
+    }
+
+    /// Adds an argument command. Accepts an optional closure to define nested commands.
+    pub fn argument_with(
+        &mut self,
+        name: &str,
+        parser: Parser,
+        f: impl FnOnce(&mut Self),
+    ) -> &mut Self {
+        let command = Command::argument(name, parser);
+        let entity = add_command(self.world, command, self.current);
+        self.parents.insert(entity, self.current);
+        self.current = entity;
+
+        // Execute the closure to define nested commands
+        f(self);
+
+        // Return to the parent command
+        self.end()
+    }
+
+    /// Ends the current command scope, returning to the parent command.
+    pub fn end(&mut self) -> &mut Self {
+        if let Some(parent) = self.parents.get(&self.current).copied() {
+            self.current = parent;
+        }
+        self
+    }
 }
 
 pub(crate) static ROOT_COMMAND: once_cell::sync::OnceCell<Entity> =

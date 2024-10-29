@@ -28,6 +28,7 @@ members = [
   'crates/hyperion-utils',
   'events/proof-of-concept',
   'crates/hyperion-circle-buf',
+  'crates/hyperion-permission',
 ]
 resolver = '2'
 
@@ -37,6 +38,7 @@ approx = '0.5.1'
 arrayvec = '0.7.4'
 base64 = '0.22.1'
 bitfield-struct = '0.9.2'
+nom = "8.0.0-alpha2"
 bitvec = '1.0.1'
 bumpalo = '3.16'
 byteorder = '1.5.0'
@@ -77,17 +79,14 @@ snafu = '0.8.5'
 tango-bench = '0.6.0'
 tar = '0.4.41'
 thiserror = '1.0.63'
-thread_local = { version = "1.1.8", features = ["nightly"] }
 tikv-jemallocator = '0.6.0'
 tokio = '1.40.0'
 toml = '0.8.14'
+tracing-tracy = { version = "0.11.3", features = ["timer-fallback"] }
 uuid = '1.8.0'
 
 [workspace.dependencies.bvh]
 git = 'https://github.com/andrewgazelka/bvh-data'
-
-[workspace.dependencies.hyperion-circle-buf]
-path = 'crates/hyperion-circle-buf'
 
 [workspace.dependencies.bvh-region]
 path = 'crates/bvh-region'
@@ -114,6 +113,9 @@ git = 'https://github.com/Indra-db/Flecs-Rust'
 [workspace.dependencies.hyperion]
 path = 'crates/hyperion'
 
+[workspace.dependencies.hyperion-circle-buf]
+path = 'crates/hyperion-circle-buf'
+
 [workspace.dependencies.hyperion-crafting]
 path = 'crates/hyperion-crafting'
 
@@ -131,6 +133,9 @@ path = 'crates/hyperion-nerd-font'
 
 [workspace.dependencies.hyperion-palette]
 path = 'crates/hyperion-palette'
+
+[workspace.dependencies.hyperion-permission]
+path = 'crates/hyperion-permission'
 
 [workspace.dependencies.hyperion-proto]
 path = 'crates/hyperion-proto'
@@ -166,6 +171,10 @@ version = '0.10.6'
 [workspace.dependencies.sha2]
 version = '0.10.8'
 
+[workspace.dependencies.thread_local]
+features = ['nightly']
+version = '1.1.8'
+
 [workspace.dependencies.tracing]
 features = ['release_max_level_info']
 version = '0.1.40'
@@ -180,6 +189,10 @@ features = ['parsing']
 git = 'https://github.com/andrewgazelka/valence'
 
 [workspace.dependencies.valence_generated]
+branch = 'feat-open'
+git = 'https://github.com/andrewgazelka/valence'
+
+[workspace.dependencies.valence_ident]
 branch = 'feat-open'
 git = 'https://github.com/andrewgazelka/valence'
 
@@ -202,10 +215,6 @@ branch = 'feat-open'
 git = 'https://github.com/andrewgazelka/valence'
 
 [workspace.dependencies.valence_text]
-branch = 'feat-open'
-git = 'https://github.com/andrewgazelka/valence'
-
-[workspace.dependencies.valence_ident]
 branch = 'feat-open'
 git = 'https://github.com/andrewgazelka/valence'
 

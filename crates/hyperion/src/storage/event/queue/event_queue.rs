@@ -27,4 +27,9 @@ impl<T: Event> EventQueue<T> {
     pub fn drain(&mut self) -> impl Iterator<Item = T::Reduced<'_>> {
         self.inner.drain().map(super::ReducedLifetime::reduce)
     }
+
+    // todo: think we need to reduce here too probably
+    pub fn peek(&mut self) -> impl Iterator<Item = &mut T> {
+        self.inner.iter_mut()
+    }
 }

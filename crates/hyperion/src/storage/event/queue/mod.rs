@@ -47,7 +47,7 @@ fn register_and_pointer<T: ComponentId + DataComponent + ComponentType<Struct>>(
 define_events! {
     event::AttackEntity,
     event::ChatMessage<'static>,
-    event::Command,
+    event::Command<'static>,
     event::DestroyBlock,
     event::ItemDropEvent,
     event::PlaceBlock,

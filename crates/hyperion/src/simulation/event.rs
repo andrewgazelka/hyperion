@@ -107,8 +107,8 @@ pub struct PostureUpdate {
 }
 
 #[derive(Debug)]
-pub struct Command {
-    pub raw: String,
+pub struct Command<'a> {
+    pub raw: &'a str,
     pub by: Entity,
 }
 
