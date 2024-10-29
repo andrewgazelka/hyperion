@@ -3,7 +3,6 @@ use nom::{
     bytes::complete::{tag, take_until, take_while1},
     character::complete::space1,
     combinator::{map, map_res, opt},
-    error::ErrorKind,
     number::complete::float,
     sequence::preceded,
     IResult, Parser,

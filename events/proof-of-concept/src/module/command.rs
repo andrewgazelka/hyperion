@@ -2,29 +2,14 @@ use std::borrow::Cow;
 
 use flecs_ecs::prelude::*;
 use hyperion::{
-    egress::player_join::{PlayerListActions, PlayerListEntry, PlayerListS2c},
-    net::{agnostic::chat, Compose, NetworkStreamRef},
-    simulation::{
-        blocks::Blocks,
-        command::{add_command, get_root_command, Command, Parser},
-        event, Health, InGameName, Position, Uuid,
-    },
-    storage::EventQueue,
-    system_registry::SystemId,
-    uuid,
-    valence_protocol::{
-        self,
-        game_mode::OptGameMode,
-        ident,
-        math::IVec3,
-        nbt,
-        packets::play::{
+    chat, egress::player_join::{PlayerListActions, PlayerListEntry, PlayerListS2c}, net::{Compose, NetworkStreamRef}, simulation::{
+        blocks::Blocks, command::{add_command, get_root_command, Command, Parser}, event, Health, IgnMap, InGameName, Position, Uuid
+    }, storage::EventQueue, system_registry::SystemId, uuid, valence_ident::ident, valence_protocol::{
+        self, game_mode::OptGameMode, math::IVec3, nbt, packets::play::{
             self, command_tree_s2c::StringArg, player_abilities_s2c::PlayerAbilitiesFlags,
             player_position_look_s2c::PlayerPositionLookFlags, PlayerAbilitiesS2c,
-        },
-        text::IntoText,
-        BlockState, GameMode, ItemKind, ItemStack, VarInt,
-    },
+        }, text::IntoText, BlockState, GameMode, ItemKind, ItemStack, VarInt
+    }
 };
 use hyperion_inventory::PlayerInventory;
 use parse::Stat;
@@ -121,6 +106,7 @@ struct CommandContext<'a> {
     inventory: &'a mut PlayerInventory,
     level: &'a mut Level,
     health: &'a mut Health,
+    ign_map: &'a IgnMap,
 }
 
 fn process_command(command: &ParsedCommand, context: &mut CommandContext<'_>) {
@@ -375,9 +361,9 @@ fn handle_stats(stat: Stat, amount: f32, context: &CommandContext<'_>) {
         });
 }
 
-fn handle_give_command(entity: &str, item_name: &str, count: i8, context: &mut CommandContext<'_>) {
+fn handle_give_command(entity: &str, item_name: &str, count: i8, context: &CommandContext<'_>) {
     let Some(item) = ItemKind::from_str(item_name) else {
-        let packet = chat(format!("Unknown item '{item_name:?}'"));
+        let packet = chat!("Unknown item '{item_name:?}'");
         context
             .compose
             .unicast(&packet, context.stream, context.system_id, context.world)
@@ -385,13 +371,19 @@ fn handle_give_command(entity: &str, item_name: &str, count: i8, context: &mut C
         return;
     };
 
-    context
-        .inventory
-        .try_add_item(ItemStack::new(item, count, None));
+    let Some(player) = context.ign_map.get(entity) else {
+        let chat = chat!("Player {entity} does not exist");
+        context.compose.unicast(&chat, context.stream, context.system_id, context.world).unwrap();
+        return;
+    };
+
+    context.world.entity_from_id(*player).get::<&mut PlayerInventory>(|inventory| {
+        inventory.try_add_item(ItemStack::new(item, count, None));
+    });
 
     let name = item.to_str();
 
-    let packet = chat(format!("Gave {count} [{name}] to {entity}"));
+    let packet = chat!("Gave {count} [{name}] to {entity}");
     context
         .compose
         .unicast(&packet, context.stream, context.system_id, context.world)
@@ -630,9 +622,9 @@ impl Module for CommandModule {
 
         let system_id = SystemId(8);
 
-        system!("handle_poc_events_player", world, &Compose($), &mut EventQueue<event::Command<'_>>($), &mut Blocks($))
+        system!("handle_poc_events_player", world, &Compose($), &mut EventQueue<event::Command<'_>>($), &mut Blocks($), &IgnMap($))
             .multi_threaded()
-            .each_iter(move |it: TableIter<'_, false>, _, (compose, event_queue, mc)| {
+            .each_iter(move |it: TableIter<'_, false>, _, (compose, event_queue, mc, ign_map)| {
                 let span = trace_span!("handle_poc_events_player");
                 let _enter = span.enter();
 
@@ -671,6 +663,7 @@ impl Module for CommandModule {
                                 level,
                                 health,
                                 position,
+                                ign_map,
                             };
                             process_command(&command, &mut context);
                         },
