@@ -110,10 +110,10 @@ fn process_command(command: &ParsedCommand, context: &mut CommandContext<'_>) {
         ParsedCommand::Zombie => handle_zombie_command(context),
         ParsedCommand::Dirt { x, y, z } => handle_dirt_command(*x, *y, *z, context),
         ParsedCommand::Give {
-            entity,
+            username,
             item,
             count,
-        } => handle_give_command(entity, item, *count, context),
+        } => handle_give_command(username, item, *count, context),
         ParsedCommand::Upgrade => handle_upgrade_command(context),
         ParsedCommand::Stats(stat, amount) => handle_stats(*stat, *amount, context),
         ParsedCommand::Health(amount) => handle_health_command(*amount, context),
@@ -355,7 +355,7 @@ fn handle_stats(stat: Stat, amount: f32, context: &CommandContext<'_>) {
         });
 }
 
-fn handle_give_command(entity: &str, item_name: &str, count: i8, context: &CommandContext<'_>) {
+fn handle_give_command(username: &str, item_name: &str, count: i8, context: &CommandContext<'_>) {
     let Some(item) = ItemKind::from_str(item_name) else {
         let packet = chat!("Unknown item '{item_name:?}'");
         context
@@ -365,8 +365,8 @@ fn handle_give_command(entity: &str, item_name: &str, count: i8, context: &Comma
         return;
     };
 
-    let Some(player) = context.ign_map.get(entity) else {
-        let chat = chat!("Player {entity} does not exist");
+    let Some(player) = context.ign_map.get(username) else {
+        let chat = chat!("Player {username} does not exist");
         context.compose.unicast(&chat, context.stream, context.system_id, context.world).unwrap();
         return;
     };
@@ -377,7 +377,7 @@ fn handle_give_command(entity: &str, item_name: &str, count: i8, context: &Comma
 
     let name = item.to_str();
 
-    let packet = chat!("Gave {count} [{name}] to {entity}");
+    let packet = chat!("Gave {count} [{name}] to {username}");
     context
         .compose
         .unicast(&packet, context.stream, context.system_id, context.world)

@@ -27,7 +27,7 @@ pub enum ParsedCommand {
         z: i32,
     },
     Give {
-        entity: String,
+        username: String,
         item: String,
         count: i8,
     },
@@ -92,8 +92,8 @@ fn parse_give(input: &str) -> IResult<&str, ParsedCommand> {
             ),
             preceded(space1_str, nom::character::complete::i8),
         ),
-        |(_, entity, item, count)| ParsedCommand::Give {
-            entity: entity.to_string(),
+        |(_, username, item, count)| ParsedCommand::Give {
+            username: username.to_string(),
             item: item.to_string(),
             count,
         },
