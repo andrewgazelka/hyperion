@@ -98,17 +98,22 @@ impl Egress {
                             Ok(true) => {} // success
                             Ok(false) => {
                                 // player is disconnect
-                                players.remove(player_id);
+                                if let Some(result) = players.remove(player_id) {
+                                    result.shutdown();
+                                }
+
                                 warn!("Failed to send data to player due to channel being full");
                             }
                             Err(e) => {
                                 warn!("Failed to send data to player: {:?}", e);
-                                players.remove(player_id);
+                                if let Some(result) = players.remove(player_id) {
+                                    result.shutdown();
+                                }
                             }
                         }
                     }
                 }
-                    .instrument(info_span!("broadcast_global_task")),
+                .instrument(info_span!("broadcast_global_task")),
             )
             .unwrap();
     }
@@ -124,17 +129,21 @@ impl Egress {
                         Ok(true) => {} // success
                         Ok(false) => {
                             // player is disconnect
-                            players.remove(id);
+                            if let Some(result) = players.remove(id) {
+                                result.shutdown();
+                            }
                             warn!("Failed to send data to player due to channel being full");
                         }
                         Err(e) => {
                             warn!("Failed to send data to player: {:?}", e);
-                            players.remove(id);
+                            if let Some(result) = players.remove(id) {
+                                result.shutdown();
+                            }
                         }
                     }
                 }
             }
-                .instrument(info_span!("flush_task")),
+            .instrument(info_span!("flush_task")),
         );
     }
 
@@ -193,18 +202,24 @@ impl Egress {
                                 Ok(true) => {} // success
                                 Ok(false) => {
                                     // player is disconnect
-                                    players.remove(id);
-                                    warn!("Failed to send data to player due to channel being full");
+                                    if let Some(result) = players.remove(id) {
+                                        result.shutdown();
+                                    }
+                                    warn!(
+                                        "Failed to send data to player due to channel being full"
+                                    );
                                 }
                                 Err(e) => {
                                     warn!("Failed to send data to player: {:?}", e);
-                                    players.remove(id);
+                                    if let Some(result) = players.remove(id) {
+                                        result.shutdown();
+                                    }
                                 }
                             }
                         }
                     }
                 }
-                    .instrument(info_span!("broadcast_local_task")),
+                .instrument(info_span!("broadcast_local_task")),
             )
             .unwrap();
     }
@@ -238,12 +253,16 @@ impl Egress {
             Ok(true) => {} // success
             Ok(false) => {
                 // player is disconnect
-                players.remove(&id);
+                if let Some(result) = players.remove(&id) {
+                    result.shutdown();
+                }
                 warn!("Failed to send data to player due to channel being full");
             }
             Err(e) => {
                 warn!("Failed to send data to player: {:?}", e);
-                players.remove(&id);
+                if let Some(result) = players.remove(&id) {
+                    result.shutdown();
+                }
             }
         }
 
