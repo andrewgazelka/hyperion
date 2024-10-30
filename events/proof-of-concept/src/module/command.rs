@@ -38,7 +38,7 @@ pub fn add_to_tree(world: &World) {
         |scope| {
             scope.argument_with("", Parser::ItemStack, |scope| {
                 scope.argument("count", Parser::Integer { 
-                    min: None,
+                    min: Some(1),
                     max: None
                 });
             });

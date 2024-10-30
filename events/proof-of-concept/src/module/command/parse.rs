@@ -1,3 +1,4 @@
+use std::cmp::max;
 use nom::{
     branch::alt,
     bytes::complete::{tag, take_until, take_while1},
@@ -84,8 +85,8 @@ fn parse_dirt(input: &str) -> IResult<&str, ParsedCommand> {
 fn parse_give(input: &str) -> IResult<&str, ParsedCommand> {
     map(
         (
-            tag("give"),
-            preceded(space1_str, take_while1(is_valid_player_char)),
+            tag("give "),
+            take_while1(is_valid_player_char),
             preceded(
                 space1_str,
                 preceded(opt(tag("minecraft:")), take_while1(is_valid_player_char)),
