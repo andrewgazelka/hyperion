@@ -1,3 +1,5 @@
+use std::cmp::min;
+
 use flecs_ecs::macros::Component;
 use roaring::RoaringBitmap;
 use valence_protocol::{ItemKind, ItemStack};
@@ -160,16 +162,21 @@ impl<const T: usize> Inventory<T> {
         to_add: &mut ItemStack,
         can_add_to_empty: bool,
     ) -> Result<TryAddSlot, InventoryAccessError> {
-        const MAX_STACK_SIZE: i8 = 64; // TODO: Make this variable based on item type
+        let max_stack_size: i8 = to_add.item.max_stack();
 
         let existing_stack = self.get_mut(slot)?;
 
         if existing_stack.is_empty() {
             return if can_add_to_empty {
-                *existing_stack = to_add.clone();
-                to_add.count = 0;
+                let new_count = min(to_add.count, max_stack_size);
+                *existing_stack = to_add.clone().with_count(new_count);
+                to_add.count -= new_count;
                 self.updated_since_last_tick.insert(u32::from(slot));
-                Ok(TryAddSlot::Complete)
+                return if to_add.count > 0 {
+                    Ok(TryAddSlot::Partial)
+                } else {
+                    Ok(TryAddSlot::Complete)
+                };
             } else {
                 Ok(TryAddSlot::Skipped)
             };
@@ -177,8 +184,8 @@ impl<const T: usize> Inventory<T> {
 
         let stackable = existing_stack.item == to_add.item && existing_stack.nbt == to_add.nbt;
 
-        if stackable && existing_stack.count < MAX_STACK_SIZE {
-            let space_left = MAX_STACK_SIZE - existing_stack.count;
+        if stackable && existing_stack.count < max_stack_size {
+            let space_left = max_stack_size - existing_stack.count;
 
             return if to_add.count <= space_left {
                 existing_stack.count += to_add.count;
@@ -186,7 +193,7 @@ impl<const T: usize> Inventory<T> {
                 self.updated_since_last_tick.insert(u32::from(slot));
                 Ok(TryAddSlot::Complete)
             } else {
-                existing_stack.count = MAX_STACK_SIZE;
+                existing_stack.count = max_stack_size;
                 to_add.count -= space_left;
                 self.updated_since_last_tick.insert(u32::from(slot));
                 Ok(TryAddSlot::Partial)
