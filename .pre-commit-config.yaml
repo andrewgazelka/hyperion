@@ -25,7 +25,6 @@ repos:
         description: Replaces mixed line endings with LF
       - id: check-executables-have-shebangs
         description: Ensures executable files have shebangs
-
   - repo: local
     hooks:
       - id: cargo-fmt
@@ -35,3 +34,25 @@ repos:
         language: system
         types: [rust]
         pass_filenames: true
+      - id: cargo-clippy
+        name: cargo clippy
+        description: Lint Rust code with Clippy
+        entry: cargo clippy --workspace --all-targets --all-features -- -D warnings
+        language: system
+        types: [rust]
+        pass_filenames: false  # Clippy should check the entire project
+        verbose: true
+      - id: cargo-machete
+        name: cargo machete
+        description: Find unused dependencies in Cargo.toml
+        entry: cargo machete
+        language: system
+        types: [rust]
+        pass_filenames: false
+      - id: cargo-deny
+        name: cargo deny check
+        description: Check dependencies for license/security issues
+        entry: cargo deny check
+        language: system
+        types: [rust]
+        pass_filenames: false
