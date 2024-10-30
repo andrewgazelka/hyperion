@@ -1,4 +1,5 @@
 use std::cmp::max;
+
 use nom::{
     branch::alt,
     bytes::complete::{tag, take_until, take_while1},
@@ -98,7 +99,8 @@ fn parse_give(input: &str) -> IResult<&str, ParsedCommand> {
             item: item.to_string(),
             count: count.unwrap_or(1),
         },
-    ).parse(input)
+    )
+    .parse(input)
 }
 
 fn parse_upgrade(input: &str) -> IResult<&str, ParsedCommand> {

@@ -2,14 +2,30 @@ use std::borrow::Cow;
 
 use flecs_ecs::prelude::*;
 use hyperion::{
-    chat, egress::player_join::{PlayerListActions, PlayerListEntry, PlayerListS2c}, net::{Compose, NetworkStreamRef}, simulation::{
-        blocks::Blocks, command::{add_command, cmd_with, get_root_command, Command, Parser}, event, Health, IgnMap, InGameName, Position, Uuid
-    }, storage::EventQueue, system_registry::SystemId, uuid, valence_ident::ident, valence_protocol::{
-        self, game_mode::OptGameMode, math::IVec3, nbt, packets::play::{
+    chat,
+    egress::player_join::{PlayerListActions, PlayerListEntry, PlayerListS2c},
+    net::{Compose, NetworkStreamRef},
+    simulation::{
+        blocks::Blocks,
+        command::{add_command, cmd_with, get_root_command, Command, Parser},
+        event, Health, IgnMap, InGameName, Position, Uuid,
+    },
+    storage::EventQueue,
+    system_registry::SystemId,
+    uuid,
+    valence_ident::ident,
+    valence_protocol::{
+        self,
+        game_mode::OptGameMode,
+        math::IVec3,
+        nbt,
+        packets::play::{
             self, command_tree_s2c::StringArg, player_abilities_s2c::PlayerAbilitiesFlags,
             player_position_look_s2c::PlayerPositionLookFlags, PlayerAbilitiesS2c,
-        }, text::IntoText, BlockState, GameMode, ItemKind, ItemStack, VarInt
-    }
+        },
+        text::IntoText,
+        BlockState, GameMode, ItemKind, ItemStack, VarInt,
+    },
 };
 use hyperion_inventory::PlayerInventory;
 use parse::Stat;
@@ -31,18 +47,21 @@ pub fn add_to_tree(world: &World) {
     add_command(world, Command::literal("upgrade"), root_command);
 
     cmd_with(world, "give", |scope| {
-        scope.argument_with("player", Parser::Entity { 
-            single: true,
-            only_players: true
-        },
-        |scope| {
-            scope.argument_with("", Parser::ItemStack, |scope| {
-                scope.argument("count", Parser::Integer { 
-                    min: Some(1),
-                    max: None
+        scope.argument_with(
+            "player",
+            Parser::Entity {
+                single: true,
+                only_players: true,
+            },
+            |scope| {
+                scope.argument_with("", Parser::ItemStack, |scope| {
+                    scope.argument("count", Parser::Integer {
+                        min: Some(1),
+                        max: None,
+                    });
                 });
-            });
-        });
+            },
+        );
     });
 
     let speed = add_command(world, Command::literal("speed"), root_command);
@@ -367,13 +386,19 @@ fn handle_give_command(username: &str, item_name: &str, count: i8, context: &Com
 
     let Some(player) = context.ign_map.get(username) else {
         let chat = chat!("Player {username} does not exist");
-        context.compose.unicast(&chat, context.stream, context.system_id, context.world).unwrap();
+        context
+            .compose
+            .unicast(&chat, context.stream, context.system_id, context.world)
+            .unwrap();
         return;
     };
 
-    context.world.entity_from_id(*player).get::<&mut PlayerInventory>(|inventory| {
-        inventory.try_add_item(ItemStack::new(item, count, None));
-    });
+    context
+        .world
+        .entity_from_id(*player)
+        .get::<&mut PlayerInventory>(|inventory| {
+            inventory.try_add_item(ItemStack::new(item, count, None));
+        });
 
     let name = item.to_str();
 
