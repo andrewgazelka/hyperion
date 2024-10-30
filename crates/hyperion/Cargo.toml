@@ -1,12 +1,24 @@
-[package]
-name = "hyperion"
-version = "0.1.0"
-edition = "2021"
-authors = ["Andrew Gazelka <andrew.gazelka@gmail.com>"]
-readme = "README.md"
-publish = false
+[[bench]]
+harness = false
+name = "set"
+
+[[bench]]
+harness = false
+name = "atomic"
+
+[build-dependencies]
+rustc_version.workspace = true
 
 [dependencies]
+colored = "2.1.0"
+flate2 = {workspace = true, features = ["zlib-ng"]}
+glam = {workspace = true, features = ["serde"]}
+rkyv = "0.8.8"
+roaring = {workspace = true, features = ["simd"]}
+serde = {workspace = true, features = ["derive"]}
+tokio = {workspace = true, features = ["full", "tracing"]}
+tracing = {workspace = true}
+uuid = {workspace = true, features = ["v3"]}
 anyhow.workspace = true
 base64.workspace = true
 bitfield-struct.workspace = true
@@ -17,20 +29,16 @@ bytemuck.workspace = true
 byteorder.workspace = true
 bytes.workspace = true
 derive_more.workspace = true
-hyperion-event-macros.workspace = true
-colored = "2.1.0"
 dirs-next.workspace = true
 enumset.workspace = true
 fastrand.workspace = true
-flate2 = { workspace = true, features = ["zlib-ng"] }
 flecs_ecs.workspace = true
-valence_ident.workspace = true
-rustc-hash.workspace = true
-glam = { workspace = true, features = ["serde"] }
 heapless.workspace = true
 heed.workspace = true
 hyperion-crafting.workspace = true
+hyperion-event-macros.workspace = true
 hyperion-inventory.workspace = true
+hyperion-nerd-font.workspace = true
 hyperion-palette.workspace = true
 hyperion-proto.workspace = true
 hyperion-text.workspace = true
@@ -49,20 +57,15 @@ ouroboros.workspace = true
 parking_lot.workspace = true
 rayon.workspace = true
 reqwest.workspace = true
-roaring = { workspace = true, features = ["simd"] }
-hyperion-nerd-font.workspace = true
-serde = { workspace = true, features = ["derive"] }
+rustc-hash.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
 tar.workspace = true
 thiserror.workspace = true
-tokio = { workspace = true, features = ["full", "tracing"] }
 toml.workspace = true
-tracing = { workspace = true }
-rkyv = "0.8.8"
-uuid = { workspace = true, features = ["v3"] }
 valence_anvil.workspace = true
 valence_generated.workspace = true
+valence_ident.workspace = true
 valence_nbt.workspace = true
 valence_protocol.workspace = true
 valence_registry.workspace = true
@@ -75,19 +78,14 @@ fastrand.workspace = true
 hex.workspace = true
 rustc_version.workspace = true
 tango-bench.workspace = true
-#tracing-subscriber.workspace = true
-
-[[bench]]
-name = "set"
-harness = false
-
-[[bench]]
-name = "atomic"
-harness = false
 
 [lints]
 workspace = true
 
-
-[build-dependencies]
-rustc_version.workspace = true
+[package]
+authors = ["Andrew Gazelka <andrew.gazelka@gmail.com>"]
+edition = "2021"
+name = "hyperion"
+publish = false
+readme = "README.md"
+version = "0.1.0"

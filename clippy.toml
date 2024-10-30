@@ -1,4 +1,5 @@
 # https://doc.rust-lang.org/nightly/clippy/lint_configuration.html
+
 cognitive-complexity-threshold = 200
 excessive-nesting-threshold = 7
 too-many-lines-threshold = 200

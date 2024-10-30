@@ -1,12 +1,12 @@
-[package]
-name = "hyperion-scheduled"
-version = "0.1.0"
-edition = "2021"
-authors = ["Andrew Gazelka <andrew.gazelka@gmail.com>"]
-readme = "README.md"
-publish = false
-
 [dependencies]
 
 [lints]
 workspace = true
+
+[package]
+authors = ["Andrew Gazelka <andrew.gazelka@gmail.com>"]
+edition = "2021"
+name = "hyperion-scheduled"
+publish = false
+readme = "README.md"
+version = "0.1.0"

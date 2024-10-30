@@ -1,6 +1,8 @@
 {
   "name": "Debian",
-  "forwardPorts": [25565],
+  "forwardPorts": [
+    25565
+  ],
   "features": {
     "ghcr.io/devcontainers/features/rust:1": {}
   },

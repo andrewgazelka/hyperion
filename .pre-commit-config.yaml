@@ -20,11 +20,31 @@ repos:
         description: Detects presence of private keys
       - id: check-yaml
         description: Validates YAML files
+      - id: check-toml
       - id: mixed-line-ending
         args: [ --fix=lf ]
         description: Replaces mixed line endings with LF
       - id: check-executables-have-shebangs
         description: Ensures executable files have shebangs
+      - id: pretty-format-json
+        args: [ --autofix, --no-sort-keys ]
+        description: Checks that JSON files are properly formatted
+
+  - repo: https://github.com/macisamuele/language-formatters-pre-commit-hooks
+    rev: v2.12.0
+    hooks:
+      - id: pretty-format-toml
+        args: [ --autofix ]
+        description: Formats TOML files
+
+  - repo: https://github.com/Lucas-C/pre-commit-hooks
+    rev: v1.5.4
+    hooks:
+      - id: forbid-crlf
+        description: Prevents CRLF line endings
+      - id: remove-tabs
+        description: Replaces tabs with spaces
+
   - repo: local
     hooks:
       - id: cargo-fmt
@@ -56,3 +76,11 @@ repos:
         language: system
         types: [rust]
         pass_filenames: false
+      - id: cargo-test
+        name: cargo test
+        description: Run cargo tests
+        entry: cargo nextest run
+        language: system
+        types: [ rust ]
+        pass_filenames: false
+        stages: [ push ]  # Only run on push, not every commit

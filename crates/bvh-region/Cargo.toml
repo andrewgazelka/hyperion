@@ -1,48 +1,48 @@
-[package]
-name = "bvh-region"
-version = "0.1.0"
-edition = "2021"
-authors = ["Andrew Gazelka <andrew.gazelka@gmail.com>"]
-readme = "README.md"
-publish = false
+[[bench]]
+harness = false
+name = "sort"
 
-[features]
-plot = ["dep:plotters", "dep:plotters-bitmap"]
-default = []
+[[bench]]
+harness = false
+name = "bvh"
+
+[[bench]]
+harness = false
+name = "side_by_side"
 
 [dependencies]
-fastrand.workspace = true
-glam = { workspace = true, features = ["serde"] }
-rayon.workspace = true
-arrayvec.workspace = true
-ordered-float.workspace = true
-itertools.workspace = true
-plotters = { workspace = true, features = [
+glam = {workspace = true, features = ["serde"]}
+plotters = {workspace = true, features = [
   "plotters-bitmap",
-  "image",
-], optional = true }
-plotters-bitmap = { workspace = true, optional = true }
+  "image"
+], optional = true}
+plotters-bitmap = {workspace = true, optional = true}
+serde = {workspace = true, features = ["derive"]}
+arrayvec.workspace = true
+fastrand.workspace = true
+itertools.workspace = true
+ordered-float.workspace = true
+rayon.workspace = true
 tracing.workspace = true
-serde = { workspace = true, features = ["derive"] }
 
 [dev-dependencies]
-divan.workspace = true
 criterion.workspace = true
+divan.workspace = true
 rand.workspace = true
 tango-bench.workspace = true
 tracing-subscriber.workspace = true
 
-[[bench]]
-name = "sort"
-harness = false
-
-[[bench]]
-name = "bvh"
-harness = false
-
-[[bench]]
-name = "side_by_side"
-harness = false
+[features]
+default = []
+plot = ["dep:plotters", "dep:plotters-bitmap"]
 
 [lints]
 workspace = true
+
+[package]
+authors = ["Andrew Gazelka <andrew.gazelka@gmail.com>"]
+edition = "2021"
+name = "bvh-region"
+publish = false
+readme = "README.md"
+version = "0.1.0"

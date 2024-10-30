@@ -1,5 +1,5 @@
 combine_control_expr = true
-comment_width = 100                    # https://lkml.org/lkml/2020/5/29/1038
+comment_width = 100  # https://lkml.org/lkml/2020/5/29/1038
 condense_wildcard_suffixes = true
 control_brace_style = "AlwaysSameLine"
 edition = "2021"
@@ -17,4 +17,5 @@ overflow_delimited_expr = true
 reorder_impl_items = true
 reorder_imports = true
 unstable_features = true
-#wrap_comments = true
+
+# wrap_comments = true

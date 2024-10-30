@@ -1,21 +1,21 @@
-[package]
-name = "hyperion-stats"
-version = "0.1.0"
-edition = "2021"
-authors = ["Andrew Gazelka <andrew.gazelka@gmail.com>"]
-readme = "README.md"
-publish = false
+[[bench]]
+harness = false
+name = "parallel_stats"
 
 [dependencies]
 
 [dev-dependencies]
+rand = "0.9.0-alpha.2"
 approx.workspace = true
 divan.workspace = true
-rand = "0.9.0-alpha.2"
 
 [lints]
 workspace = true
 
-[[bench]]
-name = "parallel_stats"
-harness = false
+[package]
+authors = ["Andrew Gazelka <andrew.gazelka@gmail.com>"]
+edition = "2021"
+name = "hyperion-stats"
+publish = false
+readme = "README.md"
+version = "0.1.0"
