@@ -1,0 +1,37 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0  # Use the latest version
+    hooks:
+      - id: trailing-whitespace
+        args: [--markdown-linebreak-ext=md]  # Preserves markdown line breaks
+        description: Removes trailing whitespace from files
+        types: [text, rust]  # Runs on text files and Rust files specifically
+        exclude: '\.(ico|jpg|png|gif|eot|svg|ttf|woff|woff2)$'  # Skip binary files
+      - id: check-added-large-files
+        args: [ '--maxkb=500' ]
+        description: Prevents giant files from being committed
+      - id: check-case-conflict
+        description: Checks for files with names that would conflict on case-insensitive filesystems
+      - id: check-merge-conflict
+        description: Checks for files containing merge conflict strings
+      - id: check-symlinks
+        description: Checks for symlinks pointing nowhere
+      - id: detect-private-key
+        description: Detects presence of private keys
+      - id: check-yaml
+        description: Validates YAML files
+      - id: mixed-line-ending
+        args: [ --fix=lf ]
+        description: Replaces mixed line endings with LF
+      - id: check-executables-have-shebangs
+        description: Ensures executable files have shebangs
+
+  - repo: local
+    hooks:
+      - id: cargo-fmt
+        name: cargo fmt
+        description: Format files with rustfmt
+        entry: cargo +nightly fmt --
+        language: system
+        types: [rust]
+        pass_filenames: true

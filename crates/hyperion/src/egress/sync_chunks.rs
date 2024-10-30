@@ -189,7 +189,7 @@ impl Module for SyncChunksModule {
                     while idx >= 0 {
                         #[expect(clippy::cast_sign_loss, reason = "we are checking if < 0")]
                         let Some(elem) = queue.changes.get(idx as usize).copied() else {
-                            // should never happen but we do not want to panic if wrong 
+                            // should never happen but we do not want to panic if wrong
                             // logic/assumptions are made
                             error!("failed to get element from queue.changes");
                             continue;

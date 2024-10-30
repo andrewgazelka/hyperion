@@ -86,15 +86,15 @@ impl Module for SyncPositionModule {
                             .exclude(io)
                             .send(&world)?;
 
-                        // let pkt = play::EntitySetHeadYawS2c {
-                        //     entity_id,
-                        //     head_yaw: ByteAngle::from_degrees(position.yaw),
-                        // };
-                        // 
-                        // compose
-                        //     .broadcast(&pkt, system_id)
-                        //     .exclude(io)
-                        //     .send(&world)?;
+                        let pkt = play::EntitySetHeadYawS2c {
+                            entity_id,
+                            head_yaw: ByteAngle::from_degrees(**yaw as f32),
+                        };
+
+                        compose
+                            .broadcast(&pkt, system_id)
+                            .exclude(io)
+                            .send(&world)?;
 
                         if reaction.velocity != Vec3::ZERO {
                             let velocity = reaction
