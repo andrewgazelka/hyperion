@@ -2,20 +2,21 @@ use std::borrow::Cow;
 
 use flecs_ecs::prelude::*;
 use hyperion::{
+    chat,
     egress::player_join::{PlayerListActions, PlayerListEntry, PlayerListS2c},
     net::{Compose, NetworkStreamRef},
     simulation::{
         blocks::Blocks,
-        command::{add_command, get_root_command, Command, Parser},
-        event, Health, InGameName, Position, Uuid,
+        command::{add_command, cmd_with, get_root_command, Command, Parser},
+        event, Health, IgnMap, InGameName, Position, Uuid,
     },
     storage::EventQueue,
     system_registry::SystemId,
     uuid,
+    valence_ident::ident,
     valence_protocol::{
         self,
         game_mode::OptGameMode,
-        ident,
         math::IVec3,
         nbt,
         packets::play::{
@@ -43,8 +44,25 @@ pub fn add_to_tree(world: &World) {
     // add to tree
     add_command(world, Command::literal("team"), root_command);
     add_command(world, Command::literal("zombie"), root_command);
-    add_command(world, Command::literal("give"), root_command);
     add_command(world, Command::literal("upgrade"), root_command);
+
+    cmd_with(world, "give", |scope| {
+        scope.argument_with(
+            "player",
+            Parser::Entity {
+                single: true,
+                only_players: true,
+            },
+            |scope| {
+                scope.argument_with("", Parser::ItemStack, |scope| {
+                    scope.argument("count", Parser::Integer {
+                        min: Some(1),
+                        max: None,
+                    });
+                });
+            },
+        );
+    });
 
     let speed = add_command(world, Command::literal("speed"), root_command);
     add_command(
@@ -101,6 +119,7 @@ struct CommandContext<'a> {
     inventory: &'a mut PlayerInventory,
     level: &'a mut Level,
     health: &'a mut Health,
+    ign_map: &'a IgnMap,
 }
 
 fn process_command(command: &ParsedCommand, context: &mut CommandContext<'_>) {
@@ -109,7 +128,11 @@ fn process_command(command: &ParsedCommand, context: &mut CommandContext<'_>) {
         ParsedCommand::Team => handle_team_command(context),
         ParsedCommand::Zombie => handle_zombie_command(context),
         ParsedCommand::Dirt { x, y, z } => handle_dirt_command(*x, *y, *z, context),
-        ParsedCommand::Give => handle_give_command(context),
+        ParsedCommand::Give {
+            username,
+            item,
+            count,
+        } => handle_give_command(username, item, *count, context),
         ParsedCommand::Upgrade => handle_upgrade_command(context),
         ParsedCommand::Stats(stat, amount) => handle_stats(*stat, *amount, context),
         ParsedCommand::Health(amount) => handle_health_command(*amount, context),
@@ -351,24 +374,39 @@ fn handle_stats(stat: Stat, amount: f32, context: &CommandContext<'_>) {
         });
 }
 
-fn handle_give_command(context: &mut CommandContext<'_>) {
-    let mut blue_wool_nbt = nbt::Compound::new();
+fn handle_give_command(username: &str, item_name: &str, count: i8, context: &CommandContext<'_>) {
+    let Some(item) = ItemKind::from_str(item_name) else {
+        let packet = chat!("Unknown item '{item_name:?}'");
+        context
+            .compose
+            .unicast(&packet, context.stream, context.system_id, context.world)
+            .unwrap();
+        return;
+    };
 
-    let can_place_on = [
-        "minecraft:stone",
-        "minecraft:dirt",
-        "minecraft:grass_block",
-        "minecraft:blue_wool",
-    ]
-    .into_iter()
-    .map(std::convert::Into::into)
-    .collect();
-
-    blue_wool_nbt.insert("CanPlaceOn", nbt::List::String(can_place_on));
+    let Some(player) = context.ign_map.get(username) else {
+        let chat = chat!("Player {username} does not exist");
+        context
+            .compose
+            .unicast(&chat, context.stream, context.system_id, context.world)
+            .unwrap();
+        return;
+    };
 
     context
-        .inventory
-        .try_add_item(ItemStack::new(ItemKind::BlueWool, 4, Some(blue_wool_nbt)));
+        .world
+        .entity_from_id(*player)
+        .get::<&mut PlayerInventory>(|inventory| {
+            inventory.try_add_item(ItemStack::new(item, count, None));
+        });
+
+    let name = item.to_str();
+
+    let packet = chat!("Gave {count} [{name}] to {username}");
+    context
+        .compose
+        .unicast(&packet, context.stream, context.system_id, context.world)
+        .unwrap();
 }
 
 fn handle_dirt_command(x: i32, y: i32, z: i32, context: &mut CommandContext<'_>) {
@@ -603,9 +641,9 @@ impl Module for CommandModule {
 
         let system_id = SystemId(8);
 
-        system!("handle_poc_events_player", world, &Compose($), &mut EventQueue<event::Command<'_>>($), &mut Blocks($))
+        system!("handle_poc_events_player", world, &Compose($), &mut EventQueue<event::Command<'_>>($), &mut Blocks($), &IgnMap($))
             .multi_threaded()
-            .each_iter(move |it: TableIter<'_, false>, _, (compose, event_queue, mc)| {
+            .each_iter(move |it: TableIter<'_, false>, _, (compose, event_queue, mc, ign_map)| {
                 let span = trace_span!("handle_poc_events_player");
                 let _enter = span.enter();
 
@@ -644,6 +682,7 @@ impl Module for CommandModule {
                                 level,
                                 health,
                                 position,
+                                ign_map,
                             };
                             process_command(&command, &mut context);
                         },

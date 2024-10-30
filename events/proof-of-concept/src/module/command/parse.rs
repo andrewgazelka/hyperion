@@ -1,8 +1,8 @@
 use nom::{
     branch::alt,
-    bytes::complete::{tag, take_until},
+    bytes::complete::{tag, take_until, take_while1},
     character::complete::space1,
-    combinator::{map, map_res},
+    combinator::{map, map_res, opt},
     number::complete::float,
     sequence::preceded,
     IResult, Parser,
@@ -21,13 +21,33 @@ pub enum ParsedCommand {
     Speed(f32),
     Team,
     Zombie,
-    Dirt { x: i32, y: i32, z: i32 },
-    Give,
+    Dirt {
+        x: i32,
+        y: i32,
+        z: i32,
+    },
+    Give {
+        username: String,
+        item: String,
+        count: i8,
+    },
     Upgrade,
     Stats(Stat, f32),
     Health(f32),
     TpHere,
-    Tp { x: f32, y: f32, z: f32 },
+    Tp {
+        x: f32,
+        y: f32,
+        z: f32,
+    },
+}
+
+fn is_valid_player_char(c: char) -> bool {
+    c.is_alphanumeric() || c == '_'
+}
+
+fn space1_str(input: &str) -> IResult<&str, &str> {
+    space1::<&str, nom::error::Error<&str>>(input)
 }
 
 fn parse_speed(input: &str) -> IResult<&str, ParsedCommand> {
@@ -62,7 +82,23 @@ fn parse_dirt(input: &str) -> IResult<&str, ParsedCommand> {
 }
 
 fn parse_give(input: &str) -> IResult<&str, ParsedCommand> {
-    map(tag("give"), |_| ParsedCommand::Give).parse(input)
+    map(
+        (
+            tag("give "),
+            take_while1(is_valid_player_char),
+            preceded(
+                space1_str,
+                preceded(opt(tag("minecraft:")), take_while1(is_valid_player_char)),
+            ),
+            opt(preceded(space1_str, nom::character::complete::i8)),
+        ),
+        |(_, username, item, count)| ParsedCommand::Give {
+            username: username.to_string(),
+            item: item.to_string(),
+            count: count.unwrap_or(1),
+        },
+    )
+    .parse(input)
 }
 
 fn parse_upgrade(input: &str) -> IResult<&str, ParsedCommand> {
@@ -123,4 +159,23 @@ pub fn command(input: &str) -> IResult<&str, ParsedCommand> {
         parse_zombie,
     ))
     .parse(input)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_give_command() {
+        let input = "give Cuz_Im_Clicks minecraft:dirt 64";
+        let result = parse_give(input);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_parse_give_command_no_minecraft() {
+        let input = "give Cuz_Im_Clicks acacia_button 64";
+        let result = parse_give(input);
+        assert!(result.is_ok());
+    }
 }
