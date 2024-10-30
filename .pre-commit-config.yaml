@@ -1,0 +1,19 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0  # Use the latest version
+    hooks:
+      - id: trailing-whitespace
+        args: [--markdown-linebreak-ext=md]  # Preserves markdown line breaks
+        description: Removes trailing whitespace from files
+        types: [text, rust]  # Runs on text files and Rust files specifically
+        exclude: '\.(ico|jpg|png|gif|eot|svg|ttf|woff|woff2)$'  # Skip binary files
+
+  - repo: local
+    hooks:
+      - id: cargo-fmt
+        name: cargo fmt
+        description: Format files with rustfmt
+        entry: cargo +nightly fmt --
+        language: system
+        types: [rust]
+        pass_filenames: true
