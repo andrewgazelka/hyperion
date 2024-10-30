@@ -90,6 +90,51 @@ pub struct Compose {
     pub bump: ThreadLocal<Bump>,
 }
 
+#[must_use]
+pub struct DataBundle<'a> {
+    compose: &'a Compose,
+    data: BytesMut,
+}
+
+impl<'a> DataBundle<'a> {
+    pub fn new(compose: &'a Compose) -> Self {
+        Self {
+            compose,
+            data: BytesMut::new(),
+        }
+    }
+
+    pub fn add_packet(&mut self, pkt: impl PacketBundle, world: &World) -> anyhow::Result<()> {
+        let data = self
+            .compose
+            .io_buf
+            .encode_packet(pkt, self.compose, world)?;
+        // todo: test to see if this ever actually unsplits
+        self.data.unsplit(data);
+        Ok(())
+    }
+
+    pub fn add_raw(&mut self, raw: &[u8]) {
+        self.data.extend_from_slice(raw);
+    }
+
+    pub fn send(
+        self,
+        world: &World,
+        stream: NetworkStreamRef,
+        system_id: SystemId,
+    ) -> anyhow::Result<()> {
+        if self.data.is_empty() {
+            return Ok(());
+        }
+
+        self.compose
+            .io_buf
+            .unicast_raw(&self.data, stream, system_id, world);
+        Ok(())
+    }
+}
+
 impl Compose {
     #[must_use]
     pub fn new(compressor: Compressors, scratch: Scratches, global: Global, io_buf: IoBuf) -> Self {
@@ -378,7 +423,7 @@ impl IoBuf {
         packet: P,
         compose: &Compose,
         world: &World,
-    ) -> anyhow::Result<bytes::Bytes>
+    ) -> anyhow::Result<BytesMut>
     where
         P: PacketBundle,
     {
@@ -396,14 +441,14 @@ impl IoBuf {
                 .encoder()
                 .append_packet(packet, temp_buffer, &mut *scratch, &mut compressor)?;
 
-        Ok(result.freeze())
+        Ok(result)
     }
 
     fn encode_packet_no_compression<P>(
         &self,
         packet: P,
         world: &World,
-    ) -> anyhow::Result<bytes::Bytes>
+    ) -> anyhow::Result<bytes::BytesMut>
     where
         P: PacketBundle,
     {
@@ -412,7 +457,7 @@ impl IoBuf {
 
         let result = append_packet_without_compression(packet, temp_buffer)?;
 
-        Ok(result.freeze())
+        Ok(result)
     }
 
     fn unicast_private<P>(

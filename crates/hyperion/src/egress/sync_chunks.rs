@@ -11,7 +11,7 @@ use valence_protocol::{
 
 use crate::{
     config::Config,
-    net::{Compose, NetworkStreamRef},
+    net::{Compose, DataBundle, NetworkStreamRef},
     simulation::{
         blocks::{Blocks, GetChunk},
         ChunkPosition, Play, Position,
@@ -101,15 +101,22 @@ impl Module for SyncChunksModule {
                         !current_range_x.contains(&pos.x) || !current_range_z.contains(&pos.y)
                     });
 
+                let mut bundle = DataBundle::new(compose);
+
                 for chunk in removed_chunks {
                     let pos = ChunkPos::new(chunk.x, chunk.y);
                     let unload_chunk = play::UnloadChunkS2c { pos };
-                    if let Err(e) = compose.unicast(&unload_chunk, stream_id, system_id, &world) {
-                        error!(
-                            "Failed to send unload chunk packet: {e}. Chunk location: {chunk:?}"
-                        );
-                    }
+
+                    bundle.add_packet(&unload_chunk, &world).unwrap();
+
+                    // if let Err(e) = compose.unicast(&unload_chunk, stream_id, system_id, &world) {
+                    //     error!(
+                    //         "Failed to send unload chunk packet: {e}. Chunk location: {chunk:?}"
+                    //     );
+                    // }
                 }
+
+                bundle.send(&world, stream_id, system_id).unwrap();
 
                 let added_chunks = current_range_x
                     .flat_map(move |x| current_range_z.clone().map(move |z| IVec2::new(x, z)))
@@ -171,6 +178,8 @@ impl Module for SyncChunksModule {
 
                     let mut iter_count = 0;
 
+                    let mut bundle = DataBundle::new(compose);
+
                     #[expect(
                         clippy::cast_possible_wrap,
                         reason = "realistically queue.changes.len() will never be large enough to wrap"
@@ -201,12 +210,10 @@ impl Module for SyncChunksModule {
 
                         match chunks.get_cached_or_load(elem) {
                             GetChunk::Loaded(chunk) => {
-                                compose
-                                    .io_buf()
-                                    .unicast_raw(&chunk.base_packet_bytes, stream_id, system_id, &world);
+                                bundle.add_raw(&chunk.base_packet_bytes);
 
                                 for packet in chunk.original_delta_packets() {
-                                    if let Err(e) = compose.unicast(packet, stream_id, system_id, &world) {
+                                    if let Err(e) = bundle.add_packet(packet, &world) {
                                         error!("failed to send chunk delta packet: {e}");
                                         return;
                                     }
@@ -221,6 +228,8 @@ impl Module for SyncChunksModule {
 
                         idx -= 1;
                     }
+
+                    bundle.send(&world, stream_id, system_id).unwrap();
                 },
             );
     }

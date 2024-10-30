@@ -35,7 +35,13 @@ use crate::{
     server_sender::launch_server_writer,
 };
 
+/// 4 KiB
 const DEFAULT_BUFFER_SIZE: usize = 4 * 1024;
+
+/// Maximum number of pending messages in a player's communication channel.
+/// If this limit is exceeded, the player will be disconnected to prevent
+/// memory exhaustion from slow or unresponsive clients.
+const MAX_PLAYER_PENDING_MESSAGES: usize = 1_024;
 
 pub mod cache;
 pub mod data;
@@ -141,12 +147,11 @@ async fn connect_to_server_and_run_proxy(
     tokio::task::Builder::new()
         .name("s2prox")
         .spawn({
-        let mut shutdown_rx = shutdown_rx.clone();
+            let mut shutdown_rx = shutdown_rx.clone();
 
-        async move {
-
-            loop {
-                tokio::select! {
+            async move {
+                loop {
+                    tokio::select! {
                     _ = shutdown_rx.wait_for(Option::is_some) => return,
                     result = handler.handle_next() => {
                         match result {
@@ -162,14 +167,14 @@ async fn connect_to_server_and_run_proxy(
                         }
                     }
                 }
+                }
+
+                debug!("Sending shutdown to all players");
+
+                shutdown_tx.send(Some(ShutdownType::Reconnect)).unwrap();
             }
-
-            debug!("Sending shutdown to all players");
-
-            shutdown_tx.send(Some(ShutdownType::Reconnect)).unwrap();
-        }
-        .instrument(info_span!("server_reader_loop"))
-    }).unwrap();
+                .instrument(info_span!("server_reader_loop"))
+        }).unwrap();
 
     // 0 is reserved for "None" value
     let mut player_id_on = 1;
@@ -189,8 +194,7 @@ async fn connect_to_server_and_run_proxy(
         let registry = player_registry.pin();
 
         // todo: re-add bounding but issues if have MASSIVE number of packets
-        // let (tx, rx) = kanal::bounded_async(1024);
-        let (tx, rx) = kanal::unbounded_async();
+        let (tx, rx) = kanal::bounded_async(MAX_PLAYER_PENDING_MESSAGES);
         registry.insert(player_id_on, PlayerHandle {
             writer: tx,
             can_receive_broadcasts: AtomicBool::new(false),
