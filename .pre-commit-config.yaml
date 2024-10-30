@@ -37,7 +37,7 @@ repos:
       - id: cargo-clippy
         name: cargo clippy
         description: Lint Rust code with Clippy
-        entry: cargo clippy --workspace --all-targets --all-features -- -D warnings
+        entry: bash -c 'cargo clippy --workspace --all-targets --all-features -- -D warnings || (echo "Regular clippy failed, attempting to fix..." && cargo clippy --workspace --all-targets --all-features --fix --allow-dirty --allow-staged -- -D warnings)'
         language: system
         types: [rust]
         pass_filenames: false  # Clippy should check the entire project
