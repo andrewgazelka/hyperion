@@ -127,27 +127,27 @@ pub async fn get_proof_of_concept_save() -> anyhow::Result<PathBuf> {
             .context("failed to create .hyperion")?;
     }
 
-    let new_york_dir = hyperion.join("ProofOfConcept");
+    let new_york_dir = hyperion.join("NewYork");
 
     if new_york_dir.exists() {
-        info!("using cached ProofOfConcept load");
+        info!("using cached NewYork load");
     } else {
         // download
-        info!("downloading ProofOfConcept.tar.gz");
+        info!("downloading NewYork.tar.gz");
 
-        // https://github.com/andrewgazelka/maps/raw/main/ProofOfConcept.tar.gz
-        let url = "https://github.com/andrewgazelka/maps/raw/main/ProofOfConcept.tar.gz";
+        // https://github.com/andrewgazelka/maps/raw/main/NewYork.tar.gz
+        let url = "https://github.com/andrewgazelka/maps/raw/main/NewYork.tar.gz";
 
         let response = reqwest::get(url)
             .await
-            .context("failed to get ProofOfConcept.tar.gz")?;
+            .context("failed to get NewYork.tar.gz")?;
 
         let bytes = response
             .bytes()
             .await
             .context("failed to get response bytes")?;
 
-        info!("extracting ProofOfConcept.tar.gz");
+        info!("extracting NewYork.tar.gz");
 
         let decompressed = GzDecoder::new(bytes.as_ref());
 
@@ -156,7 +156,7 @@ pub async fn get_proof_of_concept_save() -> anyhow::Result<PathBuf> {
 
         archive
             .unpack(&hyperion)
-            .context("failed to unpack ProofOfConcept.tar.gz")?;
+            .context("failed to unpack NewYork.tar.gz")?;
     }
 
     Ok(new_york_dir)

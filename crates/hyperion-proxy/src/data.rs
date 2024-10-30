@@ -34,14 +34,14 @@ impl OrderedBytes {
         exclusions: None,
     };
     pub const FLUSH: Self = Self {
-        order: 0,
+        order: u32::MAX,
         offset: 0,
-        data: Bytes::from_static(b"flush"),
+        data: Bytes::from_static(b""),
         exclusions: None,
     };
 
-    pub fn is_flush(&self) -> bool {
-        self.data.as_ref() == b"flush" // todo: this is REALLY jank let's maybe not do this
+    pub const fn is_flush(&self) -> bool {
+        self.order == u32::MAX
     }
 
     pub const fn no_order(data: Bytes) -> Self {
