@@ -3,7 +3,8 @@
 use std::io::IoSlice;
 
 use hyperion_proto::{
-    ChunkPosition, PlayerConnect, PlayerDisconnect, PlayerPackets, ProxyToServerMessage,
+    ChunkPosition, PlayerConnect, PlayerDisconnect, PlayerDisconnectReason, PlayerPackets,
+    ProxyToServerMessage,
 };
 use rkyv::ser::allocator::Arena;
 use rustc_hash::FxBuildHasher;
@@ -64,7 +65,7 @@ pub fn initiate_player_connection(
             )
             .unwrap();
 
-            server_sender.try_send(connect).unwrap();
+            server_sender.send(connect).await.unwrap();
 
             let mut arena = Arena::new();
 
@@ -98,7 +99,7 @@ pub fn initiate_player_connection(
 
                 read_buffer.clear();
 
-                if let Err(e) = server_sender.try_send(aligned_vec) {
+                if let Err(e) = server_sender.send(aligned_vec).await {
                     warn!("Error forwarding player packets to server: {e:?}");
                     panic!("Error forwarding player packets to server: {e:?}");
                 }
@@ -150,6 +151,7 @@ pub fn initiate_player_connection(
                     let disconnect = rkyv::to_bytes::<rkyv::rancor::Error>(
                         &ProxyToServerMessage::PlayerDisconnect(PlayerDisconnect {
                             stream: player_id,
+                            reason: PlayerDisconnectReason::LostConnection,
                         })).unwrap();
 
                     let map_ref = player_registry.pin_owned();
