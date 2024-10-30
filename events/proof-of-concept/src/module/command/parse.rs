@@ -90,12 +90,12 @@ fn parse_give(input: &str) -> IResult<&str, ParsedCommand> {
                 space1_str,
                 preceded(opt(tag("minecraft:")), take_while1(is_valid_player_char)),
             ),
-            preceded(space1_str, nom::character::complete::i8),
+            opt(preceded(space1_str, nom::character::complete::i8)),
         ),
         |(_, username, item, count)| ParsedCommand::Give {
             username: username.to_string(),
             item: item.to_string(),
-            count,
+            count: count.unwrap_or(1),
         },
     ).parse(input)
 }
