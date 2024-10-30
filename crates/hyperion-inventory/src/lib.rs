@@ -162,7 +162,7 @@ impl<const T: usize> Inventory<T> {
         to_add: &mut ItemStack,
         can_add_to_empty: bool,
     ) -> Result<TryAddSlot, InventoryAccessError> {
-        let max_stack_size: i8 = to_add.item.max_stack(); // TODO: Make this variable based on item type
+        let max_stack_size: i8 = to_add.item.max_stack();
 
         let existing_stack = self.get_mut(slot)?;
 
