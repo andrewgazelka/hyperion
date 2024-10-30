@@ -39,9 +39,19 @@ impl OrderedBytes {
         data: Bytes::from_static(b""),
         exclusions: None,
     };
+    pub const SHUTDOWN: Self = Self {
+        order: u32::MAX - 1,
+        offset: 0,
+        data: Bytes::from_static(b""),
+        exclusions: None,
+    };
 
     pub const fn is_flush(&self) -> bool {
         self.order == u32::MAX
+    }
+
+    pub const fn is_shutdown(&self) -> bool {
+        self.order == u32::MAX - 1
     }
 
     pub const fn no_order(data: Bytes) -> Self {
@@ -97,4 +107,11 @@ pub struct PlayerHandle {
     /// they will get packets that it deems are invalid because the broadcasts are using the play
     /// state and play IDs.
     pub can_receive_broadcasts: AtomicBool,
+}
+
+impl PlayerHandle {
+    pub fn shutdown(&self) {
+        let _ = self.writer.try_send(OrderedBytes::SHUTDOWN);
+        self.writer.close();
+    }
 }

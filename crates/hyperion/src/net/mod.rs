@@ -90,7 +90,6 @@ pub struct Compose {
     pub bump: ThreadLocal<Bump>,
 }
 
-
 #[must_use]
 pub struct DataBundle<'a> {
     compose: &'a Compose,
@@ -106,7 +105,10 @@ impl<'a> DataBundle<'a> {
     }
 
     pub fn add_packet(&mut self, pkt: impl PacketBundle, world: &World) -> anyhow::Result<()> {
-        let data = self.compose.io_buf.encode_packet(pkt, self.compose, world)?;
+        let data = self
+            .compose
+            .io_buf
+            .encode_packet(pkt, self.compose, world)?;
         // todo: test to see if this ever actually unsplits
         self.data.unsplit(data);
         Ok(())
@@ -116,16 +118,22 @@ impl<'a> DataBundle<'a> {
         self.data.extend_from_slice(raw);
     }
 
-    pub fn send(self, world: &World, stream: NetworkStreamRef, system_id: SystemId) -> anyhow::Result<()> {
+    pub fn send(
+        self,
+        world: &World,
+        stream: NetworkStreamRef,
+        system_id: SystemId,
+    ) -> anyhow::Result<()> {
         if self.data.is_empty() {
             return Ok(());
         }
 
-        self.compose.io_buf.unicast_raw(&self.data, stream, system_id, world);
+        self.compose
+            .io_buf
+            .unicast_raw(&self.data, stream, system_id, world);
         Ok(())
     }
 }
-
 
 impl Compose {
     #[must_use]
@@ -221,7 +229,7 @@ impl Compose {
             // Or a better word for no_compress, or should we just use negative field names?
             compress: true,
         }
-            .send(world)
+        .send(world)
     }
 
     /// Send a packet to a single player without compression.
@@ -242,7 +250,7 @@ impl Compose {
             system_id,
             compress: false,
         }
-            .send(world)
+        .send(world)
     }
 
     #[must_use]
@@ -397,7 +405,7 @@ impl<P> BroadcastLocal<'_, P> {
 
 impl IoBuf {
     /// Returns an iterator over the result of splitting the buffer into packets with [`BytesMut::split`].
-    pub fn reset_and_split(&mut self) -> impl Iterator<Item=Bytes> + '_ {
+    pub fn reset_and_split(&mut self) -> impl Iterator<Item = Bytes> + '_ {
         // reset idx
         for elem in &mut self.idx {
             elem.set(0);
