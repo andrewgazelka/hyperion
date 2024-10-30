@@ -176,7 +176,7 @@ impl<const T: usize> Inventory<T> {
                     Ok(TryAddSlot::Partial)
                 } else {
                     Ok(TryAddSlot::Complete)
-                }
+                };
             } else {
                 Ok(TryAddSlot::Skipped)
             };
