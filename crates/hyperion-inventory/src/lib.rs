@@ -295,9 +295,9 @@ impl PlayerInventory {
     pub fn try_add_item(&mut self, mut item: ItemStack) -> AddItemResult {
         let mut result = AddItemResult { remaining: None };
 
-        // Try to add to hand slots (36-45) first, then the rest of the inventory (0-35)
+        // Try to add to hot bar (36-45) first, then the rest of the inventory (9-35)
         // try to stack first
-        for slot in (36..=45).chain(0..36) {
+        for slot in (36..=44).chain(9..36) {
             let Ok(add_slot) = self.try_add_to_slot(slot, &mut item, false) else {
                 unreachable!("try_add_item should always return Ok");
             };
@@ -310,9 +310,9 @@ impl PlayerInventory {
             }
         }
 
-        // Try to add to hand slots (36-45) first, then the rest of the inventory (0-35)
+        // Try to add to hot bar (36-44) first, then the rest of the inventory (9-35)
         // now try to add to empty slots
-        for slot in (36..=45).chain(0..36) {
+        for slot in (36..=44).chain(9..36) {
             let Ok(add_slot) = self.try_add_to_slot(slot, &mut item, true) else {
                 unreachable!("try_add_item should always return Ok");
             };
