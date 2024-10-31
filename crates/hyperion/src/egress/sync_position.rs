@@ -169,7 +169,7 @@ impl Module for SyncPositionModule {
                                     dimension_type_name: ident!("minecraft:overworld").into(),
                                     dimension_name: ident!("minecraft:overworld").into(),
                                     hashed_seed: 0,
-                                    game_mode: GameMode::Adventure,
+                                    game_mode: GameMode::Survival,
                                     previous_game_mode: OptGameMode::default(),
                                     is_debug: false,
                                     is_flat: false,

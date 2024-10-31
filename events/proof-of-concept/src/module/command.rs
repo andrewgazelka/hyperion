@@ -505,7 +505,7 @@ fn handle_zombie_command(context: &CommandContext<'_>) {
         chat_data: None,
         listed: true,
         ping: 20,
-        game_mode: GameMode::Adventure,
+        game_mode: GameMode::Survival,
         display_name: Some(context.name.to_string().into_cow_text()),
     }];
 
@@ -524,7 +524,7 @@ fn handle_zombie_command(context: &CommandContext<'_>) {
         dimension_type_name: ident!("minecraft:overworld").into(),
         dimension_name: ident!("minecraft:overworld").into(),
         hashed_seed: 0,
-        game_mode: GameMode::Adventure,
+        game_mode: GameMode::Survival,
         previous_game_mode: OptGameMode::default(),
         is_debug: false,
         is_flat: false,

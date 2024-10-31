@@ -91,11 +91,11 @@ pub fn player_join_world(
         enable_respawn_screen: false,
         dimension_name: dimension_name.into(),
         hashed_seed: 0,
-        game_mode: GameMode::Adventure,
+        game_mode: GameMode::Survival,
         is_flat: false,
         last_death_location: None,
         portal_cooldown: 60.into(),
-        previous_game_mode: OptGameMode(Some(GameMode::Adventure)),
+        previous_game_mode: OptGameMode(Some(GameMode::Survival)),
         dimension_type_name: ident!("minecraft:overworld").into(),
         is_debug: false,
     };
@@ -302,7 +302,7 @@ pub fn player_join_world(
         chat_data: None,
         listed: true,
         ping: 20,
-        game_mode: GameMode::Adventure,
+        game_mode: GameMode::Survival,
         display_name: Some(name.to_string().into_cow_text()),
     }];
 
