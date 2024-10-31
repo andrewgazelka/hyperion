@@ -1,7 +1,7 @@
 use std::io::IoSlice;
 
 use rkyv::util::AlignedVec;
-use tracing::{trace_span, Instrument};
+use tracing::{trace_span, warn, Instrument};
 
 use crate::util::AsyncWriteVectoredExt;
 
@@ -48,7 +48,10 @@ pub fn launch_server_writer(mut write: tokio::net::tcp::OwnedWriteHalf) -> Serve
                         io_slices.push(msg);
                     }
 
-                    write.write_vectored_all(&mut io_slices).await.unwrap();
+                    if let Err(e) = write.write_vectored_all(&mut io_slices).await {
+                        warn!("failed to write to server: {e}");
+                        return;
+                    }
 
                     lengths.clear();
                     messages.clear();

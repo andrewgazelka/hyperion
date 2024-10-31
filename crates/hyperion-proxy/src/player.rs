@@ -67,7 +67,10 @@ pub fn initiate_player_connection(
                 )
                 .unwrap();
 
-                server_sender.send(connect).await.unwrap();
+                if let Err(e) = server_sender.send(connect).await {
+                    warn!("failed to send player connect to server: {e}");
+                    return;
+                }
 
                 let mut arena = Arena::new();
 
@@ -158,7 +161,9 @@ pub fn initiate_player_connection(
                         }),
                     ).unwrap();
 
-                    server_sender.send(disconnect).await.unwrap();
+                    if let Err(e) = server_sender.send(disconnect).await {
+                        warn!("failed to send player disconnect to server: {e}");
+                    }
                 },
                 _ = &mut packet_reader_task => {
                     info!("Player disconnected because reader task finished: {player_id:?}");
@@ -171,7 +176,9 @@ pub fn initiate_player_connection(
                             reason: PlayerDisconnectReason::LostConnection,
                         })).unwrap();
 
-                    server_sender.send(disconnect).await.unwrap();
+                    if let Err(e) = server_sender.send(disconnect).await {
+                        warn!("failed to send player disconnect to server: {e}");
+                    }
 
                     let map_ref = player_registry.pin();
                     map_ref.remove(&player_id);
