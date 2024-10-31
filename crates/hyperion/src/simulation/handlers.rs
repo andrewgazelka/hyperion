@@ -120,7 +120,8 @@ fn try_change_position(
     is_within_speed_limits(**position, proposed)?;
 
     // Only check collision if we're starting outside a block
-    if !has_collision(position, size, blocks) && has_collision(&proposed, size, blocks) {
+    if !has_block_collision(position, size, blocks) && has_block_collision(&proposed, size, blocks)
+    {
         return Err(anyhow::anyhow!("Cannot move into solid blocks"));
     }
 
@@ -138,7 +139,7 @@ fn is_within_speed_limits(current: Vec3, proposed: Vec3) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn has_collision(position: &Vec3, size: EntitySize, blocks: &Blocks) -> bool {
+fn has_block_collision(position: &Vec3, size: EntitySize, blocks: &Blocks) -> bool {
     use std::ops::ControlFlow;
 
     let (min, max) = block_bounds(*position, size);
@@ -421,7 +422,7 @@ pub fn player_interact_block(
 
         // todo(hack): technically players can do some crazy position stuff to abuse this probably
         // let player_aabb = query.position.bounding.shrink(0.01);
-        let player_aabb = aabb(**query.position, *query.size).shrink(0.01);
+        let player_aabb = aabb(**query.position, *query.size);
 
         let collides_player = block_state
             .collision_shapes()
