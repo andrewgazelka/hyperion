@@ -196,10 +196,10 @@ impl Hyperion {
 
         let mut app = world.app();
 
-        // app.enable_rest(0)
-        //     .enable_stats(true)
-        //     .set_threads(rayon::current_num_threads() as i32)
-        //     .set_target_fps(20.0);
+        app.enable_rest(0)
+            .enable_stats(true)
+            .set_threads(i32::try_from(rayon::current_num_threads())?)
+            .set_target_fps(20.0);
 
         world.set_threads(i32::try_from(rayon::current_num_threads())?);
 
