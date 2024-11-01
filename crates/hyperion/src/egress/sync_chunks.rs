@@ -21,7 +21,6 @@ use crate::{
 };
 
 #[derive(Component, Deref, DerefMut, Default)]
-#[meta]
 pub struct ChunkSendQueue {
     changes: Vec<IVec2>,
 }
@@ -31,9 +30,7 @@ pub struct SyncChunksModule;
 
 impl Module for SyncChunksModule {
     fn module(world: &World) {
-        meta_register_vector_type!(world, IVec2 { x: 0, y: 0 });
-
-        world.component::<ChunkSendQueue>().meta();
+        world.component::<ChunkSendQueue>();
 
         let radius = world.get::<&Config>(|config| config.view_distance);
         let liberal_radius = radius + 2;

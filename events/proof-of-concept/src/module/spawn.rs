@@ -98,7 +98,7 @@ fn find_spawn_position(
     runtime: &AsyncRuntime,
     avoid_blocks: &RoaringBitmap,
 ) -> Vec3 {
-    const MAX_TRIES: usize = 100;
+    const MAX_TRIES: usize = 1;
     const FALLBACK_POSITION: Vec3 = Vec3::new(0.0, 120.0, 0.0);
 
     for _ in 0..MAX_TRIES {

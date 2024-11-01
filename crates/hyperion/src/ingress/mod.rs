@@ -165,11 +165,6 @@ fn process_login(
 
     ign_map.insert(username.clone(), entity.id(), world);
 
-    // first 4 bytes of the uuid
-    let uuid_short = hex::encode(&uuid.as_bytes()[0..4]);
-
-    let name = format!("{username}-{uuid_short}");
-
     entity
         .set(InGameName::from(username))
         .add::<AiTargetable>()
@@ -178,8 +173,7 @@ fn process_login(
         .set(Health::default())
         .set(ChunkSendQueue::default())
         .set(ChunkPosition::null())
-        .set(EntityReaction::default())
-        .set_name(&name);
+        .set(EntityReaction::default());
 
     compose.io_buf().set_receive_broadcasts(stream_id, world);
 
