@@ -9,7 +9,12 @@ use serde::{Deserialize, Serialize};
 use skin::PlayerSkin;
 use uuid;
 
-use crate::{simulation::command::Command, storage::ThreadLocalVec, Global};
+use crate::{
+    simulation::{command::Command, metadata::{Metadata, tracked::FiniteDifference}},
+    storage::ThreadLocalVec,
+    Global
+};
+use crate::simulation::metadata::tracked::Observable;
 
 pub mod animation;
 pub mod blocks;
@@ -153,12 +158,17 @@ pub enum PacketState {
 /// To revive a dead entity, use the [`Health::reset`] method, typically when respawning.
 /// This method restores the entity to full health and allows it to be affected
 /// by subsequent health changes.
-#[derive(Component, Debug, PartialEq)]
-#[meta]
-pub struct Health {
-    value: f32,
+#[derive(Component, Debug, Deref, DerefMut)];
+pub struct Health(Observable<f32>);
 
-    pending: f32,
+impl Metadata for Health {
+    /// <https://wiki.vg/Entity_metadata#:~:text=Float%20(3)-,Health,-1.0>
+    const INDEX: u8 = 9;
+    type Type = f32;
+
+    fn to_type(self) -> Self::Type {
+        self.0.get()
+    }
 }
 
 pub const FULL_HEALTH: f32 = 20.0;
@@ -511,7 +521,7 @@ impl Module for SimModule {
         world.component::<ChunkPosition>().meta();
         world.component::<EntityReaction>().meta();
         world.component::<ConfirmBlockSequences>();
-        world.component::<metadata::Metadata>();
+        world.component::<metadata::StateObserver>();
         world.component::<animation::ActiveAnimation>();
 
         world.component::<hyperion_inventory::PlayerInventory>();

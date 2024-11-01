@@ -18,29 +18,29 @@ use crate::{
     egress::metadata::show_all,
     net::{Compose, NetworkStreamRef},
     simulation::{
-        animation::ActiveAnimation, metadata::Metadata, EntityReaction, Health, Pitch, Position,
-        Yaw,
+        animation::ActiveAnimation, metadata::StateObserver, EntityReaction, Health, Pitch,
+        Position, Yaw,
     },
     system_registry::SYNC_ENTITY_POSITION,
     util::TracingExt,
 };
 
 #[derive(Component)]
-pub struct SyncPositionModule;
+pub struct EntityStateSyncModule;
 
-impl Module for SyncPositionModule {
+impl Module for EntityStateSyncModule {
     fn module(world: &World) {
         let system_id = SYNC_ENTITY_POSITION;
 
         system!(
-            "sync_position",
+            "entity_state_sync",
             world,
             &Compose($),
             &mut Position,
             &Yaw,
             &Pitch,
             &NetworkStreamRef,
-            &mut Metadata,
+            &mut StateObserver,
             &mut ActiveAnimation,
             &mut PlayerInventory,
             &mut EntityReaction,
@@ -49,7 +49,7 @@ impl Module for SyncPositionModule {
             .multi_threaded()
             .kind::<flecs::pipeline::OnStore>()
             .tracing_each_entity(
-                trace_span!("sync_position"),
+                trace_span!("entity_state_sync"),
                 move |entity,
                       elems: (
                           &Compose,
@@ -57,13 +57,13 @@ impl Module for SyncPositionModule {
                           &Yaw,
                           &Pitch,
                           &NetworkStreamRef,
-                          &mut Metadata,
+                          &mut StateObserver,
                           &mut ActiveAnimation,
                           &mut PlayerInventory,
                           &mut EntityReaction,
                           &mut Health,
                       )| {
-                    let (compose, position, yaw, pitch, io, metadata, animation, inventory, reaction, health) = elems;
+                    let (compose, position, yaw, pitch, io, observer, animation, inventory, reaction, health) = elems;
 
                     let mut run = || {
                         let entity_id = VarInt(entity.minecraft_id());
@@ -134,6 +134,10 @@ impl Module for SyncPositionModule {
                             // };
                             //
                             // compose.unicast(&pkt, io, system_id, &world).unwrap();
+
+
+                            health.
+
                             metadata.health(to);
 
                             if to < from {
@@ -187,7 +191,7 @@ impl Module for SyncPositionModule {
                             }
                         }
 
-                        if let Some(view) = metadata.get_and_clear() {
+                        if let Some(view) = observer.get_and_clear() {
                             let pkt = play::EntityTrackerUpdateS2c {
                                 entity_id,
                                 tracked_values: RawBytes(&view),

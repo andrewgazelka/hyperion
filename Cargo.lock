@@ -1647,6 +1647,7 @@ dependencies = [
  "anyhow",
  "base64",
  "bitfield-struct",
+ "bitflags 2.6.0",
  "bitvec",
  "bumpalo",
  "bvh-region",

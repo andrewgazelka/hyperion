@@ -40,7 +40,6 @@ pub const NUM_THREADS: usize = 8;
 pub const CHUNK_HEIGHT_SPAN: u32 = 384; // 512; // usually 384
 
 use std::{alloc::Allocator, cell::RefCell, fmt::Debug, io::Write, net::ToSocketAddrs, sync::Arc};
-
 use anyhow::{bail, Context};
 use derive_more::{Deref, DerefMut};
 use egress::EgressModule;
@@ -89,6 +88,13 @@ pub mod ingress;
 pub mod net;
 pub mod simulation;
 pub mod storage;
+
+
+/// Tracks previous values
+#[derive(Component, Deref, DerefMut)]
+struct Prev<T: Send + Sync + 'static> {
+    prev: T
+}
 
 pub trait PacketBundle {
     fn encode_including_ids(self, w: impl Write) -> anyhow::Result<()>;

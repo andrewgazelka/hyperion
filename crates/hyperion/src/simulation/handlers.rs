@@ -24,12 +24,12 @@ use super::{
     animation::{self, ActiveAnimation},
     block_bounds,
     blocks::Blocks,
-    metadata::{Metadata, Pose},
+    metadata::{Pose, StateObserver},
     ConfirmBlockSequences, EntitySize, Position,
 };
 use crate::{
     net::{decoder::BorrowedPacketFrame, Compose, NetworkStreamRef},
-    simulation::{aabb, event, event::PluginMessage, Pitch, Yaw},
+    simulation::{aabb, event, event::PluginMessage, metadata::tracked::Observable, Pitch, Yaw},
     storage::Events,
     system_registry::SystemId,
 };
@@ -268,10 +268,11 @@ pub struct PacketSwitchQuery<'a> {
     pub events: &'a Events,
     pub world: &'a World,
     pub blocks: &'a Blocks,
+    pub pose: &'a mut Observable<Pose>,
     pub confirm_block_sequences: &'a mut ConfirmBlockSequences,
     pub system_id: SystemId,
     pub inventory: &'a mut hyperion_inventory::PlayerInventory,
-    pub metadata: &'a mut Metadata,
+    pub observer: &'a mut StateObserver,
     pub animation: &'a mut ActiveAnimation,
     pub crafting_registry: &'a hyperion_crafting::CraftingRegistry,
 }
@@ -307,14 +308,18 @@ fn client_command(mut data: &[u8], query: &mut PacketSwitchQuery<'_>) -> anyhow:
 
     match packet.action {
         ClientCommand::StartSneaking => {
-            query.metadata.pose(Pose::Sneaking);
+            *query.pose.observe(query.observer) = Pose::Sneaking;
         }
         ClientCommand::StopSneaking | ClientCommand::LeaveBed => {
-            query.metadata.pose(Pose::Standing);
+            *query.pose.observe(query.observer) = Pose::Standing;
         }
-        _ => {
-            // todo
-        }
+
+        ClientCommand::StartSprinting => {}
+        ClientCommand::StopSprinting => {}
+        ClientCommand::StartJumpWithHorse => {}
+        ClientCommand::StopJumpWithHorse => {}
+        ClientCommand::OpenHorseInventory => {}
+        ClientCommand::StartFlyingWithElytra => {}
     }
 
     Ok(())

@@ -16,7 +16,7 @@ mod sync_position;
 use player_join::PlayerJoinModule;
 use stats::StatsModule;
 use sync_chunks::SyncChunksModule;
-use sync_position::SyncPositionModule;
+use sync_position::EntityStateSyncModule;
 
 use crate::{
     net::NetworkStreamRef,
@@ -53,7 +53,7 @@ impl Module for EgressModule {
         world.import::<StatsModule>();
         world.import::<PlayerJoinModule>();
         world.import::<SyncChunksModule>();
-        world.import::<SyncPositionModule>();
+        world.import::<EntityStateSyncModule>();
 
         system!(
             "broadcast_chunk_deltas",
