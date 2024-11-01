@@ -42,17 +42,20 @@ use tracing::trace_span;
 pub struct AttackModule;
 
 #[derive(Component, Default, Copy, Clone, Debug)]
+#[meta]
 pub struct ImmuneUntil {
     tick: i64,
 }
 
 #[derive(Component, Default, Copy, Clone, Debug)]
+#[meta]
 pub struct Armor {
     pub armor: f32,
 }
 
 // Used as a component only for commands, does not include armor or weapons
 #[derive(Component, Default, Copy, Clone, Debug)]
+#[meta]
 pub struct CombatStats {
     pub armor: f32,
     pub armor_toughness: f32,
@@ -61,6 +64,7 @@ pub struct CombatStats {
 }
 
 #[derive(Component, Default, Copy, Clone, Debug)]
+#[meta]
 pub struct KillCount {
     pub kill_count: u32,
 }
@@ -68,6 +72,11 @@ pub struct KillCount {
 impl Module for AttackModule {
     #[allow(clippy::excessive_nesting)]
     fn module(world: &World) {
+        world.component::<ImmuneUntil>().meta();
+        world.component::<Armor>().meta();
+        world.component::<CombatStats>().meta();
+        world.component::<KillCount>().meta();
+
         world
             .component::<Player>()
             .add_trait::<(flecs::With, ImmuneUntil)>()

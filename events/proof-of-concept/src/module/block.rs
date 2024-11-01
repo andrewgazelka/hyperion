@@ -49,6 +49,7 @@ impl Module for BlockModule {
     fn module(world: &World) {
         const TOTAL_DESTRUCTION_TIME: Duration = Duration::from_secs(30);
 
+        world.component::<PendingDestruction>();
         world.set(PendingDestruction::default());
 
         system!("handle_pending_air", world, &mut PendingDestruction($), &mut Blocks($), &Compose($))

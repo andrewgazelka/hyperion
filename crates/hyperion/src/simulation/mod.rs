@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use skin::PlayerSkin;
 use uuid;
 
-use crate::{storage::ThreadLocalVec, Global};
+use crate::{simulation::command::Command, storage::ThreadLocalVec, Global};
 
 pub mod animation;
 pub mod blocks;
@@ -116,7 +116,9 @@ impl<K: Eq + Hash, V> DeferredMap<K, V> {
 }
 
 /// The in-game name of a player.
+/// todo: fix the meta
 #[derive(Component, Deref, From, Display, Debug)]
+#[meta]
 pub struct InGameName(Arc<str>);
 
 #[derive(Component, Deref, DerefMut, From, Debug, Default)]
@@ -156,6 +158,7 @@ pub enum PacketState {
 /// This method restores the entity to full health and allows it to be affected
 /// by subsequent health changes.
 #[derive(Component, Debug, PartialEq)]
+#[meta]
 pub struct Health {
     value: f32,
 
@@ -272,6 +275,7 @@ impl Default for Health {
 
 #[derive(Component, Debug, Eq, PartialEq, Default)]
 #[expect(missing_docs)]
+#[meta]
 pub struct ImmuneStatus {
     /// The tick until the player is immune to player attacks.
     pub until: i64,
@@ -339,6 +343,7 @@ pub struct AiTargetable;
     DerefMut,
     From
 )]
+#[meta]
 pub struct Position {
     /// The (x, y, z) position of the entity.
     /// Note we are using [`Vec3`] instead of [`glam::DVec3`] because *cache locality* is important.
@@ -351,6 +356,20 @@ pub struct Yaw {
     yaw: f16,
 }
 
+impl Display for Yaw {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let yaw = self.yaw as f32;
+        write!(f, "{yaw}")
+    }
+}
+
+impl Display for Pitch {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let pitch = self.pitch as f32;
+        write!(f, "{pitch}")
+    }
+}
+
 #[derive(Component, Copy, Clone, Debug, Deref, DerefMut, Default)]
 pub struct Pitch {
     pitch: f16,
@@ -359,10 +378,19 @@ pub struct Pitch {
 const PLAYER_WIDTH: f16 = 0.6;
 const PLAYER_HEIGHT: f16 = 1.8;
 
-#[derive(Component, Copy, Clone)]
+#[derive(Component, Copy, Clone, Debug)]
+#[meta]
 pub struct EntitySize {
     pub half_width: f16,
     pub height: f16,
+}
+
+impl Display for EntitySize {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let half_width = self.half_width as f32;
+        let height = self.height as f32;
+        write!(f, "{half_width}x{height}")
+    }
 }
 
 impl Default for EntitySize {
@@ -383,8 +411,10 @@ impl Position {
 }
 
 #[derive(Component, Debug, Copy, Clone)]
-#[expect(missing_docs)]
-pub struct ChunkPosition(pub IVec2);
+#[meta]
+pub struct ChunkPosition {
+    pub position: IVec2,
+}
 
 const SANE_MAX_RADIUS: i32 = 128;
 
@@ -393,7 +423,9 @@ impl ChunkPosition {
     #[expect(missing_docs)]
     pub const fn null() -> Self {
         // todo: huh
-        Self(IVec2::new(SANE_MAX_RADIUS, SANE_MAX_RADIUS))
+        Self {
+            position: IVec2::new(SANE_MAX_RADIUS, SANE_MAX_RADIUS),
+        }
     }
 }
 
@@ -441,6 +473,7 @@ impl Position {
 /// - Therefore, we have an [`EntityReaction`] component which is used to store the reaction of an entity to collisions.
 /// - Later we can apply the reaction to the entity's [`Position`] to move the entity.
 #[derive(Component, Default, Debug)]
+#[meta]
 pub struct EntityReaction {
     /// The velocity of the entity.
     pub velocity: Vec3,
@@ -451,15 +484,36 @@ pub struct SimModule;
 
 impl Module for SimModule {
     fn module(world: &World) {
-        world.component::<Position>();
+        world.component::<PlayerSkin>();
+        world.component::<Command>();
+
+        component!(world, EntitySize).opaque_func(meta_ser_stringify_type_display::<EntitySize>);
+        component!(world, IVec3 {
+            x: i32,
+            y: i32,
+            z: i32
+        });
+        component!(world, Vec3 {
+            x: f32,
+            y: f32,
+            z: f32
+        });
+
+        component!(world, IgnMap);
+
+        world.component::<Position>().meta();
+
         world.component::<Player>();
+
         world.component::<InGameName>();
+        component!(world, InGameName).opaque_func(meta_ser_stringify_type_display::<InGameName>);
+
         world.component::<AiTargetable>();
-        world.component::<ImmuneStatus>();
+        world.component::<ImmuneStatus>().meta();
         world.component::<Uuid>();
-        world.component::<Health>();
-        world.component::<ChunkPosition>();
-        world.component::<EntityReaction>();
+        world.component::<Health>().meta();
+        world.component::<ChunkPosition>().meta();
+        world.component::<EntityReaction>().meta();
         world.component::<Play>();
         world.component::<ConfirmBlockSequences>();
         world.component::<metadata::Metadata>();

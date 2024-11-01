@@ -98,6 +98,8 @@ pub fn parse_perms_command(input: &str) -> IResult<&str, Command<'_>> {
 
 impl Module for PermissionModule {
     fn module(world: &World) {
+        world.component::<Group>();
+        world.component::<storage::PermissionStorage>();
         cmd_with(world, "perms", |scope| {
             scope.literal_with("set", |scope| {
                 scope.argument_with(

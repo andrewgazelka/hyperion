@@ -118,8 +118,8 @@ impl Module for EgressModule {
                     stream.push(io.inner());
 
                     let position = hyperion_proto::ChunkPosition {
-                        x: i16::try_from(pos.0.x).unwrap(),
-                        z: i16::try_from(pos.0.y).unwrap(),
+                        x: i16::try_from(pos.position.x).unwrap(),
+                        z: i16::try_from(pos.position.y).unwrap(),
                     };
 
                     positions.push(position);

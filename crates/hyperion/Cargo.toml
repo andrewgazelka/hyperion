@@ -35,6 +35,7 @@ fastrand.workspace = true
 flecs_ecs.workspace = true
 heapless.workspace = true
 heed.workspace = true
+hex.workspace = true
 hyperion-crafting.workspace = true
 hyperion-event-macros.workspace = true
 hyperion-inventory.workspace = true

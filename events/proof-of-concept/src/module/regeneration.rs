@@ -12,6 +12,7 @@ use hyperion::{
 pub struct RegenerationModule;
 
 #[derive(Component, Default, Copy, Clone, Debug)]
+#[meta]
 pub struct LastDamaged {
     pub tick: i64,
 }
@@ -19,6 +20,8 @@ pub struct LastDamaged {
 impl Module for RegenerationModule {
     #[allow(clippy::excessive_nesting)]
     fn module(world: &World) {
+        world.component::<LastDamaged>().meta();
+
         world
             .component::<Player>()
             .add_trait::<(flecs::With, LastDamaged)>(); // todo: how does this even call Default? (IndraDb)

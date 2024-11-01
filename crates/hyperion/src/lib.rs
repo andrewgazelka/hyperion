@@ -46,6 +46,7 @@ use derive_more::{Deref, DerefMut};
 use egress::EgressModule;
 use flecs_ecs::prelude::*;
 pub use glam;
+use glam::IVec2;
 use ingress::IngressModule;
 #[cfg(unix)]
 use libc::{getrlimit, setrlimit, RLIMIT_NOFILE};
@@ -77,7 +78,9 @@ pub use valence_ident;
 
 pub use crate::simulation::command::CommandScope;
 use crate::{
-    simulation::{EntitySize, IgnMap, Player},
+    ingress::PendingRemove,
+    net::{proxy::ReceiveState, NetworkStreamRef, PacketDecoder},
+    simulation::{EgressComm, EntitySize, IgnMap, PacketState, Player},
     util::mojang::ApiProvider,
 };
 
@@ -192,7 +195,7 @@ impl Hyperion {
         let world = World::new();
 
         let world = Box::new(world);
-        let world = Box::leak(world);
+        let world: &World = Box::leak(world);
 
         let mut app = world.app();
 
@@ -208,20 +211,37 @@ impl Hyperion {
             .next()
             .context("could not get first address")?;
 
+        component!(world, IVec2 { x: i32, y: i32 });
+        world.component::<PendingRemove>();
+
+        world.component::<Yaw>();
+        component!(world, Yaw).opaque_func(meta_ser_stringify_type_display::<Yaw>);
+
+        world.component::<Pitch>();
+        component!(world, Pitch).opaque_func(meta_ser_stringify_type_display::<Pitch>);
+
+        world.component::<PacketDecoder>();
+
+        world.component::<PacketState>();
+
+        world.component::<NetworkStreamRef>();
+        world.component::<ReceiveState>();
+        world.component::<Compose>();
+        world.component::<CraftingRegistry>();
+
         world.component::<LocalDb>();
         world.component::<SkinHandler>();
         world.component::<MojangClient>();
         world.component::<Events>();
-
+        world.component::<Comms>();
+        world.component::<EgressComm>();
+        world.component::<Blocks>();
+        world.component::<AsyncRuntime>();
+        world.component::<StreamLookup>();
         world.component::<EntitySize>();
+        world.component::<IgnMap>();
 
-        world.set(IgnMap::default());
-
-        world
-            .component::<Player>()
-            .add_trait::<(flecs::With, EntitySize)>()
-            .add_trait::<(flecs::With, Yaw)>()
-            .add_trait::<(flecs::With, Pitch)>();
+        world.component::<config::Config>();
 
         info!("starting hyperion");
         let config = config::Config::load("run/config.toml")?;
@@ -229,6 +249,7 @@ impl Hyperion {
 
         let runtime = AsyncRuntime::default();
 
+        world.component::<GlobalEventHandlers>();
         world.set(GlobalEventHandlers::default());
 
         info!("initializing database");
@@ -276,6 +297,14 @@ impl Hyperion {
         world.import::<SimModule>();
         world.import::<EgressModule>();
         world.import::<IngressModule>();
+
+        world
+            .component::<Player>()
+            .add_trait::<(flecs::With, EntitySize)>()
+            .add_trait::<(flecs::With, Yaw)>()
+            .add_trait::<(flecs::With, Pitch)>();
+
+        world.set(IgnMap::default());
 
         handlers(world);
 
