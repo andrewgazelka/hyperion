@@ -124,10 +124,6 @@ pub struct InGameName(Arc<str>);
 #[derive(Component, Deref, DerefMut, From, Debug, Default)]
 pub struct IgnMap(DeferredMap<Arc<str>, Entity>);
 
-/// This component is added to all players once they reach the play state. See [`PacketState::Play`].
-#[derive(Component, Default)]
-pub struct Play;
-
 /// A component that represents a Player. In the future, this should be broken up into multiple components.
 ///
 /// Why should it be broken up? The more things are broken up, the more we can take advantage of Rust borrowing rules.
@@ -514,7 +510,6 @@ impl Module for SimModule {
         world.component::<Health>().meta();
         world.component::<ChunkPosition>().meta();
         world.component::<EntityReaction>().meta();
-        world.component::<Play>();
         world.component::<ConfirmBlockSequences>();
         world.component::<metadata::Metadata>();
         world.component::<animation::ActiveAnimation>();

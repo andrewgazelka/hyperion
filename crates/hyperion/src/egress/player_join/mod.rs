@@ -21,7 +21,7 @@ use valence_registry::{BiomeRegistry, RegistryCodec};
 use valence_server::entity::EntityKind;
 use valence_text::IntoText;
 
-use crate::simulation::Pitch;
+use crate::simulation::{PacketState, Pitch};
 
 mod list;
 pub use list::*;
@@ -35,7 +35,7 @@ use crate::{
         command::{get_command_packet, Command, ROOT_COMMAND},
         skin::PlayerSkin,
         util::registry_codec_raw,
-        Comms, InGameName, Play, Position, Uuid, Yaw,
+        Comms, InGameName, Position, Uuid, Yaw,
     },
     system_registry::{SystemId, PLAYER_JOINS},
     util::{SendableQuery, SendableRef},
@@ -622,7 +622,7 @@ impl Module for PlayerJoinModule {
                 let entity = world.entity_from_id(entity);
                 entity.set(skin);
 
-                entity.add::<Play>();
+                entity.add_enum(PacketState::Play);
             });
         });
     }

@@ -15,6 +15,7 @@ const CHAT_COOLDOWN_SECONDS: i64 = 15; // 15 seconds
 const CHAT_COOLDOWN_TICKS: i64 = CHAT_COOLDOWN_SECONDS * 20; // Convert seconds to ticks
 
 #[derive(Default, Component)]
+#[meta]
 pub struct ChatCooldown {
     pub expires: i64,
 }
@@ -26,7 +27,7 @@ impl Module for ChatModule {
     fn module(world: &World) {
         let system_id = SystemId(8);
 
-        world.component::<ChatCooldown>();
+        world.component::<ChatCooldown>().meta();
 
         world
             .component::<Player>()

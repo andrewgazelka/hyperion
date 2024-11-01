@@ -14,7 +14,7 @@ use crate::{
     net::{Compose, DataBundle, NetworkStreamRef},
     simulation::{
         blocks::{Blocks, GetChunk},
-        ChunkPosition, Play, Position,
+        ChunkPosition, PacketState, Position,
     },
     system_registry::{GENERATE_CHUNK_CHANGES, SEND_FULL_LOADED_CHUNKS},
     util::TracingExt,
@@ -49,7 +49,7 @@ impl Module for SyncChunksModule {
             &NetworkStreamRef,
             &mut ChunkSendQueue,
         )
-        .with::<Play>()
+        .with_enum(PacketState::Play)
         .kind::<flecs::pipeline::OnUpdate>()
         .multi_threaded()
         .tracing_each_entity(
@@ -168,7 +168,7 @@ impl Module for SyncChunksModule {
         let system_id = SEND_FULL_LOADED_CHUNKS;
 
         system!("send_full_loaded_chunks", world, &Blocks($), &Compose($), &NetworkStreamRef, &mut ChunkSendQueue)
-            .with::<Play>()
+            .with_enum(PacketState::Play)
             .kind::<flecs::pipeline::OnUpdate>()
             .multi_threaded()
             .each_entity(

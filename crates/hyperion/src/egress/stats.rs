@@ -3,7 +3,7 @@ use tracing::{error, trace_span};
 
 use crate::{
     net::Compose,
-    simulation::{blocks::Blocks, Play},
+    simulation::{blocks::Blocks, PacketState},
 };
 
 #[derive(Component)]
@@ -11,7 +11,7 @@ pub struct StatsModule;
 
 impl Module for StatsModule {
     fn module(world: &World) {
-        let players = world.new_query::<&Play>();
+        let players = world.query::<()>().with_enum(PacketState::Play).build();
 
         // let last_frame_time_total = 0.0;
 
