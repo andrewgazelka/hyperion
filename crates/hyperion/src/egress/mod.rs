@@ -172,7 +172,7 @@ impl Module for EgressModule {
         )
         .kind_id(pipeline)
         .each(move |(compose, gametick_span)| {
-            let span = tracing::info_span!("clear_bump");
+            let span = info_span!("clear_bump");
             let _enter = span.enter();
 
             for bump in &mut compose.bump {

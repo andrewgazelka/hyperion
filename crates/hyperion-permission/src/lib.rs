@@ -46,6 +46,7 @@ use nom::{
     sequence::preceded,
     IResult, Parser as NomParser,
 };
+use tracing::info_span;
 
 fn parse_group(input: &str) -> IResult<&str, Group> {
     let banned = value(Group::Banned, tag("banned"));
@@ -143,7 +144,11 @@ impl Module for PermissionModule {
         system!("perms_command", world, &Compose($), &mut EventQueue<event::Command<'_>>($), &IgnMap($))
             .kind::<flecs::pipeline::OnUpdate>()
             .each_iter(move |it: TableIter<'_, false>, _, (compose, queue, ign_map)| {
+                let span = info_span!("perms_command");
+                let _enter = span.enter();
+
                 let world = it.world();
+
 
                 for command in queue.drain() {
                     let by = command.by;

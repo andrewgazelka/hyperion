@@ -8,6 +8,7 @@ use hyperion::{
     system_registry::SystemId,
     valence_protocol::{packets::play, text::IntoText},
 };
+use tracing::info_span;
 
 #[derive(Component)]
 pub struct StatsModule;
@@ -23,6 +24,8 @@ impl Module for StatsModule {
         system!("stats", world, &Compose($))
             .multi_threaded()
             .each_iter(move |it, _, compose| {
+                let span = info_span!("stats");
+                let _enter = span.enter();
                 let world = it.world();
                 let player_count = compose
                     .global()

@@ -124,7 +124,7 @@ pub fn initiate_player_connection(
                 if outgoing_packet.is_shutdown() {
                     return;
                 }
-                
+
                 if outgoing_packet.is_flush() {
                     let time_start = std::time::Instant::now();
                     if let Err(e) = packet_writer.flush_pending_packets().await {
