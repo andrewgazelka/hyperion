@@ -3,7 +3,7 @@ use std::cmp::Ordering;
 use derive_more::derive::{Deref, DerefMut};
 use flecs_ecs::prelude::*;
 use glam::IVec2;
-use tracing::{error, trace_span};
+use tracing::{error, info_span};
 use valence_protocol::{
     packets::play::{self},
     ChunkPos,
@@ -50,7 +50,7 @@ impl Module for SyncChunksModule {
         .kind::<flecs::pipeline::OnUpdate>()
         .multi_threaded()
         .tracing_each_entity(
-            trace_span!("generate_chunk_changes"),
+            info_span!("generate_chunk_changes"),
             move |entity, (compose, last_sent, pose, &stream_id, chunk_changes)| {
                 let world = entity.world();
 
@@ -168,7 +168,8 @@ impl Module for SyncChunksModule {
             .with_enum(PacketState::Play)
             .kind::<flecs::pipeline::OnUpdate>()
             .multi_threaded()
-            .each_entity(
+            .tracing_each_entity(
+                info_span!("send_full_loaded_chunks"),
                 move |entity, (chunks, compose, &stream_id, queue)| {
                     const MAX_CHUNKS_PER_TICK: usize = 16;
 

@@ -17,7 +17,7 @@
     clippy::future_not_send
 )]
 
-use std::{fmt::Debug, sync::atomic::AtomicBool};
+use std::fmt::Debug;
 
 use anyhow::Context;
 use colored::Colorize;
@@ -195,10 +195,7 @@ async fn connect_to_server_and_run_proxy(
 
         // todo: re-add bounding but issues if have MASSIVE number of packets
         let (tx, rx) = kanal::bounded_async(MAX_PLAYER_PENDING_MESSAGES);
-        registry.insert(player_id_on, PlayerHandle {
-            writer: tx,
-            can_receive_broadcasts: AtomicBool::new(false),
-        });
+        registry.insert(player_id_on, PlayerHandle::new(tx));
 
         // todo: some SlotMap like thing
         debug!("got player with id {player_id_on:?}");

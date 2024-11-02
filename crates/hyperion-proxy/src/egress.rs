@@ -1,4 +1,4 @@
-use std::sync::{atomic::Ordering, Arc};
+use std::sync::Arc;
 
 use bvh::{Aabb, Bvh};
 use bytes::Bytes;
@@ -84,7 +84,7 @@ impl Egress {
                     // imo it makes sense to read once... it is a fast loop
                     #[allow(clippy::significant_drop_in_scrutinee)]
                     for (player_id, player) in &players {
-                        if !player.can_receive_broadcasts.load(Ordering::Relaxed) {
+                        if !player.can_receive_broadcasts() {
                             continue;
                         }
 
@@ -94,21 +94,10 @@ impl Egress {
                             exclusions.clone(),
                         );
 
-                        match player.writer.try_send(to_send) {
-                            Ok(true) => {} // success
-                            Ok(false) => {
-                                // player is disconnect
-                                if let Some(result) = players.remove(player_id) {
-                                    result.shutdown();
-                                }
-
-                                warn!("Failed to send data to player due to channel being full");
-                            }
-                            Err(e) => {
-                                warn!("Failed to send data to player: {:?}", e);
-                                if let Some(result) = players.remove(player_id) {
-                                    result.shutdown();
-                                }
+                        if let Err(e) = player.send(to_send) {
+                            warn!("Failed to send data to player: {:?}", e);
+                            if let Some(result) = players.remove(player_id) {
+                                result.shutdown();
                             }
                         }
                     }
@@ -125,20 +114,10 @@ impl Egress {
         tokio::spawn(
             async move {
                 for (id, player) in &players {
-                    match player.writer.try_send(OrderedBytes::FLUSH) {
-                        Ok(true) => {} // success
-                        Ok(false) => {
-                            // player is disconnect
-                            if let Some(result) = players.remove(id) {
-                                result.shutdown();
-                            }
-                            warn!("Failed to send data to player due to channel being full");
-                        }
-                        Err(e) => {
-                            warn!("Failed to send data to player: {:?}", e);
-                            if let Some(result) = players.remove(id) {
-                                result.shutdown();
-                            }
+                    if let Err(e) = player.send(OrderedBytes::FLUSH) {
+                        warn!("Failed to send data to player: {:?}", e);
+                        if let Some(result) = players.remove(id) {
+                            result.shutdown();
                         }
                     }
                 }
@@ -171,7 +150,7 @@ impl Egress {
                             continue;
                         };
 
-                        if !player.can_receive_broadcasts.load(Ordering::Relaxed) {
+                        if !player.can_receive_broadcasts() {
                             continue;
                         }
 
@@ -198,22 +177,10 @@ impl Egress {
                                 exclusions: Some(exclusions.clone()),
                             };
 
-                            match player.writer.try_send(to_send) {
-                                Ok(true) => {} // success
-                                Ok(false) => {
-                                    // player is disconnect
-                                    if let Some(result) = players.remove(id) {
-                                        result.shutdown();
-                                    }
-                                    warn!(
-                                        "Failed to send data to player due to channel being full"
-                                    );
-                                }
-                                Err(e) => {
-                                    warn!("Failed to send data to player: {:?}", e);
-                                    if let Some(result) = players.remove(id) {
-                                        result.shutdown();
-                                    }
+                            if let Err(e) = player.send(to_send) {
+                                warn!("Failed to send data to player: {:?}", e);
+                                if let Some(result) = players.remove(id) {
+                                    result.shutdown();
                                 }
                             }
                         }
@@ -249,20 +216,10 @@ impl Egress {
         };
 
         // todo: handle error; kick player if cannot send (buffer full)
-        match player.writer.try_send(ordered) {
-            Ok(true) => {} // success
-            Ok(false) => {
-                // player is disconnect
-                if let Some(result) = players.remove(&id) {
-                    result.shutdown();
-                }
-                warn!("Failed to send data to player due to channel being full");
-            }
-            Err(e) => {
-                warn!("Failed to send data to player: {:?}", e);
-                if let Some(result) = players.remove(&id) {
-                    result.shutdown();
-                }
+        if let Err(e) = player.send(ordered) {
+            warn!("Failed to send data to player: {:?}", e);
+            if let Some(result) = players.remove(&id) {
+                result.shutdown();
             }
         }
 
@@ -280,6 +237,6 @@ impl Egress {
             return;
         };
 
-        player.can_receive_broadcasts.store(true, Ordering::Relaxed);
+        player.enable_receive_broadcasts();
     }
 }

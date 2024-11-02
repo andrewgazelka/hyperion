@@ -13,6 +13,7 @@ rustc_version.workspace = true
 colored = "2.1.0"
 flate2 = {workspace = true, features = ["zlib-ng"]}
 glam = {workspace = true, features = ["serde"]}
+replace_with = "0.1.7"
 rkyv = "0.8.8"
 roaring = {workspace = true, features = ["simd"]}
 serde = {workspace = true, features = ["derive"]}

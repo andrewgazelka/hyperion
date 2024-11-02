@@ -2,7 +2,7 @@ use byteorder::WriteBytesExt;
 use flecs_ecs::prelude::*;
 use hyperion_proto::{Flush, ServerToProxyMessage, UpdatePlayerChunkPositions};
 use rkyv::util::AlignedVec;
-use tracing::{error, trace_span};
+use tracing::{error, info_span};
 use valence_protocol::{packets::play, VarInt};
 
 use crate::{net::Compose, simulation::EgressComm};
@@ -19,6 +19,7 @@ use sync_chunks::SyncChunksModule;
 use sync_position::SyncPositionModule;
 
 use crate::{
+    ingress::GametickSpan,
     net::NetworkStreamRef,
     simulation::{blocks::Blocks, ChunkPosition},
     system_registry::SystemId,
@@ -64,7 +65,7 @@ impl Module for EgressModule {
         .multi_threaded()
         .kind::<flecs::pipeline::OnUpdate>()
         .each_iter(move |it: TableIter<'_, false>, _, (compose, mc)| {
-            let span = trace_span!("broadcast_chunk_deltas");
+            let span = info_span!("broadcast_chunk_deltas");
             let _enter = span.enter();
 
             let world = it.world();
@@ -104,11 +105,11 @@ impl Module for EgressModule {
         )
         .kind_id(pipeline)
         .each(move |(compose, egress)| {
-            let span = trace_span!("egress");
+            let span = info_span!("egress");
             let _enter = span.enter();
 
             {
-                let span = trace_span!("chunk_positions");
+                let span = info_span!("chunk_positions");
                 let _enter = span.enter();
 
                 let mut stream = Vec::new();
@@ -167,15 +168,24 @@ impl Module for EgressModule {
             "clear_bump",
             world,
             &mut Compose($),
+            &mut GametickSpan($)
         )
         .kind_id(pipeline)
-        .each(move |compose| {
-            let span = tracing::trace_span!("clear_bump");
+        .each(move |(compose, gametick_span)| {
+            let span = tracing::info_span!("clear_bump");
             let _enter = span.enter();
 
             for bump in &mut compose.bump {
                 bump.reset();
             }
+
+            replace_with::replace_with_or_abort(gametick_span, |span| {
+                let GametickSpan::Entered(span) = span else {
+                    panic!("gametick_span should be exited");
+                };
+
+                GametickSpan::Exited(span.exit())
+            });
         });
     }
 }

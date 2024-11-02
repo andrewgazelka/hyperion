@@ -30,7 +30,7 @@ use crate::{
     config::Config,
     egress::metadata::show_all,
     ingress::PendingRemove,
-    net::{Compose, NetworkStreamRef},
+    net::{Compose, DataBundle, NetworkStreamRef},
     simulation::{
         command::{get_command_packet, Command, ROOT_COMMAND},
         skin::PlayerSkin,
@@ -64,6 +64,8 @@ pub fn player_join_world(
     config: &Config,
 ) -> anyhow::Result<()> {
     static CACHED_DATA: once_cell::sync::OnceCell<bytes::Bytes> = once_cell::sync::OnceCell::new();
+
+    let mut bundle = DataBundle::new(compose);
 
     let id = entity.minecraft_id();
 
@@ -100,8 +102,8 @@ pub fn player_join_world(
         is_debug: false,
     };
 
-    compose
-        .unicast(&pkt, io, system_id, world)
+    bundle
+        .add_packet(&pkt, world)
         .context("failed to send player spawn packet")?;
 
     let center_chunk = position.to_chunk();
@@ -111,7 +113,7 @@ pub fn player_join_world(
         chunk_z: center_chunk.y.into(),
     };
 
-    compose.unicast(&pkt, io, system_id, world)?;
+    bundle.add_packet(&pkt, world)?;
 
     // let chunk = blocks.get_and_wait(center_chunk);
     // let chunk = tasks.block_on(chunk);
@@ -123,7 +125,7 @@ pub fn player_join_world(
         angle: **yaw as f32,
     };
 
-    compose.unicast(&pkt, io, system_id, world)?;
+    bundle.add_packet(&pkt, world)?;
 
     let cached_data = CACHED_DATA
         .get_or_init(|| {
@@ -147,9 +149,7 @@ pub fn player_join_world(
         })
         .clone();
 
-    compose
-        .io_buf()
-        .unicast_raw(&cached_data, io, system_id, world);
+    bundle.add_raw(&cached_data);
 
     let text = play::GameMessageS2c {
         chat: format!("{name} joined the world").into_cow_text(),
@@ -161,20 +161,16 @@ pub fn player_join_world(
         .send(world)
         .context("failed to send player join message")?;
 
-    compose
-        .unicast(
-            &play::PlayerPositionLookS2c {
-                position: position.as_dvec3(),
-                yaw: **yaw as f32,
-                pitch: **pitch as f32,
-                flags: PlayerPositionLookFlags::default(),
-                teleport_id: 1.into(),
-            },
-            io,
-            system_id,
-            world,
-        )
-        .context("failed to send player position and look packet")?;
+    bundle.add_packet(
+        &play::PlayerPositionLookS2c {
+            position: position.as_dvec3(),
+            yaw: **yaw as f32,
+            pitch: **pitch as f32,
+            flags: PlayerPositionLookFlags::default(),
+            teleport_id: 1.into(),
+        },
+        world,
+    )?;
 
     let mut entries = Vec::new();
     let mut all_player_names = Vec::new();
@@ -184,7 +180,7 @@ pub fn player_join_world(
     info!("sending skins for {count} players");
 
     {
-        let scope = tracing::trace_span!("generating_skins");
+        let scope = tracing::info_span!("generating_skins");
         let _enter = scope.enter();
         query
             .iter_stage(world)
@@ -216,23 +212,19 @@ pub fn player_join_world(
         .with_update_display_name(true);
 
     {
-        let scope = tracing::trace_span!("unicasting_player_list");
+        let scope = tracing::info_span!("unicasting_player_list");
         let _enter = scope.enter();
-        compose
-            .unicast(
-                &PlayerListS2c {
-                    actions,
-                    entries: Cow::Owned(entries),
-                },
-                io,
-                system_id,
-                world,
-            )
-            .context("failed to send player list packet")?;
+        bundle.add_packet(
+            &PlayerListS2c {
+                actions,
+                entries: Cow::Owned(entries),
+            },
+            world,
+        )?;
     }
 
     {
-        let scope = tracing::trace_span!("sending_player_spawns");
+        let scope = tracing::info_span!("sending_player_spawns");
         let _enter = scope.enter();
 
         // todo(Indra): this is a bit awkward.
@@ -242,7 +234,7 @@ pub fn player_join_world(
         query
             .iter_stage(world)
             .each_iter(|it, idx, (uuid, _, position, yaw, pitch, _)| {
-                let result = || {
+                let mut result = || {
                     let query_entity = it.entity(idx);
 
                     if entity.id() == query_entity.id() {
@@ -257,13 +249,13 @@ pub fn player_join_world(
                         pitch: ByteAngle::from_degrees(**pitch as f32),
                     };
 
-                    compose
-                        .unicast(&pkt, io, system_id, world)
+                    bundle
+                        .add_packet(&pkt, world)
                         .context("failed to send player spawn packet")?;
 
                     let show_all = show_all(query_entity.minecraft_id());
-                    compose
-                        .unicast(show_all.borrow_packet(), io, system_id, world)
+                    bundle
+                        .add_packet(show_all.borrow_packet(), world)
                         .context("failed to send player spawn packet")?;
 
                     Ok(())
@@ -316,8 +308,8 @@ pub fn player_join_world(
         .broadcast(&pkt, system_id)
         .send(world)
         .context("failed to send player list packet")?;
-    compose
-        .unicast(&pkt, io, system_id, world)
+    bundle
+        .add_packet(&pkt, world)
         .context("failed to send player list packet")?;
 
     let player_name = vec![name];
@@ -357,25 +349,23 @@ pub fn player_join_world(
         .send(world)
         .context("failed to send show all packet")?;
 
-    compose
-        .unicast(
+    bundle
+        .add_packet(
             &play::TeamS2c {
                 team_name: "no_tag",
                 mode: Mode::AddEntities {
                     entities: all_player_names,
                 },
             },
-            io,
-            system_id,
             world,
         )
         .context("failed to send team packet")?;
 
     let command_packet = get_command_packet(world, root_command);
 
-    compose
-        .unicast(&command_packet, io, system_id, world)
-        .context("failed to send command packet")?;
+    bundle.add_packet(&command_packet, world)?;
+
+    bundle.send(world, io, system_id)?;
 
     info!("{name} joined the world");
 
@@ -558,7 +548,7 @@ impl Module for PlayerJoinModule {
         )
         .kind::<flecs::pipeline::PreUpdate>()
         .each(move |(comms, compose, crafting_registry, config)| {
-            let span = tracing::trace_span!("joins");
+            let span = tracing::info_span!("joins");
             let _enter = span.enter();
 
             let mut skins = Vec::new();

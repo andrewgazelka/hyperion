@@ -1,5 +1,5 @@
 use flecs_ecs::prelude::*;
-use tracing::{error, trace_span};
+use tracing::{error, info_span};
 
 use crate::{
     net::Compose,
@@ -43,7 +43,7 @@ impl Module for StatsModule {
         )
         .kind::<flecs::pipeline::OnUpdate>()
         .each_iter(|_iter, _, blocks| {
-            let span = trace_span!("load_pending");
+            let span = info_span!("load_pending");
             let _enter = span.enter();
             blocks.load_pending();
         });

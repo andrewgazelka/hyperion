@@ -80,7 +80,6 @@ impl Module for SpawnModule {
                     .or_insert_with(|| find_spawn_position(blocks, runtime, &avoid_blocks));
 
                 entity.set(Position::from(position));
-                println!("got uuid: {uuid:?}");
             }
         });
 
@@ -103,7 +102,6 @@ fn find_spawn_position(
 
     for _ in 0..MAX_TRIES {
         let chunk = random_chunk_in_radius();
-        println!("random chunk {chunk:?}");
         if let Some(pos) = try_chunk_for_spawn(chunk, blocks, runtime, avoid_blocks) {
             return pos;
         }
