@@ -138,8 +138,9 @@ impl PlayerHandle {
             Ok(true) => Ok(()),
 
             Ok(false) => {
+                let is_full = self.writer.is_full();
                 self.shutdown();
-                bail!("failed to send packet to player, channel is full");
+                bail!("failed to send packet to player, channel is full: {is_full}");
             }
             Err(e) => {
                 self.writer.close();
