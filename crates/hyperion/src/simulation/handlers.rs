@@ -29,7 +29,7 @@ use super::{
 };
 use crate::{
     net::{decoder::BorrowedPacketFrame, Compose, NetworkStreamRef},
-    simulation::{aabb, event, event::PluginMessage, metadata::tracked::Observable, Pitch, Yaw},
+    simulation::{aabb, event, event::PluginMessage, Pitch, Yaw},
     storage::Events,
     system_registry::SystemId,
 };
@@ -268,7 +268,7 @@ pub struct PacketSwitchQuery<'a> {
     pub events: &'a Events,
     pub world: &'a World,
     pub blocks: &'a Blocks,
-    pub pose: &'a mut Observable<Pose>,
+    pub pose: &'a mut Pose,
     pub confirm_block_sequences: &'a mut ConfirmBlockSequences,
     pub system_id: SystemId,
     pub inventory: &'a mut hyperion_inventory::PlayerInventory,
@@ -308,18 +308,17 @@ fn client_command(mut data: &[u8], query: &mut PacketSwitchQuery<'_>) -> anyhow:
 
     match packet.action {
         ClientCommand::StartSneaking => {
-            *query.pose.observe(query.observer) = Pose::Sneaking;
+            *query.pose = Pose::Sneaking;
         }
         ClientCommand::StopSneaking | ClientCommand::LeaveBed => {
-            *query.pose.observe(query.observer) = Pose::Standing;
+            *query.pose = Pose::Standing;
         }
-
-        ClientCommand::StartSprinting => {}
-        ClientCommand::StopSprinting => {}
-        ClientCommand::StartJumpWithHorse => {}
-        ClientCommand::StopJumpWithHorse => {}
-        ClientCommand::OpenHorseInventory => {}
-        ClientCommand::StartFlyingWithElytra => {}
+        ClientCommand::StartSprinting
+        | ClientCommand::StopSprinting
+        | ClientCommand::StartJumpWithHorse
+        | ClientCommand::StopJumpWithHorse
+        | ClientCommand::OpenHorseInventory
+        | ClientCommand::StartFlyingWithElytra => {}
     }
 
     Ok(())

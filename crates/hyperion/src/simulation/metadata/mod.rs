@@ -1,12 +1,11 @@
-use std::{cell::UnsafeCell, ops::Deref};
+use std::cell::UnsafeCell;
 
 use bitfield_struct::bitfield;
+use derive_more::Deref;
 use flecs_ecs::macros::Component;
 use valence_protocol::{Encode, VarInt};
 
 use crate::simulation::metadata::r#type::MetadataType;
-
-pub mod tracked;
 
 #[derive(Component, Debug, Default)]
 // index (u8), type (varint), value (varies)
@@ -71,10 +70,11 @@ impl Metadata for AirSupply {
     }
 }
 
-#[derive(Encode, Clone, Copy)]
+#[derive(Encode, Clone, Copy, Default)]
 #[repr(u8)]
 #[derive(Component)]
 pub enum Pose {
+    #[default]
     Standing,
     FallFlying,
     Sleeping,

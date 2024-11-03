@@ -36,6 +36,7 @@ use crate::{
     storage::{Events, GlobalEventHandlers, PlayerJoinServer, SkinHandler},
     system_registry::{SystemId, RECV_DATA, REMOVE_PLAYER_FROM_VISIBILITY},
     util::{mojang::MojangClient, SendableRef, TracingExt},
+    Prev,
 };
 
 #[derive(Component, Debug)]
@@ -179,10 +180,12 @@ fn process_login(
         .add::<AiTargetable>()
         .set(ImmuneStatus::default())
         .set(Uuid::from(uuid))
-        .set(Health::default())
-        .set(ChunkSendQueue::default())
+        .set(Prev(Health::default()))
+        .add::<Pose>()
+        .add::<Health>()
+        .add::<ChunkSendQueue>()
+        .add::<EntityReaction>()
         .set(ChunkPosition::null())
-        .set(EntityReaction::default())
         .set_name(&name);
 
     compose.io_buf().set_receive_broadcasts(stream_id, world);
@@ -464,7 +467,7 @@ impl Module for IngressModule {
             &mut PacketDecoder,
             &mut PacketState,
             &NetworkStreamRef,
-            &Pose,
+            ?&mut Pose,
             &Events($),
             &EntitySize,
             ?&mut Position,
@@ -493,7 +496,7 @@ impl Module for IngressModule {
                 decoder,
                 login_state,
                 &io_ref,
-                pose,
+                mut pose,
                 event_queue,
                 size,
                 mut position,
@@ -594,7 +597,7 @@ impl Module for IngressModule {
                             // Transitioning to play is just a way to make sure that the player is officially in play before we start sending them play packets.
                             // We have a certain duration that we wait before doing this.
                             // todo: better way?
-                            if let Some(position) = &mut position {
+                            if let Some((position, pose)) = position.as_mut().zip(pose.as_mut()) {
                                 let world = &world;
 
                                 let mut query = PacketSwitchQuery {

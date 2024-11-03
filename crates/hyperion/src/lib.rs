@@ -92,9 +92,7 @@ pub mod storage;
 
 /// Tracks previous values
 #[derive(Component, Deref, DerefMut)]
-struct Prev<T: Send + Sync + 'static> {
-    prev: T
-}
+pub struct Prev<T: ComponentId>(pub T);
 
 pub trait PacketBundle {
     fn encode_including_ids(self, w: impl Write) -> anyhow::Result<()>;

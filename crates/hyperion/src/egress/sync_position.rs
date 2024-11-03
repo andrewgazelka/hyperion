@@ -6,9 +6,9 @@ use glam::Vec3;
 use hyperion_inventory::PlayerInventory;
 use hyperion_utils::EntityExt;
 use tracing::{error, trace_span};
+use valence_ident::ident;
 use valence_protocol::{
     game_mode::OptGameMode,
-    ident,
     packets::{play, play::entity_equipment_update_s2c::EquipmentEntry},
     sound::{SoundCategory, SoundId},
     ByteAngle, GameMode, RawBytes, VarInt, Velocity,
@@ -16,13 +16,14 @@ use valence_protocol::{
 
 use crate::{
     egress::metadata::show_all,
-    net::{Compose, NetworkStreamRef},
+    net::{agnostic, Compose, NetworkStreamRef},
     simulation::{
         animation::ActiveAnimation, metadata::StateObserver, EntityReaction, Health, Pitch,
         Position, Yaw,
     },
     system_registry::SYNC_ENTITY_POSITION,
     util::TracingExt,
+    Prev,
 };
 
 #[derive(Component)]
@@ -44,33 +45,76 @@ impl Module for EntityStateSyncModule {
             &mut ActiveAnimation,
             &mut PlayerInventory,
             &mut EntityReaction,
-            &mut Health
+            &mut Health,
+            &mut Prev<Health>
         )
             .multi_threaded()
             .kind::<flecs::pipeline::OnStore>()
             .tracing_each_entity(
                 trace_span!("entity_state_sync"),
-                move |entity,
-                      elems: (
-                          &Compose,
-                          &mut Position,
-                          &Yaw,
-                          &Pitch,
-                          &NetworkStreamRef,
-                          &mut StateObserver,
-                          &mut ActiveAnimation,
-                          &mut PlayerInventory,
-                          &mut EntityReaction,
-                          &mut Health,
-                      )| {
-                    let (compose, position, yaw, pitch, io, observer, animation, inventory, reaction, health) = elems;
-
+                move |entity, (compose, position, yaw, pitch, io, observer, animation, inventory, reaction, health, Prev(prev_health))| {
                     let mut run = || {
                         let entity_id = VarInt(entity.minecraft_id());
+
 
                         let io = *io;
 
                         let world = entity.world();
+
+                        let chunk_pos = position.to_chunk();
+
+                        let health_updated = *prev_health != *health;
+
+                        if health_updated {
+                            let to = *health;
+                            let from = *prev_health;
+
+                            observer.append(*health);
+                            *prev_health = *health;
+
+                            if to < from {
+                                let pkt = play::EntityDamageS2c {
+                                    entity_id,
+                                    source_type_id: VarInt::default(),
+                                    source_cause_id: VarInt::default(),
+                                    source_direct_id: VarInt::default(),
+                                    source_pos: None,
+                                };
+
+                                compose.broadcast_local(&pkt, chunk_pos, system_id).send(&world)?;
+
+                                let packet = agnostic::sound(
+                                    ident!("minecraft:entity.player.hurt"),
+                                    **position,
+                                ).build();
+
+                                compose.broadcast_local(&packet, chunk_pos, system_id).send(&world)?;
+                            }
+
+                            if *to == 0.0 {
+                                // send respawn packet
+                                let pkt = play::PlayerRespawnS2c {
+                                    dimension_type_name: ident!("minecraft:overworld").into(),
+                                    dimension_name: ident!("minecraft:overworld").into(),
+                                    hashed_seed: 0,
+                                    game_mode: GameMode::Survival,
+                                    previous_game_mode: OptGameMode::default(),
+                                    is_debug: false,
+                                    is_flat: false,
+                                    copy_metadata: false,
+                                    last_death_location: None,
+                                    portal_cooldown: VarInt::default(),
+                                };
+                                // position.position = PLAYER_SPAWN_POSITION;
+                                compose.unicast(&pkt, io, system_id, &world)?;
+
+                                **health = 20.0;
+
+                                let show_all = show_all(entity.minecraft_id());
+                                compose.unicast(show_all.borrow_packet(), io, system_id, &world)?;
+                            }
+                        }
+
 
                         let pkt = play::EntityPositionS2c {
                             entity_id,
@@ -79,7 +123,6 @@ impl Module for EntityStateSyncModule {
                             pitch: ByteAngle::from_degrees(**pitch as f32),
                             on_ground: false,
                         };
-                        let chunk_pos = position.to_chunk();
 
                         compose
                             .broadcast_local(&pkt, chunk_pos, system_id)
@@ -122,74 +165,6 @@ impl Module for EntityStateSyncModule {
                             reaction.velocity = Vec3::ZERO;
                         }
 
-                        if let Some(value) = health.pop_updated() {
-                            let from = value.from;
-                            let to = value.to;
-
-                            // not sure health update is needed
-                            // let pkt = play::HealthUpdateS2c {
-                            //     health: to,
-                            //     food: VarInt(20),
-                            //     food_saturation: 10.0,
-                            // };
-                            //
-                            // compose.unicast(&pkt, io, system_id, &world).unwrap();
-
-
-                            health.
-
-                            metadata.health(to);
-
-                            if to < from {
-                                let pkt = play::EntityDamageS2c {
-                                    entity_id,
-                                    source_type_id: VarInt::default(),
-                                    source_cause_id: VarInt::default(),
-                                    source_direct_id: VarInt::default(),
-                                    source_pos: None,
-                                };
-
-                                compose.broadcast_local(&pkt, chunk_pos, system_id).send(&world)?;
-
-                                // Play a sound when an entity is damaged
-                                let ident = ident!("minecraft:entity.player.hurt");
-                                let pkt = play::PlaySoundS2c {
-                                    id: SoundId::Direct {
-                                        id: ident.into(),
-                                        range: None,
-                                    },
-                                    position: (**position * 8.0).as_ivec3(),
-                                    volume: 1.0,
-                                    pitch: 1.0,
-                                    seed: fastrand::i64(..),
-                                    category: SoundCategory::Player,
-                                };
-                                compose.broadcast_local(&pkt, chunk_pos, system_id).send(&world)?;
-                            }
-
-                            if to == 0.0 {
-                                // send respawn packet
-                                let pkt = play::PlayerRespawnS2c {
-                                    dimension_type_name: ident!("minecraft:overworld").into(),
-                                    dimension_name: ident!("minecraft:overworld").into(),
-                                    hashed_seed: 0,
-                                    game_mode: GameMode::Survival,
-                                    previous_game_mode: OptGameMode::default(),
-                                    is_debug: false,
-                                    is_flat: false,
-                                    copy_metadata: false,
-                                    last_death_location: None,
-                                    portal_cooldown: VarInt::default(),
-                                };
-                                // position.position = PLAYER_SPAWN_POSITION;
-                                compose.unicast(&pkt, io, system_id, &world)?;
-
-                                health.reset();
-
-                                let show_all = show_all(entity.minecraft_id());
-                                compose.unicast(show_all.borrow_packet(), io, system_id, &world)?;
-                            }
-                        }
 
                         if let Some(view) = observer.get_and_clear() {
                             let pkt = play::EntityTrackerUpdateS2c {
