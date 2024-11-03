@@ -24,7 +24,7 @@ use super::{
     animation::{self, ActiveAnimation},
     block_bounds,
     blocks::Blocks,
-    metadata::{Metadata, Pose},
+    metadata::Pose,
     ConfirmBlockSequences, EntitySize, Position,
 };
 use crate::{
@@ -268,10 +268,10 @@ pub struct PacketSwitchQuery<'a> {
     pub events: &'a Events,
     pub world: &'a World,
     pub blocks: &'a Blocks,
+    pub pose: &'a mut Pose,
     pub confirm_block_sequences: &'a mut ConfirmBlockSequences,
     pub system_id: SystemId,
     pub inventory: &'a mut hyperion_inventory::PlayerInventory,
-    pub metadata: &'a mut Metadata,
     pub animation: &'a mut ActiveAnimation,
     pub crafting_registry: &'a hyperion_crafting::CraftingRegistry,
 }
@@ -307,14 +307,17 @@ fn client_command(mut data: &[u8], query: &mut PacketSwitchQuery<'_>) -> anyhow:
 
     match packet.action {
         ClientCommand::StartSneaking => {
-            query.metadata.pose(Pose::Sneaking);
+            *query.pose = Pose::Sneaking;
         }
         ClientCommand::StopSneaking | ClientCommand::LeaveBed => {
-            query.metadata.pose(Pose::Standing);
+            *query.pose = Pose::Standing;
         }
-        _ => {
-            // todo
-        }
+        ClientCommand::StartSprinting
+        | ClientCommand::StopSprinting
+        | ClientCommand::StartJumpWithHorse
+        | ClientCommand::StopJumpWithHorse
+        | ClientCommand::OpenHorseInventory
+        | ClientCommand::StartFlyingWithElytra => {}
     }
 
     Ok(())

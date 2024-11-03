@@ -9,7 +9,11 @@ use serde::{Deserialize, Serialize};
 use skin::PlayerSkin;
 use uuid;
 
-use crate::{simulation::command::Command, storage::ThreadLocalVec, Global};
+use crate::{
+    simulation::{command::Command, metadata::Metadata},
+    storage::ThreadLocalVec,
+    Global, Prev,
+};
 
 pub mod animation;
 pub mod blocks;
@@ -141,98 +145,45 @@ pub enum PacketState {
     Terminate,
 }
 
-/// The health component.
-///
-/// Health changes can be applied in any order within a tick.
-/// Damage and healing are processed as they occur, with the health value
-/// being updated immediately after each change.
-///
-/// Once an entity's health reaches 0, it is considered dead and cannot be
-/// revived by healing alone. The entity remains dead until explicitly reset.
-///
-/// To revive a dead entity, use the [`Health::reset`] method, typically when respawning.
-/// This method restores the entity to full health and allows it to be affected
-/// by subsequent health changes.
-#[derive(Component, Debug, PartialEq)]
+#[derive(Component, Debug, Deref, DerefMut, PartialEq, PartialOrd, Copy, Clone)]
 #[meta]
-pub struct Health {
-    value: f32,
+pub struct Health(f32);
 
-    pending: f32,
+impl Metadata for Health {
+    type Type = f32;
+
+    /// <https://wiki.vg/Entity_metadata#:~:text=Float%20(3)-,Health,-1.0>
+    const INDEX: u8 = 9;
+
+    fn to_type(self) -> Self::Type {
+        self.0
+    }
 }
 
-pub const FULL_HEALTH: f32 = 20.0;
-
 impl Health {
-    /// Checks if there's a pending health update and returns it.
-    ///
-    /// This method updates the current health value with the pending value
-    /// and returns an [`event::HealthUpdate`] if there was a change.
-    pub fn pop_updated(&mut self) -> Option<event::HealthUpdate> {
-        #[expect(clippy::float_cmp)]
-        let result = (self.pending != self.value).then_some(event::HealthUpdate {
-            from: self.value,
-            to: self.pending,
-        });
-
-        self.value = self.pending;
-        result
-    }
-
-    /// Returns the current health value.
     #[must_use]
-    pub const fn get(&self) -> f32 {
-        self.value
+    pub fn is_dead(&self) -> bool {
+        self.0 <= 0.0
     }
 
-    pub fn just_damaged(&mut self) -> bool {
-        self.pending < self.value
+    pub fn heal(&mut self, amount: f32) {
+        self.0 += amount;
     }
 
-    /// Checks if the entity is dead (health is 0).
-    #[must_use]
-    pub const fn is_dead(&self) -> bool {
-        self.pending == 0.0
+    pub fn damage(&mut self, amount: f32) {
+        self.0 -= amount;
     }
 
-    /// Sets the health of a living entity to a specific value.
-    ///
-    /// This method will not affect dead entities. To revive a dead entity,
-    /// use [`Self::reset`] instead.
     pub fn set_for_alive(&mut self, value: f32) {
         if self.is_dead() {
             return;
         }
 
-        self.pending = value;
-    }
-
-    /// Applies damage to the entity, reducing its health.
-    ///
-    /// The resulting health will be clamped between 0 and [`FULL_HEALTH`].
-    pub fn damage(&mut self, amount: f32) {
-        self.pending = (self.pending - amount).clamp(0.0, FULL_HEALTH);
-    }
-
-    /// Resets the entity's health to full, reviving it if dead.
-    ///
-    /// This is the only way to revive a dead entity.
-    pub fn reset(&mut self) {
-        self.pending = FULL_HEALTH;
-    }
-
-    /// Heals the entity, increasing its health.
-    ///
-    /// This method will not affect dead entities. The resulting health
-    /// will be clamped between 0 and [`FULL_HEALTH`].
-    pub fn heal(&mut self, amount: f32) {
-        if self.is_dead() {
-            return;
-        }
-
-        self.pending = (self.pending + amount).clamp(0.0, FULL_HEALTH);
+        self.0 = value;
     }
 }
+
+pub const FULL_HEALTH: f32 = 20.0;
 
 #[derive(Component, Debug, Default, Deref, DerefMut)]
 pub struct ConfirmBlockSequences(pub Vec<i32>);
@@ -244,7 +195,7 @@ impl Display for Health {
             clippy::cast_possible_truncation,
             reason = "we want saturating ceiling"
         )]
-        let normal = usize::try_from(self.value.ceil() as isize).unwrap_or(0);
+        let normal = usize::try_from(self.0.ceil() as isize).unwrap_or(0);
 
         let full_hearts = normal / 2;
         for _ in 0..full_hearts {
@@ -262,10 +213,7 @@ impl Display for Health {
 
 impl Default for Health {
     fn default() -> Self {
-        Self {
-            value: 20.0,
-            pending: 20.0,
-        }
+        Self(20.0)
     }
 }
 
@@ -480,6 +428,9 @@ pub struct SimModule;
 
 impl Module for SimModule {
     fn module(world: &World) {
+        world.component::<Health>().member::<f32>("level");
+        world.component::<Prev<Health>>();
+
         world.component::<PlayerSkin>();
         world.component::<Command>();
 
@@ -507,11 +458,9 @@ impl Module for SimModule {
         world.component::<AiTargetable>();
         world.component::<ImmuneStatus>().meta();
         world.component::<Uuid>();
-        world.component::<Health>().meta();
         world.component::<ChunkPosition>().meta();
         world.component::<EntityReaction>().meta();
         world.component::<ConfirmBlockSequences>();
-        world.component::<metadata::Metadata>();
         world.component::<animation::ActiveAnimation>();
 
         world.component::<hyperion_inventory::PlayerInventory>();

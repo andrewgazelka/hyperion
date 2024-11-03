@@ -36,7 +36,7 @@ use hyperion::{
 };
 use hyperion_inventory::PlayerInventory;
 use hyperion_utils::EntityExt;
-use tracing::{info_span, trace_span};
+use tracing::info_span;
 
 #[derive(Component)]
 pub struct AttackModule;

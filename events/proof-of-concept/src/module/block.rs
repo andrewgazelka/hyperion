@@ -27,7 +27,7 @@ use hyperion::{
 };
 use hyperion_inventory::PlayerInventory;
 use hyperion_scheduled::Scheduled;
-use tracing::{error, info_span, trace_span};
+use tracing::{error, info_span};
 
 #[derive(Component)]
 pub struct BlockModule;

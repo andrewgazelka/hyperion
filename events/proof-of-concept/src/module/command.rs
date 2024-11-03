@@ -8,7 +8,9 @@ use hyperion::{
     simulation::{
         blocks::Blocks,
         command::{add_command, cmd_with, get_root_command, Command, Parser},
-        event, Health, IgnMap, InGameName, Position, Uuid,
+        event,
+        metadata::EntityFlags,
+        Health, IgnMap, InGameName, Position, Uuid,
     },
     storage::EventQueue,
     system_registry::SystemId,
@@ -29,7 +31,7 @@ use hyperion::{
 };
 use hyperion_inventory::PlayerInventory;
 use parse::Stat;
-use tracing::{debug, info_span, trace_span};
+use tracing::{debug, info_span};
 
 use crate::{
     component::team::Team,
@@ -120,6 +122,7 @@ struct CommandContext<'a> {
     level: &'a mut Level,
     health: &'a mut Health,
     ign_map: &'a IgnMap,
+    flags: &'a mut EntityFlags,
 }
 
 fn process_command(command: &ParsedCommand, context: &mut CommandContext<'_>) {
@@ -143,6 +146,7 @@ fn process_command(command: &ParsedCommand, context: &mut CommandContext<'_>) {
 
 fn handle_health_command(amount: f32, context: &mut CommandContext<'_>) {
     context.health.set_for_alive(amount);
+    *context.flags |= EntityFlags::ON_FIRE;
 }
 
 fn handle_upgrade_command(context: &mut CommandContext<'_>) {
@@ -648,7 +652,7 @@ impl Module for CommandModule {
                 let _enter = span.enter();
 
                 let world = it.world();
-                for event in event_queue.iter_mut() {
+                for event in event_queue.drain() {
                     let executed = event.raw;
 
                     debug!("executed: {executed}");
@@ -666,8 +670,9 @@ impl Module for CommandModule {
                         &mut Level,
                         &mut Health,
                         &mut Position,
+                        &mut EntityFlags,
                     )>(
-                        |(stream, team, uuid, name, inventory, level, health, position)| {
+                        |(stream, team, uuid, name, inventory, level, health, position, flags)| {
                             let mut context = CommandContext {
                                 entity: event.by,
                                 stream: *stream,
@@ -683,6 +688,7 @@ impl Module for CommandModule {
                                 health,
                                 position,
                                 ign_map,
+                                flags,
                             };
                             process_command(&command, &mut context);
                         },

@@ -18,7 +18,7 @@ pub struct SoundBuilder {
     position: Vec3,
     pitch: f32,
     volume: f32,
-    seed: i64,
+    seed: Option<i64>,
     sound: valence_ident::Ident<&'static str>,
 }
 
@@ -34,7 +34,7 @@ impl SoundBuilder {
     }
 
     pub const fn seed(mut self, seed: i64) -> Self {
-        self.seed = seed;
+        self.seed = Some(seed);
         self
     }
 
@@ -48,7 +48,7 @@ impl SoundBuilder {
                 position: (self.position * 8.0).as_ivec3(),
                 volume: self.volume,
                 pitch: self.pitch,
-                seed: self.seed,
+                seed: self.seed.unwrap_or_else(|| fastrand::i64(..)),
                 category: SoundCategory::Master,
             },
         }
@@ -66,7 +66,7 @@ pub const fn sound(sound: valence_ident::Ident<&'static str>, position: Vec3) ->
         position,
         pitch: 1.0,
         volume: 1.0,
-        seed: 0,
+        seed: None,
         sound,
     }
 }

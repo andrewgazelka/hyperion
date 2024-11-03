@@ -24,14 +24,19 @@ use crate::{
     },
     runtime::AsyncRuntime,
     simulation::{
-        animation::ActiveAnimation, blocks::Blocks, handlers::PacketSwitchQuery,
-        metadata::Metadata, skin::PlayerSkin, AiTargetable, ChunkPosition, Comms,
-        ConfirmBlockSequences, EntityReaction, EntitySize, Health, IgnMap, ImmuneStatus,
-        InGameName, PacketState, Pitch, Player, Position, StreamLookup, Uuid, Yaw,
+        animation::ActiveAnimation,
+        blocks::Blocks,
+        handlers::PacketSwitchQuery,
+        metadata::{EntityFlags, Pose},
+        skin::PlayerSkin,
+        AiTargetable, ChunkPosition, Comms, ConfirmBlockSequences, EntityReaction, EntitySize,
+        Health, IgnMap, ImmuneStatus, InGameName, PacketState, Pitch, Player, Position,
+        StreamLookup, Uuid, Yaw,
     },
     storage::{Events, GlobalEventHandlers, PlayerJoinServer, SkinHandler},
     system_registry::{SystemId, RECV_DATA, REMOVE_PLAYER_FROM_VISIBILITY},
     util::{mojang::MojangClient, SendableRef, TracingExt},
+    Prev,
 };
 
 #[derive(Component, Debug)]
@@ -170,8 +175,14 @@ fn process_login(
         .add::<AiTargetable>()
         .set(ImmuneStatus::default())
         .set(Uuid::from(uuid))
-        .set(Health::default())
-        .set(ChunkSendQueue::default())
+        .set(Prev(Health::default()))
+        .add::<Health>()
+        .set(Prev(EntityFlags::default()))
+        .set(EntityFlags::default())
+        .set(Prev(Pose::default()))
+        .add::<Pose>()
+        .add::<ChunkSendQueue>()
+        .add::<EntityReaction>()
         .set(ChunkPosition::null())
         .set(EntityReaction::default());
 
@@ -271,6 +282,7 @@ pub enum GametickSpan {
     Exited(tracing::Span),
 }
 
+#[allow(clippy::non_send_fields_in_send_ty)]
 unsafe impl Send for GametickSpan {}
 unsafe impl Sync for GametickSpan {}
 
@@ -325,7 +337,6 @@ impl Module for IngressModule {
                     .set(hyperion_inventory::PlayerInventory::default())
                     .set(ConfirmBlockSequences::default())
                     .set(PacketState::Handshake)
-                    .set(Metadata::default())
                     .set(ActiveAnimation::NONE)
                     .set(PacketDecoder::default())
                     .add::<Player>();
@@ -477,6 +488,7 @@ impl Module for IngressModule {
             &mut PacketDecoder,
             &mut PacketState,
             &NetworkStreamRef,
+            ?&mut Pose,
             &Events($),
             &EntitySize,
             ?&mut Position,
@@ -484,7 +496,6 @@ impl Module for IngressModule {
             &mut Pitch,
             &mut ConfirmBlockSequences,
             &mut hyperion_inventory::PlayerInventory,
-            &mut Metadata,
             &mut ActiveAnimation,
             &hyperion_crafting::CraftingRegistry($),
             &IgnMap($)
@@ -505,6 +516,7 @@ impl Module for IngressModule {
                 decoder,
                 login_state,
                 &io_ref,
+                mut pose,
                 event_queue,
                 size,
                 mut position,
@@ -512,7 +524,6 @@ impl Module for IngressModule {
                 pitch,
                 confirm_block_sequences,
                 inventory,
-                metadata,
                 animation,
                 crafting_registry,
                 ign_map,
@@ -605,7 +616,7 @@ impl Module for IngressModule {
                             // Transitioning to play is just a way to make sure that the player is officially in play before we start sending them play packets.
                             // We have a certain duration that we wait before doing this.
                             // todo: better way?
-                            if let Some(position) = &mut position {
+                            if let Some((position, pose)) = position.as_mut().zip(pose.as_mut()) {
                                 let world = &world;
 
                                 let mut query = PacketSwitchQuery {
@@ -617,13 +628,13 @@ impl Module for IngressModule {
                                     yaw,
                                     pitch,
                                     size,
+                                    pose,
                                     events: event_queue,
                                     world,
                                     blocks,
                                     system_id,
                                     confirm_block_sequences,
                                     inventory,
-                                    metadata,
                                     animation,
                                     crafting_registry,
                                 };

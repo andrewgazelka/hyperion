@@ -107,7 +107,7 @@ pub fn initiate_player_connection(
 
                     if let Err(e) = server_sender.send(aligned_vec).await {
                         warn!("Error forwarding player packets to server: {e:?}");
-                        panic!("Error forwarding player packets to server: {e:?}");
+                        return;
                     }
                 }
             }
