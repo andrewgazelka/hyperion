@@ -145,18 +145,6 @@ pub enum PacketState {
     Terminate,
 }
 
-/// The health component.
-///
-/// Health changes can be applied in any order within a tick.
-/// Damage and healing are processed as they occur, with the health value
-/// being updated immediately after each change.
-///
-/// Once an entity's health reaches 0, it is considered dead and cannot be
-/// revived by healing alone. The entity remains dead until explicitly reset.
-///
-/// To revive a dead entity, use the [`Health::reset`] method, typically when respawning.
-/// This method restores the entity to full health and allows it to be affected
-/// by subsequent health changes.
 #[derive(Component, Debug, Deref, DerefMut, PartialEq, PartialOrd, Copy, Clone)]
 #[meta]
 pub struct Health(f32);
