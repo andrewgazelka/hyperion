@@ -18,7 +18,7 @@ use crate::{
     net::{agnostic, Compose, NetworkStreamRef},
     simulation::{
         animation::ActiveAnimation,
-        metadata::{MetadataBuilder, EntityFlags, Pose},
+        metadata::{EntityFlags, MetadataBuilder, Pose},
         EntityReaction, Health, Pitch, Position, Yaw,
     },
     storage::ThreadLocal,

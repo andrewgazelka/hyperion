@@ -241,7 +241,7 @@ pub fn player_join_world(
         let mut query_errors = Vec::new();
 
         let mut metadata = MetadataBuilder::default();
-        
+
         query
             .iter_stage(world)
             .each_iter(|it, idx, (uuid, _, position, yaw, pitch, _, flags)| {
