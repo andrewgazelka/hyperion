@@ -54,6 +54,14 @@ repos:
         language: system
         types: [rust]
         pass_filenames: true
+      - id: cargo-test
+        name: cargo test
+        description: Run cargo tests
+        entry: cargo nextest run
+        language: system
+        types: [rust]
+        pass_filenames: false
+        verbose: true
       - id: cargo-clippy
         name: cargo clippy
         description: Lint Rust code with Clippy

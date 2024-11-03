@@ -212,6 +212,7 @@ mod tests {
     #[test]
     fn test_empty_command_tree() {
         let world = World::new();
+        world.component::<Command>();
         let root = world.entity();
 
         let packet = get_command_packet(&world, root.id());
@@ -225,6 +226,7 @@ mod tests {
     #[test]
     fn test_single_command() {
         let world = World::new();
+        world.component::<Command>();
         let root = world.entity();
 
         world
@@ -249,6 +251,9 @@ mod tests {
     #[test]
     fn test_nested_commands() {
         let world = World::new();
+
+        world.component::<Command>();
+
         let root = world.entity();
 
         let parent = world
@@ -286,6 +291,8 @@ mod tests {
     #[test]
     fn test_max_depth() {
         let world = World::new();
+        world.component::<Command>();
+
         let root = world.entity();
 
         let mut parent = root;

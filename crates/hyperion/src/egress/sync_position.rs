@@ -5,7 +5,7 @@ use flecs_ecs::prelude::*;
 use glam::Vec3;
 use hyperion_inventory::PlayerInventory;
 use hyperion_utils::EntityExt;
-use tracing::{error, trace_span};
+use tracing::{error, info_span, trace_span};
 use valence_ident::ident;
 use valence_protocol::{
     game_mode::OptGameMode,
@@ -51,7 +51,7 @@ impl Module for EntityStateSyncModule {
             .multi_threaded()
             .kind::<flecs::pipeline::OnStore>()
             .tracing_each_entity(
-                trace_span!("entity_state_sync"),
+                info_span!("entity_state_sync"),
                 move |entity, (compose, position, yaw, pitch, io, observer, animation, inventory, reaction, health, Prev(prev_health))| {
                     let mut run = || {
                         let entity_id = VarInt(entity.minecraft_id());

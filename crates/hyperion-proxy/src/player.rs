@@ -126,9 +126,14 @@ pub fn initiate_player_connection(
                 }
 
                 if outgoing_packet.is_flush() {
+                    let time_start = std::time::Instant::now();
                     if let Err(e) = packet_writer.flush_pending_packets().await {
                         warn!("Error flushing packets to player: {e:?}");
                         return;
+                    }
+                    let duration = time_start.elapsed();
+                    if duration > std::time::Duration::from_millis(50) {
+                        warn!("flushed packets to player in {duration:?}");
                     }
                 } else {
                     packet_writer.enqueue_packet(outgoing_packet);

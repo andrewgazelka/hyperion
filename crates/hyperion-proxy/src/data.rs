@@ -1,5 +1,6 @@
-use std::sync::{atomic::AtomicBool, Arc};
+use std::sync::{atomic, atomic::AtomicBool, Arc};
 
+use anyhow::bail;
 use bytes::Bytes;
 use slotmap::{new_key_type, KeyData};
 
@@ -98,7 +99,7 @@ impl Ord for OrderedBytes {
 
 #[derive(Debug)]
 pub struct PlayerHandle {
-    pub writer: kanal::AsyncSender<OrderedBytes>,
+    writer: kanal::AsyncSender<OrderedBytes>,
 
     /// Whether the player is allowed to send broadcasts.
     ///
@@ -106,12 +107,45 @@ pub struct PlayerHandle {
     /// and if they are not in the play state and they receive broadcasts,
     /// they will get packets that it deems are invalid because the broadcasts are using the play
     /// state and play IDs.
-    pub can_receive_broadcasts: AtomicBool,
+    can_receive_broadcasts: AtomicBool,
 }
 
 impl PlayerHandle {
+    #[must_use]
+    pub const fn new(writer: kanal::AsyncSender<OrderedBytes>) -> Self {
+        Self {
+            writer,
+            can_receive_broadcasts: AtomicBool::new(false),
+        }
+    }
+
     pub fn shutdown(&self) {
         let _ = self.writer.try_send(OrderedBytes::SHUTDOWN);
         self.writer.close();
+    }
+
+    pub fn enable_receive_broadcasts(&self) {
+        self.can_receive_broadcasts
+            .store(true, atomic::Ordering::Relaxed);
+    }
+
+    pub fn can_receive_broadcasts(&self) -> bool {
+        self.can_receive_broadcasts.load(atomic::Ordering::Relaxed)
+    }
+
+    pub fn send(&self, ordered_bytes: OrderedBytes) -> anyhow::Result<()> {
+        match self.writer.try_send(ordered_bytes) {
+            Ok(true) => Ok(()),
+
+            Ok(false) => {
+                let is_full = self.writer.is_full();
+                self.shutdown();
+                bail!("failed to send packet to player, channel is full: {is_full}");
+            }
+            Err(e) => {
+                self.writer.close();
+                bail!("failed to send packet to player: {e}");
+            }
+        }
     }
 }

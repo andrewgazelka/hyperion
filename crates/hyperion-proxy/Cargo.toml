@@ -1,6 +1,7 @@
 [dependencies]
 colored = "2.1.0"
 kanal = "0.1.0-pre8"
+# integer-encoding = "4.0.2"
 papaya = "0.1.4"
 rkyv = "0.8.8"
 rustc-hash = "2.0.0"

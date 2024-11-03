@@ -27,7 +27,7 @@ use hyperion::{
 };
 use hyperion_inventory::PlayerInventory;
 use hyperion_scheduled::Scheduled;
-use tracing::{error, trace_span};
+use tracing::{error, info_span, trace_span};
 
 #[derive(Component)]
 pub struct BlockModule;
@@ -59,6 +59,8 @@ impl Module for BlockModule {
                     it: TableIter<'_, false>,
                       _,
                       (pending_air, blocks, compose): (&mut PendingDestruction, &mut Blocks, &Compose)| {
+                    let span = info_span!("handle_pending_air");
+                    let _enter = span.enter();
                     let now = Instant::now();
                     let world = it.world();
                     for SetLevel { position, sequence, stage } in pending_air.set_level_at.pop_until(&now) {
@@ -123,7 +125,7 @@ impl Module for BlockModule {
         system!("handle_destroyed_blocks", world, &mut Blocks($), &mut EventQueue<event::DestroyBlock>($), &Compose($))
             .multi_threaded()
             .each_iter(move |it: TableIter<'_, false>, _, (mc, event_queue, compose): (&mut Blocks, &mut EventQueue<event::DestroyBlock>, &Compose)| {
-                let span = trace_span!("handle_blocks");
+                let span = info_span!("handle_blocks");
                 let _enter = span.enter();
                 let world = it.world();
 
@@ -174,7 +176,7 @@ impl Module for BlockModule {
         system!("handle_placed_blocks", world, &mut Blocks($), &mut EventQueue<event::PlaceBlock>($), &mut PendingDestruction($))
             .multi_threaded()
             .each_iter(move |_it: TableIter<'_, false>, _, (mc, event_queue, pending_air): (&mut Blocks, &mut EventQueue<event::PlaceBlock>, &mut PendingDestruction)| {
-                let span = trace_span!("handle_placed_blocks");
+                let span = info_span!("handle_placed_blocks");
                 let _enter = span.enter();
                 for event in event_queue.drain() {
                     let position = event.position;
@@ -208,7 +210,7 @@ impl Module for BlockModule {
         system!("handle_toggled_doors", world, &mut Blocks($), &mut EventQueue<event::ToggleDoor>($))
             .multi_threaded()
             .each_iter(move |_it: TableIter<'_, false>, _, (mc, event_queue): (&mut Blocks, &mut EventQueue<event::ToggleDoor>)| {
-                let span = trace_span!("handle_toggled_doors");
+                let span = info_span!("handle_toggled_doors");
                 let _enter = span.enter();
                 for event in event_queue.drain() {
                     let position = event.position;

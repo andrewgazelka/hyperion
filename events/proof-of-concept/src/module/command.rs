@@ -29,7 +29,7 @@ use hyperion::{
 };
 use hyperion_inventory::PlayerInventory;
 use parse::Stat;
-use tracing::{debug, trace_span};
+use tracing::{debug, info_span, trace_span};
 
 use crate::{
     component::team::Team,
@@ -644,7 +644,7 @@ impl Module for CommandModule {
         system!("handle_poc_events_player", world, &Compose($), &mut EventQueue<event::Command<'_>>($), &mut Blocks($), &IgnMap($))
             .multi_threaded()
             .each_iter(move |it: TableIter<'_, false>, _, (compose, event_queue, mc, ign_map)| {
-                let span = trace_span!("handle_poc_events_player");
+                let span = info_span!("handle_poc_events_player");
                 let _enter = span.enter();
 
                 let world = it.world();

@@ -1,6 +1,7 @@
 use clap::Parser;
 use proof_of_concept::init_game;
 use tracing_subscriber::layer::SubscriberExt;
+use tracing_tracy::TracyLayer;
 
 #[cfg(not(target_env = "msvc"))]
 #[global_allocator]
@@ -18,18 +19,31 @@ struct Args {
 }
 
 fn setup_logging() {
-    // // Build a custom subscriber
-    // tracing_subscriber::fmt()
-    //     .with_ansi(true)
-    //     .with_file(false)
-    //     .with_line_number(false)
-    //     .with_target(false)
-    //     .with_max_level(tracing::Level::DEBUG)
-    //     .with_env_filter(EnvFilter::from_default_env())
-    //     .init();
+    // // // Build a custom subscriber
+    // // tracing_subscriber::fmt()
+    // //     .with_ansi(true)
+    // //     .with_file(false)
+    // //     .with_line_number(false)
+    // //     .with_target(false)
+    // //     .with_max_level(tracing::Level::DEBUG)
+    // //     .with_env_filter(EnvFilter::from_default_env())
+    // //     .init();
+    //
+    // tracing::subscriber::set_global_default(
+    //     tracing_subscriber::registry().with(tracing_tracy::TracyLayer::default()),
+    // )
+    // .expect("setup tracy layer");
 
+    // tracing::subscriber::set_global_default(
+    //     tracing_subscriber::registry().with(
+    //         TracyLayer::default()
+    //             .with_filter(tracing::Level::DEBUG)
+    //     )
+    // ).expect("setup tracy layer");
     tracing::subscriber::set_global_default(
-        tracing_subscriber::registry().with(tracing_tracy::TracyLayer::default()),
+        tracing_subscriber::registry()
+            .with(TracyLayer::default())
+            // .with(tracing_subscriber::filter::LevelFilter::INFO),
     )
     .expect("setup tracy layer");
 }

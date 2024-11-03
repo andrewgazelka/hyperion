@@ -1687,6 +1687,7 @@ dependencies = [
  "ouroboros",
  "parking_lot",
  "rayon",
+ "replace_with",
  "reqwest",
  "rkyv",
  "roaring",
@@ -2975,6 +2976,12 @@ checksum = "a35e8a6bf28cd121053a66aa2e6a2e3eaffad4a60012179f0e864aa5ffeff215"
 dependencies = [
  "bytecheck",
 ]
+
+[[package]]
+name = "replace_with"
+version = "0.1.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e3a8614ee435691de62bcffcf4a66d91b3594bf1428a5722e79103249a095690"
 
 [[package]]
 name = "reqwest"

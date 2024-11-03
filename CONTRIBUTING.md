@@ -23,6 +23,11 @@ Pre-commit hooks run automatically on `git commit`. If any checks fail, fix the 
 
 ### Helpful Development Tools
 - [Packet Inspector](https://github.com/valence-rs/valence/tree/main/tools/packet_inspector) - Useful for debugging Minecraft protocol packets
+- [flecs.dev](https://flecs.dev/explorer) super useful for viewing entities
+- tracy
+
+![image](https://github.com/user-attachments/assets/51f99c9a-a535-4fd8-9a9f-12f8e3039d04)
+
 
 ### Protocol Documentation
 We use Minecraft 1.20.1 protocol documentation:

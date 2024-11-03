@@ -6,7 +6,7 @@ use flecs_ecs::prelude::*;
 use hyperion_utils::EntityExt;
 use serde_json::json;
 use sha2::Digest;
-use tracing::{error, info, trace, trace_span, warn};
+use tracing::{error, info, info_span, span::EnteredSpan, trace, warn};
 use valence_protocol::{
     packets,
     packets::{
@@ -170,11 +170,6 @@ fn process_login(
 
     ign_map.insert(username.clone(), entity.id(), world);
 
-    // first 4 bytes of the uuid
-    let uuid_short = hex::encode(&uuid.as_bytes()[0..4]);
-
-    let name = format!("{username}-{uuid_short}");
-
     entity
         .set(InGameName::from(username))
         .add::<AiTargetable>()
@@ -186,7 +181,7 @@ fn process_login(
         .add::<ChunkSendQueue>()
         .add::<EntityReaction>()
         .set(ChunkPosition::null())
-        .set_name(&name);
+        .set(EntityReaction::default());
 
     compose.io_buf().set_receive_broadcasts(stream_id, world);
 
@@ -278,15 +273,29 @@ fn process_status(
 #[derive(Component)]
 pub struct IngressModule;
 
+#[derive(Component)]
+pub enum GametickSpan {
+    Entered(EnteredSpan),
+    Exited(tracing::Span),
+}
+
+unsafe impl Send for GametickSpan {}
+unsafe impl Sync for GametickSpan {}
+
 impl Module for IngressModule {
     #[expect(clippy::too_many_lines)]
     fn module(world: &World) {
+        world.component::<GametickSpan>();
+        world.set(GametickSpan::Exited(tracing::info_span!("tick")));
+
         system!(
             "update_ign_map",
             world,
             &mut IgnMap($),
         )
         .each_iter(|_, _, ign_map| {
+            let span = info_span!("update_ign_map");
+            let _enter = span.enter();
             ign_map.update();
         });
 
@@ -294,13 +303,22 @@ impl Module for IngressModule {
             "generate_ingress_events",
             world,
             &mut StreamLookup($),
-            &ReceiveState($)
+            &ReceiveState($),
+            &mut GametickSpan($)
         )
         .immediate(true)
         .kind::<flecs::pipeline::OnLoad>()
         .term_at(0)
-        .each_iter(move |it, _, (lookup, receive)| {
-            let span = trace_span!("generate_ingress_events");
+        .each_iter(move |it, _, (lookup, receive, gametick_span)| {
+            replace_with::replace_with_or_abort(gametick_span, |span| {
+                let GametickSpan::Exited(span) = span else {
+                    panic!("gametick_span should be exited");
+                };
+
+                GametickSpan::Entered(span.entered())
+            });
+
+            let span = info_span!("generate_ingress_events");
             let _enter = span.enter();
 
             let world = it.world();
@@ -362,7 +380,7 @@ impl Module for IngressModule {
 
             // 134µs with par_iter
             // 150-208µs with regular drain
-            let span = trace_span!("ingress_to_ecs");
+            let span = info_span!("ingress_to_ecs");
             let _enter = span.enter();
 
             let mut recv = receive.0.lock();
@@ -407,7 +425,7 @@ impl Module for IngressModule {
         )
         .kind::<flecs::pipeline::PostLoad>()
         .tracing_each_entity(
-            trace_span!("remove_player"),
+            info_span!("remove_player"),
             move |entity, (uuid, compose, io, pending_remove)| {
                 let uuids = &[uuid.0];
                 let entity_ids = [VarInt(entity.minecraft_id())];
@@ -448,7 +466,7 @@ impl Module for IngressModule {
             .system_named::<()>("remove_player")
             .kind::<flecs::pipeline::PostLoad>()
             .with::<&PendingRemove>()
-            .tracing_each_entity(trace_span!("remove_player"), |entity, ()| {
+            .tracing_each_entity(info_span!("remove_player"), |entity, ()| {
                 entity.destruct();
             });
 
@@ -483,7 +501,7 @@ impl Module for IngressModule {
         .kind::<flecs::pipeline::OnUpdate>()
         .multi_threaded()
         .tracing_each_entity(
-            trace_span!("recv_data"),
+            info_span!("recv_data"),
             move |entity,
                   (
                 compose,
@@ -621,7 +639,7 @@ impl Module for IngressModule {
                                     crafting_registry,
                                 };
 
-                                // trace_span!("ingress", ign = name).in_scope(|| {
+                                // info_span!("ingress", ign = name).in_scope(|| {
                                 if let Err(err) =
                                     crate::simulation::handlers::packet_switch(frame, &mut query)
                                 {

@@ -36,7 +36,7 @@ use hyperion::{
 };
 use hyperion_inventory::PlayerInventory;
 use hyperion_utils::EntityExt;
-use tracing::trace_span;
+use tracing::{info_span, trace_span};
 
 #[derive(Component)]
 pub struct AttackModule;
@@ -97,7 +97,7 @@ impl Module for AttackModule {
         .multi_threaded()
         .kind::<flecs::pipeline::OnUpdate>()
         .tracing_each_entity(
-            trace_span!("kill_counts"),
+            info_span!("kill_counts"),
             move |entity, (compose, kill_count, stream)| {
                 const MAX_KILLS: usize = 10;
 
@@ -136,7 +136,7 @@ impl Module for AttackModule {
                       )| {
                     const IMMUNE_TICK_DURATION: i64 = 10;
 
-                    let span = trace_span!("handle_attacks");
+                    let span = info_span!("handle_attacks");
                     let _enter = span.enter();
 
                     let current_tick = compose.global().tick;

@@ -7,7 +7,9 @@ use hyperion::{
     net::Compose,
     simulation::{Health, Player},
     Prev,
+    util::TracingExt,
 };
+use tracing::info_span;
 
 #[derive(Component)]
 pub struct RegenerationModule;
@@ -38,7 +40,9 @@ impl Module for RegenerationModule {
             &Compose($)
         )
         .multi_threaded()
-        .each(|(last_damaged, Prev(prev_health), health, compose)| {
+        .tracing_each(
+                info_span!("regenerate"),
+                |(last_damaged, Prev(prev_health), health, compose)| {
             let current_tick = compose.global().tick;
 
             if *health < *prev_health {
@@ -59,6 +63,7 @@ impl Module for RegenerationModule {
             // Apply regeneration, capped at max health
             health.heal(regen_rate);
             **health = health.min(MAX_HEALTH);
-        });
+        },
+            );
     }
 }
