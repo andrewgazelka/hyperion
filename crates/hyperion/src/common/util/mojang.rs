@@ -222,6 +222,31 @@ mod tests {
             ))
             .unwrap();
 
+        // {
+        //   "id": "86271406118844a584967af10c906204",
+        //   "name": "Emerald_Explorer",
+        //   "profileActions": [],
+        //   "properties": [
+        //     {
+        //       "name": "textures",
+        //       "signature": "vSdWxKrUendEP7rapc8Kw2RP6oxWH75CaDrdLXIZlXRmM3+lIYbxaUr8feA0gtZTdiJPTA9GstQHr6mIz1Ap2gm6pd50LVj22yRA1e1qgmAEq8L6EZj7MPnN/kgvWnUj2XFdhP1TsENi3ekvDLHuvRSdeOKgdew3u6/3h6DLAZp/6w2Z89wRJRytWDrSxm3YrPJpGyUA0DjYkoKlCi2n4fd6iTxGzPCnN0gi/y1ewEGbz9rVSsN9EX+tecACl/W4PAOo2wtSEDBziHOMmAEFunmzVReo24XNTTTqQNf6wywAFbXRPaSsRayYrc1vwPXNj4mZwep1LbP8/qQsefjNi3olBmXLxnyxD62Zyx2ZK3NBD1Qbc40PiM6qhpuoQxUgPQHTxL3XazzatH4sQv11rWxLYJhppVsWxUNMy696e5JK7oVtUgSSPbqVjQYdPpn/z22ZzwXh3Y0vkbxfTZ8aZSxEYhJzUtlDNFKcaWEPzuohBsUPELISELLWmL46Rue96gR2lUxdStlUR15L4XZ3cpINTCLj1AQdl2q6mP0T7ooG/Cvri0qKtZ/RuJ3HUZMFfZB6SQ5LGbpwfwPwCWxgYkpwhIUNvLBaEQQNDXELmYgomLE1rd/q6FdM4HaSYCqxBgMyQPzkeOkrZ4k9pBaU16rRWwkCvek4Evdz2L5cpMo=",
+        //       "value": "ewogICJ0aW1lc3RhbXAiIDogMTczMDY0Mjc1NjU0OCwKICAicHJvZmlsZUlkIiA6ICI4NjI3MTQwNjExODg0NGE1ODQ5NjdhZjEwYzkwNjIwNCIsCiAgInByb2ZpbGVOYW1lIiA6ICJFbWVyYWxkX0V4cGxvcmVyIiwKICAic2lnbmF0dXJlUmVxdWlyZWQiIDogdHJ1ZSwKICAidGV4dHVyZXMiIDogewogICAgIlNLSU4iIDogewogICAgICAidXJsIiA6ICJodHRwOi8vdGV4dHVyZXMubWluZWNyYWZ0Lm5ldC90ZXh0dXJlLzE1MTBlM2VlM2YwZThkNTJhMGUxZjMzY2UwYmJiZTRhZWE4Yjg4MzhjOWJkYzQ5NjEzNDI2ZWJhYjYxNGE2ODMiCiAgICB9CiAgfQp9"
+        //     }
+        //   ]
+        // }
+
+        // {
+        //   "timestamp" : 1730642756548,
+        //   "profileId" : "86271406118844a584967af10c906204",
+        //   "profileName" : "Emerald_Explorer",
+        //   "signatureRequired" : true,
+        //   "textures" : {
+        //     "SKIN" : {
+        //       "url" : "http://textures.minecraft.net/texture/1510e3ee3f0e8d52a0e1f33ce0bbbe4aea8b8838c9bdc49613426ebab614a683"
+        //     }
+        //   }
+        // }⏎
+
         let pretty = serde_json::to_string_pretty(&res).unwrap();
         println!("{pretty}");
     }
