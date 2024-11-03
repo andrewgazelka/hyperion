@@ -18,7 +18,7 @@ use crate::{
     net::{agnostic, Compose, NetworkStreamRef},
     simulation::{
         animation::ActiveAnimation,
-        metadata::{ChangedMetadata, EntityFlags, Pose},
+        metadata::{MetadataBuilder, EntityFlags, Pose},
         EntityReaction, Health, Pitch, Position, Yaw,
     },
     storage::ThreadLocal,
@@ -34,7 +34,7 @@ impl Module for EntityStateSyncModule {
     fn module(world: &World) {
         let system_id = SYNC_ENTITY_POSITION;
 
-        let metadata: ThreadLocal<UnsafeCell<ChangedMetadata>> = ThreadLocal::new_defaults();
+        let metadata: ThreadLocal<UnsafeCell<MetadataBuilder>> = ThreadLocal::new_defaults();
 
         system!(
             "entity_state_sync",
@@ -89,7 +89,7 @@ impl Module for EntityStateSyncModule {
                         let pose_updated = *prev_pose != *pose;
 
                         if pose_updated {
-                            observer.append(*pose);
+                            observer.encode(*pose);
                             *prev_pose = *pose;
                         }
 
@@ -99,7 +99,7 @@ impl Module for EntityStateSyncModule {
                             let to = *health;
                             let from = *prev_health;
 
-                            observer.append(*health);
+                            observer.encode(*health);
                             *prev_health = *health;
 
                             if to < from {
@@ -148,7 +148,7 @@ impl Module for EntityStateSyncModule {
                         let entity_flags_updated = *prev_entity_flags != *entity_flags;
 
                         if entity_flags_updated {
-                            observer.append(*entity_flags);
+                            observer.encode(*entity_flags);
                             *prev_entity_flags = *entity_flags;
                         }
 

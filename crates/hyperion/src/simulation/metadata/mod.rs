@@ -9,12 +9,12 @@ use crate::simulation::metadata::r#type::MetadataType;
 /// <https://wiki.vg/Entity_metadata>
 ///
 /// Tracks updates within a gametick for the metadata
-pub struct ChangedMetadata(Vec<u8>);
+pub struct MetadataBuilder(Vec<u8>);
 
-unsafe impl Send for ChangedMetadata {}
+unsafe impl Send for MetadataBuilder {}
 
 // technically not Sync but I mean do we really care? todo: Indra
-unsafe impl Sync for ChangedMetadata {}
+unsafe impl Sync for MetadataBuilder {}
 
 mod status;
 
@@ -151,13 +151,13 @@ impl Metadata for Pose {
     }
 }
 
-impl ChangedMetadata {
+impl MetadataBuilder {
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
 
-    pub fn append<M: Metadata>(&mut self, metadata: M) {
+    pub fn encode<M: Metadata>(&mut self, metadata: M) {
         let value_index = M::INDEX;
         self.0.push(value_index);
 
@@ -180,7 +180,7 @@ impl ChangedMetadata {
 }
 
 #[derive(Debug)]
-pub struct MetadataView<'a>(&'a mut ChangedMetadata);
+pub struct MetadataView<'a>(&'a mut MetadataBuilder);
 
 impl Deref for MetadataView<'_> {
     type Target = [u8];

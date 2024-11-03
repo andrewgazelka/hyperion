@@ -33,6 +33,7 @@ use crate::{
     net::{Compose, DataBundle, NetworkStreamRef},
     simulation::{
         command::{get_command_packet, Command, ROOT_COMMAND},
+        metadata::{EntityFlags, MetadataBuilder},
         skin::PlayerSkin,
         util::registry_codec_raw,
         Comms, InGameName, Position, Uuid, Yaw,
@@ -59,7 +60,15 @@ pub fn player_join_world(
     skin: &PlayerSkin,
     system_id: SystemId,
     root_command: Entity,
-    query: &Query<(&Uuid, &InGameName, &Position, &Yaw, &Pitch, &PlayerSkin)>,
+    query: &Query<(
+        &Uuid,
+        &InGameName,
+        &Position,
+        &Yaw,
+        &Pitch,
+        &PlayerSkin,
+        &EntityFlags,
+    )>,
     crafting_registry: &CraftingRegistry,
     config: &Config,
 ) -> anyhow::Result<()> {
@@ -184,7 +193,7 @@ pub fn player_join_world(
         let _enter = scope.enter();
         query
             .iter_stage(world)
-            .each(|(uuid, name, _, _, _, _skin)| {
+            .each(|(uuid, name, _, _, _, _skin, _)| {
                 // todo: in future, do not clone
 
                 let entry = PlayerListEntry {
@@ -231,9 +240,11 @@ pub fn player_join_world(
         // todo: could also be helped by denoting some packets as infallible for serialization
         let mut query_errors = Vec::new();
 
+        let mut metadata = MetadataBuilder::default();
+        
         query
             .iter_stage(world)
-            .each_iter(|it, idx, (uuid, _, position, yaw, pitch, _)| {
+            .each_iter(|it, idx, (uuid, _, position, yaw, pitch, _, flags)| {
                 let mut result = || {
                     let query_entity = it.entity(idx);
 
@@ -257,6 +268,19 @@ pub fn player_join_world(
                     bundle
                         .add_packet(show_all.borrow_packet(), world)
                         .context("failed to send player spawn packet")?;
+
+                    metadata.encode(*flags);
+
+                    if let Some(view) = metadata.get_and_clear() {
+                        let pkt = play::EntityTrackerUpdateS2c {
+                            entity_id: VarInt(query_entity.minecraft_id()),
+                            tracked_values: RawBytes(&view),
+                        };
+
+                        bundle
+                            .add_packet(&pkt, world)
+                            .context("failed to send player spawn packet")?;
+                    }
 
                     Ok(())
                 };
@@ -497,7 +521,15 @@ pub struct PlayerJoinModule;
 
 impl Module for PlayerJoinModule {
     fn module(world: &World) {
-        let query = world.new_query::<(&Uuid, &InGameName, &Position, &Yaw, &Pitch, &PlayerSkin)>();
+        let query = world.new_query::<(
+            &Uuid,
+            &InGameName,
+            &Position,
+            &Yaw,
+            &Pitch,
+            &PlayerSkin,
+            &EntityFlags,
+        )>();
 
         let query = SendableQuery(query);
 
