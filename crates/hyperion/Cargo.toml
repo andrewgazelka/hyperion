@@ -10,7 +10,6 @@ name = "atomic"
 rustc_version.workspace = true
 
 [dependencies]
-bitflags = "2.6.0"
 colored = "2.1.0"
 flate2 = {workspace = true, features = ["zlib-ng"]}
 glam = {workspace = true, features = ["serde"]}
