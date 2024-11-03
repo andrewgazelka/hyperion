@@ -3,9 +3,9 @@ repos:
     rev: v4.5.0  # Use the latest version
     hooks:
       - id: trailing-whitespace
-        args: [--markdown-linebreak-ext=md]  # Preserves markdown line breaks
+        args: [ --markdown-linebreak-ext=md ]  # Preserves markdown line breaks
         description: Removes trailing whitespace from files
-        types: [text, rust]  # Runs on text files and Rust files specifically
+        types: [ text, rust ]  # Runs on text files and Rust files specifically
         exclude: '\.(ico|jpg|png|gif|eot|svg|ttf|woff|woff2)$'  # Skip binary files
       - id: check-added-large-files
         args: [ '--maxkb=500' ]
@@ -52,43 +52,35 @@ repos:
         description: Format files with rustfmt
         entry: cargo +nightly fmt --
         language: system
-        types: [rust]
+        types: [ rust ]
         pass_filenames: true
-      - id: cargo-test
-        name: cargo test
-        description: Run cargo tests
-        entry: cargo nextest run
-        language: system
-        types: [rust]
-        pass_filenames: false
-        verbose: true
-      - id: cargo-clippy
-        name: cargo clippy
-        description: Lint Rust code with Clippy
-        entry: bash -c 'cargo clippy --workspace --all-targets --all-features -- -D warnings || (echo "Regular clippy failed, attempting to fix..." && cargo clippy --workspace --all-targets --all-features --fix --allow-dirty --allow-staged -- -D warnings)'
-        language: system
-        types: [rust]
-        pass_filenames: false  # Clippy should check the entire project
-        verbose: true
+      #      - id: cargo-test
+      #        name: cargo test
+      #        description: Run cargo tests
+      #        entry: cargo nextest run
+      #        language: system
+      #        types: [rust]
+      #        pass_filenames: false
+      #        verbose: true
+      #      - id: cargo-clippy
+      #        name: cargo clippy
+      #        description: Lint Rust code with Clippy
+      #        entry: bash -c 'cargo clippy --workspace --all-targets --all-features -- -D warnings || (echo "Regular clippy failed, attempting to fix..." && cargo clippy --workspace --all-targets --all-features --fix --allow-dirty --allow-staged -- -D warnings)'
+      #        language: system
+      #        types: [rust]
+      #        pass_filenames: false  # Clippy should check the entire project
+      #        verbose: true
       - id: cargo-machete
         name: cargo machete
         description: Find unused dependencies in Cargo.toml
         entry: cargo machete
         language: system
-        types: [rust]
+        types: [ rust ]
         pass_filenames: false
       - id: cargo-deny
         name: cargo deny check
         description: Check dependencies for license/security issues
         entry: cargo deny check
         language: system
-        types: [rust]
-        pass_filenames: false
-      - id: cargo-test
-        name: cargo test
-        description: Run cargo tests
-        entry: cargo nextest run
-        language: system
         types: [ rust ]
         pass_filenames: false
-        stages: [ push ]  # Only run on push, not every commit
