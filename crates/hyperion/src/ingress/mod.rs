@@ -27,7 +27,7 @@ use crate::{
         animation::ActiveAnimation,
         blocks::Blocks,
         handlers::PacketSwitchQuery,
-        metadata::{Pose, StateObserver},
+        metadata::{EntityFlags, Pose},
         skin::PlayerSkin,
         AiTargetable, ChunkPosition, Comms, ConfirmBlockSequences, EntityReaction, EntitySize,
         Health, IgnMap, ImmuneStatus, InGameName, PacketState, Pitch, Player, Position,
@@ -176,8 +176,11 @@ fn process_login(
         .set(ImmuneStatus::default())
         .set(Uuid::from(uuid))
         .set(Prev(Health::default()))
-        .add::<Pose>()
         .add::<Health>()
+        .set(Prev(EntityFlags::default()))
+        .set(EntityFlags::default())
+        .set(Prev(Pose::default()))
+        .add::<Pose>()
         .add::<ChunkSendQueue>()
         .add::<EntityReaction>()
         .set(ChunkPosition::null())
@@ -279,6 +282,7 @@ pub enum GametickSpan {
     Exited(tracing::Span),
 }
 
+#[allow(clippy::non_send_fields_in_send_ty)]
 unsafe impl Send for GametickSpan {}
 unsafe impl Sync for GametickSpan {}
 
@@ -333,7 +337,6 @@ impl Module for IngressModule {
                     .set(hyperion_inventory::PlayerInventory::default())
                     .set(ConfirmBlockSequences::default())
                     .set(PacketState::Handshake)
-                    .set(StateObserver::default())
                     .set(ActiveAnimation::NONE)
                     .set(PacketDecoder::default())
                     .add::<Player>();
@@ -493,7 +496,6 @@ impl Module for IngressModule {
             &mut Pitch,
             &mut ConfirmBlockSequences,
             &mut hyperion_inventory::PlayerInventory,
-            &mut StateObserver,
             &mut ActiveAnimation,
             &hyperion_crafting::CraftingRegistry($),
             &IgnMap($)
@@ -522,7 +524,6 @@ impl Module for IngressModule {
                 pitch,
                 confirm_block_sequences,
                 inventory,
-                metadata,
                 animation,
                 crafting_registry,
                 ign_map,
@@ -634,7 +635,6 @@ impl Module for IngressModule {
                                     system_id,
                                     confirm_block_sequences,
                                     inventory,
-                                    observer: metadata,
                                     animation,
                                     crafting_registry,
                                 };

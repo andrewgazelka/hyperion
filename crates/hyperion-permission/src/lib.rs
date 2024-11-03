@@ -1,13 +1,11 @@
 use flecs_ecs::{
-    core::{EntityViewGet, QueryBuilderImpl, SystemAPI, TermBuilderImpl, World, WorldGet},
-    macros::{observer, system, Component},
-    prelude::{flecs, Module, TableIter},
+    core::{QueryBuilderImpl, SystemAPI, TermBuilderImpl, World, WorldGet},
+    macros::{observer, Component},
+    prelude::{flecs, Module},
 };
 use hyperion::{
-    chat,
-    net::Compose,
-    simulation::{command::cmd_with, event, Uuid},
-    storage::{EventQueue, LocalDb},
+    simulation::{command::cmd_with, Uuid},
+    storage::LocalDb,
 };
 use num_derive::{FromPrimitive, ToPrimitive};
 use valence_protocol::packets::play::command_tree_s2c::{Parser, StringArg};
@@ -37,7 +35,6 @@ pub enum Group {
     Admin,
 }
 
-use hyperion::{net::NetworkStreamRef, simulation::IgnMap, system_registry::SystemId};
 use nom::{
     branch::alt,
     bytes::complete::{is_a, tag},
@@ -46,7 +43,6 @@ use nom::{
     sequence::preceded,
     IResult, Parser as NomParser,
 };
-use tracing::info_span;
 
 fn parse_group(input: &str) -> IResult<&str, Group> {
     let banned = value(Group::Banned, tag("banned"));
@@ -141,59 +137,59 @@ impl Module for PermissionModule {
             },
         );
 
-        system!("perms_command", world, &Compose($), &mut EventQueue<event::Command<'_>>($), &IgnMap($))
-            .kind::<flecs::pipeline::OnUpdate>()
-            .each_iter(move |it: TableIter<'_, false>, _, (compose, queue, ign_map)| {
-                let span = info_span!("perms_command");
-                let _enter = span.enter();
-
-                let world = it.world();
-
-
-                for command in queue.drain() {
-                    let by = command.by;
-
-                    // todo: assert as none probably
-                    let Ok((_assert_none, command)) = parse_perms_command(command.raw) else {
-                        println!("not parsed");
-                        continue;
-                    };
-
-                    println!("parsed");
-
-                    world.entity_from_id(by)
-                        .get::<&NetworkStreamRef>(|io| {
-                            match command {
-                                Command::Set { player, group } => {
-                                    let Some(result) = ign_map.get(player) else {
-                                        let chat = chat!("Player {player} does not exist");
-                                        compose.unicast(&chat, *io, SystemId(8), &world).unwrap();
-                                        return;
-                                    };
-
-                                    world.entity_from_id(*result).get::<&mut Group>(|group_ptr| {
-                                        *group_ptr = group;
-                                    });
-
-                                    let chat = chat!("Set group of {player} to {group:?}");
-                                    compose.unicast(&chat, *io, SystemId(8), &world).unwrap();
-                                }
-                                Command::Get { player } => {
-                                    let Some(result) = ign_map.get(player) else {
-                                        let chat = chat!("Player {player} does not exist");
-                                        compose.unicast(&chat, *io, SystemId(8), &world).unwrap();
-                                        return;
-                                    };
-
-                                    world.entity_from_id(*result).get::<&Group>(|group_ptr| {
-                                        let chat = chat!("Group of {player} is {group_ptr:?}");
-                                        compose.unicast(&chat, *io, SystemId(8), &world).unwrap();
-                                    });
-                                }
-                            }
-                        });
-                }
-            });
+        // system!("perms_command", world, &Compose($), &mut EventQueue<event::Command<'_>>($), &IgnMap($))
+        //     .kind::<flecs::pipeline::OnUpdate>()
+        //     .each_iter(move |it: TableIter<'_, false>, _, (compose, queue, ign_map)| {
+        //         let span = info_span!("perms_command");
+        //         let _enter = span.enter();
+        //
+        //         let world = it.world();
+        //
+        //
+        //         for command in queue.drain() {
+        //             let by = command.by;
+        //
+        //             // todo: assert as none probably
+        //             let Ok((_assert_none, command)) = parse_perms_command(command.raw) else {
+        //                 println!("not parsed");
+        //                 continue;
+        //             };
+        //
+        //             println!("parsed");
+        //
+        //             world.entity_from_id(by)
+        //                 .get::<&NetworkStreamRef>(|io| {
+        //                     match command {
+        //                         Command::Set { player, group } => {
+        //                             let Some(result) = ign_map.get(player) else {
+        //                                 let chat = chat!("Player {player} does not exist");
+        //                                 compose.unicast(&chat, *io, SystemId(8), &world).unwrap();
+        //                                 return;
+        //                             };
+        //
+        //                             world.entity_from_id(*result).get::<&mut Group>(|group_ptr| {
+        //                                 *group_ptr = group;
+        //                             });
+        //
+        //                             let chat = chat!("Set group of {player} to {group:?}");
+        //                             compose.unicast(&chat, *io, SystemId(8), &world).unwrap();
+        //                         }
+        //                         Command::Get { player } => {
+        //                             let Some(result) = ign_map.get(player) else {
+        //                                 let chat = chat!("Player {player} does not exist");
+        //                                 compose.unicast(&chat, *io, SystemId(8), &world).unwrap();
+        //                                 return;
+        //                             };
+        //
+        //                             world.entity_from_id(*result).get::<&Group>(|group_ptr| {
+        //                                 let chat = chat!("Group of {player} is {group_ptr:?}");
+        //                                 compose.unicast(&chat, *io, SystemId(8), &world).unwrap();
+        //                             });
+        //                         }
+        //                     }
+        //                 });
+        //         }
+        //     });
 
         // based on luckperms https://luckperms.net/wiki/Command-Usage
         // https://luckperms.net/wiki/General-Commands

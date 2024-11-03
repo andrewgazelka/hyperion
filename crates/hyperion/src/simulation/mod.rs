@@ -12,7 +12,7 @@ use uuid;
 use crate::{
     simulation::{command::Command, metadata::Metadata},
     storage::ThreadLocalVec,
-    Global,
+    Global, Prev,
 };
 
 pub mod animation;
@@ -441,6 +441,7 @@ pub struct SimModule;
 impl Module for SimModule {
     fn module(world: &World) {
         world.component::<Health>().member::<f32>("level");
+        world.component::<Prev<Health>>();
 
         world.component::<PlayerSkin>();
         world.component::<Command>();
@@ -472,7 +473,6 @@ impl Module for SimModule {
         world.component::<ChunkPosition>().meta();
         world.component::<EntityReaction>().meta();
         world.component::<ConfirmBlockSequences>();
-        world.component::<metadata::StateObserver>();
         world.component::<animation::ActiveAnimation>();
 
         world.component::<hyperion_inventory::PlayerInventory>();

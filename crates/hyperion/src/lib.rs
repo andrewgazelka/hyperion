@@ -40,6 +40,7 @@ pub const NUM_THREADS: usize = 8;
 pub const CHUNK_HEIGHT_SPAN: u32 = 384; // 512; // usually 384
 
 use std::{alloc::Allocator, cell::RefCell, fmt::Debug, io::Write, net::ToSocketAddrs, sync::Arc};
+
 use anyhow::{bail, Context};
 use derive_more::{Deref, DerefMut};
 use egress::EgressModule;
@@ -77,9 +78,12 @@ pub use valence_ident;
 
 pub use crate::simulation::command::CommandScope;
 use crate::{
-    ingress::PendingRemove,
+    ingress::{GametickSpan, PendingRemove},
     net::{proxy::ReceiveState, NetworkStreamRef, PacketDecoder},
-    simulation::{EgressComm, EntitySize, IgnMap, PacketState, Player},
+    simulation::{
+        metadata::{EntityFlags, Pose},
+        EgressComm, EntitySize, IgnMap, PacketState, Player,
+    },
     util::mojang::ApiProvider,
 };
 
@@ -88,7 +92,6 @@ pub mod ingress;
 pub mod net;
 pub mod simulation;
 pub mod storage;
-
 
 /// Tracks previous values
 #[derive(Component, Deref, DerefMut)]
@@ -214,6 +217,22 @@ impl Hyperion {
             .to_socket_addrs()?
             .next()
             .context("could not get first address")?;
+
+        world.component::<GametickSpan>();
+        world.component::<Pose>();
+        world.component::<Prev<Pose>>();
+
+        world.component::<Prev<EntityFlags>>();
+
+        world.component::<EntityFlags>();
+        // todo: sadly this requires u32
+        // .bit("on_fire", *EntityFlags::ON_FIRE)
+        // .bit("crouching", *EntityFlags::CROUCHING)
+        // .bit("sprinting", *EntityFlags::SPRINTING)
+        // .bit("swimming", *EntityFlags::SWIMMING)
+        // .bit("invisible", *EntityFlags::INVISIBLE)
+        // .bit("glowing", *EntityFlags::GLOWING)
+        // .bit("flying_with_elytra", *EntityFlags::FLYING_WITH_ELYTRA);
 
         component!(world, IVec2 { x: i32, y: i32 });
         world.component::<PendingRemove>();

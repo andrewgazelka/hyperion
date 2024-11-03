@@ -11,12 +11,12 @@ pub mod metadata;
 pub mod player_join;
 mod stats;
 pub mod sync_chunks;
-mod sync_position;
+mod sync_entity_state;
 
 use player_join::PlayerJoinModule;
 use stats::StatsModule;
 use sync_chunks::SyncChunksModule;
-use sync_position::EntityStateSyncModule;
+use sync_entity_state::EntityStateSyncModule;
 
 use crate::{
     ingress::GametickSpan,

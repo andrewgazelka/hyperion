@@ -1,23 +1,20 @@
-use std::cell::UnsafeCell;
-
-use bitfield_struct::bitfield;
 use derive_more::Deref;
 use flecs_ecs::macros::Component;
 use valence_protocol::{Encode, VarInt};
 
 use crate::simulation::metadata::r#type::MetadataType;
 
-#[derive(Component, Debug, Default)]
+#[derive(Debug, Default)]
 // index (u8), type (varint), value (varies)
 /// <https://wiki.vg/Entity_metadata>
 ///
 /// Tracks updates within a gametick for the metadata
-pub struct StateObserver(UnsafeCell<Vec<u8>>);
+pub struct ChangedMetadata(Vec<u8>);
 
-unsafe impl Send for StateObserver {}
+unsafe impl Send for ChangedMetadata {}
 
 // technically not Sync but I mean do we really care? todo: Indra
-unsafe impl Sync for StateObserver {}
+unsafe impl Sync for ChangedMetadata {}
 
 mod status;
 
@@ -29,28 +26,80 @@ pub trait Metadata {
     fn to_type(self) -> Self::Type;
 }
 
-// Entity flags using bitfield
-#[bitfield(u8)]
-#[derive(Component)]
-pub struct EntityBitFlags {
-    pub on_fire: bool,   // 0x01
-    pub crouching: bool, // 0x02
-    #[skip]
-    __: bool, // 0x04 (unused/previously riding)
-    pub sprinting: bool, // 0x08
-    pub swimming: bool,  // 0x10
-    pub invisible: bool, // 0x20
-    pub glowing: bool,   // 0x40
-    pub flying_with_elytra: bool, // 0x80
+// todo: can be u8
+#[derive(Component, PartialEq, Eq, Copy, Clone, Debug, Deref)]
+pub struct EntityFlags {
+    value: u8,
 }
 
-impl Metadata for EntityBitFlags {
+impl Default for EntityFlags {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl EntityFlags {
+    pub const CROUCHING: Self = Self { value: 0x02 };
+    pub const FLYING_WITH_ELYTRA: Self = Self { value: 0x80 };
+    pub const GLOWING: Self = Self { value: 0x40 };
+    pub const INVISIBLE: Self = Self { value: 0x20 };
+    pub const ON_FIRE: Self = Self { value: 0x01 };
+    // 0x04 skipped (previously riding)
+    pub const SPRINTING: Self = Self { value: 0x08 };
+    pub const SWIMMING: Self = Self { value: 0x10 };
+
+    const fn new() -> Self {
+        Self { value: 0 }
+    }
+}
+
+impl std::ops::BitOrAssign for EntityFlags {
+    fn bitor_assign(&mut self, rhs: Self) {
+        self.value |= rhs.value;
+    }
+}
+
+impl std::ops::BitAndAssign for EntityFlags {
+    fn bitand_assign(&mut self, rhs: Self) {
+        self.value &= rhs.value;
+    }
+}
+
+impl std::ops::BitOr for EntityFlags {
+    type Output = Self;
+
+    fn bitor(self, rhs: Self) -> Self {
+        Self {
+            value: self.value | rhs.value,
+        }
+    }
+}
+
+impl std::ops::BitAnd for EntityFlags {
+    type Output = Self;
+
+    fn bitand(self, rhs: Self) -> Self {
+        Self {
+            value: self.value & rhs.value,
+        }
+    }
+}
+
+impl std::ops::Not for EntityFlags {
+    type Output = Self;
+
+    fn not(self) -> Self {
+        Self { value: !self.value }
+    }
+}
+
+impl Metadata for EntityFlags {
     type Type = u8;
 
     const INDEX: u8 = 0;
 
     fn to_type(self) -> Self::Type {
-        self.0
+        self.value
     }
 }
 
@@ -70,7 +119,7 @@ impl Metadata for AirSupply {
     }
 }
 
-#[derive(Encode, Clone, Copy, Default)]
+#[derive(Encode, Clone, Copy, Default, PartialEq, Eq, Debug)]
 #[repr(u8)]
 #[derive(Component)]
 pub enum Pose {
@@ -92,24 +141,31 @@ pub enum Pose {
     Digging,
 }
 
-impl StateObserver {
+impl Metadata for Pose {
+    type Type = Self;
+
+    const INDEX: u8 = 6;
+
+    fn to_type(self) -> Self::Type {
+        self
+    }
+}
+
+impl ChangedMetadata {
+    #[must_use]
     pub fn is_empty(&self) -> bool {
-        let inner = unsafe { &mut *self.0.get() };
-        inner.is_empty()
+        self.0.is_empty()
     }
 
-    pub fn append<M: Metadata>(&self, metadata: M) {
-        let inner = unsafe { &mut *self.0.get() };
-
+    pub fn append<M: Metadata>(&mut self, metadata: M) {
         let value_index = M::INDEX;
+        self.0.push(value_index);
 
-        inner.push(value_index);
         let type_index = VarInt(<M as Metadata>::Type::INDEX);
-
-        type_index.encode(&mut *inner).unwrap();
+        type_index.encode(&mut self.0).unwrap();
 
         let r#type = metadata.to_type();
-        r#type.encode(inner).unwrap();
+        r#type.encode(&mut self.0).unwrap();
     }
 
     pub fn get_and_clear(&mut self) -> Option<MetadataView<'_>> {
@@ -117,30 +173,26 @@ impl StateObserver {
             return None;
         }
         // denote end of metadata
-
-        let inner = unsafe { &mut *self.0.get() };
-        inner.push(0xff);
+        self.0.push(0xff);
 
         Some(MetadataView(self))
     }
 }
 
 #[derive(Debug)]
-pub struct MetadataView<'a>(&'a mut StateObserver);
+pub struct MetadataView<'a>(&'a mut ChangedMetadata);
 
 impl Deref for MetadataView<'_> {
     type Target = [u8];
 
     fn deref(&self) -> &Self::Target {
-        let inner = unsafe { &mut *self.0 .0.get() };
-        &inner[..]
+        &self.0 .0[..]
     }
 }
 
 impl Drop for MetadataView<'_> {
     fn drop(&mut self) {
-        let inner = unsafe { &mut *self.0 .0.get() };
-        inner.clear();
+        self.0 .0.clear();
     }
 }
 

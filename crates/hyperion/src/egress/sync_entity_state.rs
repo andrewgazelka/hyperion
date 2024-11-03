@@ -1,16 +1,15 @@
-use std::borrow::Cow;
+use std::{borrow::Cow, cell::UnsafeCell};
 
 use anyhow::Context;
 use flecs_ecs::prelude::*;
 use glam::Vec3;
 use hyperion_inventory::PlayerInventory;
 use hyperion_utils::EntityExt;
-use tracing::{error, info_span, trace_span};
+use tracing::{error, info_span};
 use valence_ident::ident;
 use valence_protocol::{
     game_mode::OptGameMode,
     packets::{play, play::entity_equipment_update_s2c::EquipmentEntry},
-    sound::{SoundCategory, SoundId},
     ByteAngle, GameMode, RawBytes, VarInt, Velocity,
 };
 
@@ -18,9 +17,11 @@ use crate::{
     egress::metadata::show_all,
     net::{agnostic, Compose, NetworkStreamRef},
     simulation::{
-        animation::ActiveAnimation, metadata::StateObserver, EntityReaction, Health, Pitch,
-        Position, Yaw,
+        animation::ActiveAnimation,
+        metadata::{ChangedMetadata, EntityFlags, Pose},
+        EntityReaction, Health, Pitch, Position, Yaw,
     },
+    storage::ThreadLocal,
     system_registry::SYNC_ENTITY_POSITION,
     util::TracingExt,
     Prev,
@@ -33,6 +34,8 @@ impl Module for EntityStateSyncModule {
     fn module(world: &World) {
         let system_id = SYNC_ENTITY_POSITION;
 
+        let metadata: ThreadLocal<UnsafeCell<ChangedMetadata>> = ThreadLocal::new_defaults();
+
         system!(
             "entity_state_sync",
             world,
@@ -41,18 +44,37 @@ impl Module for EntityStateSyncModule {
             &Yaw,
             &Pitch,
             &NetworkStreamRef,
-            &mut StateObserver,
             &mut ActiveAnimation,
             &mut PlayerInventory,
             &mut EntityReaction,
             &mut Health,
-            &mut Prev<Health>
+            &mut Prev<Health>,
+            &mut EntityFlags,
+            &mut Prev<EntityFlags>,
+            &mut Pose,
+            &mut Prev<Pose>
         )
             .multi_threaded()
             .kind::<flecs::pipeline::OnStore>()
             .tracing_each_entity(
                 info_span!("entity_state_sync"),
-                move |entity, (compose, position, yaw, pitch, io, observer, animation, inventory, reaction, health, Prev(prev_health))| {
+                move |entity,
+                      (
+                          compose,
+                          position,
+                          yaw,
+                          pitch,
+                          io,
+                          animation,
+                          inventory,
+                          reaction,
+                          health,
+                          Prev(prev_health),
+                          entity_flags,
+                          Prev(prev_entity_flags),
+                          pose,
+                          Prev(prev_pose),
+                      )| {
                     let mut run = || {
                         let entity_id = VarInt(entity.minecraft_id());
 
@@ -60,8 +82,16 @@ impl Module for EntityStateSyncModule {
                         let io = *io;
 
                         let world = entity.world();
+                        let observer = unsafe { &mut *metadata.get(&world).get() };
 
                         let chunk_pos = position.to_chunk();
+
+                        let pose_updated = *prev_pose != *pose;
+
+                        if pose_updated {
+                            observer.append(*pose);
+                            *prev_pose = *pose;
+                        }
 
                         let health_updated = *prev_health != *health;
 
@@ -115,6 +145,12 @@ impl Module for EntityStateSyncModule {
                             }
                         }
 
+                        let entity_flags_updated = *prev_entity_flags != *entity_flags;
+
+                        if entity_flags_updated {
+                            observer.append(*entity_flags);
+                            *prev_entity_flags = *entity_flags;
+                        }
 
                         let pkt = play::EntityPositionS2c {
                             entity_id,

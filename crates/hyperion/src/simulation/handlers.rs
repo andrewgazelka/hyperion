@@ -24,7 +24,7 @@ use super::{
     animation::{self, ActiveAnimation},
     block_bounds,
     blocks::Blocks,
-    metadata::{Pose, StateObserver},
+    metadata::Pose,
     ConfirmBlockSequences, EntitySize, Position,
 };
 use crate::{
@@ -272,7 +272,6 @@ pub struct PacketSwitchQuery<'a> {
     pub confirm_block_sequences: &'a mut ConfirmBlockSequences,
     pub system_id: SystemId,
     pub inventory: &'a mut hyperion_inventory::PlayerInventory,
-    pub observer: &'a mut StateObserver,
     pub animation: &'a mut ActiveAnimation,
     pub crafting_registry: &'a hyperion_crafting::CraftingRegistry,
 }
