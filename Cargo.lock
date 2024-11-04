@@ -1350,9 +1350,9 @@ checksum = "07e28edb80900c19c28f1072f2e8aeca7fa06b23cd4169cefe1af5aa3260783f"
 
 [[package]]
 name = "glam"
-version = "0.29.0"
+version = "0.29.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c28091a37a5d09b555cb6628fd954da299b536433834f5b8e59eba78e0cbbf8a"
+checksum = "480c9417a5dc586fc0c0cb67891170e59cc11e9dc79ba1c11ddd2c56ca3f3b90"
 dependencies = [
  "serde",
 ]
