@@ -1,8 +1,8 @@
-use std::sync::{atomic, atomic::AtomicBool, Arc};
+use std::sync::{Arc, atomic, atomic::AtomicBool};
 
 use anyhow::bail;
 use bytes::Bytes;
-use slotmap::{new_key_type, KeyData};
+use slotmap::{KeyData, new_key_type};
 
 use crate::cache::ExclusionsManager;
 

@@ -313,20 +313,17 @@ impl BufferedEgress {
                 self.raw_local_broadcast_data.clear();
 
                 let egress = self.egress;
-                tokio::task::Builder::new()
-                    .name("bvh")
-                    .spawn(async move {
-                        let bvh = bvh.into_bytes();
+                tokio::spawn(async move {
+                    let bvh = bvh.into_bytes();
 
-                        let instruction = BroadcastLocalInstruction {
-                            order: 0,
-                            bvh: Arc::new(bvh),
-                            exclusions: Arc::new(exclusions),
-                        };
+                    let instruction = BroadcastLocalInstruction {
+                        order: 0,
+                        bvh: Arc::new(bvh),
+                        exclusions: Arc::new(exclusions),
+                    };
 
-                        egress.handle_broadcast_local(instruction);
-                    })
-                    .unwrap();
+                    egress.handle_broadcast_local(instruction);
+                });
             }
         }
     }

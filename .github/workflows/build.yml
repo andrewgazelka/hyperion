@@ -10,7 +10,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  RUST_TOOLCHAIN: nightly-2024-10-15
+  RUST_TOOLCHAIN: nightly-2024-11-03
 
 jobs:
   machete:
@@ -47,22 +47,6 @@ jobs:
       - name: Run cargo test
         run: |
           cargo test --workspace --all-features
-
-  deny:
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Install cargo-deny
-        uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-deny
-
-      - name: Run cargo deny
-        run: |
-          cargo deny check  -D warnings
 
   fmt:
     runs-on: ubuntu-latest

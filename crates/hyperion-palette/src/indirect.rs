@@ -1,4 +1,4 @@
-use std::simd::{cmp::SimdPartialEq, Simd};
+use std::simd::{Simd, cmp::SimdPartialEq};
 
 use crate::{Data, HALF_LEN, LEN};
 

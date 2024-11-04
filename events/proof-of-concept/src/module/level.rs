@@ -1,5 +1,5 @@
 use flecs_ecs::{
-    core::{flecs, World},
+    core::{World, flecs},
     macros::Component,
     prelude::Module,
 };

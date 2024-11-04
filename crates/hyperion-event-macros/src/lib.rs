@@ -2,11 +2,11 @@ use convert_case::{Case, Casing};
 use proc_macro::TokenStream;
 use quote::{format_ident, quote};
 use syn::{
+    Lifetime, Token, Type,
     parse::{Parse, ParseStream, Result},
     parse_macro_input,
     punctuated::Punctuated,
     spanned::Spanned,
-    Lifetime, Token, Type,
 };
 
 /// Entry point for the procedural macro

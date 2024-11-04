@@ -7,15 +7,14 @@ use hyperion_utils::EntityExt;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use tracing::{info, instrument};
 use valence_protocol::{
+    ByteAngle, GameMode, Ident, PacketEncoder, RawBytes, VarInt, Velocity,
     game_mode::OptGameMode,
     ident,
     packets::play::{
-        self,
+        self, GameJoinS2c,
         player_position_look_s2c::PlayerPositionLookFlags,
         team_s2c::{CollisionRule, Mode, NameTagVisibility, TeamColor, TeamFlags},
-        GameJoinS2c,
     },
-    ByteAngle, GameMode, Ident, PacketEncoder, RawBytes, VarInt, Velocity,
 };
 use valence_registry::{BiomeRegistry, RegistryCodec};
 use valence_server::entity::EntityKind;
@@ -32,13 +31,13 @@ use crate::{
     ingress::PendingRemove,
     net::{Compose, DataBundle, NetworkStreamRef},
     simulation::{
-        command::{get_command_packet, Command, ROOT_COMMAND},
+        Comms, InGameName, Position, Uuid, Yaw,
+        command::{Command, ROOT_COMMAND, get_command_packet},
         metadata::{EntityFlags, MetadataBuilder},
         skin::PlayerSkin,
         util::registry_codec_raw,
-        Comms, InGameName, Position, Uuid, Yaw,
     },
-    system_registry::{SystemId, PLAYER_JOINS},
+    system_registry::{PLAYER_JOINS, SystemId},
     util::{SendableQuery, SendableRef},
 };
 

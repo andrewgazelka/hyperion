@@ -8,23 +8,23 @@ use hyperion_utils::EntityExt;
 use tracing::{error, info_span};
 use valence_ident::ident;
 use valence_protocol::{
+    ByteAngle, GameMode, RawBytes, VarInt, Velocity,
     game_mode::OptGameMode,
     packets::{play, play::entity_equipment_update_s2c::EquipmentEntry},
-    ByteAngle, GameMode, RawBytes, VarInt, Velocity,
 };
 
 use crate::{
+    Prev,
     egress::metadata::show_all,
-    net::{agnostic, Compose, NetworkStreamRef},
+    net::{Compose, NetworkStreamRef, agnostic},
     simulation::{
+        EntityReaction, Health, Pitch, Position, Yaw,
         animation::ActiveAnimation,
         metadata::{EntityFlags, MetadataBuilder, Pose},
-        EntityReaction, Health, Pitch, Position, Yaw,
     },
     storage::ThreadLocal,
     system_registry::SYNC_ENTITY_POSITION,
     util::TracingExt,
-    Prev,
 };
 
 #[derive(Component)]

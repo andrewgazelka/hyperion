@@ -2,7 +2,7 @@
 
 use std::{fmt, hash::Hash};
 
-use serde::{de::Visitor, Deserialize, Deserializer, Serialize, Serializer};
+use serde::{Deserialize, Deserializer, Serialize, Serializer, de::Visitor};
 use thiserror::Error;
 
 /// Text color

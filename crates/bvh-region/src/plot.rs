@@ -5,11 +5,11 @@ use plotters::{
     drawing::IntoDrawingArea,
     element::Rectangle,
     prelude::Cartesian2d,
-    style::{Color, RGBColor, ShapeStyle, BLACK, RED},
+    style::{BLACK, Color, RED, RGBColor, ShapeStyle},
 };
 use plotters_bitmap::BitMapBackend;
 
-use crate::{aabb::Aabb, Bvh, HasAabb, Node};
+use crate::{Bvh, HasAabb, Node, aabb::Aabb};
 
 impl<T: HasAabb + Copy> Bvh<T> {
     pub fn plot(&self, filename: &str) -> Result<(), Box<dyn std::error::Error>> {

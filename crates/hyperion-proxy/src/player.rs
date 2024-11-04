@@ -15,11 +15,11 @@ use tokio::{
 use tracing::{info, info_span, instrument, warn};
 
 use crate::{
+    ShutdownType,
     cache::ExclusionsManager,
     data::{OrderedBytes, PlayerHandle},
     server_sender::ServerSender,
     util::AsyncWriteVectoredExt,
-    ShutdownType,
 };
 
 /// Default buffer size for reading player packets, set to 8 KiB.
@@ -52,149 +52,139 @@ pub fn initiate_player_connection(
     let socket_writer = Box::pin(socket_writer);
 
     // Task for handling incoming packets (player -> proxy)
-    let mut packet_reader_task = tokio::task::Builder::new()
-        .name("PL->PR") // player to proxy
-        .spawn({
-            let server_sender = server_sender.clone();
-            async move {
-                let mut read_buffer = Vec::new();
-                let player_stream_id = player_id;
+    let mut packet_reader_task = tokio::spawn({
+        let server_sender = server_sender.clone();
+        async move {
+            let mut read_buffer = Vec::new();
+            let player_stream_id = player_id;
 
-                let connect = rkyv::to_bytes::<rkyv::rancor::Error>(
-                    &ProxyToServerMessage::PlayerConnect(PlayerConnect {
-                        stream: player_stream_id,
-                    }),
+            let connect = rkyv::to_bytes::<rkyv::rancor::Error>(
+                &ProxyToServerMessage::PlayerConnect(PlayerConnect {
+                    stream: player_stream_id,
+                }),
+            )
+            .unwrap();
+
+            if let Err(e) = server_sender.send(connect).await {
+                warn!("failed to send player connect to server: {e}");
+                return;
+            }
+
+            let mut arena = Arena::new();
+
+            loop {
+                // Ensure the buffer has enough capacity
+                read_buffer.reserve(DEFAULT_READ_BUFFER_SIZE);
+
+                let bytes_read = match socket_reader.read_buf(&mut read_buffer).await {
+                    Ok(n) => n,
+                    Err(e) => {
+                        warn!("Error reading from player: {e:?}");
+                        return;
+                    }
+                };
+
+                if bytes_read == 0 {
+                    warn!("End of stream reached for player");
+                    return;
+                }
+
+                let player_packets = ProxyToServerMessage::PlayerPackets(PlayerPackets {
+                    stream: player_id,
+                    data: &read_buffer,
+                });
+
+                let aligned_vec = rkyv::api::high::to_bytes_with_alloc::<_, rkyv::rancor::Error>(
+                    &player_packets,
+                    arena.acquire(),
                 )
                 .unwrap();
 
-                if let Err(e) = server_sender.send(connect).await {
-                    warn!("failed to send player connect to server: {e}");
+                read_buffer.clear();
+
+                if let Err(e) = server_sender.send(aligned_vec).await {
+                    warn!("Error forwarding player packets to server: {e:?}");
                     return;
                 }
-
-                let mut arena = Arena::new();
-
-                loop {
-                    // Ensure the buffer has enough capacity
-                    read_buffer.reserve(DEFAULT_READ_BUFFER_SIZE);
-
-                    let bytes_read = match socket_reader.read_buf(&mut read_buffer).await {
-                        Ok(n) => n,
-                        Err(e) => {
-                            warn!("Error reading from player: {e:?}");
-                            return;
-                        }
-                    };
-
-                    if bytes_read == 0 {
-                        warn!("End of stream reached for player");
-                        return;
-                    }
-
-                    let player_packets = ProxyToServerMessage::PlayerPackets(PlayerPackets {
-                        stream: player_id,
-                        data: &read_buffer,
-                    });
-
-                    let aligned_vec =
-                        rkyv::api::high::to_bytes_with_alloc::<_, rkyv::rancor::Error>(
-                            &player_packets,
-                            arena.acquire(),
-                        )
-                        .unwrap();
-
-                    read_buffer.clear();
-
-                    if let Err(e) = server_sender.send(aligned_vec).await {
-                        warn!("Error forwarding player packets to server: {e:?}");
-                        return;
-                    }
-                }
             }
-        })
-        .unwrap();
+        }
+    });
 
     // Task for handling outgoing packets (proxy -> player)
-    let mut packet_writer_task = tokio::task::Builder::new()
-        .name("proxy2player")
-        .spawn(async move {
-            let mut packet_writer = PlayerPacketWriter::new(socket_writer, player_id);
+    let mut packet_writer_task = tokio::spawn(async move {
+        let mut packet_writer = PlayerPacketWriter::new(socket_writer, player_id);
 
-            while let Ok(outgoing_packet) = incoming_packet_receiver.recv().await {
-                if outgoing_packet.is_shutdown() {
+        while let Ok(outgoing_packet) = incoming_packet_receiver.recv().await {
+            if outgoing_packet.is_shutdown() {
+                return;
+            }
+
+            if outgoing_packet.is_flush() {
+                let time_start = std::time::Instant::now();
+                if let Err(e) = packet_writer.flush_pending_packets().await {
+                    warn!("Error flushing packets to player: {e:?}");
                     return;
                 }
-
-                if outgoing_packet.is_flush() {
-                    let time_start = std::time::Instant::now();
-                    if let Err(e) = packet_writer.flush_pending_packets().await {
-                        warn!("Error flushing packets to player: {e:?}");
-                        return;
-                    }
-                    let duration = time_start.elapsed();
-                    if duration > std::time::Duration::from_millis(50) {
-                        warn!("flushed packets to player in {duration:?}");
-                    }
-                } else {
-                    packet_writer.enqueue_packet(outgoing_packet);
+                let duration = time_start.elapsed();
+                if duration > std::time::Duration::from_millis(50) {
+                    warn!("flushed packets to player in {duration:?}");
                 }
+            } else {
+                packet_writer.enqueue_packet(outgoing_packet);
             }
-        })
-        .unwrap();
+        }
+    });
 
-    tokio::task::Builder::new()
-        .name("player_disconnect")
-        .spawn(async move {
-            let shutdown_received = async move {
-                shutdown_signal.wait_for(Option::is_some).await.unwrap();
-            };
+    tokio::task::spawn(async move {
+        let shutdown_received = async move {
+            shutdown_signal.wait_for(Option::is_some).await.unwrap();
+        };
 
-            tokio::select! {
-                () = shutdown_received => {
-                    info!("Shutting down player connection due to server shutdown");
-                    packet_reader_task.abort();
-                    packet_writer_task.abort();
-                },
-                _ = &mut packet_writer_task => {
-                    info!("Player disconnected because writer task finished: {player_id:?}");
-                    packet_reader_task.abort();
+        tokio::select! {
+            () = shutdown_received => {
+                info!("Shutting down player connection due to server shutdown");
+                packet_reader_task.abort();
+                packet_writer_task.abort();
+            },
+            _ = &mut packet_writer_task => {
+                info!("Player disconnected because writer task finished: {player_id:?}");
+                packet_reader_task.abort();
 
-                    let disconnect = rkyv::to_bytes::<rkyv::rancor::Error>(
-                        &ProxyToServerMessage::PlayerDisconnect(PlayerDisconnect {
-                            stream: player_id,
-                            reason: PlayerDisconnectReason::LostConnection,
-                        }),
-                    ).unwrap();
+                let disconnect = rkyv::to_bytes::<rkyv::rancor::Error>(
+                    &ProxyToServerMessage::PlayerDisconnect(PlayerDisconnect {
+                        stream: player_id,
+                        reason: PlayerDisconnectReason::LostConnection,
+                    }),
+                ).unwrap();
 
-                    if let Err(e) = server_sender.send(disconnect).await {
-                        warn!("failed to send player disconnect to server: {e}");
-                    }
-                },
-                _ = &mut packet_reader_task => {
-                    info!("Player disconnected because reader task finished: {player_id:?}");
-                    packet_writer_task.abort();
-
-
-                    let disconnect = rkyv::to_bytes::<rkyv::rancor::Error>(
-                        &ProxyToServerMessage::PlayerDisconnect(PlayerDisconnect {
-                            stream: player_id,
-                            reason: PlayerDisconnectReason::LostConnection,
-                        })).unwrap();
-
-                    if let Err(e) = server_sender.send(disconnect).await {
-                        warn!("failed to send player disconnect to server: {e}");
-                    }
-
-                    let map_ref = player_registry.pin();
-                    map_ref.remove(&player_id);
-
-                    let map_ref = player_positions.pin();
-                    map_ref.remove(&player_id);
-
+                if let Err(e) = server_sender.send(disconnect).await {
+                    warn!("failed to send player disconnect to server: {e}");
                 }
+            },
+            _ = &mut packet_reader_task => {
+                info!("Player disconnected because reader task finished: {player_id:?}");
+                packet_writer_task.abort();
+
+
+                let disconnect = rkyv::to_bytes::<rkyv::rancor::Error>(
+                    &ProxyToServerMessage::PlayerDisconnect(PlayerDisconnect {
+                        stream: player_id,
+                        reason: PlayerDisconnectReason::LostConnection,
+                    })).unwrap();
+
+                if let Err(e) = server_sender.send(disconnect).await {
+                    warn!("failed to send player disconnect to server: {e}");
+                }
+
+                let map_ref = player_registry.pin();
+                map_ref.remove(&player_id);
+
+                let map_ref = player_positions.pin();
+                map_ref.remove(&player_id);
+
             }
-        })
-        .unwrap()
+        }
+    })
 }
 
 /// Manages the writing of packets to a player's connection.

@@ -3,7 +3,7 @@ use flecs_ecs::prelude::*;
 use hyperion_proto::{Flush, ServerToProxyMessage, UpdatePlayerChunkPositions};
 use rkyv::util::AlignedVec;
 use tracing::{error, info_span};
-use valence_protocol::{packets::play, VarInt};
+use valence_protocol::{VarInt, packets::play};
 
 use crate::{net::Compose, simulation::EgressComm};
 
@@ -21,7 +21,7 @@ use sync_entity_state::EntityStateSyncModule;
 use crate::{
     ingress::GametickSpan,
     net::NetworkStreamRef,
-    simulation::{blocks::Blocks, ChunkPosition},
+    simulation::{ChunkPosition, blocks::Blocks},
     system_registry::SystemId,
 };
 

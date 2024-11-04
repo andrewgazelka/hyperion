@@ -2,12 +2,12 @@
 
 use std::{sync::Arc, time::Duration};
 
-use anyhow::{bail, Context};
+use anyhow::{Context, bail};
 use flecs_ecs::macros::Component;
 use serde_json::Value;
 use tokio::{
     sync::Semaphore,
-    time::{interval, MissedTickBehavior},
+    time::{MissedTickBehavior, interval},
 };
 use tracing::warn;
 use uuid::Uuid;
@@ -73,31 +73,25 @@ impl MojangClient {
         let rate_limit = Arc::new(Semaphore::new(provider.max_requests()));
         let interval_duration = provider.interval();
 
-        tokio::task::Builder::new()
-            .name("reset_rate_limit")
-            .spawn_on(
-                {
-                    let rate_limit = Arc::downgrade(&rate_limit);
-                    let max_requests = provider.max_requests();
-                    async move {
-                        let mut interval = interval(interval_duration);
-                        interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
+        tasks.spawn({
+            let rate_limit = Arc::downgrade(&rate_limit);
+            let max_requests = provider.max_requests();
+            async move {
+                let mut interval = interval(interval_duration);
+                interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
 
-                        loop {
-                            interval.tick().await;
+                loop {
+                    interval.tick().await;
 
-                            let Some(rate_limit) = rate_limit.upgrade() else {
-                                return;
-                            };
+                    let Some(rate_limit) = rate_limit.upgrade() else {
+                        return;
+                    };
 
-                            let available = rate_limit.available_permits();
-                            rate_limit.add_permits(max_requests - available);
-                        }
-                    }
-                },
-                tasks.handle(),
-            )
-            .unwrap();
+                    let available = rate_limit.available_permits();
+                    rate_limit.add_permits(max_requests - available);
+                }
+            }
+        });
 
         Self {
             req: reqwest::Client::new(),

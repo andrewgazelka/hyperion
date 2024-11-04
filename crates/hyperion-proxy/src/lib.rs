@@ -28,7 +28,7 @@ use tokio::{
     net::{TcpStream, ToSocketAddrs},
 };
 use tokio_util::net::Listener;
-use tracing::{debug, error, info, info_span, instrument, trace, warn, Instrument};
+use tracing::{Instrument, debug, error, info, info_span, instrument, trace, warn};
 
 use crate::{
     cache::BufferedEgress, data::PlayerHandle, egress::Egress, player::initiate_player_connection,
@@ -74,17 +74,14 @@ pub async fn run_proxy(
 ) -> anyhow::Result<()> {
     let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(None);
 
-    tokio::task::Builder::new()
-        .name("ctrl-c")
-        .spawn({
-            let shutdown_tx = shutdown_tx.clone();
-            async move {
-                tokio::signal::ctrl_c().await.unwrap();
-                warn!("ctrl-c received, shutting down");
-                shutdown_tx.send(Some(ShutdownType::Full)).unwrap();
-            }
-        })
-        .unwrap();
+    tokio::spawn({
+        let shutdown_tx = shutdown_tx.clone();
+        async move {
+            tokio::signal::ctrl_c().await.unwrap();
+            warn!("ctrl-c received, shutting down");
+            shutdown_tx.send(Some(ShutdownType::Full)).unwrap();
+        }
+    });
 
     loop {
         let mut shutdown_rx2 = shutdown_rx.clone();
@@ -144,12 +141,10 @@ async fn connect_to_server_and_run_proxy(
 
     let mut handler = IngressHandler::new(BufReader::new(server_read), egress);
 
-    tokio::task::Builder::new()
-        .name("s2prox")
-        .spawn({
-            let mut shutdown_rx = shutdown_rx.clone();
+    tokio::spawn({
+        let mut shutdown_rx = shutdown_rx.clone();
 
-            async move {
+        async move {
                 loop {
                     tokio::select! {
                     _ = shutdown_rx.wait_for(Option::is_some) => return,
@@ -174,7 +169,7 @@ async fn connect_to_server_and_run_proxy(
                 shutdown_tx.send(Some(ShutdownType::Reconnect)).unwrap();
             }
                 .instrument(info_span!("server_reader_loop"))
-        }).unwrap();
+    });
 
     // 0 is reserved for "None" value
     let mut player_id_on = 1;

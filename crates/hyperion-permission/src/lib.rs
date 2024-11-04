@@ -1,10 +1,10 @@
 use flecs_ecs::{
     core::{QueryBuilderImpl, SystemAPI, TermBuilderImpl, World, WorldGet},
-    macros::{observer, Component},
-    prelude::{flecs, Module},
+    macros::{Component, observer},
+    prelude::{Module, flecs},
 };
 use hyperion::{
-    simulation::{command::cmd_with, Uuid},
+    simulation::{Uuid, command::cmd_with},
     storage::LocalDb,
 };
 use num_derive::{FromPrimitive, ToPrimitive};
@@ -36,12 +36,12 @@ pub enum Group {
 }
 
 use nom::{
+    IResult, Parser as NomParser,
     branch::alt,
     bytes::complete::{is_a, tag},
     character::complete::space0,
     combinator::{map, value},
     sequence::preceded,
-    IResult, Parser as NomParser,
 };
 
 fn parse_group(input: &str) -> IResult<&str, Group> {

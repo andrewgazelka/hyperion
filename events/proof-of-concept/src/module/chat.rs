@@ -1,11 +1,11 @@
 use flecs_ecs::{
-    core::{flecs, EntityViewGet, QueryBuilderImpl, SystemAPI, TableIter, TermBuilderImpl, World},
-    macros::{system, Component},
+    core::{EntityViewGet, QueryBuilderImpl, SystemAPI, TableIter, TermBuilderImpl, World, flecs},
+    macros::{Component, system},
     prelude::Module,
 };
 use hyperion::{
     net::NetworkStreamRef,
-    simulation::{event, InGameName, Player, Position},
+    simulation::{InGameName, Player, Position, event},
     storage::EventQueue,
     system_registry::SystemId,
     valence_protocol::{packets::play, text::IntoText},

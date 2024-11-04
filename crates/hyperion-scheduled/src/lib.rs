@@ -1,7 +1,7 @@
 use std::{
     borrow::Borrow,
     cmp::{Ordering, Reverse},
-    collections::{binary_heap::PeekMut, BinaryHeap},
+    collections::{BinaryHeap, binary_heap::PeekMut},
 };
 
 struct KeyValue<K, V>(K, V);

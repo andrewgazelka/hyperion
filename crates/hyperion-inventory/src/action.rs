@@ -1,6 +1,6 @@
 use valence_protocol::ItemStack;
 
-use super::{slot_index_from_hand, PlayerInventory, OFFHAND_SLOT};
+use super::{OFFHAND_SLOT, PlayerInventory, slot_index_from_hand};
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum FullMouseButton {

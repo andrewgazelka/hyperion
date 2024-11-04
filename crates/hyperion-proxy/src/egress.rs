@@ -8,7 +8,7 @@ use hyperion_proto::{
     ChunkPosition,
 };
 use rustc_hash::FxBuildHasher;
-use tracing::{debug, error, info_span, instrument, warn, Instrument};
+use tracing::{Instrument, debug, error, info_span, instrument, warn};
 
 use crate::{
     cache::ExclusionsManager,
@@ -75,36 +75,30 @@ impl Egress {
         let data = pkt.data;
         let data = Bytes::copy_from_slice(data);
 
-        tokio::task::Builder::new()
-            .name("broadcast_global")
-            .spawn(
-                async move {
-                    let exclusions = Arc::new(exclusions);
+        tokio::spawn(
+            async move {
+                let exclusions = Arc::new(exclusions);
 
-                    // imo it makes sense to read once... it is a fast loop
-                    #[allow(clippy::significant_drop_in_scrutinee)]
-                    for (player_id, player) in &players {
-                        if !player.can_receive_broadcasts() {
-                            continue;
-                        }
+                // imo it makes sense to read once... it is a fast loop
+                #[allow(clippy::significant_drop_in_scrutinee)]
+                for (player_id, player) in &players {
+                    if !player.can_receive_broadcasts() {
+                        continue;
+                    }
 
-                        let to_send = OrderedBytes::with_exclusions(
-                            pkt.order,
-                            data.clone(),
-                            exclusions.clone(),
-                        );
+                    let to_send =
+                        OrderedBytes::with_exclusions(pkt.order, data.clone(), exclusions.clone());
 
-                        if let Err(e) = player.send(to_send) {
-                            warn!("Failed to send data to player: {:?}", e);
-                            if let Some(result) = players.remove(player_id) {
-                                result.shutdown();
-                            }
+                    if let Err(e) = player.send(to_send) {
+                        warn!("Failed to send data to player: {:?}", e);
+                        if let Some(result) = players.remove(player_id) {
+                            result.shutdown();
                         }
                     }
                 }
-                .instrument(info_span!("broadcast_global_task")),
-            )
-            .unwrap();
+            }
+            .instrument(info_span!("broadcast_global_task")),
+        );
     }
 
     #[instrument(skip_all)]
@@ -135,60 +129,57 @@ impl Egress {
         let positions = self.positions.pin_owned();
         // we are spawning because it is rather intensive to call get_in_slices on a bvh
         // #[allow(clippy::significant_drop_tightening)]
-        tokio::task::Builder::new()
-            .name("broadcast_local")
-            .spawn(
-                async move {
-                    const RADIUS: i16 = 16;
+        tokio::spawn(
+            async move {
+                const RADIUS: i16 = 16;
 
-                    let players = self.player_registry.pin();
+                let players = self.player_registry.pin();
 
-                    for (id, &position) in &positions {
-                        let Some(player) = players.get(id) else {
-                            // expected to still happen infrequently
-                            debug!("Player not found for id {id:?}");
-                            continue;
+                for (id, &position) in &positions {
+                    let Some(player) = players.get(id) else {
+                        // expected to still happen infrequently
+                        debug!("Player not found for id {id:?}");
+                        continue;
+                    };
+
+                    if !player.can_receive_broadcasts() {
+                        continue;
+                    }
+
+                    let position = I16Vec2::new(position.x, position.z);
+                    let min = position - I16Vec2::splat(RADIUS);
+                    let max = position + I16Vec2::splat(RADIUS);
+
+                    let aabb = Aabb::new(min, max);
+
+                    let slices = bvh.get_in(aabb);
+
+                    for slice in slices {
+                        let (_, data) = bvh.inner();
+
+                        let start = slice.start as usize;
+                        let end = slice.end as usize;
+
+                        let data = data.slice(start..end);
+
+                        let to_send = OrderedBytes {
+                            order,
+                            offset: slice.start,
+                            data,
+                            exclusions: Some(exclusions.clone()),
                         };
 
-                        if !player.can_receive_broadcasts() {
-                            continue;
-                        }
-
-                        let position = I16Vec2::new(position.x, position.z);
-                        let min = position - I16Vec2::splat(RADIUS);
-                        let max = position + I16Vec2::splat(RADIUS);
-
-                        let aabb = Aabb::new(min, max);
-
-                        let slices = bvh.get_in(aabb);
-
-                        for slice in slices {
-                            let (_, data) = bvh.inner();
-
-                            let start = slice.start as usize;
-                            let end = slice.end as usize;
-
-                            let data = data.slice(start..end);
-
-                            let to_send = OrderedBytes {
-                                order,
-                                offset: slice.start,
-                                data,
-                                exclusions: Some(exclusions.clone()),
-                            };
-
-                            if let Err(e) = player.send(to_send) {
-                                warn!("Failed to send data to player: {:?}", e);
-                                if let Some(result) = players.remove(id) {
-                                    result.shutdown();
-                                }
+                        if let Err(e) = player.send(to_send) {
+                            warn!("Failed to send data to player: {:?}", e);
+                            if let Some(result) = players.remove(id) {
+                                result.shutdown();
                             }
                         }
                     }
                 }
-                .instrument(info_span!("broadcast_local_task")),
-            )
-            .unwrap();
+            }
+            .instrument(info_span!("broadcast_local_task")),
+        );
     }
 
     #[instrument(skip_all)]

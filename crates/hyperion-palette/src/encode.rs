@@ -9,7 +9,7 @@ use std::io::Write;
 
 use valence_protocol::{Encode, VarInt};
 
-use crate::{Data, PalettedContainer, LEN};
+use crate::{Data, LEN, PalettedContainer};
 
 const fn bit_width(n: usize) -> usize {
     (usize::BITS - n.leading_zeros()) as usize

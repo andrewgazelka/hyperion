@@ -9,7 +9,7 @@
 use std::net::ToSocketAddrs;
 
 use flecs_ecs::prelude::*;
-use hyperion::{simulation::Player, Hyperion};
+use hyperion::{Hyperion, simulation::Player};
 use module::block::BlockModule;
 
 mod component;

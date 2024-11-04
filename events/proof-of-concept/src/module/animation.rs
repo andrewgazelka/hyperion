@@ -1,9 +1,9 @@
 use flecs_ecs::{
     core::{QueryBuilderImpl, SystemAPI, TableIter, TermBuilderImpl, World},
-    macros::{system, Component},
+    macros::{Component, system},
     prelude::Module,
 };
-use hyperion::{glam::IVec3, simulation::blocks::Blocks, BlockState};
+use hyperion::{BlockState, glam::IVec3, simulation::blocks::Blocks};
 use ndarray::Array3;
 use tracing::trace_span;
 

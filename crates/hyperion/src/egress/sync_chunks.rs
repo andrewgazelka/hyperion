@@ -5,16 +5,16 @@ use flecs_ecs::prelude::*;
 use glam::IVec2;
 use tracing::{error, info_span};
 use valence_protocol::{
-    packets::play::{self},
     ChunkPos,
+    packets::play::{self},
 };
 
 use crate::{
     config::Config,
     net::{Compose, DataBundle, NetworkStreamRef},
     simulation::{
-        blocks::{Blocks, GetChunk},
         ChunkPosition, PacketState, Position,
+        blocks::{Blocks, GetChunk},
     },
     system_registry::{GENERATE_CHUNK_CHANGES, SEND_FULL_LOADED_CHUNKS},
     util::TracingExt,

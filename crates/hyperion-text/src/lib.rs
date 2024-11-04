@@ -1,7 +1,7 @@
 use std::{borrow::Cow, io::Write};
 
 use serde::{Deserialize, Serialize};
-use valence_protocol::{anyhow, anyhow::Context, Bounded, Encode};
+use valence_protocol::{Bounded, Encode, anyhow, anyhow::Context};
 
 use crate::{
     color::Color,

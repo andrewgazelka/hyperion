@@ -1,3 +1,5 @@
+cargo-features = ["edition2024"]
+
 [[bench]]
 harness = false
 name = "set"
@@ -85,7 +87,7 @@ workspace = true
 
 [package]
 authors = ["Andrew Gazelka <andrew.gazelka@gmail.com>"]
-edition = "2021"
+edition = "2024"
 name = "hyperion"
 publish = false
 readme = "README.md"

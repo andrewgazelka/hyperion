@@ -1,6 +1,6 @@
 use std::{borrow::Borrow, collections::HashMap, hash::Hash, sync::Arc};
 
-use bvh_region::{aabb::Aabb, HasAabb};
+use bvh_region::{HasAabb, aabb::Aabb};
 use derive_more::{Deref, DerefMut, Display, From};
 use flecs_ecs::prelude::*;
 use glam::{IVec2, IVec3, Vec3};
@@ -10,9 +10,9 @@ use skin::PlayerSkin;
 use uuid;
 
 use crate::{
+    Global, Prev,
     simulation::{command::Command, metadata::Metadata},
     storage::ThreadLocalVec,
-    Global, Prev,
 };
 
 pub mod animation;
@@ -297,7 +297,7 @@ pub struct Position {
 
 #[derive(Component, Copy, Clone, Debug, Deref, DerefMut, Default)]
 pub struct Yaw {
-    yaw: f16,
+    yaw: f32,
 }
 
 impl Display for Yaw {
@@ -316,17 +316,17 @@ impl Display for Pitch {
 
 #[derive(Component, Copy, Clone, Debug, Deref, DerefMut, Default)]
 pub struct Pitch {
-    pitch: f16,
+    pitch: f32,
 }
 
-const PLAYER_WIDTH: f16 = 0.6;
-const PLAYER_HEIGHT: f16 = 1.8;
+const PLAYER_WIDTH: f32 = 0.6;
+const PLAYER_HEIGHT: f32 = 1.8;
 
 #[derive(Component, Copy, Clone, Debug)]
 #[meta]
 pub struct EntitySize {
-    pub half_width: f16,
-    pub height: f16,
+    pub half_width: f32,
+    pub height: f32,
 }
 
 impl Display for EntitySize {

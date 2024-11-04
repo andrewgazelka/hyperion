@@ -1,16 +1,16 @@
 use std::{cell::RefCell, rc::Rc};
 
 use flecs_ecs::{
-    core::{flecs, QueryBuilderImpl, SystemAPI, TermBuilderImpl, World},
-    macros::{observer, Component},
+    core::{QueryBuilderImpl, SystemAPI, TermBuilderImpl, World, flecs},
+    macros::{Component, observer},
     prelude::Module,
 };
 use hyperion::{
     runtime::AsyncRuntime,
-    simulation::{blocks::Blocks, Position, Uuid},
+    simulation::{Position, Uuid, blocks::Blocks},
     valence_protocol::{
-        math::{IVec2, IVec3, Vec3},
         BlockKind,
+        math::{IVec2, IVec3, Vec3},
     },
 };
 use rustc_hash::FxHashMap;

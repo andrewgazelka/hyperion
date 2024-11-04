@@ -5,11 +5,11 @@ use std::{
 
 use flecs_ecs::{
     core::{EntityViewGet, QueryBuilderImpl, SystemAPI, TableIter, TermBuilderImpl, World},
-    macros::{system, Component},
+    macros::{Component, system},
     prelude::Module,
 };
 use hyperion::{
-    net::{agnostic, Compose, NetworkStreamRef},
+    net::{Compose, NetworkStreamRef, agnostic},
     simulation::{
         blocks::{Blocks, EntityAndSequence},
         event,
@@ -17,12 +17,12 @@ use hyperion::{
     storage::EventQueue,
     system_registry::SystemId,
     valence_protocol::{
+        BlockPos, BlockState, ItemStack, Particle, VarInt,
         block::{PropName, PropValue},
         ident,
         math::{DVec3, IVec3, Vec3},
         packets::play,
         text::IntoText,
-        BlockPos, BlockState, ItemStack, Particle, VarInt,
     },
 };
 use hyperion_inventory::PlayerInventory;

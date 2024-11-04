@@ -1,5 +1,5 @@
 use flecs_ecs::macros::Component;
-use heed::{byteorder::NativeEndian, types, Database, Env};
+use heed::{Database, Env, byteorder::NativeEndian, types};
 use hyperion::storage::LocalDb;
 use num_traits::{FromPrimitive, ToPrimitive};
 

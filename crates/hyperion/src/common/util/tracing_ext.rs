@@ -1,4 +1,4 @@
-use flecs_ecs::core::{builder, ComponentId, EntityView, QueryTuple, SystemAPI};
+use flecs_ecs::core::{ComponentId, EntityView, QueryTuple, SystemAPI, builder};
 use tracing::Span;
 // SystemAPI<'a, P, T>: Builder<'a> + private::internal_SystemAPI<'a, P, T>
 // where

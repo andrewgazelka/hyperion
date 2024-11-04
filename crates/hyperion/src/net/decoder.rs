@@ -3,11 +3,11 @@ use std::{
     ops::{Index, RangeFull},
 };
 
-use anyhow::{bail, ensure, Context};
+use anyhow::{Context, bail, ensure};
 use bytes::Buf;
 use flecs_ecs::macros::Component;
 use valence_protocol::{
-    var_int::VarIntDecodeError, CompressionThreshold, Decode, Packet, VarInt, MAX_PACKET_SIZE,
+    CompressionThreshold, Decode, MAX_PACKET_SIZE, Packet, VarInt, var_int::VarIntDecodeError,
 };
 
 #[derive(Default)]

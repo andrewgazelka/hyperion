@@ -3,25 +3,24 @@ use std::borrow::Cow;
 use compact_str::format_compact;
 use flecs_ecs::{
     core::{
-        flecs, EntityViewGet, QueryBuilderImpl, SystemAPI, TableIter, TermBuilderImpl, World,
-        WorldProvider,
+        EntityViewGet, QueryBuilderImpl, SystemAPI, TableIter, TermBuilderImpl, World,
+        WorldProvider, flecs,
     },
-    macros::{system, Component},
+    macros::{Component, system},
     prelude::Module,
 };
 use hyperion::{
     net::{
-        agnostic,
+        Compose, NetworkStreamRef, agnostic,
         packets::{BossBarAction, BossBarS2c},
-        Compose, NetworkStreamRef,
     },
-    simulation::{event, EntityReaction, Health, PacketState, Player, Position},
+    simulation::{EntityReaction, Health, PacketState, Player, Position, event},
     storage::EventQueue,
     system_registry::SystemId,
     util::TracingExt,
     uuid::Uuid,
     valence_protocol::{
-        ident,
+        ItemKind, ItemStack, Particle, VarInt, ident,
         math::{DVec3, Vec3},
         nbt,
         packets::{
@@ -31,7 +30,6 @@ use hyperion::{
                 entity_attributes_s2c::AttributeProperty,
             },
         },
-        ItemKind, ItemStack, Particle, VarInt,
     },
 };
 use hyperion_inventory::PlayerInventory;

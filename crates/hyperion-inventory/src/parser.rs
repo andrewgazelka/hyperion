@@ -1,4 +1,4 @@
-use snafu::{ensure, ResultExt, Snafu};
+use snafu::{ResultExt, Snafu, ensure};
 
 use super::action::{FullMouseButton, InventoryAction, MouseButton};
 

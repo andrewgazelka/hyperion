@@ -1,3 +1,5 @@
+cargo-features = ["edition2024"]
+
 [[bench]]
 harness = false
 name = "sort"
@@ -41,7 +43,7 @@ workspace = true
 
 [package]
 authors = ["Andrew Gazelka <andrew.gazelka@gmail.com>"]
-edition = "2021"
+edition = "2024"
 name = "bvh-region"
 publish = false
 readme = "README.md"

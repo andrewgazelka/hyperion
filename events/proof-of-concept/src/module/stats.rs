@@ -1,6 +1,6 @@
 use flecs_ecs::{
     core::{QueryBuilderImpl, SystemAPI, TermBuilderImpl, World},
-    macros::{system, Component},
+    macros::{Component, system},
     prelude::Module,
 };
 use hyperion::{

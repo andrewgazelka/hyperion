@@ -2,7 +2,7 @@
 
 use std::borrow::Cow;
 
-use anyhow::{bail, Context};
+use anyhow::{Context, bail};
 use bvh_region::aabb::Aabb;
 use flecs_ecs::core::{Entity, EntityView, World};
 use glam::{IVec3, Vec3};
@@ -10,26 +10,25 @@ use hyperion_utils::EntityExt;
 use tracing::{info, instrument, trace, warn};
 use valence_generated::block::{BlockKind, BlockState, PropName};
 use valence_protocol::{
-    nbt,
+    Decode, Hand, Packet, VarInt, nbt,
     packets::play::{
         self, click_slot_c2s::SlotChange, client_command_c2s::ClientCommand,
         player_action_c2s::PlayerAction, player_interact_entity_c2s::EntityInteraction,
         player_position_look_s2c::PlayerPositionLookFlags,
     },
-    Decode, Hand, Packet, VarInt,
 };
 use valence_text::IntoText;
 
 use super::{
+    ConfirmBlockSequences, EntitySize, Position,
     animation::{self, ActiveAnimation},
     block_bounds,
     blocks::Blocks,
     metadata::Pose,
-    ConfirmBlockSequences, EntitySize, Position,
 };
 use crate::{
-    net::{decoder::BorrowedPacketFrame, Compose, NetworkStreamRef},
-    simulation::{aabb, event, event::PluginMessage, Pitch, Yaw},
+    net::{Compose, NetworkStreamRef, decoder::BorrowedPacketFrame},
+    simulation::{Pitch, Yaw, aabb, event, event::PluginMessage},
     storage::Events,
     system_registry::SystemId,
 };
@@ -50,8 +49,8 @@ fn full(query: &mut PacketSwitchQuery<'_>, mut data: &[u8]) -> anyhow::Result<()
     let position = position.as_vec3();
     change_position_or_correct_client(query, position);
 
-    query.yaw.yaw = yaw as f16;
-    query.pitch.pitch = pitch as f16;
+    query.yaw.yaw = yaw;
+    query.pitch.pitch = pitch;
 
     Ok(())
 }
@@ -168,8 +167,8 @@ fn look_and_on_ground(mut data: &[u8], query: &mut PacketSwitchQuery<'_>) -> any
 
     let play::LookAndOnGroundC2s { yaw, pitch, .. } = pkt;
 
-    **query.yaw = yaw as f16;
-    **query.pitch = pitch as f16;
+    **query.yaw = yaw;
+    **query.pitch = pitch;
 
     Ok(())
 }
@@ -502,7 +501,7 @@ pub fn custom_payload(
 
     let event = PluginMessage {
         channel: borrow,
-        data: packet.data.0 .0,
+        data: packet.data.0.0,
     };
 
     query.events.push(event, query.world);

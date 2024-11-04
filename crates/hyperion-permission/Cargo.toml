@@ -1,3 +1,5 @@
+cargo-features = ["edition2024"]
+
 [dependencies]
 heed = "0.20.5"
 num-derive = "0.4.2"
@@ -15,7 +17,7 @@ workspace = true
 
 [package]
 authors = ["Andrew Gazelka <andrew.gazelka@gmail.com>"]
-edition = "2021"
+edition = "2024"
 name = "hyperion-permission"
 publish = false
 readme = "README.md"

@@ -96,25 +96,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let server_help = "~ The event server internal address".dimmed();
     info!("👾 Internal server address: tcp://{server_addr} {server_help}");
 
-    let handle = tokio::task::Builder::new()
-        .name("proxy")
-        .spawn(async move {
-            match &proxy_addr {
-                ProxyAddress::Tcp(addr) => {
-                    let listener = TcpListener::bind(addr).await.unwrap();
-                    let socket = NoDelayTcpListener { listener };
-                    run_proxy(socket, server_addr).await.unwrap();
-                }
-                #[cfg(unix)]
-                ProxyAddress::Unix(path) => {
-                    // remove file if already exists
-                    let _unused = tokio::fs::remove_file(path).await;
-                    let listener = UnixListener::bind(path).unwrap();
-                    run_proxy(listener, server_addr).await.unwrap();
-                }
+    let handle = tokio::spawn(async move {
+        match &proxy_addr {
+            ProxyAddress::Tcp(addr) => {
+                let listener = TcpListener::bind(addr).await.unwrap();
+                let socket = NoDelayTcpListener { listener };
+                run_proxy(socket, server_addr).await.unwrap();
             }
-        })
-        .unwrap();
+            #[cfg(unix)]
+            ProxyAddress::Unix(path) => {
+                // remove file if already exists
+                let _unused = tokio::fs::remove_file(path).await;
+                let listener = UnixListener::bind(path).unwrap();
+                run_proxy(listener, server_addr).await.unwrap();
+            }
+        }
+    });
 
     if let Err(e) = handle.await {
         error!("Proxy task failed: {:?}", e);

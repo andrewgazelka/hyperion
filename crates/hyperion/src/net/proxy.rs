@@ -73,95 +73,81 @@ async fn inner(
         Err(e) => panic!("Failed to bind to address {socket}: {e}"),
     };
 
-    tokio::task::Builder::new()
-        .name("proxy_listener")
-        .spawn(
-            async move {
-                loop {
-                    let (socket, _) = listener.accept().await.unwrap();
-                    socket.set_nodelay(true).unwrap();
+    tokio::spawn(
+        async move {
+            loop {
+                let (socket, _) = listener.accept().await.unwrap();
+                socket.set_nodelay(true).unwrap();
 
-                    let addr = socket.peer_addr().unwrap();
+                let addr = socket.peer_addr().unwrap();
 
-                    info!("Proxy connection established on {addr}");
+                info!("Proxy connection established on {addr}");
 
-                    let shared = shared.clone();
+                let shared = shared.clone();
 
-                    let (read, mut write) = socket.into_split();
+                let (read, mut write) = socket.into_split();
 
-                    let proxy_writer_task = tokio::task::Builder::new()
-                        .name("proxy_writer")
-                        .spawn(async move {
-                            while let Some(bytes) = server_to_proxy.recv().await {
-                                if write.write_all(&bytes).await.is_err() {
-                                    error!("error writing to proxy");
-                                    return server_to_proxy;
-                                }
+                let proxy_writer_task = tokio::spawn(async move {
+                    while let Some(bytes) = server_to_proxy.recv().await {
+                        if write.write_all(&bytes).await.is_err() {
+                            error!("error writing to proxy");
+                            return server_to_proxy;
+                        }
+                    }
+
+                    warn!("proxy shut down");
+
+                    server_to_proxy
+                });
+
+                tokio::spawn(async move {
+                    let mut reader = ProxyReader::new(read);
+
+                    loop {
+                        let buffer = match reader.next_server_packet_buffer().await {
+                            Ok(message) => message,
+                            Err(err) => {
+                                error!("failed to process packet {err:?}");
+                                return;
                             }
+                        };
 
-                            warn!("proxy shut down");
+                        let result = unsafe {
+                            rkyv::access_unchecked::<ArchivedProxyToServerMessage<'_>>(&buffer)
+                        };
 
-                            server_to_proxy
-                        })
-                        .unwrap();
+                        match result {
+                            ArchivedProxyToServerMessage::PlayerConnect(message) => {
+                                let Ok(stream) = rkyv::deserialize::<u64, !>(&message.stream);
 
-                    tokio::task::Builder::new()
-                        .name("proxy_reader")
-                        .spawn(async move {
-                            let mut reader = ProxyReader::new(read);
-
-                            loop {
-                                let buffer = match reader.next_server_packet_buffer().await {
-                                    Ok(message) => message,
-                                    Err(err) => {
-                                        error!("failed to process packet {err:?}");
-                                        return;
-                                    }
-                                };
-
-                                let result = unsafe {
-                                    rkyv::access_unchecked::<ArchivedProxyToServerMessage<'_>>(
-                                        &buffer,
-                                    )
-                                };
-
-                                match result {
-                                    ArchivedProxyToServerMessage::PlayerConnect(message) => {
-                                        let Ok(stream) =
-                                            rkyv::deserialize::<u64, !>(&message.stream);
-
-                                        shared.lock().player_connect.push(stream);
-                                    }
-                                    ArchivedProxyToServerMessage::PlayerDisconnect(message) => {
-                                        let Ok(stream) =
-                                            rkyv::deserialize::<u64, !>(&message.stream);
-                                        shared.lock().player_disconnect.push(stream);
-                                    }
-                                    ArchivedProxyToServerMessage::PlayerPackets(message) => {
-                                        let Ok(stream) =
-                                            rkyv::deserialize::<u64, !>(&message.stream);
-
-                                        shared
-                                            .lock()
-                                            .packets
-                                            .entry(stream)
-                                            .or_default()
-                                            .extend_from_slice(&message.data);
-                                    }
-                                }
+                                shared.lock().player_connect.push(stream);
                             }
-                        })
-                        .unwrap();
+                            ArchivedProxyToServerMessage::PlayerDisconnect(message) => {
+                                let Ok(stream) = rkyv::deserialize::<u64, !>(&message.stream);
+                                shared.lock().player_disconnect.push(stream);
+                            }
+                            ArchivedProxyToServerMessage::PlayerPackets(message) => {
+                                let Ok(stream) = rkyv::deserialize::<u64, !>(&message.stream);
 
-                    // todo: handle player disconnects on proxy shut down
-                    // Ideally, we should design for there being multiple proxies,
-                    // and all proxies should store all the players on them.
-                    // Then we can disconnect all those players related to that proxy.
-                    server_to_proxy = proxy_writer_task.await.unwrap();
-                }
-            }, // .instrument(info_span!("proxy reader")),
-        )
-        .unwrap();
+                                shared
+                                    .lock()
+                                    .packets
+                                    .entry(stream)
+                                    .or_default()
+                                    .extend_from_slice(&message.data);
+                            }
+                        }
+                    }
+                });
+
+                // todo: handle player disconnects on proxy shut down
+                // Ideally, we should design for there being multiple proxies,
+                // and all proxies should store all the players on them.
+                // Then we can disconnect all those players related to that proxy.
+                server_to_proxy = proxy_writer_task.await.unwrap();
+            }
+        }, // .instrument(info_span!("proxy reader")),
+    );
 }
 
 /// A wrapper around [`ReceiveStateInner`]

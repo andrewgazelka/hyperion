@@ -6,27 +6,27 @@ use hyperion::{
     egress::player_join::{PlayerListActions, PlayerListEntry, PlayerListS2c},
     net::{Compose, NetworkStreamRef},
     simulation::{
+        Health, IgnMap, InGameName, Position, Uuid,
         blocks::Blocks,
-        command::{add_command, cmd_with, get_root_command, Command, Parser},
+        command::{Command, Parser, add_command, cmd_with, get_root_command},
         event,
         metadata::EntityFlags,
-        Health, IgnMap, InGameName, Position, Uuid,
     },
     storage::EventQueue,
     system_registry::SystemId,
     uuid,
     valence_ident::ident,
     valence_protocol::{
-        self,
+        self, BlockState, GameMode, ItemKind, ItemStack, VarInt,
         game_mode::OptGameMode,
         math::IVec3,
         nbt,
         packets::play::{
-            self, command_tree_s2c::StringArg, player_abilities_s2c::PlayerAbilitiesFlags,
-            player_position_look_s2c::PlayerPositionLookFlags, PlayerAbilitiesS2c,
+            self, PlayerAbilitiesS2c, command_tree_s2c::StringArg,
+            player_abilities_s2c::PlayerAbilitiesFlags,
+            player_position_look_s2c::PlayerPositionLookFlags,
         },
         text::IntoText,
-        BlockState, GameMode, ItemKind, ItemStack, VarInt,
     },
 };
 use hyperion_inventory::PlayerInventory;

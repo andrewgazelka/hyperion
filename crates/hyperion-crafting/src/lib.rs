@@ -2,7 +2,7 @@ use std::{collections::HashMap, io::Write};
 
 use derive_build::Build;
 use flecs_ecs::macros::Component;
-use slotmap::{new_key_type, SecondaryMap, SlotMap};
+use slotmap::{SecondaryMap, SlotMap, new_key_type};
 use valence_protocol::{Encode, ItemKind, ItemStack, Packet};
 
 /// Represents a packet sent from the server to the client to synchronize recipes.

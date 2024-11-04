@@ -1,3 +1,5 @@
+cargo-features = ["edition2024"]
+
 [build-dependencies]
 
 [dependencies]
@@ -8,7 +10,7 @@ workspace = true
 
 [package]
 authors = ["Andrew Gazelka <andrew.gazelka@gmail.com>"]
-edition = "2021"
+edition = "2024"
 name = "hyperion-proto"
 publish = false
 readme = "README.md"

@@ -1,8 +1,8 @@
 use std::hint::black_box;
 
-use bvh_region::{aabb::Aabb, random_aabb, Bvh, TrivialHeuristic};
+use bvh_region::{Bvh, TrivialHeuristic, aabb::Aabb, random_aabb};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
-use tango_bench::{benchmark_fn, tango_benchmarks, tango_main, IntoBenchmarks};
+use tango_bench::{IntoBenchmarks, benchmark_fn, tango_benchmarks, tango_main};
 
 const COUNT: usize = 10_000;
 

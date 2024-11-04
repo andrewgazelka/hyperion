@@ -1,13 +1,13 @@
 use flecs_ecs::{
-    core::{flecs, QueryBuilderImpl, TermBuilderImpl, World},
-    macros::{system, Component},
+    core::{QueryBuilderImpl, TermBuilderImpl, World, flecs},
+    macros::{Component, system},
     prelude::Module,
 };
 use hyperion::{
+    Prev,
     net::Compose,
     simulation::{Health, Player},
     util::TracingExt,
-    Prev,
 };
 use tracing::info_span;
 

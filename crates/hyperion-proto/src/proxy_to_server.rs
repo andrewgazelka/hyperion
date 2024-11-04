@@ -1,4 +1,4 @@
-use rkyv::{with::InlineAsBox, Archive, Deserialize, Serialize};
+use rkyv::{Archive, Deserialize, Serialize, with::InlineAsBox};
 
 #[derive(Archive, Deserialize, Serialize, Clone, PartialEq, Debug)]
 pub struct PlayerPackets<'a> {

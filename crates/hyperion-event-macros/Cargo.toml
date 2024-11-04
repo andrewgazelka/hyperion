@@ -1,3 +1,5 @@
+cargo-features = ["edition2024"]
+
 [dependencies]
 convert_case = "0.6.0"
 proc-macro2 = "1.0.88"
@@ -16,7 +18,7 @@ workspace = true
 
 [package]
 authors = ["Andrew Gazelka <andrew.gazelka@gmail.com>"]
-edition = "2021"
+edition = "2024"
 name = "hyperion-event-macros"
 publish = false
 readme = "README.md"

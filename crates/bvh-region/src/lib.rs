@@ -194,7 +194,7 @@ impl<T: HasAabb + Send + Copy + Sync + Debug> Bvh<T> {
 
                         (elem, dist2)
                     })
-                    .min_by_key(|(_, dist)| dist.to_bits())
+                    .min_by_key(|(_, dist)| dist.to_bits());
             }
         };
 

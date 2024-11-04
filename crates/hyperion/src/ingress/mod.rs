@@ -8,35 +8,34 @@ use serde_json::json;
 use sha2::Digest;
 use tracing::{error, info, info_span, span::EnteredSpan, trace, warn};
 use valence_protocol::{
-    packets,
+    Bounded, Packet, VarInt, packets,
     packets::{
         handshaking::handshake_c2s::HandshakeNextState, login, login::LoginCompressionS2c, play,
     },
-    Bounded, Packet, VarInt,
 };
 use valence_text::IntoText;
 
 use crate::{
+    Prev,
     egress::sync_chunks::ChunkSendQueue,
     net::{
-        decoder::BorrowedPacketFrame, proxy::ReceiveState, Compose, NetworkStreamRef,
-        PacketDecoder, MINECRAFT_VERSION, PROTOCOL_VERSION,
+        Compose, MINECRAFT_VERSION, NetworkStreamRef, PROTOCOL_VERSION, PacketDecoder,
+        decoder::BorrowedPacketFrame, proxy::ReceiveState,
     },
     runtime::AsyncRuntime,
     simulation::{
+        AiTargetable, ChunkPosition, Comms, ConfirmBlockSequences, EntityReaction, EntitySize,
+        Health, IgnMap, ImmuneStatus, InGameName, PacketState, Pitch, Player, Position,
+        StreamLookup, Uuid, Yaw,
         animation::ActiveAnimation,
         blocks::Blocks,
         handlers::PacketSwitchQuery,
         metadata::{EntityFlags, Pose},
         skin::PlayerSkin,
-        AiTargetable, ChunkPosition, Comms, ConfirmBlockSequences, EntityReaction, EntitySize,
-        Health, IgnMap, ImmuneStatus, InGameName, PacketState, Pitch, Player, Position,
-        StreamLookup, Uuid, Yaw,
     },
     storage::{Events, GlobalEventHandlers, PlayerJoinServer, SkinHandler},
-    system_registry::{SystemId, RECV_DATA, REMOVE_PLAYER_FROM_VISIBILITY},
-    util::{mojang::MojangClient, SendableRef, TracingExt},
-    Prev,
+    system_registry::{RECV_DATA, REMOVE_PLAYER_FROM_VISIBILITY, SystemId},
+    util::{SendableRef, TracingExt, mojang::MojangClient},
 };
 
 #[derive(Component, Debug)]
@@ -134,27 +133,21 @@ fn process_login(
     let skins = comms.skins_tx.clone();
     let id = entity.id();
 
-    tokio::task::Builder::new()
-        .name("player_join")
-        .spawn_on(
-            async move {
-                let skin = match PlayerSkin::from_uuid(uuid, &mojang, &skins_collection).await {
-                    Ok(Some(skin)) => skin,
-                    Err(e) => {
-                        error!("failed to get skin {e}. Using empty skin");
-                        PlayerSkin::EMPTY
-                    }
-                    Ok(None) => {
-                        error!("failed to get skin. Using empty skin");
-                        PlayerSkin::EMPTY
-                    }
-                };
+    tasks.spawn(async move {
+        let skin = match PlayerSkin::from_uuid(uuid, &mojang, &skins_collection).await {
+            Ok(Some(skin)) => skin,
+            Err(e) => {
+                error!("failed to get skin {e}. Using empty skin");
+                PlayerSkin::EMPTY
+            }
+            Ok(None) => {
+                error!("failed to get skin. Using empty skin");
+                PlayerSkin::EMPTY
+            }
+        };
 
-                skins.send((id, skin)).unwrap();
-            },
-            tasks.handle(),
-        )
-        .unwrap();
+        skins.send((id, skin)).unwrap();
+    });
 
     let pkt = login::LoginSuccessS2c {
         uuid,

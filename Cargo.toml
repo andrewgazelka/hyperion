@@ -1,3 +1,4 @@
+
 [profile]
 
 [profile.release-debug]
@@ -28,7 +29,6 @@ members = [
   'crates/hyperion-text',
   'crates/hyperion-utils',
   'events/proof-of-concept',
-  'crates/hyperion-circle-buf',
   'crates/hyperion-permission'
 ]
 resolver = '2'
@@ -114,9 +114,6 @@ git = 'https://github.com/Indra-db/Flecs-Rust'
 
 [workspace.dependencies.hyperion]
 path = 'crates/hyperion'
-
-[workspace.dependencies.hyperion-circle-buf]
-path = 'crates/hyperion-circle-buf'
 
 [workspace.dependencies.hyperion-crafting]
 path = 'crates/hyperion-crafting'

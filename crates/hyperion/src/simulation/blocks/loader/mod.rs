@@ -1,6 +1,6 @@
 use std::{borrow::Cow, cell::RefCell, io::Write, sync::Arc};
 
-use anyhow::{bail, Context};
+use anyhow::{Context, bail};
 use bytes::BytesMut;
 use glam::IVec2;
 use hyperion_nerd_font::NERD_ROCKET;
@@ -10,20 +10,20 @@ use parse::ColumnData;
 use rustc_hash::FxHashSet;
 use tracing::{debug, warn};
 use valence_generated::block::BlockState;
-use valence_nbt::{compound, List};
-use valence_protocol::{packets::play, ChunkPos, CompressionThreshold, FixedArray};
+use valence_nbt::{List, compound};
+use valence_protocol::{ChunkPos, CompressionThreshold, FixedArray, packets::play};
 use valence_registry::RegistryIdx;
-use valence_server::layer::chunk::{bit_width, BiomeContainer, Chunk};
+use valence_server::layer::chunk::{BiomeContainer, Chunk, bit_width};
 
 pub mod parse;
 
 use super::{chunk::Column, shared::WorldShared};
 use crate::{
+    CHUNK_HEIGHT_SPAN, Scratch,
     net::encoder::PacketEncoder,
     runtime::AsyncRuntime,
     simulation::{blocks::loader::parse::section::Section, util::heightmap},
     storage::BitStorage,
-    Scratch, CHUNK_HEIGHT_SPAN,
 };
 
 struct TasksState {
@@ -73,25 +73,19 @@ impl ChunkLoaderHandle {
 pub fn launch_manager(shared: Arc<WorldShared>, runtime: &AsyncRuntime) -> ChunkLoaderHandle {
     let (tx_load_chunk_requests, rx_load_chunk_requests) = tokio::sync::mpsc::unbounded_channel();
 
-    tokio::task::Builder::new()
-        .name("launch_manager")
-        .spawn_on(
-            {
-                let runtime = runtime.clone();
-                async move {
-                    ChunkLoader {
-                        rx_load_chunk_requests,
-                        received_request: FxHashSet::default(),
-                        shared,
-                        runtime,
-                    }
-                    .run()
-                    .await;
-                }
-            },
-            runtime.handle(),
-        )
-        .unwrap();
+    runtime.spawn({
+        let runtime = runtime.clone();
+        async move {
+            ChunkLoader {
+                rx_load_chunk_requests,
+                received_request: FxHashSet::default(),
+                shared,
+                runtime,
+            }
+            .run()
+            .await;
+        }
+    });
 
     ChunkLoaderHandle {
         tx_load_chunk_requests,

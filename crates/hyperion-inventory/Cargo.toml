@@ -1,3 +1,5 @@
+cargo-features = ["edition2024"]
+
 [dependencies]
 flecs_ecs.workspace = true
 hyperion-crafting.workspace = true
@@ -10,7 +12,7 @@ workspace = true
 
 [package]
 authors = ["Andrew Gazelka <andrew.gazelka@gmail.com>"]
-edition = "2021"
+edition = "2024"
 name = "hyperion-inventory"
 publish = false
 readme = "README.md"
