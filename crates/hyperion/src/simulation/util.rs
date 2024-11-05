@@ -1,9 +1,7 @@
-use std::{path::PathBuf, sync::LazyLock};
+use std::sync::LazyLock;
 
 use anyhow::{Context, bail};
-use flate2::bufread::GzDecoder;
 use serde::Deserialize;
-use tar::Archive;
 use valence_nbt::{Compound, Value, value::ValueRef};
 use valence_registry::{
     BiomeRegistry,

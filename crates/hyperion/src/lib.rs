@@ -50,7 +50,7 @@ use ingress::IngressModule;
 #[cfg(unix)]
 use libc::{RLIMIT_NOFILE, getrlimit, setrlimit};
 use libdeflater::CompressionLvl;
-use simulation::{Comms, SimModule, StreamLookup, blocks::Blocks, util::generate_biome_registry};
+use simulation::{Comms, SimModule, StreamLookup, blocks::Blocks};
 use storage::{Events, GlobalEventHandlers, LocalDb, SkinHandler, ThreadLocal};
 use tracing::{info, info_span};
 use util::mojang::MojangClient;

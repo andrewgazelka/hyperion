@@ -2,12 +2,9 @@ use std::path::PathBuf;
 
 use anyhow::Context;
 use directories::ProjectDirs;
-use flecs_ecs::{
-    core::{World, WorldGet},
-    macros::Component,
-};
+use flecs_ecs::core::{World, WorldGet};
 use futures_util::stream::StreamExt;
-use sha2::{Digest, digest::Update};
+use sha2::Digest;
 use tar::Archive;
 use tokio_util::io::{StreamReader, SyncIoBridge};
 use tracing::info;

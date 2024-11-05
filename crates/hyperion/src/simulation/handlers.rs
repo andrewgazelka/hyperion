@@ -77,8 +77,8 @@ fn change_position_or_correct_client(query: &mut PacketSwitchQuery<'_>, proposed
         // Correct client position
         let pkt = play::PlayerPositionLookS2c {
             position: pose.position.as_dvec3(),
-            yaw: query.yaw.yaw as f32,
-            pitch: query.pitch.pitch as f32,
+            yaw: query.yaw.yaw,
+            pitch: query.pitch.pitch,
             flags: PlayerPositionLookFlags::default(),
             teleport_id: VarInt(fastrand::i32(..)),
         };

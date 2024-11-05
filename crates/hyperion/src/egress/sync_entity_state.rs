@@ -155,8 +155,8 @@ impl Module for EntityStateSyncModule {
                         let pkt = play::EntityPositionS2c {
                             entity_id,
                             position: position.as_dvec3(),
-                            yaw: ByteAngle::from_degrees(**yaw as f32),
-                            pitch: ByteAngle::from_degrees(**pitch as f32),
+                            yaw: ByteAngle::from_degrees(**yaw),
+                            pitch: ByteAngle::from_degrees(**pitch),
                             on_ground: false,
                         };
 
@@ -167,7 +167,7 @@ impl Module for EntityStateSyncModule {
 
                         let pkt = play::EntitySetHeadYawS2c {
                             entity_id,
-                            head_yaw: ByteAngle::from_degrees(**yaw as f32),
+                            head_yaw: ByteAngle::from_degrees(**yaw),
                         };
 
                         compose

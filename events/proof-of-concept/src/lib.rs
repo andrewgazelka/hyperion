@@ -62,7 +62,7 @@ impl Module for ProofOfConceptModule {
 
             runtime.schedule(f, |result, world| {
                 let save = result.unwrap();
-                world.set(Blocks::new(&world, &save).unwrap());
+                world.set(Blocks::new(world, &save).unwrap());
             });
         });
     }

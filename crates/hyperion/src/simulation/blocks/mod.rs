@@ -17,7 +17,6 @@ use rustc_hash::FxBuildHasher;
 use shared::WorldShared;
 use tracing::error;
 use valence_generated::block::BlockState;
-use valence_registry::BiomeRegistry;
 use valence_server::layer::chunk::Chunk;
 
 use crate::{CHUNK_HEIGHT_SPAN, runtime::AsyncRuntime, simulation::util::generate_biome_registry};

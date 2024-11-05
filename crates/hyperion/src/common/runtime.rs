@@ -6,18 +6,21 @@ use derive_more::{Deref, DerefMut};
 use flecs_ecs::{core::World, macros::Component};
 use kanal::{Receiver, Sender};
 
+/// Type alias for world callback functions
+pub type WorldCallback = Box<dyn FnOnce(&World)>;
+
 /// Wrapper around [`tokio::runtime::Runtime`]
 #[derive(Component, Deref, DerefMut, Clone)]
 pub struct AsyncRuntime {
     #[deref]
     #[deref_mut]
     runtime: Arc<tokio::runtime::Runtime>,
-    sender: Sender<Box<dyn FnOnce(&World)>>,
+    sender: Sender<WorldCallback>,
 }
 
 #[derive(Component)]
 pub struct Tasks {
-    pub(crate) tasks: Receiver<Box<dyn FnOnce(&World)>>,
+    pub(crate) tasks: Receiver<WorldCallback>,
 }
 
 impl AsyncRuntime {
@@ -39,7 +42,7 @@ impl AsyncRuntime {
         });
     }
 
-    pub(crate) fn new(sender: Sender<Box<dyn FnOnce(&World)>>) -> Self {
+    pub(crate) fn new(sender: Sender<WorldCallback>) -> Self {
         Self {
             runtime: Arc::new(
                 tokio::runtime::Builder::new_multi_thread()
