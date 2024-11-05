@@ -1,4 +1,11 @@
-use flecs_ecs::prelude::Entity;
+use flecs_ecs::{
+    core::World,
+    macros::Component,
+    prelude::{Entity, Module},
+};
+
+mod cached_save;
+pub use cached_save::cached_save;
 
 pub trait EntityExt {
     fn minecraft_id(&self) -> i32;
@@ -53,5 +60,25 @@ impl EntityExt for Entity {
 
         let raw = (u64::from(most_significant) << 32) | u64::from(least_significant);
         Self(raw)
+    }
+}
+
+/// Represents application identification information used for caching and other system-level operations
+#[derive(Component)]
+pub struct AppId {
+    /// The qualifier/category of the application (e.g. "com", "org", "hyperion")
+    pub qualifier: String,
+    /// The organization that created the application (e.g. "andrewgazelka")
+    pub organization: String,
+    /// The specific application name (e.g. "proof-of-concept")
+    pub application: String,
+}
+
+#[derive(Component)]
+pub struct HyperionUtilsModule;
+
+impl Module for HyperionUtilsModule {
+    fn module(world: &World) {
+        world.component::<AppId>();
     }
 }

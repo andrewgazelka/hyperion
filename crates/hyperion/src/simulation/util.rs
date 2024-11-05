@@ -1,10 +1,7 @@
-use std::{path::PathBuf, sync::LazyLock};
+use std::sync::LazyLock;
 
 use anyhow::{Context, bail};
-use flate2::bufread::GzDecoder;
 use serde::Deserialize;
-use tar::Archive;
-use tracing::info;
 use valence_nbt::{Compound, Value, value::ValueRef};
 use valence_registry::{
     BiomeRegistry,
@@ -111,55 +108,6 @@ pub fn generate_biome_registry() -> anyhow::Result<BiomeRegistry> {
     }
 
     Ok(biome_registry)
-}
-
-pub async fn get_proof_of_concept_save() -> anyhow::Result<PathBuf> {
-    // $HOME/.hyperion
-    let home_dir = dirs_next::home_dir().context("could not find home directory")?;
-
-    let hyperion = home_dir.join(".hyperion");
-
-    if !hyperion.exists() {
-        // create
-        info!("creating .hyperion");
-        tokio::fs::create_dir_all(&hyperion)
-            .await
-            .context("failed to create .hyperion")?;
-    }
-
-    let new_york_dir = hyperion.join("NewYork");
-
-    if new_york_dir.exists() {
-        info!("using cached NewYork load");
-    } else {
-        // download
-        info!("downloading NewYork.tar.gz");
-
-        // https://github.com/andrewgazelka/maps/raw/main/NewYork.tar.gz
-        let url = "https://github.com/andrewgazelka/maps/raw/main/NewYork.tar.gz";
-
-        let response = reqwest::get(url)
-            .await
-            .context("failed to get NewYork.tar.gz")?;
-
-        let bytes = response
-            .bytes()
-            .await
-            .context("failed to get response bytes")?;
-
-        info!("extracting NewYork.tar.gz");
-
-        let decompressed = GzDecoder::new(bytes.as_ref());
-
-        // Create a new archive from the decompressed file.
-        let mut archive = Archive::new(decompressed);
-
-        archive
-            .unpack(&hyperion)
-            .context("failed to unpack NewYork.tar.gz")?;
-    }
-
-    Ok(new_york_dir)
 }
 
 /// Returns the minimum number of bits needed to represent the integer `n`.

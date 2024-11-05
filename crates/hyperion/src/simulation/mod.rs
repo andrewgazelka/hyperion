@@ -27,7 +27,7 @@ pub mod util;
 #[derive(Component, Default, Debug, Deref, DerefMut)]
 pub struct StreamLookup {
     /// The UUID of all players
-    inner: rustc_hash::FxHashMap<u64, Entity>,
+    inner: FxHashMap<u64, Entity>,
 }
 
 #[derive(Component, Default, Debug, Deref, DerefMut)]
@@ -302,14 +302,14 @@ pub struct Yaw {
 
 impl Display for Yaw {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let yaw = self.yaw as f32;
+        let yaw = self.yaw;
         write!(f, "{yaw}")
     }
 }
 
 impl Display for Pitch {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let pitch = self.pitch as f32;
+        let pitch = self.pitch;
         write!(f, "{pitch}")
     }
 }
@@ -331,8 +331,8 @@ pub struct EntitySize {
 
 impl Display for EntitySize {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let half_width = self.half_width as f32;
-        let height = self.height as f32;
+        let half_width = self.half_width;
+        let height = self.height;
         write!(f, "{half_width}x{height}")
     }
 }
@@ -375,8 +375,8 @@ impl ChunkPosition {
 
 #[must_use]
 pub fn aabb(position: Vec3, size: EntitySize) -> Aabb {
-    let half_width = size.half_width as f32;
-    let height = size.height as f32;
+    let half_width = size.half_width;
+    let height = size.height;
     Aabb::new(
         position - Vec3::new(half_width, 0.0, half_width),
         position + Vec3::new(half_width, height, half_width),

@@ -32,7 +32,6 @@ bytemuck.workspace = true
 byteorder.workspace = true
 bytes.workspace = true
 derive_more.workspace = true
-dirs-next.workspace = true
 enumset.workspace = true
 fastrand.workspace = true
 flecs_ecs.workspace = true

@@ -130,7 +130,7 @@ pub fn player_join_world(
 
     let pkt = play::PlayerSpawnPositionS2c {
         position: position.as_dvec3().into(),
-        angle: **yaw as f32,
+        angle: **yaw,
     };
 
     bundle.add_packet(&pkt, world)?;
@@ -172,8 +172,8 @@ pub fn player_join_world(
     bundle.add_packet(
         &play::PlayerPositionLookS2c {
             position: position.as_dvec3(),
-            yaw: **yaw as f32,
-            pitch: **pitch as f32,
+            yaw: **yaw,
+            pitch: **pitch,
             flags: PlayerPositionLookFlags::default(),
             teleport_id: 1.into(),
         },
@@ -255,8 +255,8 @@ pub fn player_join_world(
                         entity_id: VarInt(query_entity.minecraft_id()),
                         player_uuid: uuid.0,
                         position: position.as_dvec3(),
-                        yaw: ByteAngle::from_degrees(**yaw as f32),
-                        pitch: ByteAngle::from_degrees(**pitch as f32),
+                        yaw: ByteAngle::from_degrees(**yaw),
+                        pitch: ByteAngle::from_degrees(**pitch),
                     };
 
                     bundle
@@ -357,8 +357,8 @@ pub fn player_join_world(
         entity_id: current_entity_id,
         player_uuid: uuid,
         position: position.as_dvec3(),
-        yaw: ByteAngle::from_degrees(**yaw as f32),
-        pitch: ByteAngle::from_degrees(**pitch as f32),
+        yaw: ByteAngle::from_degrees(**yaw),
+        pitch: ByteAngle::from_degrees(**pitch),
     };
     compose
         .broadcast(&spawn_player, system_id)
@@ -507,9 +507,9 @@ pub fn spawn_entity_packet(
         object_uuid: *uuid,
         kind: VarInt(kind.get()),
         position: position.as_dvec3(),
-        yaw: ByteAngle::from_degrees(**yaw as f32),
-        pitch: ByteAngle::from_degrees(**pitch as f32),
-        head_yaw: ByteAngle::from_degrees(**yaw as f32), // todo: unsure if this is correct
+        yaw: ByteAngle::from_degrees(**yaw),
+        pitch: ByteAngle::from_degrees(**pitch),
+        head_yaw: ByteAngle::from_degrees(**yaw), // todo: unsure if this is correct
         data: VarInt::default(),
         velocity: Velocity([0; 3]),
     }
