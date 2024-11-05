@@ -4,6 +4,7 @@ use std::{
     sync::Arc,
 };
 
+use anyhow::ensure;
 use glam::IVec2;
 use tokio::{
     fs::File,
@@ -12,7 +13,6 @@ use tokio::{
 };
 
 use super::region::Region;
-use crate::simulation::util::get_proof_of_concept_save;
 
 enum RegionRequest {
     Get {
@@ -27,9 +27,12 @@ pub struct RegionManager {
 }
 
 impl RegionManager {
-    pub fn new(runtime: &Runtime) -> anyhow::Result<Self> {
-        let save = runtime.block_on(get_proof_of_concept_save())?;
+    pub fn new(runtime: &Runtime, save: &Path) -> anyhow::Result<Self> {
+        println!("region manager root: {save:?}");
         let root = save.join("region");
+
+        ensure!(root.exists(), "{} directory does not exist", root.display());
+
         let (sender, receiver) = mpsc::channel(100);
 
         runtime.spawn(RegionManagerTask::new(root.clone(), receiver).run());

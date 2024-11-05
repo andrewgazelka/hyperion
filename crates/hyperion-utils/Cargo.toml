@@ -2,6 +2,17 @@ cargo-features = ["edition2024"]
 
 [dependencies]
 flecs_ecs.workspace = true
+anyhow = "1.0.92"
+directories = "5.0.1"
+sha2 = "0.11.0-pre.4"
+hex.workspace = true
+tracing.workspace = true
+reqwest.workspace = true
+flate2 = "1.0.34"
+tar.workspace = true
+tokio-util.workspace = true
+tokio.workspace = true
+futures-util = "0.3.31"
 
 [lints]
 workspace = true

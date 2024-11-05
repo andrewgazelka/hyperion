@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, path::Path};
 
 use anyhow::Context;
 use tokio::runtime::Runtime;
@@ -14,8 +14,12 @@ pub struct WorldShared {
 }
 
 impl WorldShared {
-    pub(crate) fn new(biomes: &BiomeRegistry, runtime: &Runtime) -> anyhow::Result<Self> {
-        let regions = RegionManager::new(runtime).context("failed to get anvil data")?;
+    pub(crate) fn new(
+        biomes: &BiomeRegistry,
+        runtime: &Runtime,
+        path: &Path,
+    ) -> anyhow::Result<Self> {
+        let regions = RegionManager::new(runtime, path).context("failed to get anvil data")?;
 
         let biome_to_id = biomes
             .iter()

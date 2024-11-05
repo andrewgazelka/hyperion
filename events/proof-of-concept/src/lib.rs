@@ -9,7 +9,11 @@
 use std::net::ToSocketAddrs;
 
 use flecs_ecs::prelude::*;
-use hyperion::{Hyperion, simulation::Player};
+use hyperion::{
+    Hyperion,
+    runtime::AsyncRuntime,
+    simulation::{Player, blocks::Blocks},
+};
 use module::block::BlockModule;
 
 mod component;
@@ -42,6 +46,25 @@ impl Module for ProofOfConceptModule {
         world.import::<LevelModule>();
         world.import::<RegenerationModule>();
         world.import::<hyperion_permission::PermissionModule>();
+        world.import::<hyperion_utils::HyperionUtilsModule>();
+
+        world.set(hyperion_utils::AppId {
+            qualifier: "com".to_string(),
+            organization: "andrewgazelka".to_string(),
+            application: "hyperion-poc".to_string(),
+        });
+
+        world.get::<&AsyncRuntime>(|runtime| {
+            let f = hyperion_utils::cached_save(
+                world,
+                "https://github.com/andrewgazelka/maps/raw/main/GenMap.tar.gz",
+            );
+
+            runtime.schedule(f, |result, world| {
+                let save = result.unwrap();
+                world.set(Blocks::new(&world, &save).unwrap());
+            });
+        });
     }
 }
 

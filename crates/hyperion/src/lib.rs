@@ -52,7 +52,7 @@ use libc::{RLIMIT_NOFILE, getrlimit, setrlimit};
 use libdeflater::CompressionLvl;
 use simulation::{Comms, SimModule, StreamLookup, blocks::Blocks, util::generate_biome_registry};
 use storage::{Events, GlobalEventHandlers, LocalDb, SkinHandler, ThreadLocal};
-use tracing::info;
+use tracing::{info, info_span};
 use util::mojang::MojangClient;
 pub use uuid;
 // todo: slowly move more and more things to arbitrary module
@@ -79,6 +79,7 @@ pub use crate::simulation::command::CommandScope;
 use crate::{
     ingress::{GametickSpan, PendingRemove},
     net::{NetworkStreamRef, PacketDecoder, proxy::ReceiveState},
+    runtime::Tasks,
     simulation::{
         EgressComm, EntitySize, IgnMap, PacketState, Player,
         metadata::{EntityFlags, Pose},
@@ -258,7 +259,21 @@ impl Hyperion {
         world.component::<Comms>();
         world.component::<EgressComm>();
         world.component::<Blocks>();
+
         world.component::<AsyncRuntime>();
+        world.component::<Tasks>();
+
+        system!("run_tasks", world, &mut Tasks($))
+            .with::<flecs::pipeline::OnUpdate>()
+            .each_iter(|it, _, tasks| {
+                let world = it.world();
+                let span = info_span!("run_tasks");
+                let _enter = span.enter();
+                while let Ok(Some(task)) = tasks.tasks.try_recv() {
+                    task(&world);
+                }
+            });
+
         world.component::<StreamLookup>();
         world.component::<EntitySize>();
         world.component::<IgnMap>();
@@ -269,7 +284,11 @@ impl Hyperion {
         let config = config::Config::load("run/config.toml")?;
         world.set(config);
 
-        let runtime = AsyncRuntime::default();
+        let (task_tx, task_rx) = kanal::bounded(32);
+        let runtime = AsyncRuntime::new(task_tx);
+
+        let tasks = Tasks { tasks: task_rx };
+        world.set(tasks);
 
         world.component::<GlobalEventHandlers>();
         world.set(GlobalEventHandlers::default());
@@ -306,14 +325,7 @@ impl Hyperion {
 
         world.set(egress_comm);
 
-        let biome_registry =
-            generate_biome_registry().context("failed to generate biome registry")?;
-
-        let minecraft_world = Blocks::new(&biome_registry, &runtime)?;
-
-        world.set(minecraft_world);
         world.set(runtime);
-
         world.set(StreamLookup::default());
 
         world.import::<SimModule>();

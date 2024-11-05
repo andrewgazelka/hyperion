@@ -1,10 +1,14 @@
 //! Constructs for working with blocks.
 
-use std::{future::Future, ops::Try, pin::Pin, sync::Arc};
+use std::{future::Future, ops::Try, path::Path, pin::Pin, sync::Arc};
 
+use anyhow::Context;
 use bytes::Bytes;
 use chunk::Column;
-use flecs_ecs::{core::Entity, macros::Component};
+use flecs_ecs::{
+    core::{Entity, World, WorldGet},
+    macros::Component,
+};
 use glam::{IVec2, IVec3};
 use indexmap::IndexMap;
 use loader::{ChunkLoaderHandle, launch_manager};
@@ -16,7 +20,7 @@ use valence_generated::block::BlockState;
 use valence_registry::BiomeRegistry;
 use valence_server::layer::chunk::Chunk;
 
-use crate::{CHUNK_HEIGHT_SPAN, runtime::AsyncRuntime};
+use crate::{CHUNK_HEIGHT_SPAN, runtime::AsyncRuntime, simulation::util::generate_biome_registry};
 
 pub mod chunk;
 
@@ -58,19 +62,24 @@ pub struct Blocks {
 }
 
 impl Blocks {
-    pub(crate) fn new(registry: &BiomeRegistry, runtime: &AsyncRuntime) -> anyhow::Result<Self> {
-        let shared = WorldShared::new(registry, runtime)?;
-        let shared = Arc::new(shared);
+    pub fn new(world: &World, path: &Path) -> anyhow::Result<Self> {
+        world.get::<&AsyncRuntime>(|runtime| {
+            let biome_registry =
+                generate_biome_registry().context("failed to generate biome registry")?;
 
-        let (tx_loaded_chunks, rx_loaded_chunks) = tokio::sync::mpsc::unbounded_channel();
+            let shared = WorldShared::new(&biome_registry, runtime, path)?;
+            let shared = Arc::new(shared);
 
-        Ok(Self {
-            chunk_cache: IndexMap::default(),
-            should_update: RoaringBitmap::default(),
-            loader_handle: launch_manager(shared, runtime),
-            tx_loaded_chunks,
-            rx_loaded_chunks,
-            to_confirm: vec![],
+            let (tx_loaded_chunks, rx_loaded_chunks) = tokio::sync::mpsc::unbounded_channel();
+
+            Ok(Self {
+                chunk_cache: IndexMap::default(),
+                should_update: RoaringBitmap::default(),
+                loader_handle: launch_manager(shared, runtime),
+                tx_loaded_chunks,
+                rx_loaded_chunks,
+                to_confirm: vec![],
+            })
         })
     }
 

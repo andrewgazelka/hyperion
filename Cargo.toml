@@ -34,6 +34,7 @@ members = [
 resolver = '2'
 
 [workspace.dependencies]
+tokio-util = { version = "0.7.12" , features = ["full"]}
 anyhow = '1.0.86'
 approx = '0.5.1'
 arrayvec = '0.7.4'
@@ -47,7 +48,7 @@ compact_str = '0.8.0'
 criterion = '0.5.1'
 derive-build = '0.1.1'
 dirs-next = '2.0.0'
-divan = '0.1.14'
+divan = { git = "https://github.com/nvzqz/divan" }
 enumset = '1.1.5'
 fastrand = '2.1.0'
 glam = '0.29.0'
@@ -160,7 +161,7 @@ default-features = false
 version = '0.3.6'
 
 [workspace.dependencies.reqwest]
-features = ['rustls-tls']
+features = ['rustls-tls', 'stream']
 version = '0.12.9'
 
 [workspace.dependencies.roaring]
