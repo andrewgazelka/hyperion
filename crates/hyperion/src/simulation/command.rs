@@ -105,7 +105,7 @@ impl<'a> CommandScope<'a> {
 pub(crate) static ROOT_COMMAND: once_cell::sync::OnceCell<Entity> =
     once_cell::sync::OnceCell::new();
 
-pub fn get_root_command() -> Entity {
+pub fn get_root_command_entity() -> Entity {
     *ROOT_COMMAND.get().unwrap()
 }
 
@@ -115,19 +115,19 @@ impl Command {
     };
 
     #[must_use]
-    pub fn literal(name: &str) -> Self {
+    pub fn literal(name: impl Into<String>) -> Self {
+        let name = name.into();
         Self {
-            data: NodeData::Literal {
-                name: name.to_string(),
-            },
+            data: NodeData::Literal { name },
         }
     }
 
     #[must_use]
-    pub fn argument(name: &str, parser: Parser) -> Self {
+    pub fn argument(name: impl Into<String>, parser: Parser) -> Self {
+        let name = name.into();
         Self {
             data: NodeData::Argument {
-                name: name.to_string(),
+                name,
                 parser,
                 suggestion: None,
             },

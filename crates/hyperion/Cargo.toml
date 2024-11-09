@@ -62,7 +62,6 @@ reqwest.workspace = true
 rustc-hash.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
-tar.workspace = true
 thiserror.workspace = true
 toml.workspace = true
 valence_anvil.workspace = true

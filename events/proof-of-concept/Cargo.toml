@@ -1,27 +1,24 @@
 cargo-features = ["edition2024"]
 
 [dependencies]
-# console-subscriber = "0.4.0"
-clap = {workspace = true, features = ["derive"]}
-dotenvy = "0.15.7"
-ndarray = "0.16.1"
-serde_json = "1.0.128"
 anyhow.workspace = true
+clap = {workspace = true, features = ["derive"]}
 compact_str.workspace = true
+dotenvy = "0.15.7"
 fastrand.workspace = true
 flecs_ecs.workspace = true
-hyperion.workspace = true
+hyperion-clap.workspace = true
 hyperion-inventory.workspace = true
 hyperion-permission.workspace = true
 hyperion-scheduled.workspace = true
 hyperion-text.workspace = true
 hyperion-utils.workspace = true
-nom.workspace = true
+hyperion.workspace = true
 roaring.workspace = true
 rustc-hash.workspace = true
-tracing.workspace = true
 tracing-subscriber.workspace = true
 tracing-tracy.workspace = true
+tracing.workspace = true
 
 [dev-dependencies]
 tokio = {workspace = true, features = ["full"]}

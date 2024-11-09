@@ -1,16 +1,15 @@
 cargo-features = ["edition2024"]
 
 [dependencies]
-heed = "0.20.5"
-num-derive = "0.4.2"
-num-traits = "0.2.19"
 anyhow.workspace = true
+clap.workspace = true
 flecs_ecs.workspace = true
+heed.workspace = true
 hyperion.workspace = true
-nom.workspace = true
+num-derive.workspace = true
+num-traits.workspace = true
 tracing.workspace = true
 uuid.workspace = true
-valence_protocol.workspace = true
 
 [lints]
 workspace = true

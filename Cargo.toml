@@ -1,6 +1,4 @@
-
 [profile]
-
 [profile.release-debug]
 debug = true
 inherits = 'release'
@@ -29,12 +27,14 @@ members = [
   'crates/hyperion-text',
   'crates/hyperion-utils',
   'events/proof-of-concept',
-  'crates/hyperion-permission'
+  'crates/hyperion-permission',
+  'crates/hyperion-clap',
+  'crates/hyperion-command',
 ]
 resolver = '2'
 
 [workspace.dependencies]
-tokio-util = { version = "0.7.12" , features = ["full"]}
+
 anyhow = '1.0.86'
 approx = '0.5.1'
 arrayvec = '0.7.4'
@@ -48,10 +48,10 @@ compact_str = '0.8.0'
 criterion = '0.5.1'
 derive-build = '0.1.1'
 dirs-next = '2.0.0'
-divan = { git = "https://github.com/nvzqz/divan" }
 enumset = '1.1.5'
 fastrand = '2.1.0'
 glam = '0.29.0'
+gxhash = { version = "3.4.1" }
 heapless = '0.8.0'
 heed = '0.20.5'
 hex = '0.4.3'
@@ -63,7 +63,8 @@ libdeflater = '1.20.0'
 memmap2 = '0.9.5'
 more-asserts = '0.3.1'
 no_denormals = '0.1.2'
-nom = "8.0.0-alpha2"
+num-derive = "0.4.2"
+num-traits = "0.2.19"
 once_cell = '1.19.0'
 ordered-float = '4.2.0'
 ouroboros = '0.18.4'
@@ -80,13 +81,11 @@ slotmap = '1.0.7'
 snafu = '0.8.5'
 tango-bench = '0.6.0'
 tar = '0.4.41'
-thiserror = '1.0.63'
+thiserror = "2.0.1"
 tikv-jemallocator = '0.6.0'
 tokio = '1.40.0'
 toml = '0.8.14'
-tracing-tracy = {version = "0.11.3", features = ["timer-fallback"]}
 uuid = '1.8.0'
-
 [workspace.dependencies.bvh]
 git = 'https://github.com/andrewgazelka/bvh-data'
 
@@ -105,16 +104,25 @@ version = '4.5.7'
 features = ['display', 'from', 'deref', 'deref_mut', 'debug', 'constructor']
 version = '1.0.0-beta.7'
 
+[workspace.dependencies.divan]
+git = 'https://github.com/nvzqz/divan'
+
 [workspace.dependencies.flate2]
 default-features = false
 version = '1.0.30'
 
 [workspace.dependencies.flecs_ecs]
-features = ["flecs_manual_registration"]
+features = ['flecs_manual_registration']
 git = 'https://github.com/Indra-db/Flecs-Rust'
 
 [workspace.dependencies.hyperion]
 path = 'crates/hyperion'
+
+[workspace.dependencies.hyperion-clap]
+path = 'crates/hyperion-clap'
+
+[workspace.dependencies.hyperion-command]
+path = 'crates/hyperion-command'
 
 [workspace.dependencies.hyperion-crafting]
 path = 'crates/hyperion-crafting'
@@ -175,6 +183,10 @@ version = '0.10.8'
 features = ['nightly']
 version = '1.1.8'
 
+[workspace.dependencies.tokio-util]
+features = ['full']
+version = '0.7.12'
+
 [workspace.dependencies.tracing]
 features = ['release_max_level_info']
 version = '0.1.40'
@@ -182,6 +194,10 @@ version = '0.1.40'
 [workspace.dependencies.tracing-subscriber]
 features = ['env-filter', 'time']
 version = '0.3.18'
+
+[workspace.dependencies.tracing-tracy]
+features = ['timer-fallback']
+version = '0.11.3'
 
 [workspace.dependencies.valence_anvil]
 branch = 'feat-open'
@@ -219,7 +235,6 @@ branch = 'feat-open'
 git = 'https://github.com/andrewgazelka/valence'
 
 [workspace.lints]
-
 [workspace.lints.clippy]
 cast_precision_loss = 'allow'
 future_not_send = 'allow'
@@ -255,7 +270,6 @@ level = 'deny'
 priority = -1
 
 [workspace.lints.rust]
-
 [workspace.lints.rust.future_incompatible]
 level = 'deny'
 priority = -1

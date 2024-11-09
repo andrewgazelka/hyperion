@@ -557,16 +557,6 @@ impl Module for PlayerJoinModule {
         )]
         ROOT_COMMAND.set(root_command.id()).unwrap();
 
-        let hello_command = world
-            .entity()
-            .set(Command::literal("hello"))
-            .child_of_id(root_command);
-
-        world
-            .entity()
-            .set(Command::literal("world"))
-            .child_of_id(hello_command);
-
         let root_command = root_command.id();
 
         system!(

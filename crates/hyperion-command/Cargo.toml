@@ -1,0 +1,19 @@
+cargo-features = ["edition2024"]
+
+[package]
+name = "hyperion-command"
+version = "0.1.0"
+edition = "2024"
+authors = ["Andrew Gazelka <andrew.gazelka@gmail.com>"]
+readme = "README.md"
+publish = false
+
+[dependencies]
+flecs_ecs.workspace = true
+hyperion.workspace = true
+gxhash.workspace = true
+tracing.workspace = true
+indexmap.workspace = true
+
+[lints]
+workspace = true

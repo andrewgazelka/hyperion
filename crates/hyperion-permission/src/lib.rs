@@ -1,14 +1,11 @@
+use clap::ValueEnum;
 use flecs_ecs::{
     core::{QueryBuilderImpl, SystemAPI, TermBuilderImpl, World, WorldGet},
     macros::{Component, observer},
     prelude::{Module, flecs},
 };
-use hyperion::{
-    simulation::{Uuid, command::cmd_with},
-    storage::LocalDb,
-};
+use hyperion::{simulation::Uuid, storage::LocalDb};
 use num_derive::{FromPrimitive, ToPrimitive};
-use valence_protocol::packets::play::command_tree_s2c::{Parser, StringArg};
 
 #[derive(Component)]
 pub struct PermissionModule;
@@ -24,6 +21,7 @@ mod storage;
     Clone,
     Debug,
     PartialEq,
+    ValueEnum,
     Eq
 )]
 #[repr(C)]
@@ -35,89 +33,30 @@ pub enum Group {
     Admin,
 }
 
-use nom::{
-    IResult, Parser as NomParser,
-    branch::alt,
-    bytes::complete::{is_a, tag},
-    character::complete::space0,
-    combinator::{map, value},
-    sequence::preceded,
-};
-
-fn parse_group(input: &str) -> IResult<&str, Group> {
-    let banned = value(Group::Banned, tag("banned"));
-    let normal = value(Group::Normal, tag("normal"));
-    let moderator = value(Group::Moderator, tag("moderator"));
-    let admin = value(Group::Admin, tag("admin"));
-
-    alt((banned, normal, moderator, admin)).parse(input)
+#[derive(clap::Parser, Debug)]
+pub struct SetCommand {
+    player: String,
+    group: Group,
 }
 
-fn parse_set_command(input: &str) -> IResult<&str, (&str, Group)> {
-    (
-        preceded(
-            (tag("set"), space0),
-            is_a("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_"),
-        ),
-        preceded(space0, parse_group),
-    )
-        .parse(input)
+#[derive(clap::Parser, Debug)]
+pub struct GetCommand {
+    player: String,
 }
 
-fn parse_get_command(input: &str) -> IResult<&str, &str> {
-    preceded(
-        (tag("get"), space0),
-        is_a("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_"),
-    )
-    .parse(input)
+#[derive(clap::Parser, Debug)]
+#[command(name = "perms")]
+pub enum PermissionCommand {
+    Set(SetCommand),
+    Get(GetCommand),
 }
 
-#[derive(Debug, Eq, PartialEq)]
-pub enum Command<'a> {
-    Set { player: &'a str, group: Group },
-    Get { player: &'a str },
-}
-
-pub fn parse_command(input: &str) -> IResult<&str, Command<'_>> {
-    alt((
-        map(parse_set_command, |(player, group)| Command::Set {
-            player,
-            group,
-        }),
-        map(parse_get_command, |player| Command::Get { player }),
-    ))
-    .parse(input)
-}
-
-pub fn parse_perms_command(input: &str) -> IResult<&str, Command<'_>> {
-    preceded(tag("perms "), parse_command).parse(input)
-}
+// todo:
 
 impl Module for PermissionModule {
     fn module(world: &World) {
         world.component::<Group>();
         world.component::<storage::PermissionStorage>();
-        cmd_with(world, "perms", |scope| {
-            scope.literal_with("set", |scope| {
-                scope.argument_with(
-                    "player",
-                    Parser::Entity {
-                        single: true,
-                        only_players: true,
-                    },
-                    |scope| {
-                        scope.argument("group", Parser::String(StringArg::SingleWord));
-                    },
-                );
-            });
-
-            scope.literal_with("get", |scope| {
-                scope.argument("player", Parser::Entity {
-                    single: true,
-                    only_players: true,
-                });
-            });
-        });
 
         world.get::<&LocalDb>(|db| {
             let storage = storage::PermissionStorage::new(db).unwrap();
@@ -135,86 +74,6 @@ impl Module for PermissionModule {
             |(uuid, group, permissions)| {
                 permissions.set(**uuid, *group).unwrap();
             },
-        );
-
-        // system!("perms_command", world, &Compose($), &mut EventQueue<event::Command<'_>>($), &IgnMap($))
-        //     .kind::<flecs::pipeline::OnUpdate>()
-        //     .each_iter(move |it: TableIter<'_, false>, _, (compose, queue, ign_map)| {
-        //         let span = info_span!("perms_command");
-        //         let _enter = span.enter();
-        //
-        //         let world = it.world();
-        //
-        //
-        //         for command in queue.drain() {
-        //             let by = command.by;
-        //
-        //             // todo: assert as none probably
-        //             let Ok((_assert_none, command)) = parse_perms_command(command.raw) else {
-        //                 println!("not parsed");
-        //                 continue;
-        //             };
-        //
-        //             println!("parsed");
-        //
-        //             world.entity_from_id(by)
-        //                 .get::<&NetworkStreamRef>(|io| {
-        //                     match command {
-        //                         Command::Set { player, group } => {
-        //                             let Some(result) = ign_map.get(player) else {
-        //                                 let chat = chat!("Player {player} does not exist");
-        //                                 compose.unicast(&chat, *io, SystemId(8), &world).unwrap();
-        //                                 return;
-        //                             };
-        //
-        //                             world.entity_from_id(*result).get::<&mut Group>(|group_ptr| {
-        //                                 *group_ptr = group;
-        //                             });
-        //
-        //                             let chat = chat!("Set group of {player} to {group:?}");
-        //                             compose.unicast(&chat, *io, SystemId(8), &world).unwrap();
-        //                         }
-        //                         Command::Get { player } => {
-        //                             let Some(result) = ign_map.get(player) else {
-        //                                 let chat = chat!("Player {player} does not exist");
-        //                                 compose.unicast(&chat, *io, SystemId(8), &world).unwrap();
-        //                                 return;
-        //                             };
-        //
-        //                             world.entity_from_id(*result).get::<&Group>(|group_ptr| {
-        //                                 let chat = chat!("Group of {player} is {group_ptr:?}");
-        //                                 compose.unicast(&chat, *io, SystemId(8), &world).unwrap();
-        //                             });
-        //                         }
-        //                     }
-        //                 });
-        //         }
-        //     });
-
-        // based on luckperms https://luckperms.net/wiki/Command-Usage
-        // https://luckperms.net/wiki/General-Commands
-        // let perms = add_command(world, Command::literal("perms"), root_command);
-        // add_command()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_parse_group() {
-        assert_eq!(parse_group("admin"), Ok(("", Group::Admin)));
-        assert_eq!(parse_group("moderator"), Ok(("", Group::Moderator)));
-        assert_eq!(parse_group("normal"), Ok(("", Group::Normal)));
-        assert_eq!(parse_group("banned"), Ok(("", Group::Banned)));
-    }
-
-    #[test]
-    fn test_parse_set_command() {
-        assert_eq!(
-            parse_set_command("set player admin"),
-            Ok(("", ("player", Group::Admin)))
         );
     }
 }
