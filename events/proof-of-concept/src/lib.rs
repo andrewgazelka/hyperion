@@ -33,42 +33,7 @@ use crate::module::{chat::ChatModule, spawn::SpawnModule, stats::StatsModule};
 #[derive(Component)]
 pub struct ProofOfConceptModule;
 
-#[derive(Parser, Debug)]
-#[command(name = "speed")]
-struct SpeedCommand {
-    amount: f32,
-}
-
-impl MinecraftCommand for SpeedCommand {
-    fn execute(self, world: &World, caller: Entity) {
-        let msg = format!("Setting speed to {}", self.amount);
-        let chat = agnostic::chat(msg);
-
-        world.get::<&Compose>(|compose| {
-            caller
-                .entity_view(world)
-                .get::<&NetworkStreamRef>(|stream| {
-                    let packet = fly_speed_packet(self.amount);
-
-                    let mut bundle = DataBundle::new(compose);
-                    bundle.add_packet(&packet, world).unwrap();
-                    bundle.add_packet(&chat, world).unwrap();
-
-                    bundle.send(world, *stream, SystemId(8)).unwrap();
-                });
-        });
-    }
-}
-
-fn fly_speed_packet(amount: f32) -> PlayerAbilitiesS2c {
-    PlayerAbilitiesS2c {
-        flags: PlayerAbilitiesFlags::default()
-            .with_allow_flying(true)
-            .with_flying(true),
-        flying_speed: amount,
-        fov_modifier: 0.0,
-    }
-}
+mod command;
 
 impl Module for ProofOfConceptModule {
     fn module(world: &World) {
@@ -90,7 +55,7 @@ impl Module for ProofOfConceptModule {
         world.import::<hyperion_clap::ClapCommandModule>();
 
         world.get::<&mut CommandRegistry>(|registry| {
-            SpeedCommand::register(registry, world);
+            command::register(registry, world);
         });
 
         world.set(hyperion_utils::AppId {
