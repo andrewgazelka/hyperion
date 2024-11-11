@@ -15,7 +15,7 @@ pub struct AsyncRuntime {
     #[deref]
     #[deref_mut]
     runtime: Arc<tokio::runtime::Runtime>,
-    sender: Sender<WorldCallback>,
+    callback_sender: Sender<WorldCallback>,
 }
 
 #[derive(Component)]
@@ -29,7 +29,7 @@ impl AsyncRuntime {
         future: impl Future<Output = T> + Send + 'static,
         handler: fn(T, &World),
     ) {
-        let sender = self.sender.clone();
+        let sender = self.callback_sender.clone();
 
         self.spawn(async move {
             let result = future.await;
@@ -52,7 +52,7 @@ impl AsyncRuntime {
                     .build()
                     .unwrap(),
             ),
-            sender,
+            callback_sender: sender,
         }
     }
 }
