@@ -3,7 +3,7 @@ cargo-features = ["edition2024"]
 [dependencies]
 serde = {version = "1.0.214", features = ["derive"]}
 serde_json = "1.0.128"
-thiserror = "1.0.64"
+thiserror = "2.0.1"
 uuid = {version = "1.10.0", features = ["v4", "serde"]}
 valence_protocol.workspace = true
 

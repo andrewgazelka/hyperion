@@ -264,7 +264,7 @@ dependencies = [
  "fixedbitset",
  "rustc-hash 1.1.0",
  "serde",
- "thiserror 1.0.68",
+ "thiserror 1.0.69",
  "thread_local",
 ]
 
@@ -326,7 +326,7 @@ dependencies = [
  "instant",
  "nonmax",
  "petgraph",
- "thiserror 1.0.68",
+ "thiserror 1.0.69",
  "tracing",
  "uuid",
 ]
@@ -1905,7 +1905,7 @@ version = "0.1.0"
 dependencies = [
  "serde",
  "serde_json",
- "thiserror 1.0.68",
+ "thiserror 2.0.1",
  "uuid",
  "valence_protocol",
 ]
@@ -2956,7 +2956,7 @@ dependencies = [
  "rustc-hash 2.0.0",
  "rustls",
  "socket2",
- "thiserror 1.0.68",
+ "thiserror 1.0.69",
  "tokio",
  "tracing",
 ]
@@ -2973,7 +2973,7 @@ dependencies = [
  "rustc-hash 2.0.0",
  "rustls",
  "slab",
- "thiserror 1.0.68",
+ "thiserror 1.0.69",
  "tinyvec",
  "tracing",
 ]
@@ -3120,7 +3120,7 @@ checksum = "ba009ff324d1fc1b900bd1fdb31564febe58a8ccc8a6fdbb93b543d33b13ca43"
 dependencies = [
  "getrandom",
  "libredox",
- "thiserror 1.0.68",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -3761,7 +3761,7 @@ dependencies = [
  "rand 0.8.5",
  "scroll",
  "tempfile",
- "thiserror 1.0.68",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -3821,11 +3821,11 @@ dependencies = [
 
 [[package]]
 name = "thiserror"
-version = "1.0.68"
+version = "1.0.69"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "02dd99dc800bbb97186339685293e1cc5d9df1f8fae2d0aecd9ff1c77efea892"
+checksum = "b6aaf5339b578ea85b50e080feb250a3e8ae8cfcdff9a461c9ec2904bc923f52"
 dependencies = [
- "thiserror-impl 1.0.68",
+ "thiserror-impl 1.0.69",
 ]
 
 [[package]]
@@ -3839,9 +3839,9 @@ dependencies = [
 
 [[package]]
 name = "thiserror-impl"
-version = "1.0.68"
+version = "1.0.69"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a7c61ec9a6f64d2793d8a45faba21efbe3ced62a886d44c36a009b2b519b4c7e"
+checksum = "4fee6c4efc90059e10f81e6d42c60a18f76588c3d74cb83a0b242a2b6c7504c1"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -4269,7 +4269,7 @@ dependencies = [
  "byteorder",
  "flate2",
  "lru",
- "thiserror 1.0.68",
+ "thiserror 1.0.69",
  "valence_nbt",
  "valence_server",
 ]
@@ -4336,7 +4336,7 @@ version = "0.2.0-alpha.1+mc.1.20.1"
 source = "git+https://github.com/andrewgazelka/valence?branch=feat-open#7ed3252c1172c935f8e56df0699339ab35b08f65"
 dependencies = [
  "serde",
- "thiserror 1.0.68",
+ "thiserror 1.0.69",
  "valence_ident_macros",
 ]
 
@@ -4367,7 +4367,7 @@ dependencies = [
  "cesu8",
  "indexmap",
  "serde",
- "thiserror 1.0.68",
+ "thiserror 1.0.69",
  "uuid",
 ]
 
@@ -4386,7 +4386,7 @@ dependencies = [
  "flate2",
  "serde",
  "serde_json",
- "thiserror 1.0.68",
+ "thiserror 1.0.69",
  "tracing",
  "url",
  "uuid",
@@ -4475,7 +4475,7 @@ source = "git+https://github.com/andrewgazelka/valence?branch=feat-open#7ed3252c
 dependencies = [
  "serde",
  "serde_json",
- "thiserror 1.0.68",
+ "thiserror 1.0.69",
  "uuid",
  "valence_ident",
  "valence_nbt",
