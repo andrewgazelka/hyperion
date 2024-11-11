@@ -1,13 +1,13 @@
 cargo-features = ["edition2024"]
 
 [dependencies]
-convert_case = "0.6.0"
-proc-macro2 = "1.0.88"
-quote = "1.0.37"
-syn = "2.0.79"
+convert_case.workspace = true
+proc-macro2.workspace = true
+quote.workspace = true
+syn.workspace = true
 
 [dev-dependencies]
-trybuild = "1.0.100"
+trybuild.workspace = true
 hyperion.workspace = true
 
 [lib]
