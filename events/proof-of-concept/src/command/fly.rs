@@ -35,7 +35,7 @@ impl MinecraftCommand for FlyCommand {
 
 fn fly_packet() -> PlayerAbilitiesS2c {
     const SPEED_METER_PER_SECOND: f32 = 10.92;
-    
+
     // guessing.. idk what the actual conversion is
     const SOME_CONVERSION: f32 = SPEED_METER_PER_SECOND / 70.0;
 

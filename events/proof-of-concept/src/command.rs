@@ -1,6 +1,5 @@
 use flecs_ecs::core::World;
-use hyperion_clap::hyperion_command::CommandRegistry;
-use hyperion_clap::MinecraftCommand;
+use hyperion_clap::{MinecraftCommand, hyperion_command::CommandRegistry};
 
 use crate::command::{fly::FlyCommand, speed::SpeedCommand};
 

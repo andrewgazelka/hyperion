@@ -8,19 +8,13 @@
 
 use std::net::ToSocketAddrs;
 
-use clap::Parser;
 use flecs_ecs::prelude::*;
 use hyperion::{
     Hyperion,
-    net::{Compose, DataBundle, NetworkStreamRef, agnostic},
     runtime::AsyncRuntime,
     simulation::{Player, blocks::Blocks},
-    system_registry::SystemId,
-    valence_protocol::packets::play::{
-        PlayerAbilitiesS2c, player_abilities_s2c::PlayerAbilitiesFlags,
-    },
 };
-use hyperion_clap::{MinecraftCommand, hyperion_command::CommandRegistry};
+use hyperion_clap::hyperion_command::CommandRegistry;
 use module::block::BlockModule;
 
 mod component;

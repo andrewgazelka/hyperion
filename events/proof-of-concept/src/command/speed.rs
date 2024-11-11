@@ -1,9 +1,12 @@
 use clap::Parser;
 use flecs_ecs::core::{Entity, EntityViewGet, World, WorldGet};
-use hyperion::net::{agnostic, Compose, DataBundle, NetworkStreamRef};
-use hyperion::system_registry::SystemId;
-use hyperion::valence_protocol::packets::play::player_abilities_s2c::PlayerAbilitiesFlags;
-use hyperion::valence_protocol::packets::play::PlayerAbilitiesS2c;
+use hyperion::{
+    net::{Compose, DataBundle, NetworkStreamRef, agnostic},
+    system_registry::SystemId,
+    valence_protocol::packets::play::{
+        PlayerAbilitiesS2c, player_abilities_s2c::PlayerAbilitiesFlags,
+    },
+};
 use hyperion_clap::MinecraftCommand;
 
 #[derive(Parser, Debug)]
@@ -11,7 +14,6 @@ use hyperion_clap::MinecraftCommand;
 pub struct SpeedCommand {
     amount: f32,
 }
-
 
 impl MinecraftCommand for SpeedCommand {
     fn execute(self, world: &World, caller: Entity) {
