@@ -19,6 +19,7 @@ mod handshake;
 struct Bot {
     name: String,
     uuid: Uuid,
+    buf: Vec<u8>,
     connection: tokio::net::TcpStream,
 }
 
@@ -34,7 +35,10 @@ pub fn bootstrap(config: &Config) {
     let first_uuid: u128 = rng.r#gen();
     let first_uuid = Uuid::from_u128(first_uuid);
     
-    let first_handle = tokio::spawn(login(first_bot));
-    let second_handle = tokio::spawn(login(second_bot));
+    for _ in 0..10 {
+        tokio::spawn(async move {
+            let mut bot = Bot::new(first_name.value, first_uuid, first_addr);
+        });
+    }
 }
 
