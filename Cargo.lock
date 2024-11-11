@@ -168,7 +168,7 @@ checksum = "30ca9a001c1e8ba5149f91a74362376cc6bc5b919d92d988668657bd570bdcec"
 dependencies = [
  "async-task",
  "concurrent-queue",
- "fastrand 2.1.1",
+ "fastrand 2.2.0",
  "futures-lite 2.4.0",
  "slab",
 ]
@@ -453,7 +453,7 @@ dependencies = [
  "arrayvec",
  "criterion",
  "divan",
- "fastrand 2.1.1",
+ "fastrand 2.2.0",
  "glam",
  "itertools 0.13.0",
  "ordered-float",
@@ -1127,9 +1127,9 @@ dependencies = [
 
 [[package]]
 name = "fastrand"
-version = "2.1.1"
+version = "2.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e8c02a5121d4ea3eb16a80748c74f5549a5665e4c21333c6098f283870fbdea6"
+checksum = "486f806e73c5707928240ddc295403b1b93c96a02038563881c4a2fd84b81ac4"
 
 [[package]]
 name = "fdeflate"
@@ -1286,7 +1286,7 @@ version = "2.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3f1fa2f9765705486b33fd2acf1577f8ec449c2ba1f318ae5447697b7c08d210"
 dependencies = [
- "fastrand 2.1.1",
+ "fastrand 2.2.0",
  "futures-core",
  "futures-io",
  "parking",
@@ -1712,7 +1712,7 @@ dependencies = [
  "derive_more",
  "divan",
  "enumset",
- "fastrand 2.1.1",
+ "fastrand 2.2.0",
  "flate2",
  "flecs_ecs",
  "glam",
@@ -2905,7 +2905,7 @@ dependencies = [
  "clap",
  "compact_str",
  "dotenvy",
- "fastrand 2.1.1",
+ "fastrand 2.2.0",
  "flecs_ecs",
  "hyperion",
  "hyperion-clap",
@@ -3794,7 +3794,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f0f2c9fc62d0beef6951ccffd757e241266a2c833136efbe35af6cd2567dca5b"
 dependencies = [
  "cfg-if",
- "fastrand 2.1.1",
+ "fastrand 2.2.0",
  "once_cell",
  "rustix",
  "windows-sys 0.59.0",
