@@ -9,7 +9,7 @@ fn main() {
 fn generate_test_data(width: usize, updates: usize) -> Vec<Vec<f64>> {
     let mut rng = rand::thread_rng();
     (0..updates)
-        .map(|_| (0..width).map(|_| rng.random::<_>()).collect())
+        .map(|_| (0..width).map(|_| rng.r#gen::<f64>()).collect())
         .collect()
 }
 
