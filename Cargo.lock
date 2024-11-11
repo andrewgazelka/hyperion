@@ -1832,6 +1832,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "hyperion-rank-tree"
+version = "0.1.0"
+dependencies = [
+ "hyperion-inventory",
+ "uuid",
+ "valence_protocol",
+]
+
+[[package]]
 name = "hyperion-scheduled"
 version = "0.1.0"
 

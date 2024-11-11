@@ -207,7 +207,7 @@ impl<const T: usize> Inventory<T> {
 impl PlayerInventory {
     pub const BOOTS_SLOT: u16 = 8;
     pub const CHESTPLATE_SLOT: u16 = 6;
-    pub const HAND_START_SLOT: u16 = 36;
+    pub const HOTBAR_START_SLOT: u16 = 36;
     pub const HELMET_SLOT: u16 = 5;
     pub const LEGGINGS_SLOT: u16 = 7;
 
@@ -244,7 +244,7 @@ impl PlayerInventory {
         result
     }
 
-    pub fn set_hand_slot(&mut self, idx: u16, stack: ItemStack) {
+    pub fn set_hotbar(&mut self, idx: u16, stack: ItemStack) {
         const HAND_END_SLOT: u16 = 45;
 
         let idx = idx + HAND_START_SLOT;
