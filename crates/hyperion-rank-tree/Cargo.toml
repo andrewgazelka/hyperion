@@ -10,6 +10,7 @@ publish = false
 hyperion-inventory.workspace = true
 valence_protocol.workspace = true
 uuid.workspace = true
+clap.workspace = true
 
 [lints]
 workspace = true

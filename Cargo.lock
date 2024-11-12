@@ -1835,6 +1835,7 @@ dependencies = [
 name = "hyperion-rank-tree"
 version = "0.1.0"
 dependencies = [
+ "clap",
  "hyperion-inventory",
  "uuid",
  "valence_protocol",
@@ -2865,6 +2866,7 @@ dependencies = [
  "hyperion-clap",
  "hyperion-inventory",
  "hyperion-permission",
+ "hyperion-rank-tree",
  "hyperion-scheduled",
  "hyperion-text",
  "hyperion-utils",

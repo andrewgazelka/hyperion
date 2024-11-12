@@ -1,20 +1,22 @@
-use std::mem::offset_of;
-use hyperion_inventory::PlayerInventory;
-use valence_protocol::{nbt, nbt::Value, ItemKind, ItemStack};
+use clap::ValueEnum;
 
-mod inventory;
+pub mod inventory;
+
 mod util;
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, ValueEnum)]
 #[repr(C)]
-enum Rank {
+pub enum Rank {
     /// ![Widget Example](https://i.imgur.com/pW7v0Xn.png)
     ///
     /// The stick is the starting rank.
-    Stick,
+    Stick, // -> [Pickaxe | Sword | Bow ]
 
+    Bow,
+    Sword,
     Pickaxe,
-}
 
-impl Rank {
+    Magician,
+    Knight,
+    Builder,
 }
