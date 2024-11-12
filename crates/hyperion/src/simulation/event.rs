@@ -7,6 +7,8 @@ use valence_generated::block::BlockState;
 use valence_protocol::Hand;
 use valence_server::entity::item_frame::ItemStack;
 
+use crate::simulation::skin::PlayerSkin;
+
 #[derive(Component, Default, Debug)]
 pub struct ItemDropEvent {
     pub item: ItemStack,
@@ -16,6 +18,12 @@ pub struct ItemDropEvent {
 #[derive(Debug)]
 pub struct ChatMessage<'a> {
     pub msg: &'a str,
+    pub by: Entity,
+}
+
+#[derive(Debug)]
+pub struct SetSkin {
+    pub skin: PlayerSkin,
     pub by: Entity,
 }
 

@@ -1,6 +1,7 @@
 use clap::ValueEnum;
 
 pub mod inventory;
+pub mod skin;
 
 mod util;
 
@@ -12,11 +13,11 @@ pub enum Rank {
     /// The stick is the starting rank.
     Stick, // -> [Pickaxe | Sword | Bow ]
 
-    Bow,
+    Archer,
     Sword,
-    Pickaxe,
+    Miner,
 
-    Magician,
+    Mage,
     Knight,
     Builder,
 }

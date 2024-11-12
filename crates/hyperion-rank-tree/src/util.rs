@@ -98,7 +98,10 @@ impl ItemBuilder {
 
     pub fn glowing(mut self) -> Self {
         let nbt = self.nbt.get_or_insert_with(nbt::Compound::new);
-        nbt.insert("Glowing", 1_i8);
+        nbt.insert(
+            "Enchantments",
+            Value::List(nbt::list::List::Compound(vec![nbt::Compound::new()])),
+        );
         self
     }
 
@@ -130,7 +133,7 @@ mod tests {
 
     #[test]
     fn test_item_builder() {
-        let sword = ItemBuilder::new(ItemKind::DiamondSword)
+        let _sword = ItemBuilder::new(ItemKind::DiamondSword)
             .count(1)
             .glowing()
             .add_attribute(AttackDamage(7.0))

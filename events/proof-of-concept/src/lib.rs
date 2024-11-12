@@ -22,12 +22,16 @@ mod module;
 
 use module::{attack::AttackModule, level::LevelModule, regeneration::RegenerationModule};
 
-use crate::module::{chat::ChatModule, spawn::SpawnModule, stats::StatsModule};
+use crate::{
+    module::{chat::ChatModule, spawn::SpawnModule, stats::StatsModule},
+    skin::SkinModule,
+};
 
 #[derive(Component)]
 pub struct ProofOfConceptModule;
 
 mod command;
+mod skin;
 
 impl Module for ProofOfConceptModule {
     fn module(world: &World) {
@@ -47,6 +51,7 @@ impl Module for ProofOfConceptModule {
         world.import::<hyperion_permission::PermissionModule>();
         world.import::<hyperion_utils::HyperionUtilsModule>();
         world.import::<hyperion_clap::ClapCommandModule>();
+        world.import::<SkinModule>();
 
         world.get::<&mut CommandRegistry>(|registry| {
             command::register(registry, world);

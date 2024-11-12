@@ -1836,7 +1836,9 @@ name = "hyperion-rank-tree"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "hyperion",
  "hyperion-inventory",
+ "toml",
  "uuid",
  "valence_protocol",
 ]
