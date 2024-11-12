@@ -59,6 +59,16 @@ impl<const N: usize> Inventory<N> {
         Ok(())
     }
 
+    pub fn items(&self) -> impl Iterator<Item = (u16, &ItemStack)> + '_ {
+        self.slots.iter().enumerate().filter_map(|(idx, item)| {
+            if item.is_empty() {
+                None
+            } else {
+                Some((u16::try_from(idx).unwrap(), item))
+            }
+        })
+    }
+
     #[must_use]
     pub const fn slots(&self) -> &[ItemStack; N] {
         &self.slots
