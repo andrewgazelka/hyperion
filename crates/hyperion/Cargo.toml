@@ -8,9 +8,6 @@ name = "set"
 harness = false
 name = "atomic"
 
-[build-dependencies]
-rustc_version.workspace = true
-
 [dependencies]
 colored = "2.1.0"
 flate2 = {workspace = true, features = ["zlib-ng"]}
@@ -76,9 +73,6 @@ valence_text.workspace = true
 [dev-dependencies]
 divan.workspace = true
 fastrand.workspace = true
-hex.workspace = true
-rustc_version.workspace = true
-tango-bench.workspace = true
 
 [lints]
 workspace = true

@@ -1,0 +1,126 @@
+use std::borrow::Cow;
+
+use flecs_ecs::{
+    core::{Entity, EntityViewGet, QueryBuilderImpl, SystemAPI, TermBuilderImpl, World},
+    macros::{Component, system},
+    prelude::Module,
+};
+use hyperion::{
+    egress::player_join::{PlayerListActions, PlayerListEntry, PlayerListS2c},
+    net::{Compose, DataBundle, NetworkStreamRef},
+    simulation::{event, skin::PlayerSkin},
+    storage::EventQueue,
+    system_registry::SystemId,
+    uuid::Uuid,
+    valence_ident::ident,
+    valence_protocol,
+    valence_protocol::{
+        GameMode, VarInt,
+        game_mode::OptGameMode,
+        packets::play::{EntitiesDestroyS2c, PlayerRemoveS2c, PlayerRespawnS2c},
+    },
+};
+use hyperion_utils::EntityExt;
+
+#[derive(Component)]
+pub struct SkinModule;
+
+impl Module for SkinModule {
+    fn module(world: &World) {
+        system!("set_skin", world, &mut EventQueue<event::SetSkin>($), &Compose($)).each_iter(
+            |it, _, (event_queue, compose)| {
+                let world = it.world();
+                for event in event_queue.drain() {
+                    println!("got {event:?}");
+                    event
+                        .by
+                        .entity_view(world)
+                        .get::<(&NetworkStreamRef, &hyperion::simulation::Uuid)>(|(io, uuid)| {
+                            on_set_skin(event.by, &world, compose, uuid.0, event.skin, *io);
+                        });
+                }
+            },
+        );
+    }
+}
+
+fn on_set_skin(
+    id: Entity,
+    world: &World,
+    compose: &Compose,
+    uuid: Uuid,
+    skin: PlayerSkin,
+    io: NetworkStreamRef,
+) {
+    let minecraft_id = id.minecraft_id();
+    let mut bundle = DataBundle::new(compose);
+    // Remove player info
+    bundle
+        .add_packet(
+            &PlayerRemoveS2c {
+                uuids: Cow::Borrowed(&[uuid]),
+            },
+            world,
+        )
+        .unwrap();
+
+    // Destroy player entity
+    bundle
+        .add_packet(
+            &EntitiesDestroyS2c {
+                entity_ids: Cow::Borrowed(&[VarInt(minecraft_id)]),
+            },
+            world,
+        )
+        .unwrap();
+
+    // todo: in future, do not clone
+    let property = valence_protocol::profile::Property {
+        name: "textures".to_string(),
+        value: skin.textures,
+        signature: Some(skin.signature),
+    };
+
+    let property = &[property];
+
+    // Add player back with new skin
+    bundle
+        .add_packet(
+            &PlayerListS2c {
+                actions: PlayerListActions::default().with_add_player(true),
+                entries: Cow::Borrowed(&[PlayerListEntry {
+                    player_uuid: uuid,
+                    username: Cow::Borrowed("Player"),
+                    properties: Cow::Borrowed(property),
+                    chat_data: None,
+                    listed: true,
+                    ping: 20,
+                    game_mode: GameMode::Survival,
+                    display_name: None,
+                }]),
+            },
+            world,
+        )
+        .unwrap();
+
+    // // Respawn player
+    bundle
+        .add_packet(
+            &PlayerRespawnS2c {
+                dimension_type_name: ident!("minecraft:overworld").into(),
+                dimension_name: ident!("minecraft:overworld").into(),
+                hashed_seed: 0,
+                game_mode: GameMode::Survival,
+                previous_game_mode: OptGameMode::default(),
+                is_debug: false,
+                is_flat: false,
+                copy_metadata: false,
+                last_death_location: None,
+                portal_cooldown: VarInt::default(),
+            },
+            world,
+        )
+        .unwrap();
+
+    bundle.send(world, io, SystemId(8)).unwrap();
+}

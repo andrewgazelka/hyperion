@@ -13,6 +13,7 @@ hyperion-permission.workspace = true
 hyperion-scheduled.workspace = true
 hyperion-text.workspace = true
 hyperion-utils.workspace = true
+hyperion-rank-tree.workspace = true
 hyperion.workspace = true
 roaring.workspace = true
 rustc-hash.workspace = true
@@ -21,7 +22,6 @@ tracing-tracy.workspace = true
 tracing.workspace = true
 
 [dev-dependencies]
-tokio = {workspace = true, features = ["full"]}
 tracing = {workspace = true, features = ["release_max_level_info"]}
 
 [lints]

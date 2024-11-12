@@ -51,12 +51,17 @@ enum TryAddSlot {
 
 const HAND_START_SLOT: u16 = 36;
 
-impl<const T: usize> Inventory<T> {
+impl<const N: usize> Inventory<N> {
     pub fn set(&mut self, index: u16, stack: ItemStack) -> Result<(), InventoryAccessError> {
         let item = self.get_mut(index)?;
         *item = stack;
         self.updated_since_last_tick.insert(u32::from(index));
         Ok(())
+    }
+
+    #[must_use]
+    pub const fn slots(&self) -> &[ItemStack; N] {
+        &self.slots
     }
 
     pub fn clear(&mut self) {
@@ -207,9 +212,10 @@ impl<const T: usize> Inventory<T> {
 impl PlayerInventory {
     pub const BOOTS_SLOT: u16 = 8;
     pub const CHESTPLATE_SLOT: u16 = 6;
-    pub const HAND_START_SLOT: u16 = 36;
     pub const HELMET_SLOT: u16 = 5;
+    pub const HOTBAR_START_SLOT: u16 = 36;
     pub const LEGGINGS_SLOT: u16 = 7;
+    pub const OFFHAND_SLOT: u16 = OFFHAND_SLOT;
 
     #[must_use]
     pub fn crafting_item(&self, registry: &CraftingRegistry) -> ItemStack {
@@ -244,7 +250,7 @@ impl PlayerInventory {
         result
     }
 
-    pub fn set_hand_slot(&mut self, idx: u16, stack: ItemStack) {
+    pub fn set_hotbar(&mut self, idx: u16, stack: ItemStack) {
         const HAND_END_SLOT: u16 = 45;
 
         let idx = idx + HAND_START_SLOT;
@@ -254,6 +260,10 @@ impl PlayerInventory {
         }
 
         self.set(idx, stack).unwrap();
+    }
+
+    pub fn set_offhand(&mut self, stack: ItemStack) {
+        self.set(Self::OFFHAND_SLOT, stack).unwrap();
     }
 
     pub fn set_helmet(&mut self, stack: ItemStack) {

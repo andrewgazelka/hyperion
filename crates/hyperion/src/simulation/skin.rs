@@ -8,7 +8,16 @@ use tracing::info;
 use crate::{storage::SkinHandler, util::mojang::MojangClient};
 
 /// A signed player skin.
-#[derive(Debug, Clone, Archive, Component, rkyv::Deserialize, rkyv::Serialize)]
+#[derive(
+    Debug,
+    Clone,
+    Archive,
+    Component,
+    rkyv::Deserialize,
+    rkyv::Serialize,
+    serde::Serialize,
+    serde::Deserialize
+)]
 pub struct PlayerSkin {
     /// The textures of the player skin, usually obtained from the [`MojangClient`] as a base64 string.
     pub textures: String,
