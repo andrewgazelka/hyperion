@@ -30,6 +30,19 @@ services:
     networks:
       - proxy-network
 
+  hyperion-bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: hyperion-bot-debug
+    command: [ ] # ["--ip", "0.0.0.0", "--port", "35565"]
+    restart: unless-stopped
+    environment:
+      - RUST_LOG=info
+      - HOST=hyperion-proxy:25565
+    networks:
+      - proxy-network
+
 networks:
   proxy-network:
     driver: bridge

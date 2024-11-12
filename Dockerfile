@@ -2,6 +2,23 @@
 ARG RUST_NIGHTLY_VERSION=nightly-2024-11-11
 ARG RUST_TARGET_CPU=native
 #ARG RUSTFLAGS="-C target-cpu=${RUST_TARGET_CPU} -Z share-generics=y -Z threads=8 --cfg tokio_unstable"
+
+
+ARG PATH_TO_LIBVOIDSTAR=/usr/lib/libvoidstar.so
+
+
+ARG RUSTFLAGS=" \
+                  -Ccodegen-units=1 \
+                  -Cpasses=sancov-module \
+                  -Cllvm-args=-sanitizer-coverage-level=3 \
+                  -Cllvm-args=-sanitizer-coverage-trace-pc-guard \
+                  -Clink-args=-Wl,--build-id  \
+                  -Clink-args=-Wl,-z,nostart-stop-gc \
+                  -L${PATH_TO_LIBVOIDSTAR} \
+                  -lvoidstar"
+
+
+
 ARG CARGO_HOME=/usr/local/cargo
 
 # Use Ubuntu as base image
@@ -27,13 +44,20 @@ RUN apt-get update && \
 FROM packages AS builder-base
 ARG RUST_NIGHTLY_VERSION
 ARG RUSTFLAGS
+ARG PATH_TO_LIBVOIDSTAR
 ARG CARGO_HOME
 ENV RUSTFLAGS=${RUSTFLAGS}
 ENV CARGO_HOME=${CARGO_HOME}
+ENV PATH_TO_LIBVOIDSTAR=${PATH_TO_LIBVOIDSTAR}
+
 RUN curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain ${RUST_NIGHTLY_VERSION} && \
     $CARGO_HOME/bin/rustup component add rust-src && \
     $CARGO_HOME/bin/rustc --version
 ENV PATH="${CARGO_HOME}/bin:${PATH}"
+
+# copy libvoidstar.so to /usr/lib
+COPY ./libvoidstar.so /usr/lib/libvoidstar.so
+
 WORKDIR /app
 COPY Cargo.toml Cargo.lock ./
 COPY crates/ ./crates
