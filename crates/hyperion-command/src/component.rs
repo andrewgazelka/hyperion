@@ -13,7 +13,7 @@ pub struct CommandHandler {
 
 #[derive(Component)]
 pub struct CommandRegistry {
-    pub(crate) commands: IndexMap<String, CommandHandler, gxhash::GxBuildHasher>,
+    pub(crate) commands: IndexMap<String, CommandHandler>,
 }
 
 impl CommandRegistry {

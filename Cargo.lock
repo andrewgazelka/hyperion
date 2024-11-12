@@ -1381,15 +1381,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "gxhash"
-version = "3.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a197c9b654827513cf53842c5c6d3da2b4b35a785f8e0eff78bdf8e445aba1bb"
-dependencies = [
- "rustversion",
-]
-
-[[package]]
 name = "h2"
 version = "0.4.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1724,7 +1715,6 @@ name = "hyperion-command"
 version = "0.1.0"
 dependencies = [
  "flecs_ecs",
- "gxhash",
  "hyperion",
  "indexmap",
  "regex",
@@ -2866,7 +2856,6 @@ dependencies = [
  "dotenvy",
  "fastrand 2.2.0",
  "flecs_ecs",
- "gxhash",
  "hyperion",
  "hyperion-clap",
  "hyperion-inventory",

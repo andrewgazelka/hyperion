@@ -1,4 +1,4 @@
-use eyre::{eyre, Context};
+use eyre::Context;
 use hyperion_bot::bootstrap;
 
 #[tokio::main]

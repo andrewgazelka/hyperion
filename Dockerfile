@@ -1,7 +1,7 @@
 # Define base arguments for versioning and optimization
-ARG RUST_NIGHTLY_VERSION=nightly-2024-10-22
+ARG RUST_NIGHTLY_VERSION=nightly-2024-11-11
 ARG RUST_TARGET_CPU=native
-ARG RUSTFLAGS="-C target-cpu=${RUST_TARGET_CPU} -Z share-generics=y -Z threads=8 --cfg tokio_unstable"
+#ARG RUSTFLAGS="-C target-cpu=${RUST_TARGET_CPU} -Z share-generics=y -Z threads=8 --cfg tokio_unstable"
 ARG CARGO_HOME=/usr/local/cargo
 
 # Use Ubuntu as base image
@@ -53,7 +53,8 @@ RUN --mount=type=cache,target=${CARGO_HOME}/registry \
     cargo build --frozen && \
     mkdir -p /app/build && \
     cp target/debug/hyperion-proxy /app/build/ && \
-    cp target/debug/proof-of-concept /app/build/
+    cp target/debug/proof-of-concept /app/build/ && \
+    cp target/debug/hyperion-bot /app/build/
 
 # Release builder
 FROM builder-base AS build-release
@@ -64,7 +65,8 @@ RUN --mount=type=cache,target=${CARGO_HOME}/registry \
     cargo build --profile release-full --frozen && \
     mkdir -p /app/build && \
     cp target/release-full/hyperion-proxy /app/build/ && \
-    cp target/release-full/proof-of-concept /app/build/
+    cp target/release-full/proof-of-concept /app/build/ && \
+    cp target/release-full/hyperion-bot /app/build/
 
 # Runtime base image
 FROM ubuntu:22.04 AS runtime-base
@@ -96,20 +98,36 @@ EXPOSE 8080
 ENTRYPOINT ["/hyperion-proxy"]
 CMD ["0.0.0.0:8080"]
 
-# NYC Debug
+# Proof of Concept Debug
 FROM runtime-base AS proof-of-concept-debug
 COPY --from=build-debug /app/build/proof-of-concept /
 LABEL org.opencontainers.image.source="https://github.com/yourusername/proof-of-concept" \
-      org.opencontainers.image.description="Debug Build - NYC Server" \
+      org.opencontainers.image.description="Debug Build - Proof of Concept Server" \
       org.opencontainers.image.version="1.0.0"
 ENTRYPOINT ["/proof-of-concept"]
 CMD ["--ip", "0.0.0.0", "--port", "35565"]
 
-# NYC Release
+# Proof of Concept Release
 FROM runtime-base AS proof-of-concept-release
 COPY --from=build-release /app/build/proof-of-concept /
 LABEL org.opencontainers.image.source="https://github.com/yourusername/proof-of-concept" \
-      org.opencontainers.image.description="Release Build - NYC Server" \
+      org.opencontainers.image.description="Release Build - Proof of Concept Server" \
       org.opencontainers.image.version="1.0.0"
 ENTRYPOINT ["/proof-of-concept"]
 CMD ["--ip", "0.0.0.0", "--port", "35565"]
+
+# Hyperion Bot Debug
+FROM runtime-base AS hyperion-bot-debug
+COPY --from=build-debug /app/build/hyperion-bot /
+LABEL org.opencontainers.image.source="https://github.com/yourusername/hyperion-bot" \
+      org.opencontainers.image.description="Debug Build - Hyperion Bot" \
+      org.opencontainers.image.version="1.0.0"
+ENTRYPOINT ["/hyperion-bot"]
+CMD ["--ip", "0.0.0.0", "--port", "35565"]
+
+# Hyperion Bot Release
+FROM runtime-base AS hyperion-bot-release
+COPY --from=build-release /app/build/hyperion-bot /
+LABEL org.opencontainers.image.source="https://github.com/yourusername/hyperion-bot" \
+      org.opencontainers.image.description="Release Build - Hyperion Bot" \
+      org.opencontainers.image.version="1.0.0"

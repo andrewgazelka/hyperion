@@ -3,5 +3,5 @@ use serde::Deserialize;
 #[derive(Debug, Deserialize)]
 pub struct Config {
     pub max_number_of_bots: usize,
-    pub add
+    pub host: String,
 }

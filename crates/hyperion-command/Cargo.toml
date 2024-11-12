@@ -10,9 +10,7 @@ publish = false
 
 [dependencies]
 flecs_ecs = {workspace = true}
-gxhash = {workspace = true}
 hyperion = {workspace = true}
-indexmap = {workspace = true}
 regex = {workspace = true}
 tracing = {workspace = true}
 

@@ -21,7 +21,6 @@ tracing-subscriber = { workspace = true }
 tracing-tracy = { workspace = true }
 tracing = { workspace = true }
 rayon = { workspace = true }
-gxhash = { workspace = true }
 derive_more = { workspace = true }
 
 [dev-dependencies]
