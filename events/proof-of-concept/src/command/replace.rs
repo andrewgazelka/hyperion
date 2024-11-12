@@ -109,7 +109,7 @@ impl hyperion_clap::MinecraftCommand for ReplaceCommand {
             let started_time = std::time::Instant::now();
 
             let concrete_positions: HashSet<_, GxBuildHasher> =
-                blocks.par_scan_for(BlockState::ORANGE_CONCRETE).collect();
+                blocks.par_scan_for(BlockState::PINK_CONCRETE).collect();
 
             let scan_time = started_time.elapsed();
 
