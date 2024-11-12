@@ -1,3 +1,4 @@
+use glam::IVec3;
 use more_asserts::debug_assert_lt;
 use roaring::RoaringBitmap;
 use valence_generated::block::BlockState;
@@ -35,6 +36,14 @@ impl Section {
             sky_light: Some([0xff; 2048]),
             ..Self::default()
         }
+    }
+
+    pub fn idx_to_xyz(idx: usize) -> IVec3 {
+        let idx = i32::try_from(idx).unwrap();
+        let x = idx & 0xF;
+        let z = idx >> 4 & 0xF;
+        let y = idx >> 8;
+        IVec3::new(x, y, z)
     }
 }
 

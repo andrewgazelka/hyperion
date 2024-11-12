@@ -2046,6 +2046,7 @@ checksum = "707907fe3c25f5424cce2cb7e1cbcafee6bdbe735ca90ef77c29e84591e5b9da"
 dependencies = [
  "equivalent",
  "hashbrown 0.15.1",
+ "rayon",
  "serde",
 ]
 
@@ -2858,6 +2859,7 @@ dependencies = [
  "dotenvy",
  "fastrand 2.2.0",
  "flecs_ecs",
+ "gxhash",
  "hyperion",
  "hyperion-clap",
  "hyperion-inventory",
@@ -2866,6 +2868,7 @@ dependencies = [
  "hyperion-scheduled",
  "hyperion-text",
  "hyperion-utils",
+ "rayon",
  "roaring",
  "rustc-hash 2.0.0",
  "tikv-jemallocator",

@@ -3,6 +3,7 @@
 use std::{clone::Clone, iter::FusedIterator};
 
 use roaring::RoaringBitmap;
+use valence_protocol::BlockState;
 
 use crate::indirect::Indirect;
 
@@ -131,6 +132,47 @@ impl PalettedContainer {
                     ),
                 }
             }
+        }
+    }
+
+    #[must_use]
+    pub fn instances_of(&self, block: BlockState) -> Box<dyn Iterator<Item = usize> + '_> {
+        let block = block.to_raw();
+        match self {
+            Self::Single(value) => {
+                if *value == block {
+                    Box::new(0..LEN)
+                } else {
+                    Box::new(std::iter::empty())
+                }
+            }
+            Self::Indirect(indirect) => {
+                let palette_idx = indirect.palette[..indirect.palette_len as usize]
+                    .iter()
+                    .position(|&x| x == block);
+
+                #[allow(clippy::option_if_let_else)]
+                if let Some(idx) = palette_idx {
+                    Box::new(
+                        indirect
+                            .indices()
+                            .enumerate()
+                            .filter_map(
+                                move |(i, value)| {
+                                    if value as usize == idx { Some(i) } else { None }
+                                },
+                            ),
+                    )
+                } else {
+                    Box::new(std::iter::empty())
+                }
+            }
+            Self::Direct(direct) => Box::new(
+                direct
+                    .iter()
+                    .enumerate()
+                    .filter_map(move |(i, &value)| if value == block { Some(i) } else { None }),
+            ),
         }
     }
 }

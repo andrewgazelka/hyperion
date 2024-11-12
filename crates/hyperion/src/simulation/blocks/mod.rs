@@ -12,6 +12,7 @@ use flecs_ecs::{
 use glam::{IVec2, IVec3};
 use indexmap::IndexMap;
 use loader::{ChunkLoaderHandle, launch_manager};
+use rayon::iter::ParallelIterator;
 use roaring::RoaringBitmap;
 use rustc_hash::FxBuildHasher;
 use shared::WorldShared;
@@ -19,7 +20,11 @@ use tracing::error;
 use valence_generated::block::BlockState;
 use valence_server::layer::chunk::Chunk;
 
-use crate::{CHUNK_HEIGHT_SPAN, runtime::AsyncRuntime, simulation::util::generate_biome_registry};
+use crate::{
+    CHUNK_HEIGHT_SPAN,
+    runtime::AsyncRuntime,
+    simulation::{blocks::loader::parse::section::Section, util::generate_biome_registry},
+};
 
 pub mod chunk;
 
@@ -78,6 +83,20 @@ impl Blocks {
                 tx_loaded_chunks,
                 rx_loaded_chunks,
                 to_confirm: vec![],
+            })
+        })
+    }
+
+    #[must_use]
+    pub fn par_scan_for(&self, block: BlockState) -> impl ParallelIterator<Item = IVec3> + '_ {
+        use rayon::prelude::*;
+
+        self.chunk_cache.par_values().flat_map_iter(move |column| {
+            column.sections().flat_map(move |(start_coord, section)| {
+                section
+                    .block_states
+                    .instances_of(block)
+                    .map(move |idx| Section::idx_to_xyz(idx) + start_coord)
             })
         })
     }

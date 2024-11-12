@@ -6,6 +6,7 @@ use valence_generated::block::BlockState;
 use valence_server::layer::chunk::Chunk;
 
 use super::loader::parse::ColumnData;
+use crate::simulation::blocks::loader::parse::section::Section;
 
 pub const START_Y: i16 = -64;
 
@@ -79,6 +80,26 @@ impl Column {
             data,
             position,
         }
+    }
+
+    pub fn sections(&self) -> impl Iterator<Item = (IVec3, &Section)> + '_ {
+        let column_start_position = IVec3::new(
+            self.position.x << 4,
+            i32::from(START_Y),
+            self.position.y << 4,
+        );
+
+        self.data
+            .sections
+            .iter()
+            .enumerate()
+            .map(move |(section_idx, section)| {
+                let section_y = i32::try_from(section_idx).unwrap();
+                let section_y = section_y * 16;
+                let section_start = column_start_position + IVec3::new(0, section_y, 0);
+
+                (section_start, section)
+            })
     }
 
     pub fn blocks_in_range(

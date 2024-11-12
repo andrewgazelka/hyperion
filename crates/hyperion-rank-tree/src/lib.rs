@@ -21,3 +21,9 @@ pub enum Rank {
     Knight,
     Builder,
 }
+
+pub enum Team {
+    Red,
+    White,
+    Blue,
+}

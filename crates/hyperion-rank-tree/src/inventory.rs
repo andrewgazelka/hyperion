@@ -3,13 +3,33 @@ use valence_protocol::ItemKind;
 
 use crate::{
     util::{AttackDamage, ItemBuilder},
-    Rank,
+    Rank, Team,
 };
 
+impl Team {
+    pub const fn build_item(self) -> ItemBuilder {
+        let kind = match self {
+            Self::Red => ItemKind::RedTerracotta,
+            Self::White => ItemKind::WhiteTerracotta,
+            Self::Blue => ItemKind::BlueTerracotta,
+        };
+
+        ItemBuilder::new(kind)
+    }
+}
+
 impl Rank {
-    #[must_use]
-    pub fn inventory(self) -> PlayerInventory {
-        let mut inventory = PlayerInventory::default();
+    pub fn apply_inventory(self, team: Team, inventory: &mut PlayerInventory) {
+        const PICKAXE_SLOT: u16 = 1;
+        const BUILD_SLOT: u16 = 2;
+        const ARROW_SLOT: u16 = 7;
+        const GUI_SLOT: u16 = 8;
+
+        let default_pickaxe = ItemBuilder::new(ItemKind::WoodenPickaxe).build();
+        inventory.set_hotbar(PICKAXE_SLOT, default_pickaxe);
+
+        let default_build_item = team.build_item().count(16).build();
+        inventory.set_hotbar(BUILD_SLOT, default_build_item);
 
         match self {
             Self::Stick => {
@@ -29,7 +49,7 @@ impl Rank {
 
                 let arrow = ItemBuilder::new(ItemKind::Arrow).count(64).build();
 
-                inventory.set_hotbar(7, arrow);
+                inventory.set_hotbar(ARROW_SLOT, arrow);
             }
             Self::Sword => {
                 let sword = ItemBuilder::new(ItemKind::StoneSword)
@@ -78,8 +98,6 @@ impl Rank {
             .name("Upgrades")
             .build();
 
-        inventory.set_hotbar(8, upgrade_item);
-
-        inventory
+        inventory.set_hotbar(GUI_SLOT, upgrade_item);
     }
 }

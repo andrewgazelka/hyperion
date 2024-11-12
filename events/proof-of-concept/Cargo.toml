@@ -20,6 +20,8 @@ rustc-hash.workspace = true
 tracing-subscriber.workspace = true
 tracing-tracy.workspace = true
 tracing.workspace = true
+rayon.workspace = true
+gxhash.workspace = true
 
 [dev-dependencies]
 tracing = {workspace = true, features = ["release_max_level_info"]}
