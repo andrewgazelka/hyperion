@@ -22,7 +22,6 @@ tracing-tracy.workspace = true
 tracing.workspace = true
 
 [dev-dependencies]
-tokio = {workspace = true, features = ["full"]}
 tracing = {workspace = true, features = ["release_max_level_info"]}
 
 [lints]
