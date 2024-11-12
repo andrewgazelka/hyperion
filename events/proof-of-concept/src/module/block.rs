@@ -29,6 +29,8 @@ use hyperion_inventory::PlayerInventory;
 use hyperion_scheduled::Scheduled;
 use tracing::{error, info_span};
 
+use crate::OreVeins;
+
 #[derive(Component)]
 pub struct BlockModule;
 
@@ -55,8 +57,7 @@ impl Module for BlockModule {
         system!("handle_pending_air", world, &mut PendingDestruction($), &mut Blocks($), &Compose($))
             .multi_threaded()
             .each_iter(
-                move |
-                    it: TableIter<'_, false>,
+                move |it: TableIter<'_, false>,
                       _,
                       (pending_air, blocks, compose): (&mut PendingDestruction, &mut Blocks, &Compose)| {
                     let span = info_span!("handle_pending_air");
@@ -102,17 +103,17 @@ impl Module for BlockModule {
                             .send(&world)
                             .unwrap();
 
-                            let sound = agnostic::sound(
-                                ident!("minecraft:entity.zombie.break_wooden_door"),
-                                center_block.as_vec3(),
-                            ).volume(1.0)
-                                .pitch(0.8)
-                                .seed(fastrand::i64(..))
-                                .build();
+                        let sound = agnostic::sound(
+                            ident!("minecraft:entity.zombie.break_wooden_door"),
+                            center_block.as_vec3(),
+                        ).volume(1.0)
+                            .pitch(0.8)
+                            .seed(fastrand::i64(..))
+                            .build();
 
-                            compose.broadcast(&sound, SystemId(999))
-                                .send(&world)
-                                .unwrap();
+                        compose.broadcast(&sound, SystemId(999))
+                            .send(&world)
+                            .unwrap();
 
                         blocks.set_block(position, BlockState::AIR).unwrap();
                     }
@@ -122,26 +123,43 @@ impl Module for BlockModule {
         // todo: this is a hack. We want the system ID to be automatically assigned based on the location of the system.
         let system_id = SystemId(8);
 
-        system!("handle_destroyed_blocks", world, &mut Blocks($), &mut EventQueue<event::DestroyBlock>($), &Compose($))
+        system!("handle_destroyed_blocks", world, &mut Blocks($), &mut EventQueue<event::DestroyBlock>($), &Compose($), &OreVeins($))
             .multi_threaded()
-            .each_iter(move |it: TableIter<'_, false>, _, (mc, event_queue, compose): (&mut Blocks, &mut EventQueue<event::DestroyBlock>, &Compose)| {
+            .each_iter(move |it: TableIter<'_, false>, _, (blocks, event_queue, compose, ore_veins): (&mut Blocks, &mut EventQueue<event::DestroyBlock>, &Compose, &OreVeins)| {
                 let span = info_span!("handle_blocks");
                 let _enter = span.enter();
                 let world = it.world();
 
 
                 for event in event_queue.drain() {
-                    let Ok(previous) = mc.set_block(event.position, BlockState::AIR) else {
+                    blocks.to_confirm.push(EntityAndSequence {
+                        entity: event.from,
+                        sequence: event.sequence,
+                    });
+                    if !ore_veins.ores.contains(&event.position) {
+                        let current = blocks.get_block(event.position).unwrap();
+
+                        // make sure the player knows the block was placed back
+                        let pkt = play::BlockUpdateS2c {
+                            position: BlockPos::new(event.position.x, event.position.y, event.position.z),
+                            block_id: current,
+                        };
+
+                        event.from.entity_view(world).get::<&NetworkStreamRef>(|stream| {
+                            compose.unicast(&pkt, *stream, SystemId(100), &world).unwrap();
+                        });
+
+                        continue;
+                    }
+
+                    // replace with stone
+                    let Ok(previous) = blocks.set_block(event.position, BlockState::STONE) else {
                         return;
                     };
 
                     let from = event.from;
                     let from_entity = world.entity_from_id(from);
                     from_entity.get::<(&NetworkStreamRef, &mut PlayerInventory)>(|(&net, inventory)| {
-                        mc.to_confirm.push(EntityAndSequence {
-                            entity: event.from,
-                            sequence: event.sequence,
-                        });
 
 
                         let previous_kind = previous.to_kind().to_item_kind();
@@ -243,7 +261,7 @@ impl Module for BlockModule {
                         Some(_) => {
                             error!("Door property 'Half' must be either 'Upper' or 'Lower'");
                             continue;
-                        },
+                        }
                         None => None
                     };
 

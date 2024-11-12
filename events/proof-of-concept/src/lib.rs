@@ -20,6 +20,8 @@ use module::block::BlockModule;
 mod component;
 mod module;
 
+use derive_more::{Deref, DerefMut};
+use hyperion::glam::IVec3;
 use module::{attack::AttackModule, level::LevelModule, regeneration::RegenerationModule};
 
 use crate::{
@@ -33,9 +35,17 @@ pub struct ProofOfConceptModule;
 mod command;
 mod skin;
 
+#[derive(Component, Default, Deref, DerefMut)]
+struct OreVeins {
+    ores: gxhash::HashSet<IVec3>,
+}
+
 impl Module for ProofOfConceptModule {
     fn module(world: &World) {
         world.component::<component::team::Team>();
+
+        world.component::<OreVeins>();
+        world.set(OreVeins::default());
 
         world
             .component::<Player>()

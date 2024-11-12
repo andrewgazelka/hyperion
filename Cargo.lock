@@ -2856,6 +2856,7 @@ dependencies = [
  "anyhow",
  "clap",
  "compact_str",
+ "derive_more",
  "dotenvy",
  "fastrand 2.2.0",
  "flecs_ecs",

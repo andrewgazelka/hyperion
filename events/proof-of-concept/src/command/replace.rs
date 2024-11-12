@@ -5,6 +5,8 @@ use gxhash::GxBuildHasher;
 use hyperion::{BlockState, glam::IVec3, simulation::blocks::Blocks};
 use rayon::iter::ParallelIterator;
 
+use crate::OreVeins;
+
 #[derive(clap::Parser, Debug)]
 #[command(name = "replace")]
 pub struct ReplaceCommand;
@@ -114,6 +116,10 @@ impl hyperion_clap::MinecraftCommand for ReplaceCommand {
             let len = concrete_positions.len();
 
             let groups = group(&concrete_positions);
+
+            world.get::<&mut OreVeins>(|ore_veins| {
+                **ore_veins = concrete_positions;
+            });
 
             for group in groups {
                 let ore = pick_ore();
