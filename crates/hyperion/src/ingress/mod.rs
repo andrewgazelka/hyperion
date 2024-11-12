@@ -6,7 +6,7 @@ use flecs_ecs::prelude::*;
 use hyperion_utils::EntityExt;
 use serde_json::json;
 use sha2::Digest;
-use tracing::{error, info, info_span, span::EnteredSpan, trace, warn};
+use tracing::{error, info, info_span, trace, warn};
 use valence_protocol::{
     Bounded, Packet, VarInt, packets,
     packets::{
@@ -269,22 +269,9 @@ fn process_status(
 #[derive(Component)]
 pub struct IngressModule;
 
-#[derive(Component)]
-pub enum GametickSpan {
-    Entered(EnteredSpan),
-    Exited(tracing::Span),
-}
-
-#[allow(clippy::non_send_fields_in_send_ty)]
-unsafe impl Send for GametickSpan {}
-unsafe impl Sync for GametickSpan {}
-
 impl Module for IngressModule {
     #[expect(clippy::too_many_lines)]
     fn module(world: &World) {
-        world.component::<GametickSpan>();
-        world.set(GametickSpan::Exited(tracing::info_span!("tick")));
-
         system!(
             "update_ign_map",
             world,
@@ -301,19 +288,14 @@ impl Module for IngressModule {
             world,
             &mut StreamLookup($),
             &ReceiveState($),
-            &mut GametickSpan($)
         )
         .immediate(true)
         .kind::<flecs::pipeline::OnLoad>()
         .term_at(0)
-        .each_iter(move |it, _, (lookup, receive, gametick_span)| {
-            replace_with::replace_with_or_abort(gametick_span, |span| {
-                let GametickSpan::Exited(span) = span else {
-                    panic!("gametick_span should be exited");
-                };
-
-                GametickSpan::Entered(span.entered())
-            });
+        .each_iter(move |it, _, (lookup, receive)| {
+            tracing_tracy::client::Client::running()
+                .expect("Tracy client should be running")
+                .frame_mark();
 
             let span = info_span!("generate_ingress_events");
             let _enter = span.enter();

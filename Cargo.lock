@@ -1696,6 +1696,7 @@ dependencies = [
  "tokio",
  "toml",
  "tracing",
+ "tracing-tracy",
  "uuid",
  "valence_anvil",
  "valence_generated",

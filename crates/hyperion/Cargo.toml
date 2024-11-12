@@ -18,6 +18,7 @@ roaring = {workspace = true, features = ["simd"]}
 serde = {workspace = true, features = ["derive"]}
 tokio = {workspace = true, features = ["full", "tracing"]}
 tracing = {workspace = true}
+tracing-tracy.workspace = true
 uuid = {workspace = true, features = ["v3"]}
 anyhow.workspace = true
 base64.workspace = true

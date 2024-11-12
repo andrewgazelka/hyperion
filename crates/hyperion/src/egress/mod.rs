@@ -19,7 +19,6 @@ use sync_chunks::SyncChunksModule;
 use sync_entity_state::EntityStateSyncModule;
 
 use crate::{
-    ingress::GametickSpan,
     net::NetworkStreamRef,
     simulation::{ChunkPosition, blocks::Blocks},
     system_registry::SystemId,
@@ -168,24 +167,15 @@ impl Module for EgressModule {
             "clear_bump",
             world,
             &mut Compose($),
-            &mut GametickSpan($)
         )
         .kind_id(pipeline)
-        .each(move |(compose, gametick_span)| {
+        .each(move |compose| {
             let span = info_span!("clear_bump");
             let _enter = span.enter();
 
             for bump in &mut compose.bump {
                 bump.reset();
             }
-
-            replace_with::replace_with_or_abort(gametick_span, |span| {
-                let GametickSpan::Entered(span) = span else {
-                    panic!("gametick_span should be exited");
-                };
-
-                GametickSpan::Exited(span.exit())
-            });
         });
     }
 }

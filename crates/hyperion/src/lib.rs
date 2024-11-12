@@ -77,7 +77,7 @@ pub use valence_ident;
 
 pub use crate::simulation::command::CommandScope;
 use crate::{
-    ingress::{GametickSpan, PendingRemove},
+    ingress::PendingRemove,
     net::{NetworkStreamRef, PacketDecoder, proxy::ReceiveState},
     runtime::Tasks,
     simulation::{
@@ -218,7 +218,6 @@ impl Hyperion {
             .next()
             .context("could not get first address")?;
 
-        world.component::<GametickSpan>();
         world.component::<Pose>();
         world.component::<Prev<Pose>>();
 
