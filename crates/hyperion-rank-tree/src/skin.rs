@@ -20,6 +20,7 @@ define_skin!(ARCHER_SKIN, "skin/archer.toml");
 define_skin!(MAGE_SKIN, "skin/mage.toml");
 define_skin!(BUILDER_SKIN, "skin/builder.toml");
 define_skin!(MINER_SKIN, "skin/miner.toml");
+define_skin!(EXCAVATOR_SKIN, "skin/excavator.toml");
 
 impl Rank {
     #[must_use]
@@ -32,6 +33,7 @@ impl Rank {
             Self::Mage => &MAGE_SKIN,
             Self::Builder => &BUILDER_SKIN,
             Self::Miner => &MINER_SKIN,
+            Rank::Excavator => &EXCAVATOR_SKIN,
         }
     }
 }

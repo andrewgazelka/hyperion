@@ -15,20 +15,21 @@ pub struct ReplaceCommand;
 /// Weights are roughly based on real Minecraft ore distribution
 fn pick_ore() -> BlockState {
     // Total weight is 100 for easy percentage calculation
-    const WEIGHTS: [(BlockState, u32); 5] = [
-        (BlockState::COBBLESTONE, 40), // 40%
-        (BlockState::COPPER_ORE, 35),  // 35%
-        (BlockState::IRON_ORE, 15),    // 15%
-        (BlockState::GOLD_ORE, 8),     // 8%
-        (BlockState::EMERALD_ORE, 2),  // 2%
+    const WEIGHTS: &[(BlockState, u32)] = &[
+        (BlockState::COBBLESTONE, 35),
+        (BlockState::COAL_ORE, 35),
+        (BlockState::COPPER_ORE, 25),
+        (BlockState::IRON_ORE, 15),
+        (BlockState::GOLD_ORE, 8),
+        (BlockState::EMERALD_ORE, 2),
     ];
 
     let total_weight: u32 = WEIGHTS.iter().map(|(_, w)| w).sum();
     let mut roll = fastrand::u32(0..total_weight);
 
     for (block, weight) in WEIGHTS {
-        if roll < weight {
-            return block;
+        if roll < *weight {
+            return *block;
         }
         roll -= weight;
     }

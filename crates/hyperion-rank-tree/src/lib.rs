@@ -5,7 +5,7 @@ pub mod skin;
 
 mod util;
 
-#[derive(Copy, Clone, Debug, ValueEnum)]
+#[derive(Copy, Clone, Debug, ValueEnum, PartialEq, Eq)]
 #[repr(C)]
 pub enum Rank {
     /// ![Widget Example](https://i.imgur.com/pW7v0Xn.png)
@@ -16,6 +16,8 @@ pub enum Rank {
     Archer,
     Sword,
     Miner,
+
+    Excavator,
 
     Mage,
     Knight,
