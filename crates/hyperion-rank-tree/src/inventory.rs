@@ -20,22 +20,32 @@ impl Team {
 
 impl Rank {
     pub fn apply_inventory(self, team: Team, inventory: &mut PlayerInventory) {
-        let mut pickaxe_slot: u16 = 1;
+        const MAIN_SLOT: u16 = 0;
+        const PICKAXE_SLOT: u16 = 1;
+        const BUILD_SLOT: u16 = 2;
 
-        if self == Rank::Miner {
-            pickaxe_slot = 1;
+        const UPGRADE_SPEED_SLOT: u16 = 3;
+        const UPGRADE_VISION_SLOT: u16 = 4;
+        const UPGRADE_HEALTH_SLOT: u16 = 5;
+        const UPGRADE_ARMOR_SLOT: u16 = 6;
+        const UPGRADE_DAMAGE_SLOT: u16 = 7;
+
+        const GUI_SLOT: u16 = 8;
+
+        let upgrade_not_available = ItemBuilder::new(ItemKind::GrayDye);
+
+        let upgrades = ["Speed", "Vision", "Health", "Armor", "Damage"];
+
+        for (i, upgrade) in upgrades.into_iter().enumerate() {
+            let slot = i as u16 + UPGRADE_SPEED_SLOT;
+            inventory.set_hotbar(slot, upgrade_not_available.clone().name(upgrade).build());
         }
 
-        let main_slot: u16 = 0;
-        let build_slot: u16 = 2;
-        let arrow_slot: u16 = 7;
-        let gui_slot: u16 = 8;
-
         let default_pickaxe = ItemBuilder::new(ItemKind::WoodenPickaxe).build();
-        inventory.set_hotbar(pickaxe_slot, default_pickaxe);
+        inventory.set_hotbar(PICKAXE_SLOT, default_pickaxe);
 
         let default_build_item = team.build_item().count(16).build();
-        inventory.set_hotbar(build_slot, default_build_item);
+        inventory.set_hotbar(BUILD_SLOT, default_build_item);
 
         match self {
             Self::Stick => {
@@ -45,17 +55,17 @@ impl Rank {
                     .add_attribute(AttackDamage(3.0))
                     .build();
 
-                inventory.set_hotbar(main_slot, stick);
+                inventory.set_hotbar(MAIN_SLOT, stick);
             }
 
             Self::Archer => {
                 let bow = ItemBuilder::new(ItemKind::Bow).build();
 
-                inventory.set_hotbar(main_slot, bow);
+                inventory.set_hotbar(MAIN_SLOT, bow);
 
                 let arrow = ItemBuilder::new(ItemKind::Arrow).count(64).build();
 
-                inventory.set_hotbar(arrow_slot, arrow);
+                inventory.set(9, arrow).unwrap();
             }
             Self::Sword => {
                 let sword = ItemBuilder::new(ItemKind::StoneSword)
@@ -63,7 +73,7 @@ impl Rank {
                     .add_attribute(AttackDamage(3.0))
                     .build();
 
-                inventory.set_hotbar(main_slot, sword);
+                inventory.set_hotbar(MAIN_SLOT, sword);
             }
 
             Self::Miner => {
@@ -73,13 +83,13 @@ impl Rank {
                     .add_attribute(AttackDamage(3.0))
                     .build();
 
-                inventory.set_hotbar(main_slot, torch);
+                inventory.set_hotbar(MAIN_SLOT, torch);
 
                 let pickaxe = ItemBuilder::new(ItemKind::StonePickaxe)
                     .add_attribute(AttackDamage(2.0))
                     .build();
 
-                inventory.set_hotbar(pickaxe_slot, pickaxe);
+                inventory.set_hotbar(PICKAXE_SLOT, pickaxe);
             }
 
             Self::Mage => {
@@ -88,7 +98,7 @@ impl Rank {
                     .add_attribute(AttackDamage(2.0))
                     .build();
 
-                inventory.set_hotbar(main_slot, wand);
+                inventory.set_hotbar(MAIN_SLOT, wand);
             }
             Self::Knight => {
                 let knight_sword = ItemBuilder::new(ItemKind::IronSword)
@@ -97,19 +107,19 @@ impl Rank {
                     .add_attribute(AttackDamage(4.0))
                     .build();
 
-                inventory.set_hotbar(main_slot, knight_sword);
+                inventory.set_hotbar(MAIN_SLOT, knight_sword);
             }
             Self::Builder => {
                 let builder_tool = ItemBuilder::new(ItemKind::GoldenPickaxe)
                     .add_attribute(AttackDamage(5.0))
                     .build();
 
-                inventory.set_hotbar(main_slot, builder_tool);
+                inventory.set_hotbar(MAIN_SLOT, builder_tool);
             }
             Rank::Excavator => {
                 let pickaxe = ItemBuilder::new(ItemKind::IronPickaxe).build();
 
-                inventory.set_hotbar(pickaxe_slot, pickaxe);
+                inventory.set_hotbar(PICKAXE_SLOT, pickaxe);
 
                 let minecart = ItemBuilder::new(ItemKind::Minecart)
                     .name("§3§lMINECART")
@@ -117,7 +127,7 @@ impl Rank {
                     .add_attribute(AttackDamage(3.0))
                     .build();
 
-                inventory.set_hotbar(main_slot, minecart);
+                inventory.set_hotbar(MAIN_SLOT, minecart);
             }
         }
 
@@ -125,6 +135,6 @@ impl Rank {
             .name("Upgrades")
             .build();
 
-        inventory.set_hotbar(gui_slot, upgrade_item);
+        inventory.set_hotbar(GUI_SLOT, upgrade_item);
     }
 }

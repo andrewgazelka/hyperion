@@ -1,6 +1,7 @@
 use valence_protocol::{nbt, nbt::Value, ItemKind, ItemStack};
 
 /// A builder for creating Minecraft items with NBT data
+#[derive(Clone)]
 #[must_use]
 pub struct ItemBuilder {
     kind: ItemKind,
