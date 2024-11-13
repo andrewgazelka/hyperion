@@ -239,23 +239,23 @@ impl Module for BlockModule {
                         compose.broadcast(&chat, SystemId(100)).send(&world).unwrap();
                     });
 
-                    // pending_air.destroy_at.schedule(Instant::now() + TOTAL_DESTRUCTION_TIME, position);
-                    //
-                    // {
-                    //     let sequence = fastrand::i32(..);
-                    //     // Schedule destruction stages 0 through 9
-                    //     for stage in 0_u8..=10 { // 10 represents no animation
-                    //         let delay = TOTAL_DESTRUCTION_TIME / 10 * u32::from(stage);
-                    //         pending_air.set_level_at.schedule(
-                    //             Instant::now() + delay,
-                    //             SetLevel {
-                    //                 position,
-                    //                 sequence,
-                    //                 stage,
-                    //             },
-                    //         );
-                    //     }
-                    // }
+                    pending_air.destroy_at.schedule(Instant::now() + TOTAL_DESTRUCTION_TIME, position);
+                    
+                    {
+                        let sequence = fastrand::i32(..);
+                        // Schedule destruction stages 0 through 9
+                        for stage in 0_u8..=10 { // 10 represents no animation
+                            let delay = TOTAL_DESTRUCTION_TIME / 10 * u32::from(stage);
+                            pending_air.set_level_at.schedule(
+                                Instant::now() + delay,
+                                SetLevel {
+                                    position,
+                                    sequence,
+                                    stage,
+                                },
+                            );
+                        }
+                    }
                     mc.to_confirm.push(EntityAndSequence {
                         entity: event.from,
                         sequence: event.sequence,
