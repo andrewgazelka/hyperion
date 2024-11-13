@@ -26,7 +26,7 @@ use crate::{
     simulation::{
         AiTargetable, ChunkPosition, Comms, ConfirmBlockSequences, EntityReaction, EntitySize,
         Health, IgnMap, ImmuneStatus, InGameName, PacketState, Pitch, Player, Position,
-        StreamLookup, Uuid, Yaw,
+        StreamLookup, Uuid, Xp, Yaw,
         animation::ActiveAnimation,
         blocks::Blocks,
         handlers::PacketSwitchQuery,
@@ -170,6 +170,8 @@ fn process_login(
         .set(Uuid::from(uuid))
         .set(Prev(Health::default()))
         .add::<Health>()
+        .set(Prev(Xp::default()))
+        .add::<Xp>()
         .set(Prev(EntityFlags::default()))
         .set(EntityFlags::default())
         .set(Prev(Pose::default()))

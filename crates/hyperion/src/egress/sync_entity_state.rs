@@ -18,12 +18,12 @@ use crate::{
     egress::metadata::show_all,
     net::{Compose, NetworkStreamRef, agnostic},
     simulation::{
-        EntityReaction, Health, Pitch, Position, Yaw,
+        EntityReaction, Health, Pitch, Position, Xp, Yaw,
         animation::ActiveAnimation,
         metadata::{EntityFlags, MetadataBuilder, Pose},
     },
     storage::ThreadLocal,
-    system_registry::SYNC_ENTITY_POSITION,
+    system_registry::{SYNC_ENTITY_POSITION, SystemId},
     util::TracingExt,
 };
 
@@ -35,6 +35,38 @@ impl Module for EntityStateSyncModule {
         let system_id = SYNC_ENTITY_POSITION;
 
         let metadata: ThreadLocal<UnsafeCell<MetadataBuilder>> = ThreadLocal::new_defaults();
+
+        system!(
+            "entity_xp_sync",
+            world,
+            &Compose($),
+            &NetworkStreamRef,
+            &mut Prev<Xp>,
+            &mut Xp,
+        )
+        .multi_threaded()
+        .kind::<flecs::pipeline::OnStore>()
+        .tracing_each_entity(
+            info_span!("entity_xp_sync"),
+            move |entity, (compose, net, Prev(prev_xp), xp)| {
+                let world = entity.world();
+                if prev_xp.amount != xp.amount {
+                    let visual = xp.get_visual();
+
+                    let packet = play::ExperienceBarUpdateS2c {
+                        bar: visual.prop,
+                        level: VarInt(i32::from(visual.level)),
+                        total_xp: VarInt::default(),
+                    };
+
+                    compose
+                        .unicast(&packet, *net, SystemId(100), &world)
+                        .unwrap();
+
+                    *prev_xp = *xp;
+                }
+            },
+        );
 
         system!(
             "entity_state_sync",
