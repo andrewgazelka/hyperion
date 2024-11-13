@@ -10,7 +10,7 @@ use hyperion_utils::EntityExt;
 use tracing::{info, instrument, trace, warn};
 use valence_generated::block::{BlockKind, BlockState, PropName};
 use valence_protocol::{
-    Decode, Hand, Packet, VarInt, nbt,
+    Decode, Hand, ItemStack, Packet, VarInt, nbt,
     packets::play::{
         self, click_slot_c2s::SlotChange, client_command_c2s::ClientCommand,
         player_action_c2s::PlayerAction, player_interact_entity_c2s::EntityInteraction,
@@ -292,7 +292,7 @@ fn player_action(mut data: &[u8], query: &PacketSwitchQuery<'_>) -> anyhow::Resu
 
             query.events.push(event, query.world);
         }
-        _ => bail!("unimplemented"),
+        action => bail!("unimplemented {action:?}"),
     }
 
     // todo: implement
@@ -510,17 +510,48 @@ pub fn custom_payload(
     Ok(())
 }
 
-fn click_slot(mut data: &[u8], query: &mut PacketSwitchQuery<'_>) -> anyhow::Result<()> {
+fn click_slot(mut data: &'static [u8], query: &mut PacketSwitchQuery<'_>) -> anyhow::Result<()> {
     let pkt = play::ClickSlotC2s::decode(&mut data)?;
 
-    // todo(security): validate the player can do this. This is a MAJOR security issue.
-    // as players will be able to spawn items in their inventory wit current logic.
-    for SlotChange { idx, stack } in pkt.slot_changes.iter() {
-        let idx = u16::try_from(*idx).context("slot index is negative")?;
-        query.inventory.set(idx, stack.clone())?;
-    }
+    let to_send_pkt = play::ScreenHandlerSlotUpdateS2c {
+        window_id: -1,
+        state_id: VarInt::default(),
+        slot_idx: 0, // crafting result
+        slot_data: Cow::Borrowed(&ItemStack::EMPTY),
+    };
 
-    let item = query.inventory.crafting_item(query.crafting_registry);
+    // negate click
+    query
+        .compose
+        .unicast(&to_send_pkt, query.io_ref, query.system_id, query.world)?;
+
+    let item_in_slot = query
+        .inventory
+        .get(pkt.slot_idx as u16)
+        .context("slot index is negative")?;
+
+    let to_send_pkt = play::ScreenHandlerSlotUpdateS2c {
+        window_id: 0,
+        state_id: VarInt::default(),
+        slot_idx: pkt.slot_idx,
+        slot_data: Cow::Borrowed(&item_in_slot),
+    };
+
+    query
+        .compose
+        .unicast(&to_send_pkt, query.io_ref, query.system_id, query.world)?;
+
+    // info!("click slot\n{pkt:#?}");
+
+    // // todo(security): validate the player can do this. This is a MAJOR security issue.
+    // // as players will be able to spawn items in their inventory wit current logic.
+    // for SlotChange { idx, stack } in pkt.slot_changes.iter() {
+    //     let idx = u16::try_from(*idx).context("slot index is negative")?;
+    //     query.inventory.set(idx, stack.clone())?;
+    // }
+
+    let item = query.inventory.crafting_result(query.crafting_registry);
+
     let set_item_pkt = play::ScreenHandlerSlotUpdateS2c {
         window_id: 0,
         state_id: VarInt(0),

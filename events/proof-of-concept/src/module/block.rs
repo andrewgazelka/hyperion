@@ -233,14 +233,8 @@ impl Module for BlockModule {
                     let block = event.block;
                     mc.set_block(position, event.block).unwrap();
 
-                    let chat = chat!("§c§l{block} was placed at {position}");
-
-                    event.from.entity_view(world).get::<&NetworkStreamRef>(|stream| {
-                        compose.broadcast(&chat, SystemId(100)).send(&world).unwrap();
-                    });
-
                     pending_air.destroy_at.schedule(Instant::now() + TOTAL_DESTRUCTION_TIME, position);
-                    
+
                     {
                         let sequence = fastrand::i32(..);
                         // Schedule destruction stages 0 through 9

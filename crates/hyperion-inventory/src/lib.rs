@@ -228,7 +228,7 @@ impl PlayerInventory {
     pub const OFFHAND_SLOT: u16 = OFFHAND_SLOT;
 
     #[must_use]
-    pub fn crafting_item(&self, registry: &CraftingRegistry) -> ItemStack {
+    pub fn crafting_result(&self, registry: &CraftingRegistry) -> ItemStack {
         let indices = core::array::from_fn::<u16, 4, _>(|i| (u16::try_from(i).unwrap() + 1));
 
         let mut min_count = i8::MAX;
