@@ -385,28 +385,29 @@ pub fn player_interact_block(
             return Ok(());
         }
 
-        let Some(nbt) = &held.nbt else {
-            return Ok(());
-        };
-
-        let Some(can_place_on) = nbt.get("CanPlaceOn") else {
-            return Ok(());
-        };
-
-        let nbt::Value::List(can_place_on) = can_place_on else {
-            return Ok(());
-        };
-
-        let nbt::list::List::String(can_place_on) = can_place_on else {
-            return Ok(());
-        };
-
-        let kind_name = interacted_block.to_kind().to_str();
-        let kind_name = format!("minecraft:{kind_name}");
-
-        if !can_place_on.iter().any(|s| s == &kind_name) {
-            return Ok(());
-        }
+        // todo: this is only applicable for adventure mode. It will have weird effects in survival
+        // let Some(nbt) = &held.nbt else {
+        //     return Ok(());
+        // };
+        //
+        // let Some(can_place_on) = nbt.get("CanPlaceOn") else {
+        //     return Ok(());
+        // };
+        //
+        // let nbt::Value::List(can_place_on) = can_place_on else {
+        //     return Ok(());
+        // };
+        //
+        // let nbt::list::List::String(can_place_on) = can_place_on else {
+        //     return Ok(());
+        // };
+        //
+        // let kind_name = interacted_block.to_kind().to_str();
+        // let kind_name = format!("minecraft:{kind_name}");
+        //
+        // if !can_place_on.iter().any(|s| s == &kind_name) {
+        //     return Ok(());
+        // }
 
         let kind = held.item;
 

@@ -9,8 +9,10 @@ use flecs_ecs::{
     prelude::Module,
 };
 use hyperion::{
+    BlockKind, chat,
     net::{Compose, NetworkStreamRef, agnostic},
     simulation::{
+        Xp,
         blocks::{Blocks, EntityAndSequence},
         event,
     },
@@ -136,8 +138,35 @@ impl Module for BlockModule {
                         entity: event.from,
                         sequence: event.sequence,
                     });
+
                     if !ore_veins.ores.contains(&event.position) {
                         let current = blocks.get_block(event.position).unwrap();
+
+                        // make sure the player knows the block was placed back
+                        let pkt = play::BlockUpdateS2c {
+                            position: BlockPos::new(event.position.x, event.position.y, event.position.z),
+                            block_id: current,
+                        };
+
+                        event.from.entity_view(world).get::<&NetworkStreamRef>(|stream| {
+                            compose.unicast(&pkt, *stream, SystemId(100), &world).unwrap();
+                        });
+
+                        continue;
+                    }
+
+                    let current = blocks.get_block(event.position).unwrap();
+
+                    let xp_amount = match current.to_kind() {
+                        BlockKind::CoalOre => 1_u16,
+                        BlockKind::CopperOre => 3,
+                        BlockKind::IronOre => 9,
+                        BlockKind::GoldOre => 27,
+                        BlockKind::EmeraldOre => 81,
+                        _ => 0,
+                    } * 4;
+
+                    if xp_amount == 0 {
 
                         // make sure the player knows the block was placed back
                         let pkt = play::BlockUpdateS2c {
@@ -157,9 +186,12 @@ impl Module for BlockModule {
                         return;
                     };
 
+
+
                     let from = event.from;
                     let from_entity = world.entity_from_id(from);
-                    from_entity.get::<(&NetworkStreamRef, &mut PlayerInventory)>(|(&net, inventory)| {
+                    from_entity.get::<(&NetworkStreamRef, &mut Xp)>(|(&net, xp)| {
+                        **xp = xp.saturating_add(xp_amount);
 
 
                         let previous_kind = previous.to_kind().to_item_kind();
@@ -185,39 +217,45 @@ impl Module for BlockModule {
                             .build();
 
                         compose.unicast(&sound, net, system_id, &world).unwrap();
-
-                        inventory.try_add_item(diff);
                     });
                 }
             });
 
-        system!("handle_placed_blocks", world, &mut Blocks($), &mut EventQueue<event::PlaceBlock>($), &mut PendingDestruction($))
+        system!("handle_placed_blocks", world, &mut Blocks($), &mut EventQueue<event::PlaceBlock>($), &mut PendingDestruction($), &Compose($))
             .multi_threaded()
-            .each_iter(move |_it: TableIter<'_, false>, _, (mc, event_queue, pending_air): (&mut Blocks, &mut EventQueue<event::PlaceBlock>, &mut PendingDestruction)| {
+            .each_iter(move |it: TableIter<'_, false>, _, (mc, event_queue, pending_air, compose): (&mut Blocks, &mut EventQueue<event::PlaceBlock>, &mut PendingDestruction, &Compose)| {
                 let span = info_span!("handle_placed_blocks");
                 let _enter = span.enter();
+                let world = it.world();
                 for event in event_queue.drain() {
                     let position = event.position;
 
+                    let block = event.block;
                     mc.set_block(position, event.block).unwrap();
 
-                    pending_air.destroy_at.schedule(Instant::now() + TOTAL_DESTRUCTION_TIME, position);
+                    let chat = chat!("§c§l{block} was placed at {position}");
 
-                    {
-                        let sequence = fastrand::i32(..);
-                        // Schedule destruction stages 0 through 9
-                        for stage in 0_u8..=10 { // 10 represents no animation
-                            let delay = TOTAL_DESTRUCTION_TIME / 10 * u32::from(stage);
-                            pending_air.set_level_at.schedule(
-                                Instant::now() + delay,
-                                SetLevel {
-                                    position,
-                                    sequence,
-                                    stage,
-                                },
-                            );
-                        }
-                    }
+                    event.from.entity_view(world).get::<&NetworkStreamRef>(|stream| {
+                        compose.broadcast(&chat, SystemId(100)).send(&world).unwrap();
+                    });
+
+                    // pending_air.destroy_at.schedule(Instant::now() + TOTAL_DESTRUCTION_TIME, position);
+                    //
+                    // {
+                    //     let sequence = fastrand::i32(..);
+                    //     // Schedule destruction stages 0 through 9
+                    //     for stage in 0_u8..=10 { // 10 represents no animation
+                    //         let delay = TOTAL_DESTRUCTION_TIME / 10 * u32::from(stage);
+                    //         pending_air.set_level_at.schedule(
+                    //             Instant::now() + delay,
+                    //             SetLevel {
+                    //                 position,
+                    //                 sequence,
+                    //                 stage,
+                    //             },
+                    //         );
+                    //     }
+                    // }
                     mc.to_confirm.push(EntityAndSequence {
                         entity: event.from,
                         sequence: event.sequence,

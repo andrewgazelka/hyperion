@@ -16,12 +16,12 @@ pub struct ReplaceCommand;
 fn pick_ore() -> BlockState {
     // Total weight is 100 for easy percentage calculation
     const WEIGHTS: &[(BlockState, u32)] = &[
-        (BlockState::COBBLESTONE, 35),
-        (BlockState::COAL_ORE, 35),
-        (BlockState::COPPER_ORE, 25),
-        (BlockState::IRON_ORE, 15),
-        (BlockState::GOLD_ORE, 8),
-        (BlockState::EMERALD_ORE, 2),
+        (BlockState::COBBLESTONE, 16),
+        (BlockState::COAL_ORE, 16),
+        (BlockState::COPPER_ORE, 8),
+        (BlockState::IRON_ORE, 4),
+        (BlockState::GOLD_ORE, 2),
+        (BlockState::EMERALD_ORE, 1),
     ];
 
     let total_weight: u32 = WEIGHTS.iter().map(|(_, w)| w).sum();
