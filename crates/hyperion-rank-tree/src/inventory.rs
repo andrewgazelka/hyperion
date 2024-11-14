@@ -24,11 +24,7 @@ impl Rank {
         const PICKAXE_SLOT: u16 = 1;
         const BUILD_SLOT: u16 = 2;
 
-        const UPGRADE_SPEED_SLOT: u16 = 3;
-        const UPGRADE_VISION_SLOT: u16 = 4;
-        const UPGRADE_HEALTH_SLOT: u16 = 5;
-        const UPGRADE_ARMOR_SLOT: u16 = 6;
-        const UPGRADE_DAMAGE_SLOT: u16 = 7;
+        const UPGRADE_START_SLOT: u16 = 3;
 
         const GUI_SLOT: u16 = 8;
 
@@ -37,7 +33,7 @@ impl Rank {
         let upgrades = ["Speed", "Vision", "Health", "Armor", "Damage"];
 
         for (i, upgrade) in upgrades.into_iter().enumerate() {
-            let slot = i as u16 + UPGRADE_SPEED_SLOT;
+            let slot = u16::try_from(i).unwrap() + UPGRADE_START_SLOT;
             inventory.set_hotbar(slot, upgrade_not_available.clone().name(upgrade).build());
         }
 
@@ -116,7 +112,7 @@ impl Rank {
 
                 inventory.set_hotbar(MAIN_SLOT, builder_tool);
             }
-            Rank::Excavator => {
+            Self::Excavator => {
                 let pickaxe = ItemBuilder::new(ItemKind::IronPickaxe).build();
 
                 inventory.set_hotbar(PICKAXE_SLOT, pickaxe);

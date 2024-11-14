@@ -299,7 +299,7 @@ impl Xp {
             _ => (9843, 10242), // Extrapolated next value
         };
 
-        let prop = (self.amount - level_start) as f32 / (next_level_start - level_start) as f32;
+        let prop = f32::from(self.amount - level_start) / f32::from(next_level_start - level_start);
 
         XpVisual { level, prop }
     }

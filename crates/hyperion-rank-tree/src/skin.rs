@@ -33,7 +33,7 @@ impl Rank {
             Self::Mage => &MAGE_SKIN,
             Self::Builder => &BUILDER_SKIN,
             Self::Miner => &MINER_SKIN,
-            Rank::Excavator => &EXCAVATOR_SKIN,
+            Self::Excavator => &EXCAVATOR_SKIN,
         }
     }
 }

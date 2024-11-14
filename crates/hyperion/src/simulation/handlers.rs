@@ -10,10 +10,10 @@ use hyperion_utils::EntityExt;
 use tracing::{info, instrument, trace, warn};
 use valence_generated::block::{BlockKind, BlockState, PropName};
 use valence_protocol::{
-    Decode, Hand, ItemStack, Packet, VarInt, nbt,
+    Decode, Hand, ItemStack, Packet, VarInt,
     packets::play::{
-        self, click_slot_c2s::SlotChange, client_command_c2s::ClientCommand,
-        player_action_c2s::PlayerAction, player_interact_entity_c2s::EntityInteraction,
+        self, client_command_c2s::ClientCommand, player_action_c2s::PlayerAction,
+        player_interact_entity_c2s::EntityInteraction,
         player_position_look_s2c::PlayerPositionLookFlags,
     },
 };
@@ -510,7 +510,7 @@ pub fn custom_payload(
     Ok(())
 }
 
-fn click_slot(mut data: &'static [u8], query: &mut PacketSwitchQuery<'_>) -> anyhow::Result<()> {
+fn click_slot(mut data: &'static [u8], query: &PacketSwitchQuery<'_>) -> anyhow::Result<()> {
     let pkt = play::ClickSlotC2s::decode(&mut data)?;
 
     let to_send_pkt = play::ScreenHandlerSlotUpdateS2c {
@@ -525,16 +525,15 @@ fn click_slot(mut data: &'static [u8], query: &mut PacketSwitchQuery<'_>) -> any
         .compose
         .unicast(&to_send_pkt, query.io_ref, query.system_id, query.world)?;
 
-    let item_in_slot = query
-        .inventory
-        .get(pkt.slot_idx as u16)
-        .context("slot index is negative")?;
+    let slot_idx = u16::try_from(pkt.slot_idx).context("slot index is negative")?;
+
+    let item_in_slot = query.inventory.get(slot_idx)?;
 
     let to_send_pkt = play::ScreenHandlerSlotUpdateS2c {
         window_id: 0,
         state_id: VarInt::default(),
         slot_idx: pkt.slot_idx,
-        slot_data: Cow::Borrowed(&item_in_slot),
+        slot_data: Cow::Borrowed(item_in_slot),
     };
 
     query

@@ -9,7 +9,7 @@ use flecs_ecs::{
     prelude::Module,
 };
 use hyperion::{
-    BlockKind, chat,
+    BlockKind,
     net::{Compose, NetworkStreamRef, agnostic},
     simulation::{
         Xp,
@@ -19,7 +19,7 @@ use hyperion::{
     storage::EventQueue,
     system_registry::SystemId,
     valence_protocol::{
-        BlockPos, BlockState, ItemStack, Particle, VarInt,
+        BlockPos, BlockState, Particle, VarInt,
         block::{PropName, PropValue},
         ident,
         math::{DVec3, IVec3, Vec3},
@@ -27,7 +27,6 @@ use hyperion::{
         text::IntoText,
     },
 };
-use hyperion_inventory::PlayerInventory;
 use hyperion_scheduled::Scheduled;
 use tracing::{error, info_span};
 
@@ -195,7 +194,6 @@ impl Module for BlockModule {
 
 
                         let previous_kind = previous.to_kind().to_item_kind();
-                        let diff = ItemStack::new(previous.to_kind().to_item_kind(), 1, None);
                         // Create a message about the broken block
                         let msg = format!("previous {previous:?} → {previous_kind:?}");
 
@@ -221,16 +219,14 @@ impl Module for BlockModule {
                 }
             });
 
-        system!("handle_placed_blocks", world, &mut Blocks($), &mut EventQueue<event::PlaceBlock>($), &mut PendingDestruction($), &Compose($))
+        system!("handle_placed_blocks", world, &mut Blocks($), &mut EventQueue<event::PlaceBlock>($), &mut PendingDestruction($))
             .multi_threaded()
-            .each_iter(move |it: TableIter<'_, false>, _, (mc, event_queue, pending_air, compose): (&mut Blocks, &mut EventQueue<event::PlaceBlock>, &mut PendingDestruction, &Compose)| {
+            .each(move |(mc, event_queue, pending_air): (&mut Blocks, &mut EventQueue<event::PlaceBlock>, &mut PendingDestruction)| {
                 let span = info_span!("handle_placed_blocks");
                 let _enter = span.enter();
-                let world = it.world();
                 for event in event_queue.drain() {
                     let position = event.position;
 
-                    let block = event.block;
                     mc.set_block(position, event.block).unwrap();
 
                     pending_air.destroy_at.schedule(Instant::now() + TOTAL_DESTRUCTION_TIME, position);

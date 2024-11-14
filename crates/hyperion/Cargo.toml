@@ -12,7 +12,6 @@ name = "atomic"
 colored = "2.1.0"
 flate2 = {workspace = true, features = ["zlib-ng"]}
 glam = {workspace = true, features = ["serde"]}
-replace_with.workspace = true
 rkyv.workspace = true
 roaring = {workspace = true, features = ["simd"]}
 serde = {workspace = true, features = ["derive"]}
