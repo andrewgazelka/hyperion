@@ -1755,7 +1755,6 @@ dependencies = [
 name = "hyperion-inventory"
 version = "0.1.0"
 dependencies = [
- "flecs_ecs",
  "hyperion-crafting",
  "roaring",
  "snafu",
@@ -1830,7 +1829,9 @@ dependencies = [
 name = "hyperion-rank-tree"
 version = "0.1.0"
 dependencies = [
+ "bytemuck",
  "clap",
+ "flecs_ecs",
  "hyperion",
  "hyperion-inventory",
  "toml",

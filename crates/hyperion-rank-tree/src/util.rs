@@ -1,3 +1,4 @@
+use flecs_ecs::core::Entity;
 use valence_protocol::{nbt, nbt::Value, ItemKind, ItemStack};
 
 /// A builder for creating Minecraft items with NBT data
@@ -94,6 +95,17 @@ impl ItemBuilder {
 
     pub const fn count(mut self, count: i8) -> Self {
         self.count = count;
+        self
+    }
+
+    pub const fn handler(mut self, handler: Entity) -> Self {
+        let nbt = self.nbt.get_or_insert_with(nbt::Compound::new);
+        let id = handler.0;
+
+        // we are explicitly casting to i64 because although sign might be lost, when we read it back,
+        // we will revert it back to a u64.
+        let id: i64 = bytemuck::cast(id);
+        nbt.insert("Handler", Value::Long(id));
         self
     }
 

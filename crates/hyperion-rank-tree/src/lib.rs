@@ -2,6 +2,7 @@ use clap::ValueEnum;
 
 pub mod inventory;
 pub mod skin;
+pub mod item;
 
 mod util;
 

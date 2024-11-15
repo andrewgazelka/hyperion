@@ -12,6 +12,8 @@ hyperion.workspace = true
 toml.workspace = true
 valence_protocol.workspace = true
 clap.workspace = true
+flecs_ecs.workspace = true
+bytemuck.workspace = true
 
 [lints]
 workspace = true
