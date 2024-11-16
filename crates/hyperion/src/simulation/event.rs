@@ -15,6 +15,12 @@ pub struct ItemDropEvent {
     pub location: Vec3,
 }
 
+#[derive(Component, Default, Debug)]
+pub struct ItemInteract {
+    pub hand: Hand,
+    pub sequence: i32,
+}
+
 #[derive(Debug)]
 pub struct ChatMessage<'a> {
     pub msg: &'a str,
@@ -49,6 +55,7 @@ pub struct DestroyBlock {
     pub from: Entity,
     pub sequence: i32,
 }
+
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct PlaceBlock {

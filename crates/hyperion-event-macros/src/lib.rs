@@ -178,6 +178,14 @@ impl EventsInput {
     fn generate(&self) -> proc_macro2::TokenStream {
         // Generate all fields and initializers
         let fields = self.events.iter().map(EventType::generate_field);
+        
+        
+        let field_idents = self.events.iter().map(|event| {
+            let field_name = event.ident.to_string().to_case(Case::Snake);
+            format_ident!("{field_name}")
+        });
+        
+        
         let initializers = self.events.iter().map(EventType::generate_initializer);
 
         // Generate all trait implementations
@@ -196,6 +204,15 @@ impl EventsInput {
                     Self {
                         #(#initializers)*
                     }
+                }
+                
+                pub fn clear(&mut self) {
+                    #(
+                        let ptr = self.#field_idents.0;
+                        let ptr = ptr.cast_mut();
+                        let ptr = unsafe { &mut *ptr };
+                        ptr.clear();
+                    )*
                 }
             }
         };

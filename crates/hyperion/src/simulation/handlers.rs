@@ -335,10 +335,13 @@ pub fn player_interact_item(
     query: &PacketSwitchQuery<'_>,
 ) -> anyhow::Result<()> {
     let packet = play::PlayerInteractItemC2s::decode(&mut data)?;
+    
+    let event = event::ItemInteract {
+        hand: packet.hand,
+        sequence: packet.sequence.0,
+    };
 
-    let id = query.id;
-
-    world.send_to(id, event::ItemInteract);
+    query.events.push(event, query.world);
 
     Ok(())
 }

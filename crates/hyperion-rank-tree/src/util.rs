@@ -98,7 +98,7 @@ impl ItemBuilder {
         self
     }
 
-    pub const fn handler(mut self, handler: Entity) -> Self {
+    pub fn handler(mut self, handler: Entity) -> Self {
         let nbt = self.nbt.get_or_insert_with(nbt::Compound::new);
         let id = handler.0;
 
