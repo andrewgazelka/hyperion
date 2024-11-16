@@ -9,11 +9,11 @@ readme = "README.md"
 publish = false
 
 [dependencies]
-flecs_ecs.workspace = true
-hyperion.workspace = true
-gxhash.workspace = true
-tracing.workspace = true
-indexmap.workspace = true
+flecs_ecs = {workspace = true}
+hyperion = {workspace = true}
+gxhash = {workspace = true}
+tracing = {workspace = true}
+indexmap = {workspace = true}
 
 [lints]
 workspace = true

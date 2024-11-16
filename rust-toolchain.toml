@@ -1,4 +1,0 @@
-[toolchain]
-channel = "nightly-2024-11-11"
-components = ["rustfmt", "clippy", "rustc-codegen-cranelift-preview"]
-profile = "minimal"

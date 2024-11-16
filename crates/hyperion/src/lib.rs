@@ -20,20 +20,6 @@
 #![feature(split_array)]
 #![feature(never_type)]
 #![feature(duration_constructors)]
-// todo: deny more and completely fix panics
-// #![deny(
-//     clippy::expect_used,
-//     clippy::get_unwrap,
-//     clippy::indexing_slicing,
-//     clippy::missing_assert_message,
-//     clippy::panic,
-//     clippy::string_slice,
-//     clippy::todo,
-//     clippy::unimplemented,
-//     clippy::unwrap_in_result,
-//     clippy::unwrap_used,
-//     clippy::allow_attributes
-// )]
 
 pub const NUM_THREADS: usize = 8;
 pub const CHUNK_HEIGHT_SPAN: u32 = 384; // 512; // usually 384
@@ -58,7 +44,7 @@ pub use uuid;
 // todo: slowly move more and more things to arbitrary module
 // and then eventually do not re-export valence_protocol
 pub use valence_protocol;
-use valence_protocol::{CompressionThreshold, Encode, Packet};
+use valence_protocol::{CompressionThreshold, Encode, Hand, Packet};
 pub use valence_protocol::{
     ItemKind, ItemStack, Particle,
     block::{BlockKind, BlockState},
@@ -82,6 +68,7 @@ use crate::{
     runtime::Tasks,
     simulation::{
         EgressComm, EntitySize, IgnMap, PacketState, Player,
+        handlers::PacketSwitchQuery,
         metadata::{EntityFlags, Pose},
     },
     util::mojang::ApiProvider,
@@ -147,6 +134,11 @@ pub fn adjust_file_descriptor_limits(recommended_min: u64) -> std::io::Result<()
     }
 
     Ok(())
+}
+
+#[derive(Component)]
+pub struct ClickEventHandlers {
+    fns: Vec<fn(&mut PacketSwitchQuery<'_>, Hand)>,
 }
 
 /// The central [`Hyperion`] struct which owns and manages the entire server.

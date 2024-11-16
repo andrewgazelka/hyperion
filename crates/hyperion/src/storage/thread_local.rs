@@ -85,6 +85,13 @@ impl<T> ThreadLocalVec<T> {
             .map(|x| x.len())
             .sum()
     }
+
+    pub fn clear(&mut self) {
+        self.inner
+            .iter_mut()
+            .map(SyncUnsafeCell::get_mut)
+            .for_each(Vec::clear);
+    }
 }
 
 /// Structure of arrays

@@ -15,6 +15,13 @@ pub struct ItemDropEvent {
     pub location: Vec3,
 }
 
+#[derive(Component, Default, Debug)]
+pub struct ItemInteract {
+    pub entity: Entity,
+    pub hand: Hand,
+    pub sequence: i32,
+}
+
 #[derive(Debug)]
 pub struct ChatMessage<'a> {
     pub msg: &'a str,

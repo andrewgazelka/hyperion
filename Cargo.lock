@@ -1763,6 +1763,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "hyperion-item"
+version = "0.1.0"
+dependencies = [
+ "bytemuck",
+ "derive_more",
+ "flecs_ecs",
+ "hyperion",
+ "hyperion-inventory",
+ "valence_protocol",
+]
+
+[[package]]
 name = "hyperion-minecraft-proto"
 version = "0.1.0"
 
@@ -1830,9 +1842,12 @@ dependencies = [
 name = "hyperion-rank-tree"
 version = "0.1.0"
 dependencies = [
+ "bytemuck",
  "clap",
+ "flecs_ecs",
  "hyperion",
  "hyperion-inventory",
+ "hyperion-item",
  "toml",
  "valence_protocol",
 ]
@@ -2288,16 +2303,6 @@ checksum = "9380b911e3e96d10c1f415da0876389aaf1b56759054eeb0de7df940c456ba1a"
 dependencies = [
  "autocfg",
  "rawpointer",
-]
-
-[[package]]
-name = "md-5"
-version = "0.10.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d89e7ee0cfbedfc4da3340218492196241d89eefb6dab27de5df917a6d2e78cf"
-dependencies = [
- "cfg-if",
- "digest",
 ]
 
 [[package]]
@@ -4124,7 +4129,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f8c5f0a0af699448548ad1a2fbf920fb4bee257eae39953ba95cb84891a0446a"
 dependencies = [
  "getrandom",
- "md-5",
  "serde",
 ]
 

@@ -43,6 +43,7 @@ struct OreVeins {
 impl Module for ProofOfConceptModule {
     fn module(world: &World) {
         world.component::<component::team::Team>();
+        world.import::<hyperion_rank_tree::RankTree>();
 
         world.component::<OreVeins>();
         world.set(OreVeins::default());

@@ -3,7 +3,7 @@ cargo-features = ["edition2024"]
 [build-dependencies]
 
 [dependencies]
-rkyv.workspace = true
+rkyv = {workspace = true}
 
 [lints]
 workspace = true

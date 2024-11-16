@@ -1,20 +1,18 @@
-cargo-features = ["edition2024"]
-
 [package]
-name = "hyperion-clap"
+name = "hyperion-item"
 version = "0.1.0"
-edition = "2024"
+edition = "2021"
 authors = ["Andrew Gazelka <andrew.gazelka@gmail.com>"]
 readme = "README.md"
 publish = false
 
 [dependencies]
-clap ={ workspace = true }
 flecs_ecs = { workspace = true }
-hyperion-command = { workspace = true }
-tracing = { workspace = true }
-hyperion = { workspace = true }
+bytemuck = "1.19.0"
 valence_protocol = { workspace = true }
+hyperion = { workspace = true }
+hyperion-inventory = { workspace = true }
+derive_more = { workspace = true }
 
 [lints]
 workspace = true

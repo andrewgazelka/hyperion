@@ -7,11 +7,14 @@ readme = "README.md"
 publish = false
 
 [dependencies]
-hyperion-inventory.workspace = true
-hyperion.workspace = true
-toml.workspace = true
-valence_protocol.workspace = true
-clap.workspace = true
+hyperion-inventory = { workspace = true }
+hyperion = { workspace = true }
+toml = { workspace = true }
+valence_protocol = { workspace = true }
+clap = { workspace = true }
+flecs_ecs = { workspace = true }
+bytemuck = { workspace = true }
+hyperion-item.workspace = true
 
 [lints]
 workspace = true

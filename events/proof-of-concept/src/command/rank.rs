@@ -42,7 +42,7 @@ impl MinecraftCommand for RankCommand {
             )>(|(stream, uuid, inventory)| {
                 inventory.clear();
 
-                rank.apply_inventory(team, inventory);
+                rank.apply_inventory(team, inventory, world);
 
                 let minecraft_id = caller.minecraft_id();
                 let mut bundle = DataBundle::new(compose);
