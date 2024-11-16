@@ -1,28 +1,28 @@
 cargo-features = ["edition2024"]
 
 [dependencies]
-anyhow.workspace = true
-clap = {workspace = true, features = ["derive"]}
-compact_str.workspace = true
-dotenvy = "0.15.7"
-fastrand.workspace = true
-flecs_ecs.workspace = true
-hyperion-clap.workspace = true
-hyperion-inventory.workspace = true
-hyperion-permission.workspace = true
-hyperion-scheduled.workspace = true
-hyperion-text.workspace = true
-hyperion-utils.workspace = true
-hyperion-rank-tree.workspace = true
-hyperion.workspace = true
-roaring.workspace = true
-rustc-hash.workspace = true
-tracing-subscriber.workspace = true
-tracing-tracy.workspace = true
-tracing.workspace = true
-rayon.workspace = true
-gxhash.workspace = true
-derive_more.workspace = true
+anyhow = { workspace = true }
+clap = { workspace = true }
+compact_str = { workspace = true }
+dotenvy = { workspace = true }
+fastrand = { workspace = true }
+flecs_ecs = { workspace = true }
+hyperion-clap = { workspace = true }
+hyperion-inventory = { workspace = true }
+hyperion-permission = { workspace = true }
+hyperion-scheduled = { workspace = true }
+hyperion-text = { workspace = true }
+hyperion-utils = { workspace = true }
+hyperion-rank-tree = { workspace = true }
+hyperion = { workspace = true }
+roaring = { workspace = true }
+rustc-hash = { workspace = true }
+tracing-subscriber = { workspace = true }
+tracing-tracy = { workspace = true }
+tracing = { workspace = true }
+rayon = { workspace = true }
+gxhash = { workspace = true }
+derive_more = { workspace = true }
 
 [dev-dependencies]
 tracing = {workspace = true, features = ["release_max_level_info"]}

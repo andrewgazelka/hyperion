@@ -49,6 +49,7 @@ convert_case = '0.6.0'
 criterion = '0.5.1'
 derive-build = '0.1.1'
 directories = '5.0.1'
+dotenvy = "0.15.7"
 enumset = '1.1.5'
 fastrand = '2.1.0'
 futures-util = '0.3.31'

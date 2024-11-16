@@ -1,24 +1,24 @@
 cargo-features = ["edition2024"]
 
 [dependencies]
-colored.workspace = true
-kanal.workspace = true
-papaya.workspace = true
-rkyv.workspace = true
-rustc-hash.workspace = true
+colored = {workspace = true}
+kanal = {workspace = true}
+papaya = {workspace = true}
+rkyv = {workspace = true}
+rustc-hash = {workspace = true}
 tokio = {workspace = true, features = ["full", "tracing"]}
 tokio-util = {workspace = true, features = ["full"]}
-anyhow.workspace = true
-bvh.workspace = true
-bytes.workspace = true
-clap.workspace = true
-glam.workspace = true
-heapless.workspace = true
-hyperion-proto.workspace = true
-more-asserts.workspace = true
-slotmap.workspace = true
-tracing.workspace = true
-tracing-subscriber.workspace = true
+anyhow = {workspace = true}
+bvh = {workspace = true}
+bytes = {workspace = true}
+clap = {workspace = true}
+glam = {workspace = true}
+heapless = {workspace = true}
+hyperion-proto = {workspace = true}
+more-asserts = {workspace = true}
+slotmap = {workspace = true}
+tracing = {workspace = true}
+tracing-subscriber = {workspace = true}
 
 [lints]
 workspace = true

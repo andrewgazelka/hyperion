@@ -9,12 +9,12 @@ readme = "README.md"
 publish = false
 
 [dependencies]
-clap = { version = "4.5.20", features = ["derive"] }
-flecs_ecs.workspace = true
-hyperion-command.workspace = true
-tracing.workspace = true
-hyperion.workspace = true
-valence_protocol.workspace = true
+clap ={ workspace = true }
+flecs_ecs = { workspace = true }
+hyperion-command = { workspace = true }
+tracing = { workspace = true }
+hyperion = { workspace = true }
+valence_protocol = { workspace = true }
 
 [lints]
 workspace = true

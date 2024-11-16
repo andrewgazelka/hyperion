@@ -1,10 +1,11 @@
 cargo-features = ["edition2024"]
 
 [dependencies]
-hyperion-crafting.workspace = true
-roaring.workspace = true
-snafu.workspace = true
-valence_protocol.workspace = true
+hyperion-crafting = {workspace = true}
+roaring = {workspace = true}
+snafu = {workspace = true}
+valence_protocol = {workspace = true}
+flecs_ecs = {workspace = true}
 
 [lints]
 workspace = true

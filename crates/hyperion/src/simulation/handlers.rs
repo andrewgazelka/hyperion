@@ -323,7 +323,7 @@ fn client_command(mut data: &[u8], query: &mut PacketSwitchQuery<'_>) -> anyhow:
 }
 
 /// Handles player interaction with items in hand
-/// 
+///
 /// Common uses:
 /// - Starting to wind up a bow for shooting arrows
 /// - Using consumable items like food or potions
@@ -335,8 +335,6 @@ pub fn player_interact_item(
     query: &PacketSwitchQuery<'_>,
 ) -> anyhow::Result<()> {
     let packet = play::PlayerInteractItemC2s::decode(&mut data)?;
-
-
 
     let id = query.id;
 
