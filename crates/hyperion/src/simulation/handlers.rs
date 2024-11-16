@@ -9,6 +9,7 @@ use glam::{IVec3, Vec3};
 use hyperion_utils::EntityExt;
 use tracing::{info, instrument, trace, warn};
 use valence_generated::block::{BlockKind, BlockState, PropName};
+use valence_nbt::Value;
 use valence_protocol::{
     Decode, Hand, ItemStack, Packet, VarInt,
     packets::play::{
@@ -20,7 +21,7 @@ use valence_protocol::{
 use valence_text::IntoText;
 
 use super::{
-    ConfirmBlockSequences, EntitySize, Position,
+    ConfirmBlockSequences, EntitySize, Name, Position,
     animation::{self, ActiveAnimation},
     block_bounds,
     blocks::Blocks,
@@ -29,7 +30,7 @@ use super::{
 use crate::{
     net::{Compose, NetworkStreamRef, decoder::BorrowedPacketFrame},
     simulation::{Pitch, Yaw, aabb, event, event::PluginMessage},
-    storage::Events,
+    storage::{Events, GlobalEventHandlers},
     system_registry::SystemId,
 };
 
@@ -219,6 +220,8 @@ fn chat_command(mut data: &'static [u8], query: &PacketSwitchQuery<'_>) -> anyho
 fn hand_swing(mut data: &[u8], query: &mut PacketSwitchQuery<'_>) -> anyhow::Result<()> {
     let packet = play::HandSwingC2s::decode(&mut data)?;
 
+    println!("hand swing");
+
     match packet.hand {
         Hand::Main => {
             query.animation.push(animation::Kind::SwingMainArm);
@@ -254,9 +257,10 @@ fn player_interact_entity(mut data: &[u8], query: &PacketSwitchQuery<'_>) -> any
 
     Ok(())
 }
-//
+
 pub struct PacketSwitchQuery<'a> {
     pub id: Entity,
+    pub handlers: &'a GlobalEventHandlers,
     pub view: EntityView<'a>,
     pub compose: &'a Compose,
     pub io_ref: NetworkStreamRef,
@@ -332,16 +336,11 @@ fn client_command(mut data: &[u8], query: &mut PacketSwitchQuery<'_>) -> anyhow:
 /// - Activating items with duration effects (e.g. chorus fruit teleport)
 pub fn player_interact_item(
     mut data: &'static [u8],
-    query: &PacketSwitchQuery<'_>,
+    query: &mut PacketSwitchQuery<'_>,
 ) -> anyhow::Result<()> {
     let packet = play::PlayerInteractItemC2s::decode(&mut data)?;
-    
-    let event = event::ItemInteract {
-        hand: packet.hand,
-        sequence: packet.sequence.0,
-    };
 
-    query.events.push(event, query.world);
+    query.handlers.click.trigger_all(query, &packet.hand);
 
     Ok(())
 }

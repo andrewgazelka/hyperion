@@ -134,6 +134,7 @@ impl ItemBuilder {
         self
     }
 
+    #[must_use]
     pub fn build(self) -> ItemStack {
         ItemStack::new(self.kind, self.count, self.nbt)
     }

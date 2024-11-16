@@ -1,6 +1,6 @@
 use std::cmp::min;
 
-use flecs_ecs::macros::Component;
+use flecs_ecs::{core::World, macros::Component, prelude::Module};
 use roaring::RoaringBitmap;
 use valence_protocol::{ItemKind, ItemStack};
 
@@ -483,3 +483,12 @@ pub const OFFHAND_SLOT: u16 = 45;
 //         assert_eq!(inventory.get(37).unwrap().count, 63);
 //     }
 // }
+
+#[derive(Component)]
+pub struct InventoryModule;
+
+impl Module for InventoryModule {
+    fn module(world: &World) {
+        world.component::<PlayerInventory>();
+    }
+}

@@ -1,3 +1,4 @@
+[profile]
 [profile.release-debug]
 debug = true
 inherits = 'release'
@@ -30,6 +31,7 @@ members = [
   'crates/hyperion-clap',
   'crates/hyperion-command',
   'crates/hyperion-rank-tree',
+  'crates/hyperion-item',
 ]
 resolver = '2'
 
@@ -49,7 +51,7 @@ convert_case = '0.6.0'
 criterion = '0.5.1'
 derive-build = '0.1.1'
 directories = '5.0.1'
-dotenvy = "0.15.7"
+dotenvy = '0.15.7'
 enumset = '1.1.5'
 fastrand = '2.1.0'
 futures-util = '0.3.31'
@@ -57,7 +59,6 @@ glam = '0.29.0'
 heapless = '0.8.0'
 heed = '0.20.5'
 hex = '0.4.3'
-indexmap = { version = '2.6.0', features = ['rayon'] }
 itertools = '0.13.0'
 kanal = '0.1.0-pre8'
 libc = '0.2.155'
@@ -142,6 +143,9 @@ path = 'crates/hyperion-event-macros'
 [workspace.dependencies.hyperion-inventory]
 path = 'crates/hyperion-inventory'
 
+[workspace.dependencies.hyperion-item]
+path = 'crates/hyperion-item'
+
 [workspace.dependencies.hyperion-nerd-font]
 path = 'crates/hyperion-nerd-font'
 
@@ -165,6 +169,10 @@ path = 'crates/hyperion-text'
 
 [workspace.dependencies.hyperion-utils]
 path = 'crates/hyperion-utils'
+
+[workspace.dependencies.indexmap]
+features = ['rayon']
+version = '2.6.0'
 
 [workspace.dependencies.ndarray]
 features = ['blas']

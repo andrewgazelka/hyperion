@@ -1763,6 +1763,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "hyperion-item"
+version = "0.1.0"
+dependencies = [
+ "bytemuck",
+ "derive_more",
+ "flecs_ecs",
+ "hyperion",
+ "hyperion-inventory",
+ "valence_protocol",
+]
+
+[[package]]
 name = "hyperion-minecraft-proto"
 version = "0.1.0"
 
@@ -1835,6 +1847,7 @@ dependencies = [
  "flecs_ecs",
  "hyperion",
  "hyperion-inventory",
+ "hyperion-item",
  "toml",
  "valence_protocol",
 ]

@@ -25,8 +25,8 @@ use crate::{
     runtime::AsyncRuntime,
     simulation::{
         AiTargetable, ChunkPosition, Comms, ConfirmBlockSequences, EntityReaction, EntitySize,
-        Health, IgnMap, ImmuneStatus, InGameName, PacketState, Pitch, Player, Position,
-        StreamLookup, Uuid, Xp, Yaw,
+        Health, IgnMap, ImmuneStatus, Name, PacketState, Pitch, Player, Position, StreamLookup,
+        Uuid, Xp, Yaw,
         animation::ActiveAnimation,
         blocks::Blocks,
         handlers::PacketSwitchQuery,
@@ -90,7 +90,6 @@ fn process_login(
     compose: &Compose,
     entity: &EntityView<'_>,
     system_id: SystemId,
-    handlers: &GlobalEventHandlers,
     ign_map: &IgnMap,
 ) -> anyhow::Result<()> {
     debug_assert!(
@@ -105,12 +104,10 @@ fn process_login(
 
     let username = username.0;
 
-    let mut player_join = PlayerJoinServer {
+    let player_join = PlayerJoinServer {
         username: username.to_string(),
         entity: entity.id(),
     };
-
-    handlers.join_server.trigger_all(world, &mut player_join);
 
     let username = player_join.username.as_str();
 
@@ -164,7 +161,7 @@ fn process_login(
     ign_map.insert(username.clone(), entity.id(), world);
 
     entity
-        .set(InGameName::from(username))
+        .set(Name::from(username))
         .add::<AiTargetable>()
         .set(ImmuneStatus::default())
         .set(Uuid::from(uuid))
@@ -475,7 +472,7 @@ impl Module for IngressModule {
             &mut hyperion_inventory::PlayerInventory,
             &mut ActiveAnimation,
             &hyperion_crafting::CraftingRegistry($),
-            &IgnMap($)
+            &IgnMap($),
         )
         .kind::<flecs::pipeline::OnUpdate>()
         .multi_threaded()
@@ -560,7 +557,6 @@ impl Module for IngressModule {
                                 compose,
                                 &entity,
                                 system_id,
-                                handlers,
                                 ign_map,
                             ) {
                                 error!("failed to process login packet");
@@ -614,6 +610,7 @@ impl Module for IngressModule {
                                     inventory,
                                     animation,
                                     crafting_registry,
+                                    handlers,
                                 };
 
                                 // info_span!("ingress", ign = name).in_scope(|| {

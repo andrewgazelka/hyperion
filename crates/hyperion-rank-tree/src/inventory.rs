@@ -1,10 +1,9 @@
+use flecs_ecs::core::{World, WorldGet};
 use hyperion_inventory::PlayerInventory;
+use hyperion_item::builder::{AttackDamage, ItemBuilder};
 use valence_protocol::ItemKind;
 
-use crate::{
-    util::{AttackDamage, ItemBuilder},
-    Rank, Team,
-};
+use crate::{Handles, Rank, Team};
 
 impl Team {
     pub const fn build_item(self) -> ItemBuilder {
@@ -19,7 +18,7 @@ impl Team {
 }
 
 impl Rank {
-    pub fn apply_inventory(self, team: Team, inventory: &mut PlayerInventory) {
+    pub fn apply_inventory(self, team: Team, inventory: &mut PlayerInventory, world: &World) {
         const MAIN_SLOT: u16 = 0;
         const PICKAXE_SLOT: u16 = 1;
         const BUILD_SLOT: u16 = 2;
@@ -32,10 +31,17 @@ impl Rank {
 
         let upgrades = ["Speed", "Vision", "Health", "Armor", "Damage"];
 
-        for (i, upgrade) in upgrades.into_iter().enumerate() {
-            let slot = u16::try_from(i).unwrap() + UPGRADE_START_SLOT;
-            inventory.set_hotbar(slot, upgrade_not_available.clone().name(upgrade).build());
-        }
+        world.get::<&Handles>(|handles| {
+            for (i, upgrade) in upgrades.into_iter().enumerate() {
+                let slot = u16::try_from(i).unwrap() + UPGRADE_START_SLOT;
+                let item = upgrade_not_available
+                    .clone()
+                    .name(upgrade)
+                    .handler(handles.speed)
+                    .build();
+                inventory.set_hotbar(slot, item);
+            }
+        });
 
         let default_pickaxe = ItemBuilder::new(ItemKind::WoodenPickaxe).build();
         inventory.set_hotbar(PICKAXE_SLOT, default_pickaxe);

@@ -17,6 +17,7 @@ pub struct ItemDropEvent {
 
 #[derive(Component, Default, Debug)]
 pub struct ItemInteract {
+    pub entity: Entity,
     pub hand: Hand,
     pub sequence: i32,
 }
@@ -55,7 +56,6 @@ pub struct DestroyBlock {
     pub from: Entity,
     pub sequence: i32,
 }
-
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct PlaceBlock {

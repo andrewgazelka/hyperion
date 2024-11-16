@@ -31,7 +31,7 @@ use crate::{
     ingress::PendingRemove,
     net::{Compose, DataBundle, NetworkStreamRef},
     simulation::{
-        Comms, InGameName, Position, Uuid, Yaw,
+        Comms, Name, Position, Uuid, Yaw,
         command::{Command, ROOT_COMMAND, get_command_packet},
         metadata::{EntityFlags, MetadataBuilder},
         skin::PlayerSkin,
@@ -61,7 +61,7 @@ pub fn player_join_world(
     root_command: Entity,
     query: &Query<(
         &Uuid,
-        &InGameName,
+        &Name,
         &Position,
         &Yaw,
         &Pitch,
@@ -522,7 +522,7 @@ impl Module for PlayerJoinModule {
     fn module(world: &World) {
         let query = world.new_query::<(
             &Uuid,
-            &InGameName,
+            &Name,
             &Position,
             &Yaw,
             &Pitch,
@@ -597,38 +597,33 @@ impl Module for PlayerJoinModule {
 
                 let entity = world.entity_from_id(entity);
 
-                entity.get::<(
-                    &Uuid,
-                    &InGameName,
-                    &Position,
-                    &Yaw,
-                    &Pitch,
-                    &NetworkStreamRef,
-                )>(|(uuid, name, position, yaw, pitch, &stream_id)| {
-                    let query = &query;
-                    let query = &query.0;
+                entity.get::<(&Uuid, &Name, &Position, &Yaw, &Pitch, &NetworkStreamRef)>(
+                    |(uuid, name, position, yaw, pitch, &stream_id)| {
+                        let query = &query;
+                        let query = &query.0;
 
-                    // if we get an error joining, we should kick the player
-                    if let Err(e) = player_join_world(
-                        &entity,
-                        compose,
-                        uuid.0,
-                        name,
-                        stream_id,
-                        position,
-                        yaw,
-                        pitch,
-                        &world,
-                        &skin,
-                        system_id,
-                        root_command,
-                        query,
-                        crafting_registry,
-                        config,
-                    ) {
-                        entity.set(PendingRemove::new(e.to_string()));
-                    };
-                });
+                        // if we get an error joining, we should kick the player
+                        if let Err(e) = player_join_world(
+                            &entity,
+                            compose,
+                            uuid.0,
+                            name,
+                            stream_id,
+                            position,
+                            yaw,
+                            pitch,
+                            &world,
+                            &skin,
+                            system_id,
+                            root_command,
+                            query,
+                            crafting_registry,
+                            config,
+                        ) {
+                            entity.set(PendingRemove::new(e.to_string()));
+                        };
+                    },
+                );
 
                 let entity = world.entity_from_id(entity);
                 entity.set(skin);
