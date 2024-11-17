@@ -1,6 +1,6 @@
 use clap::Parser;
 use proof_of_concept::init_game;
-use tracing_subscriber::{Registry, layer::SubscriberExt};
+use tracing_subscriber::{EnvFilter, Registry, layer::SubscriberExt};
 use tracing_tracy::TracyLayer;
 
 #[cfg(not(target_env = "msvc"))]
@@ -20,13 +20,16 @@ struct Args {
 
 fn setup_logging() {
     tracing::subscriber::set_global_default(
-        Registry::default().with(TracyLayer::default()).with(
-            tracing_subscriber::fmt::layer()
-                .with_target(false)
-                .with_thread_ids(false)
-                .with_file(true)
-                .with_line_number(true),
-        ),
+        Registry::default()
+            .with(EnvFilter::from_default_env())
+            .with(TracyLayer::default())
+            .with(
+                tracing_subscriber::fmt::layer()
+                    .with_target(false)
+                    .with_thread_ids(false)
+                    .with_file(true)
+                    .with_line_number(true),
+            ),
     )
     .expect("setup tracing subscribers");
 }
@@ -36,13 +39,9 @@ fn main() {
 
     setup_logging();
 
-    // console_subscriber::init();
-
     let Args { ip, port } = Args::parse();
 
     let address = format!("{ip}:{port}");
 
-    // Denormals (numbers very close to 0) are flushed to zero because doing computations on them
-    // is slow.
     init_game(address).unwrap();
 }
