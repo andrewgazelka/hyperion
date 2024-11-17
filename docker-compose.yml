@@ -40,6 +40,7 @@ services:
     environment:
       - RUST_LOG=info
       - HOST=hyperion-proxy:25565
+      - MAX_NUMBER_OF_BOTS=10
     networks:
       - proxy-network
 

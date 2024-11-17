@@ -17,7 +17,7 @@ pub fn bootstrap(config: &Config) {
     // todo: use life cycle
 
     let mut rng = AntithesisRng;
-
+    
     let first_name = generate::name();
     assert_sometimes!(first_name.is_valid, "First name is never invalid");
     assert_sometimes!(!first_name.is_valid, "First name is always valid");

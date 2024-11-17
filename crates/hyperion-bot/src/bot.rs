@@ -1,4 +1,5 @@
 use tokio::net::{TcpStream, ToSocketAddrs};
+use tracing::info;
 use uuid::Uuid;
 
 mod handshake;
@@ -11,7 +12,9 @@ pub struct Bot {
 }
 
 impl Bot {
-    pub async fn new(name: String, uuid: Uuid, addr: impl ToSocketAddrs) -> Self {
+    #[tracing::instrument(skip_all, fields(name))]
+    pub async fn new(name: String, uuid: Uuid, addr: impl ToSocketAddrs + std::fmt::Display) -> Self {
+        info!("connecting to {addr}");
         let addr = TcpStream::connect(addr).await.unwrap();
 
         Self {
