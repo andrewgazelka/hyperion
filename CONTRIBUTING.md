@@ -31,6 +31,8 @@ Essential tools to enhance your development workflow:
 - **[Mineskin](https://mineskin.org/)**
   - Upload skin PNG files
   - Get Mojang-signed signatures for player skin customization
+ 
+You can use https://github.com/andrewgazelka/mineskin-cli to use Mineskin from CLI.
 
 ## Protocol Documentation
 
