@@ -9,7 +9,6 @@ use glam::{IVec3, Vec3};
 use hyperion_utils::EntityExt;
 use tracing::{info, instrument, trace, warn};
 use valence_generated::block::{BlockKind, BlockState, PropName};
-use valence_nbt::Value;
 use valence_protocol::{
     Decode, Hand, ItemStack, Packet, VarInt,
     packets::play::{
@@ -21,7 +20,7 @@ use valence_protocol::{
 use valence_text::IntoText;
 
 use super::{
-    ConfirmBlockSequences, EntitySize, Name, Position,
+    ConfirmBlockSequences, EntitySize, Position,
     animation::{self, ActiveAnimation},
     block_bounds,
     blocks::Blocks,

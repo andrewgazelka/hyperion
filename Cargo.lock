@@ -1842,7 +1842,6 @@ dependencies = [
 name = "hyperion-rank-tree"
 version = "0.1.0"
 dependencies = [
- "bytemuck",
  "clap",
  "flecs_ecs",
  "hyperion",

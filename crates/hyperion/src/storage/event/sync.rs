@@ -1,7 +1,4 @@
-use flecs_ecs::{
-    core::{Entity, World},
-    macros::Component,
-};
+use flecs_ecs::{core::Entity, macros::Component};
 use valence_protocol::Hand;
 
 use crate::simulation::handlers::PacketSwitchQuery;

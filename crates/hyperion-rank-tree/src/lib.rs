@@ -1,11 +1,10 @@
 use clap::ValueEnum;
 use flecs_ecs::{
-    core::{Entity, IdOperations, World, WorldGet},
+    core::{Entity, IdOperations, World},
     macros::Component,
     prelude::Module,
 };
-use hyperion::{net::Compose, storage::EventHandler};
-use valence_protocol::Hand;
+use hyperion::storage::EventHandler;
 
 pub mod inventory;
 pub mod skin;
@@ -49,7 +48,7 @@ impl Module for RankTree {
         world.component::<Rank>();
         world.component::<Handles>();
 
-        let handler = EventHandler::new(|query, hand| {
+        let handler = EventHandler::new(|query, _| {
             let cursor = query.inventory.get_cursor();
             println!("clicked {cursor:?}");
         });

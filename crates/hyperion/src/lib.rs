@@ -44,7 +44,7 @@ pub use uuid;
 // todo: slowly move more and more things to arbitrary module
 // and then eventually do not re-export valence_protocol
 pub use valence_protocol;
-use valence_protocol::{CompressionThreshold, Encode, Hand, Packet};
+use valence_protocol::{CompressionThreshold, Encode, Packet};
 pub use valence_protocol::{
     ItemKind, ItemStack, Particle,
     block::{BlockKind, BlockState},
@@ -68,7 +68,6 @@ use crate::{
     runtime::Tasks,
     simulation::{
         EgressComm, EntitySize, IgnMap, PacketState, Player,
-        handlers::PacketSwitchQuery,
         metadata::{EntityFlags, Pose},
     },
     util::mojang::ApiProvider,
@@ -134,11 +133,6 @@ pub fn adjust_file_descriptor_limits(recommended_min: u64) -> std::io::Result<()
     }
 
     Ok(())
-}
-
-#[derive(Component)]
-pub struct ClickEventHandlers {
-    fns: Vec<fn(&mut PacketSwitchQuery<'_>, Hand)>,
 }
 
 /// The central [`Hyperion`] struct which owns and manages the entire server.
@@ -336,31 +330,6 @@ impl Hyperion {
         app.run();
 
         bail!("app exited");
-
-        // loop {
-        //     let tick_each_ms = 50.0;
-        //
-        //     let start = std::time::Instant::now();
-        //
-        //     tracing::info_span!("tick").in_scope(|| {
-
-        //         world.progress();
-        //     });
-        //
-        //     let elapsed = start.elapsed();
-        //
-        //     let ms_last_tick = elapsed.as_secs_f32() * 1000.0;
-        //
-        //     if ms_last_tick < tick_each_ms {
-        //         let remaining = tick_each_ms - ms_last_tick;
-        //         let remaining = Duration::from_secs_f32(remaining / 1000.0);
-        //         std::thread::sleep(remaining);
-        //     }
-        //
-        //     world.get::<&mut Compose>(|compose| {
-        //         compose.global_mut().ms_last_tick = ms_last_tick;
-        //     });
-        // }
     }
 }
 

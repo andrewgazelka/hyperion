@@ -1,4 +1,3 @@
-[profile]
 [profile.release-debug]
 debug = true
 inherits = 'release'
