@@ -1,70 +1,114 @@
 # Contributing to Hyperion
-We love pull requests! If you consistently contribute quality PRs, @andrewgazelka will sponsor your subscriptions to AI development tools to enhance your productivity.
 
-## Recommended Development Setup
+Welcome to the Hyperion project! We love pull requests from the community. Contributors who consistently provide quality PRs may be eligible for sponsored subscriptions to AI development tools from @andrewgazelka to enhance their productivity.
 
-### IDEs & Tools
-- **IntelliJ IDEA** - Primary recommended IDE
-- [Cursor](https://cursor.com) - AI-powered IDE
-    - [cursor-sync](https://github.com/andrewgazelka/cursor-sync) - Plugin to sync cursor position between Cursor and IntelliJ
-- [Supermaven](https://www.supermaven.com) - For enhanced code completion
+## Table of Contents
+- [Development Tools](#development-tools)
+- [Protocol Documentation](#protocol-documentation)
+- [Working with Protocol Documentation and LLMs](#working-with-protocol-documentation-and-llms)
+- [Getting Help](#getting-help)
+- [Development Setup](#development-setup)
 
-### Code Quality Tools
-- **pre-commit** - Ensures code quality before commits
-    1. Install pre-commit: `pip install pre-commit`
-    2. Install the hooks (optional): `pre-commit install`
-    3. Run against all files (optional): `pre-commit run --all-files`
+## Development Tools
 
-The pre-commit configuration will automatically:
-- Format Rust code with `rustfmt`
-- Run other code quality checks
+Essential tools to enhance your development workflow:
 
-Pre-commit hooks run automatically on `git commit`. If any checks fail, fix the issues and try committing again.
+### Protocol Analysis
+- **[Packet Inspector](https://github.com/valence-rs/valence/tree/main/tools/packet_inspector)**
+  - Debug and analyze Minecraft protocol packets
+  - Essential for protocol-related development
 
-### Helpful Development Tools
-- [Packet Inspector](https://github.com/valence-rs/valence/tree/main/tools/packet_inspector) - Useful for debugging Minecraft protocol packets
-- [flecs.dev](https://flecs.dev/explorer) super useful for viewing entities
-- tracy
+### Debugging
+- **[flecs.dev/explorer](https://flecs.dev/explorer)**
+  - View entities in the Entity Component System (ECS)
 
-![image](https://github.com/user-attachments/assets/51f99c9a-a535-4fd8-9a9f-12f8e3039d04)
+### Profiling
+- **[Tracy Profiler](https://github.com/wolfpld/tracy)**
+  - Advanced performance profiling
+  - Helps identify bottlenecks
 
+### Asset Management
+- **[Mineskin](https://mineskin.org/)**
+  - Upload skin PNG files
+  - Get Mojang-signed signatures for player skin customization
 
-### Protocol Documentation
-We use Minecraft 1.20.1 protocol documentation:
-- Reference: [Wiki.vg Protocol (Version 18375)](https://wiki.vg/index.php?title=Protocol&oldid=18375)
+## Protocol Documentation
 
-### Working with Protocol Documentation and LLMs
+We currently target Minecraft 1.20.1 protocol specification:
 
-To effectively work with LLMs for packet analysis:
+- **Primary Reference**: [Wiki.vg Protocol (Version 18375)](https://wiki.vg/index.php?title=Protocol&oldid=18375)
 
-1. Get Wiki.vg Documentation:
-    - Install [MarkDownload](https://chromewebstore.google.com/detail/markdownload-markdown-web/pcmpcfapbekmbjjkdalcgopdkipoggdi) browser extension
-    - Navigate to [Wiki.vg Protocol](https://wiki.vg/index.php?title=Protocol&oldid=18375)
-    - Use MarkDownload to save the page as Markdown
-    - This gives you the protocol specification in a format you can share with LLMs
+## Working with Protocol Documentation and LLMs
 
-2. Include Valence Reference:
-    - Share Valence's [packets.json](https://github.com/valence-rs/valence/blob/8f3f84d557dacddd7faddb2ad724185ecee2e482/tools/packet_inspector/extracted/packets.json) with the LLM
-    - This helps the LLM understand packet name mappings between Wiki.vg and Valence
+Follow these steps to effectively use LLMs for packet analysis:
 
-3. Ask Questions:
-    - Provide both the Wiki.vg markdown and relevant parts of packets.json
-    - LLMs can then help map between Wiki.vg and Valence packet structures
-    - Get assistance with implementation details and packet field mappings
+### 1. Obtaining Wiki.vg Documentation
+1. Install the [MarkDownload](https://chromewebstore.google.com/detail/markdownload-markdown-web/pcmpcfapbekmbjjkdalcgopdkipoggdi) browser extension
+2. Navigate to [Wiki.vg Protocol](https://wiki.vg/index.php?title=Protocol&oldid=18375)
+3. Use MarkDownload to save the page as Markdown
+4. Use the resulting file for LLM analysis
+
+### 2. Valence Integration
+1. Reference Valence's [packets.json](https://github.com/valence-rs/valence/blob/8f3f84d557dacddd7faddb2ad724185ecee2e482/tools/packet_inspector/extracted/packets.json)
+2. This helps map Wiki.vg specifications to Valence implementations
+
+### 3. LLM Interaction
+- Provide both Wiki.vg markdown and relevant packets.json sections
+- Get assistance with:
+  - Packet structure mapping
+  - Implementation details
+  - Field mapping between specifications
 
 ## Getting Help
-If you're stuck or have questions:
-- Open an issue for discussion
-- Join our [Discord](https://discord.gg/PBfnDtj5Wb) for real-time help
-- Check existing PRs and issues for similar discussions
 
-## Pull Request Process
-1. Fork the repository
-2. Create a feature branch
-3. Commit your changes
-4. Push to your fork
-5. Open a Pull Request
+Multiple channels are available for support:
 
-We aim to review PRs promptly and provide constructive feedback when needed.
+- **Issues**: Open a GitHub issue for detailed discussions
+- **Discord**: Join our [community](https://discord.gg/PBfDtj5Wb) for real-time help
+- **Existing Resources**: Check open PRs and issues for similar topics
 
-Thank you for contributing to Hyperion!
+## Development Setup
+
+### Recommended IDEs
+
+#### Primary IDE
+- **IntelliJ IDEA**
+  - Recommended as the primary development environment
+
+#### AI-Enhanced Development
+- **[Cursor](https://cursor.com)**
+  - AI-powered coding assistance
+  - Enhanced with [cursor-sync](https://github.com/andrewgazelka/cursor-sync) for IntelliJ position synchronization
+
+#### Additional Tools
+- **[Supermaven](https://www.supermaven.com)**
+  - Enhanced code completion capabilities
+
+### Code Quality Enforcement
+
+We use pre-commit hooks to maintain code quality:
+
+1. **Installation**
+   ```bash
+   pip install pre-commit
+   ```
+
+2. **Setup** (Optional)
+   ```bash
+   pre-commit install
+   ```
+
+3. **Manual Run** (Optional)
+   ```bash
+   pre-commit run --all-files
+   ```
+
+#### Automated Checks
+The pre-commit configuration handles:
+- Rust code formatting via `rustfmt`
+- Additional code quality verifications
+
+Hooks run automatically on `git commit`. If checks fail:
+1. Review the reported issues
+2. Make necessary corrections
+3. Attempt the commit again
