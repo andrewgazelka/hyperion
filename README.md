@@ -11,9 +11,10 @@ https://github.com/user-attachments/assets/64a4a8c7-f375-4821-a1c7-0efc69c1ae0b
 
 # Event
 
-The upcoming 10k-player PvP event will feature class progression systems and [tag mode](https://diepio.fandom.com/wiki/Tag) inspired by [diep.io](https://diep.io/). The gameplay mechanics also draw influence from Hypixel Pit's combat systems.
+The upcoming 10k-player PvP event draws inspiration from the class progression systems and [tag mode](https://diepio.fandom.com/wiki/Tag) from [diep.io](https://diep.io/). The gameplay mechanics also draw influence from Hypixel Pit's combat systems. Players will gain levels (XP) from mining ore and killing other players.
 
 We're partnering with [TheMisterEpic](https://www.youtube.com/channel/UCJiFgnnYpwlnadzTzhMnX_Q) to run an initial proof-of-concept event with around 2k players. Following its success, we'll host the full-scale 10,000-player PvP battle alongside numerous YouTubers and streamers.
+
 
 # Benchmarks
 
