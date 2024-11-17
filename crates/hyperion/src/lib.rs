@@ -24,7 +24,14 @@
 pub const NUM_THREADS: usize = 8;
 pub const CHUNK_HEIGHT_SPAN: u32 = 384; // 512; // usually 384
 
-use std::{alloc::Allocator, cell::RefCell, fmt::Debug, io::Write, net::ToSocketAddrs, sync::Arc};
+use std::{
+    alloc::Allocator,
+    cell::RefCell,
+    fmt::Debug,
+    io::Write,
+    net::ToSocketAddrs,
+    sync::{Arc, atomic::AtomicBool},
+};
 
 use anyhow::{Context, bail};
 use derive_more::{Deref, DerefMut};
@@ -38,7 +45,7 @@ use libc::{RLIMIT_NOFILE, getrlimit, setrlimit};
 use libdeflater::CompressionLvl;
 use simulation::{Comms, SimModule, StreamLookup, blocks::Blocks};
 use storage::{Events, GlobalEventHandlers, LocalDb, SkinHandler, ThreadLocal};
-use tracing::{info, info_span};
+use tracing::{info, info_span, warn};
 use util::mojang::MojangClient;
 pub use uuid;
 // todo: slowly move more and more things to arbitrary module
@@ -138,6 +145,11 @@ pub fn adjust_file_descriptor_limits(recommended_min: u64) -> std::io::Result<()
 /// The central [`Hyperion`] struct which owns and manages the entire server.
 pub struct Hyperion;
 
+#[derive(Component)]
+struct Shutdown {
+    value: Arc<AtomicBool>,
+}
+
 impl Hyperion {
     /// Initializes the server.
     pub fn init(address: impl ToSocketAddrs + Send + Sync + 'static) -> anyhow::Result<()> {
@@ -203,6 +215,13 @@ impl Hyperion {
             .to_socket_addrs()?
             .next()
             .context("could not get first address")?;
+
+        world.component::<Shutdown>();
+        let shutdown = Arc::new(AtomicBool::new(false));
+
+        world.set(Shutdown {
+            value: shutdown.clone(),
+        });
 
         world.component::<Pose>();
         world.component::<Prev<Pose>>();
@@ -271,6 +290,29 @@ impl Hyperion {
 
         let (task_tx, task_rx) = kanal::bounded(32);
         let runtime = AsyncRuntime::new(task_tx);
+
+        #[allow(clippy::redundant_pub_crate)]
+        runtime.spawn(async move {
+            let mut sigterm =
+                tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()).unwrap();
+            let mut sigquit =
+                tokio::signal::unix::signal(tokio::signal::unix::SignalKind::quit()).unwrap();
+
+            tokio::select! {
+                _ = tokio::signal::ctrl_c() => {
+                    warn!("SIGINT/ctrl-c received, shutting down");
+                    shutdown.store(true, std::sync::atomic::Ordering::Relaxed);
+                }
+                _ = sigterm.recv() => {
+                    warn!("SIGTERM received, shutting down");
+                    shutdown.store(true, std::sync::atomic::Ordering::Relaxed);
+                }
+                _ = sigquit.recv() => {
+                    warn!("SIGQUIT received, shutting down");
+                    shutdown.store(true, std::sync::atomic::Ordering::Relaxed);
+                }
+            }
+        });
 
         let tasks = Tasks { tasks: task_rx };
         world.set(tasks);

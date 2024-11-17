@@ -16,7 +16,7 @@ use valence_protocol::{
 use valence_text::IntoText;
 
 use crate::{
-    Prev,
+    Prev, Shutdown,
     egress::sync_chunks::ChunkSendQueue,
     net::{
         Compose, MINECRAFT_VERSION, NetworkStreamRef, PROTOCOL_VERSION, PacketDecoder,
@@ -280,6 +280,20 @@ impl Module for IngressModule {
             let span = info_span!("update_ign_map");
             let _enter = span.enter();
             ign_map.update();
+        });
+
+        system!(
+            "shutdown",
+            world,
+            &Shutdown($),
+        )
+        .kind::<flecs::pipeline::OnLoad>()
+        .each_iter(|it, _, shutdown| {
+            let world = it.world();
+            if shutdown.value.load(std::sync::atomic::Ordering::Relaxed) {
+                info!("shutting down");
+                world.quit();
+            }
         });
 
         system!(
