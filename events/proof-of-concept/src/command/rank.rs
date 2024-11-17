@@ -22,12 +22,12 @@ use hyperion_inventory::PlayerInventory;
 use hyperion_utils::EntityExt;
 
 #[derive(Parser, Debug)]
-#[command(name = "rank")]
-pub struct RankCommand {
+#[command(name = "class")]
+pub struct ClassCommand {
     rank: hyperion_rank_tree::Rank,
     team: hyperion_rank_tree::Team,
 }
-impl MinecraftCommand for RankCommand {
+impl MinecraftCommand for ClassCommand {
     fn execute(self, world: &World, caller: Entity) {
         let rank = self.rank;
         let team = self.team;

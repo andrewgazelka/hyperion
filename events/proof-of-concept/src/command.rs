@@ -2,7 +2,8 @@ use flecs_ecs::core::World;
 use hyperion_clap::{MinecraftCommand, hyperion_command::CommandRegistry};
 
 use crate::command::{
-    fly::FlyCommand, rank::RankCommand, replace::ReplaceCommand, speed::SpeedCommand, xp::XpCommand,
+    fly::FlyCommand, rank::ClassCommand, replace::ReplaceCommand, speed::SpeedCommand,
+    xp::XpCommand,
 };
 
 mod fly;
@@ -14,7 +15,7 @@ mod xp;
 pub fn register(registry: &mut CommandRegistry, world: &World) {
     SpeedCommand::register(registry, world);
     FlyCommand::register(registry, world);
-    RankCommand::register(registry, world);
+    ClassCommand::register(registry, world);
     XpCommand::register(registry, world);
     ReplaceCommand::register(registry, world);
 }
