@@ -102,6 +102,8 @@ RUN apt-get update && \
 ENV RUST_BACKTRACE=1 \
     RUST_LOG=info
 
+COPY --from=builder-base /usr/lib/libvoidstar.so /usr/lib/libvoidstar.so
+
 # Hyperion Proxy Debug
 FROM runtime-base AS hyperion-proxy-debug
 COPY --from=build-debug /app/build/hyperion-proxy /
