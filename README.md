@@ -7,6 +7,8 @@ Record ([8825 by
 EVE Online](https://www.guinnessworldrecords.com/world-records/105603-largest-videogame-pvp-battle)). The
 architecture is ECS-driven using [Flecs Rust](https://github.com/Indra-db/Flecs-Rust).
 
+https://github.com/user-attachments/assets/64a4a8c7-f375-4821-a1c7-0efc69c1ae0b
+
 # Benchmarks
 
 | Players | Tick Time (ms) | Core Usage (%) | Total CPU Utilization (%) |
