@@ -34,6 +34,9 @@ Essential tools to enhance your development workflow:
  
 You can use https://github.com/andrewgazelka/mineskin-cli to use Mineskin from CLI.
 
+https://docs.mineskin.org/docs/guides/getting-started/
+
+
 ## Protocol Documentation
 
 We currently target Minecraft 1.20.1 protocol specification:

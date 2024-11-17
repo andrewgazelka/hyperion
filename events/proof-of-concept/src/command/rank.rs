@@ -19,21 +19,21 @@ use hyperion::{
 };
 use hyperion_clap::MinecraftCommand;
 use hyperion_inventory::PlayerInventory;
-use hyperion_rank_tree::Team;
 use hyperion_utils::EntityExt;
 
 #[derive(Parser, Debug)]
 #[command(name = "rank")]
 pub struct RankCommand {
     rank: hyperion_rank_tree::Rank,
+    team: hyperion_rank_tree::Team,
 }
 impl MinecraftCommand for RankCommand {
     fn execute(self, world: &World, caller: Entity) {
         let rank = self.rank;
+        let team = self.team;
         let msg = format!("Setting rank to {rank:?}");
         let chat = agnostic::chat(msg);
 
-        let team = Team::Red;
         world.get::<&Compose>(|compose| {
             caller.entity_view(world).get::<(
                 &NetworkStreamRef,
@@ -67,7 +67,7 @@ impl MinecraftCommand for RankCommand {
                     )
                     .unwrap();
 
-                let skin = rank.skin();
+                let skin = rank.skin(team);
                 let property = Property {
                     name: "textures".to_string(),
                     value: skin.textures.clone(),

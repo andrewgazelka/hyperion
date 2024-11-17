@@ -1847,6 +1847,7 @@ dependencies = [
  "hyperion",
  "hyperion-inventory",
  "hyperion-item",
+ "paste",
  "toml",
  "valence_protocol",
 ]

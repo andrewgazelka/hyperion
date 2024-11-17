@@ -8,9 +8,10 @@ use crate::{Handles, Rank, Team};
 impl Team {
     pub const fn build_item(self) -> ItemBuilder {
         let kind = match self {
-            Self::Red => ItemKind::RedTerracotta,
-            Self::White => ItemKind::WhiteTerracotta,
             Self::Blue => ItemKind::BlueTerracotta,
+            Self::Green => ItemKind::GreenTerracotta,
+            Self::Red => ItemKind::RedTerracotta,
+            Self::Yellow => ItemKind::YellowTerracotta,
         };
 
         ItemBuilder::new(kind)

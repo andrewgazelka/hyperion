@@ -28,10 +28,12 @@ pub enum Rank {
     Builder,
 }
 
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum, PartialOrd, Ord)]
 pub enum Team {
-    Red,
-    White,
     Blue,
+    Green,
+    Red,
+    Yellow,
 }
 
 #[derive(Component)]
