@@ -128,8 +128,7 @@ dependencies = [
 [[package]]
 name = "antithesis_sdk"
 version = "0.2.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "987cdecd45a069a1bd755cce3c7f8434433ccd5f2f54e6545e9f7175256b3b1b"
+source = "git+https://github.com/andrewgazelka/antithesis-sdk-rust?branch=andrew%2Fassert-never#4965258d7155219c1d587f7f1165787aebe3ea89"
 dependencies = [
  "libc",
  "libloading",
@@ -1738,6 +1737,7 @@ name = "hyperion-bot"
 version = "0.1.0"
 dependencies = [
  "antithesis_sdk",
+ "bytes",
  "derive_more",
  "dotenvy",
  "envy",
@@ -1745,11 +1745,13 @@ dependencies = [
  "rand",
  "regex",
  "serde",
+ "serde_json",
  "tokio",
  "tracing",
  "tracing-subscriber",
  "uuid",
  "valence_protocol",
+ "valence_server",
 ]
 
 [[package]]
@@ -1770,7 +1772,6 @@ version = "0.1.0"
 dependencies = [
  "flecs_ecs",
  "hyperion",
- "indexmap",
  "regex",
  "tracing",
 ]

@@ -12,6 +12,6 @@ async fn main() -> eyre::Result<()> {
 
     tracing::info!("{config:?}");
 
-    bootstrap(&config);
+    bootstrap(&config).await;
     Ok(())
 }
