@@ -2,6 +2,8 @@
 
 [![Discord invite link](https://dcbadge.vercel.app/api/server/PBfnDtj5Wb)](https://discord.gg/PBfnDtj5Wb)
 
+Thank you for your hard work [@TestingPlant](https://github.com/TestingPlant), [@james-j-obrien](https://github.com/james-j-obrien), [@Ruben2424](https://github.com/Ruben2424), [@CuzImClicks](https://github.com/CuzImClicks), [@Indra-db](https://github.com/Indra-db), [@SanderMertens](https://github.com/SanderMertens).
+
 Hyperion is a **Minecraft game engine** that aims to enable a 10k player PvP battle to break the Guinness World
 Record ([8825 by
 EVE Online](https://www.guinnessworldrecords.com/world-records/105603-largest-videogame-pvp-battle)). The
