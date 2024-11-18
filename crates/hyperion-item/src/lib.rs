@@ -4,7 +4,7 @@ use flecs_ecs::{
     macros::Component,
     prelude::Module,
 };
-use hyperion::storage::{EventHandler, GlobalEventHandlers};
+use hyperion::storage::{EventFn, GlobalEventHandlers};
 use valence_protocol::{nbt, Hand};
 
 pub mod builder;
@@ -14,7 +14,7 @@ pub struct ItemModule;
 
 #[derive(Component, Constructor, Deref, DerefMut)]
 pub struct Handler {
-    on_click: EventHandler<Hand>,
+    on_click: EventFn<Hand>,
 }
 
 impl Module for ItemModule {
@@ -51,7 +51,7 @@ impl Module for ItemModule {
 
                 handler.try_get::<&Handler>(|handler| {
                     let on_interact = &handler.on_click;
-                    on_interact.trigger(query, hand);
+                    on_interact(query, hand);
                 });
             });
         });

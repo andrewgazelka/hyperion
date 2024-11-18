@@ -10,10 +10,11 @@ publish = false
 
 [dependencies]
 flecs_ecs = {workspace = true}
-hyperion = {workspace = true}
 gxhash = {workspace = true}
-tracing = {workspace = true}
+hyperion = {workspace = true}
 indexmap = {workspace = true}
+regex = {workspace = true}
+tracing = {workspace = true}
 
 [lints]
 workspace = true

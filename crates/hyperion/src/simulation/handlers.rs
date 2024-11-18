@@ -29,7 +29,7 @@ use super::{
 use crate::{
     net::{Compose, NetworkStreamRef, decoder::BorrowedPacketFrame},
     simulation::{Pitch, Yaw, aabb, event, event::PluginMessage},
-    storage::{Events, GlobalEventHandlers},
+    storage::{CommandCompletionRequest, Events, GlobalEventHandlers},
     system_registry::SystemId,
 };
 
@@ -586,6 +586,28 @@ fn chat_message(mut data: &'static [u8], query: &PacketSwitchQuery<'_>) -> anyho
     Ok(())
 }
 
+pub fn request_command_completions(
+    mut data: &'static [u8],
+    query: &mut PacketSwitchQuery<'_>,
+) -> anyhow::Result<()> {
+    let play::RequestCommandCompletionsC2s {
+        transaction_id,
+        text,
+    } = play::RequestCommandCompletionsC2s::decode(&mut data)?;
+
+    let text = text.0;
+    let transaction_id = transaction_id.0;
+
+    let completion = CommandCompletionRequest {
+        query: text,
+        id: transaction_id,
+    };
+
+    query.handlers.completion.trigger_all(query, &completion);
+
+    Ok(())
+}
+
 pub fn packet_switch(
     raw: BorrowedPacketFrame<'_>,
     query: &mut PacketSwitchQuery<'_>,
@@ -612,6 +634,7 @@ pub fn packet_switch(
         play::PlayerInteractEntityC2s::ID => player_interact_entity(data, query)?,
         play::PlayerInteractItemC2s::ID => player_interact_item(data, query)?,
         play::PositionAndOnGroundC2s::ID => position_and_on_ground(query, data)?,
+        play::RequestCommandCompletionsC2s::ID => request_command_completions(data, query)?,
         play::UpdateSelectedSlotC2s::ID => update_selected_slot(data, query)?,
         _ => trace!("unknown packet id: 0x{:02X}", packet_id),
     }

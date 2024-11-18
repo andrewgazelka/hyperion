@@ -3,9 +3,13 @@ use flecs_ecs::{
     macros::Component,
     prelude::Module,
 };
+use hyperion::storage::{CommandCompletionRequest, EventFn};
 use indexmap::IndexMap;
 
-pub type CommandHandler = fn(input: &str, world: &World, caller: Entity);
+pub struct CommandHandler {
+    pub on_execute: fn(input: &str, world: &World, caller: Entity),
+    pub on_tab_complete: EventFn<CommandCompletionRequest<'static>>,
+}
 
 #[derive(Component)]
 pub struct CommandRegistry {

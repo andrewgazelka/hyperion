@@ -3,29 +3,23 @@ use valence_protocol::Hand;
 
 use crate::simulation::handlers::PacketSwitchQuery;
 
-type EventFn<T> = fn(&mut PacketSwitchQuery<'_>, &T);
+pub type EventFn<T> = fn(&mut PacketSwitchQuery<'_>, &T);
+
+pub struct CommandCompletionRequest<'a> {
+    pub query: &'a str,
+    pub id: i32,
+}
 
 #[derive(Component, Default)]
 pub struct GlobalEventHandlers {
     pub click: EventHandlers<Hand>,
+
+    // todo: this should be a lifetime for<'a>
+    pub completion: EventHandlers<CommandCompletionRequest<'static>>,
 }
 
 pub struct EventHandlers<T> {
     handlers: Vec<EventFn<T>>,
-}
-
-pub struct EventHandler<T> {
-    handler: EventFn<T>,
-}
-
-impl<T> EventHandler<T> {
-    pub fn new(handler: EventFn<T>) -> Self {
-        Self { handler }
-    }
-
-    pub fn trigger(&self, world: &mut PacketSwitchQuery<'_>, event: &T) {
-        (self.handler)(world, event);
-    }
 }
 
 impl<T> Default for EventHandlers<T> {
