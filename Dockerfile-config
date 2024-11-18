@@ -1,5 +1,5 @@
 FROM scratch
-COPY docker-compose.yaml /docker-compose.yaml
+COPY docker-compose.yml /docker-compose.yml
 #ADD config/license /license
 #ADD config/volumes/database /volumes/database
 #ADD config/volumes/workload-logs /volumes/workload-logs

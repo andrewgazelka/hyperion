@@ -1,2 +1,2 @@
 mod name;
-pub use name::{generate as name, Name};
+pub use name::generate as name;

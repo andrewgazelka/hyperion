@@ -6,8 +6,7 @@
 #![feature(iter_from_coroutine)]
 #![feature(exact_size_is_empty)]
 
-use std::collections::HashSet;
-use std::net::ToSocketAddrs;
+use std::{collections::HashSet, net::ToSocketAddrs};
 
 use flecs_ecs::prelude::*;
 use hyperion::{

@@ -3,15 +3,13 @@ use rand::Rng;
 
 pub fn random_either<T>(left: impl FnOnce() -> T, right: impl FnOnce() -> T) -> T {
     let mut rng = AntithesisRng;
-    if rng.r#gen::<bool>() {
-        left()
-    } else {
-        right()
-    }
+    if rng.r#gen::<bool>() { left() } else { right() }
 }
 
-use tokio::net::TcpStream;
-use tokio::time::{sleep, Duration};
+use tokio::{
+    net::TcpStream,
+    time::{Duration, sleep},
+};
 use tracing::{info, warn};
 
 pub async fn wait_for_tcp_port(addr: &str) {

@@ -2,9 +2,8 @@ use antithesis::{assert_always, assert_never, random::AntithesisRng};
 use eyre::bail;
 use rand::Rng;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tracing::info;
 use valence_protocol::{
-    Bounded, Encode, PROTOCOL_VERSION, Packet, VarInt, packets,
+    Bounded, PROTOCOL_VERSION, Packet, VarInt, packets,
     packets::handshaking::handshake_c2s::HandshakeNextState,
 };
 
@@ -15,8 +14,6 @@ impl Bot {
         let mut rng = AntithesisRng;
 
         let protocol_version: i32 = random_either(|| PROTOCOL_VERSION, || rng.r#gen::<i32>());
-
-        let is_correct_protocol_version = protocol_version == PROTOCOL_VERSION;
 
         let addr = "placeholder";
 
