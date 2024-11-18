@@ -65,6 +65,9 @@ impl Attribute for MaxHealth {
     }
 }
 
+#[derive(Copy, Clone, Debug)]
+pub struct Color(pub u8, pub u8, pub u8);
+
 impl ItemBuilder {
     pub const fn new(kind: ItemKind) -> Self {
         Self {
@@ -72,6 +75,41 @@ impl ItemBuilder {
             count: 1,
             nbt: None,
         }
+    }
+
+    /// Sets the color of a leather armor item
+    ///
+    /// # Example
+    /// ```
+    /// // Create a red leather helmet
+    /// use hyperion::ItemKind;
+    /// use hyperion_item::builder::{Color, ItemBuilder};
+    /// let item = ItemBuilder::new(ItemKind::LeatherHelmet)
+    ///     .color(Color(255, 0, 0))
+    ///     .build();
+    /// ```
+    pub fn color(mut self, color: Color) -> Self {
+        let nbt = self.nbt.get_or_insert_with(nbt::Compound::new);
+
+        // Create or get existing display compound
+        let display = match nbt.remove("display") {
+            Some(Value::Compound(display)) => display,
+            _ => nbt::Compound::new(),
+        };
+
+        let r = color.0;
+        let g = color.1;
+        let b = color.2;
+
+        // Create a new display compound with the color
+        let mut new_display = display;
+        let color = (u32::from(r) << 16) | (u32::from(g) << 8) | u32::from(b);
+        let color = bytemuck::cast(color);
+        new_display.insert("color", Value::Int(color));
+
+        // Insert the updated display compound
+        nbt.insert("display", Value::Compound(new_display));
+        self
     }
 
     /// Sets a custom name for the item

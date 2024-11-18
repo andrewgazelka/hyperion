@@ -67,7 +67,7 @@ impl MinecraftCommand for ClassCommand {
                     )
                     .unwrap();
 
-                let skin = rank.skin(team);
+                let skin = rank.skin();
                 let property = Property {
                     name: "textures".to_string(),
                     value: skin.textures.clone(),

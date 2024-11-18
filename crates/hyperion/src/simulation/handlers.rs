@@ -219,8 +219,6 @@ fn chat_command(mut data: &'static [u8], query: &PacketSwitchQuery<'_>) -> anyho
 fn hand_swing(mut data: &[u8], query: &mut PacketSwitchQuery<'_>) -> anyhow::Result<()> {
     let packet = play::HandSwingC2s::decode(&mut data)?;
 
-    println!("hand swing");
-
     match packet.hand {
         Hand::Main => {
             query.animation.push(animation::Kind::SwingMainArm);

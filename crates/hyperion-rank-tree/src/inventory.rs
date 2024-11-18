@@ -1,6 +1,6 @@
 use flecs_ecs::core::{World, WorldGet};
 use hyperion_inventory::PlayerInventory;
-use hyperion_item::builder::{AttackDamage, ItemBuilder};
+use hyperion_item::builder::{AttackDamage, Color, ItemBuilder};
 use valence_protocol::ItemKind;
 
 use crate::{Handles, Rank, Team};
@@ -29,6 +29,21 @@ impl Rank {
         const GUI_SLOT: u16 = 8;
 
         let upgrade_not_available = ItemBuilder::new(ItemKind::GrayDye);
+
+        inventory.clear();
+
+        let color = match team {
+            Team::Red => Color(255, 0, 0),
+            Team::Blue => Color(0, 0, 255),
+            Team::Green => Color(0, 255, 0),
+            Team::Yellow => Color(255, 255, 0),
+        };
+
+        let boots = ItemBuilder::new(ItemKind::LeatherBoots)
+            .color(color)
+            .build();
+
+        inventory.set_boots(boots);
 
         let upgrades = ["Speed", "Vision", "Health", "Armor", "Damage"];
 
