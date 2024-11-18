@@ -18,16 +18,14 @@ impl Team {
     }
 }
 
+pub const MAIN_SLOT: u16 = 0;
+pub const PICKAXE_SLOT: u16 = 1;
+pub const BLOCK_SLOT: u16 = 2;
+pub const UPGRADE_START_SLOT: u16 = 3;
+pub const GUI_SLOT: u16 = 8;
+
 impl Rank {
     pub fn apply_inventory(self, team: Team, inventory: &mut PlayerInventory, world: &World) {
-        const MAIN_SLOT: u16 = 0;
-        const PICKAXE_SLOT: u16 = 1;
-        const BUILD_SLOT: u16 = 2;
-
-        const UPGRADE_START_SLOT: u16 = 3;
-
-        const GUI_SLOT: u16 = 8;
-
         let upgrade_not_available = ItemBuilder::new(ItemKind::GrayDye);
 
         inventory.clear();
@@ -63,7 +61,7 @@ impl Rank {
         inventory.set_hotbar(PICKAXE_SLOT, default_pickaxe);
 
         let default_build_item = team.build_item().count(16).build();
-        inventory.set_hotbar(BUILD_SLOT, default_build_item);
+        inventory.set_hotbar(BLOCK_SLOT, default_build_item);
 
         match self {
             Self::Stick => {

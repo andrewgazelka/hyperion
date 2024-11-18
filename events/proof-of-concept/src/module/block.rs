@@ -4,7 +4,7 @@ use std::{
 };
 
 use flecs_ecs::{
-    core::{EntityViewGet, QueryBuilderImpl, SystemAPI, TableIter, TermBuilderImpl, World},
+    core::{Entity, EntityViewGet, QueryBuilderImpl, SystemAPI, TableIter, TermBuilderImpl, World},
     macros::{Component, system},
     prelude::Module,
 };
@@ -27,6 +27,8 @@ use hyperion::{
         text::IntoText,
     },
 };
+use hyperion_inventory::PlayerInventory;
+use hyperion_rank_tree::inventory;
 use hyperion_scheduled::Scheduled;
 use tracing::{error, info_span};
 
@@ -41,9 +43,14 @@ pub struct SetLevel {
     pub stage: u8,
 }
 
+pub struct DestroyValue {
+    pub position: IVec3,
+    pub from: Entity,
+}
+
 #[derive(Default, Component)]
 pub struct PendingDestruction {
-    pub destroy_at: Scheduled<Instant, IVec3>,
+    pub destroy_at: Scheduled<Instant, DestroyValue>,
     pub set_level_at: Scheduled<Instant, SetLevel>,
 }
 
@@ -56,6 +63,7 @@ impl Module for BlockModule {
         world.set(PendingDestruction::default());
 
         system!("handle_pending_air", world, &mut PendingDestruction($), &mut Blocks($), &Compose($))
+            .write::<PlayerInventory>()
             .multi_threaded()
             .each_iter(
                 move |it: TableIter<'_, false>,
@@ -87,9 +95,9 @@ impl Module for BlockModule {
                             .send(&world)
                             .unwrap();
                     }
-                    for position in pending_air.destroy_at.pop_until(&now) {
+                    for destroy in pending_air.destroy_at.pop_until(&now) {
                         // Play particle effect for block destruction
-                        let center_block = position.as_dvec3() + DVec3::splat(0.5);
+                        let center_block = destroy.position.as_dvec3() + DVec3::splat(0.5);
 
                         let particle_packet = play::ParticleS2c {
                             particle: Cow::Owned(Particle::Explosion),
@@ -116,7 +124,18 @@ impl Module for BlockModule {
                             .send(&world)
                             .unwrap();
 
-                        blocks.set_block(position, BlockState::AIR).unwrap();
+                        destroy.from
+                            .entity_view(world)
+                            .get::<&mut PlayerInventory>(|inventory| {
+                                let stack = inventory
+                                    .get_hand_slot_mut(inventory::BLOCK_SLOT)
+                                    .unwrap();
+
+                                stack.count = stack.count.saturating_add(1);
+                            });
+
+
+                        blocks.set_block(destroy.position, BlockState::AIR).unwrap();
                     }
                 },
             );
@@ -186,7 +205,6 @@ impl Module for BlockModule {
                     };
 
 
-
                     let from = event.from;
                     let from_entity = world.entity_from_id(from);
                     from_entity.get::<(&NetworkStreamRef, &mut Xp)>(|(&net, xp)| {
@@ -220,7 +238,6 @@ impl Module for BlockModule {
             });
 
         system!("handle_placed_blocks", world, &mut Blocks($), &mut EventQueue<event::PlaceBlock>($), &mut PendingDestruction($))
-            .multi_threaded()
             .each(move |(mc, event_queue, pending_air): (&mut Blocks, &mut EventQueue<event::PlaceBlock>, &mut PendingDestruction)| {
                 let span = info_span!("handle_placed_blocks");
                 let _enter = span.enter();
@@ -229,7 +246,12 @@ impl Module for BlockModule {
 
                     mc.set_block(position, event.block).unwrap();
 
-                    pending_air.destroy_at.schedule(Instant::now() + TOTAL_DESTRUCTION_TIME, position);
+                    let destroy = DestroyValue {
+                        position,
+                        from: event.from,
+                    };
+
+                    pending_air.destroy_at.schedule(Instant::now() + TOTAL_DESTRUCTION_TIME, destroy);
 
                     {
                         let sequence = fastrand::i32(..);
