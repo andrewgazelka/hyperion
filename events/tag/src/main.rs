@@ -1,5 +1,5 @@
 use clap::Parser;
-use proof_of_concept::init_game;
+use tag::init_game;
 use tracing_subscriber::{EnvFilter, Registry, layer::SubscriberExt};
 use tracing_tracy::TracyLayer;
 
