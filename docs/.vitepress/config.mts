@@ -7,6 +7,7 @@ import {withMermaid} from 'vitepress-plugin-mermaid';
 const config = defineConfig({
     title: "Hyperion",
     description: "The most advanced Minecraft game engine built in Rust",
+    base: "/hyperion/",
     themeConfig: {
         // https://vitepress.dev/reference/default-theme-config
         nav: [
