@@ -153,9 +153,6 @@ pub fn packet_switch(
 }
 ```
 
-## Ingress System
-
-
 [^1]: the actual number is assigned at compile-time for maximum performance and is usually equal to the number of cores
 on the machine.
 

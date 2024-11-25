@@ -19,15 +19,23 @@ const config = defineConfig({
         // https://vitepress.dev/reference/default-theme-config
         nav: [
             {text: 'Home', link: '/'},
-            {text: 'Guide', link: '/guide'},
+            {text: 'Architecture', link: '/architecture/introduction'},
+            {text: 'Tag', link: '/tag/introduction'},
         ],
 
         sidebar: [
             {
-                text: 'Guide',
+                text: 'Architecture',
                 items: [
-                    {text: 'Introduction', link: '/guide/introduction'},
-                    {text: 'Game Server', link: '/guide/game-server'},
+                    {text: 'Introduction', link: '/architecture/introduction'},
+                    {text: 'Game Server', link: '/architecture/game-server'},
+                    {text: 'Proxy', link: '/architecture/proxy'},
+                ]
+            },
+            {
+                text: 'Tag',
+                items: [
+                    {text: '10,000 Player PvP', link: '/tag/introduction'},
                 ]
             }
         ],
