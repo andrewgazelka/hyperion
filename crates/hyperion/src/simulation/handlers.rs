@@ -3,8 +3,8 @@
 use std::borrow::Cow;
 
 use anyhow::{Context, bail};
-use bvh_region::aabb::Aabb;
 use flecs_ecs::core::{Entity, EntityView, World};
+use geometry::aabb::Aabb;
 use glam::{IVec3, Vec3};
 use hyperion_utils::EntityExt;
 use tracing::{info, instrument, trace, warn};

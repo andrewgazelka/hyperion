@@ -445,6 +445,7 @@ dependencies = [
  "criterion",
  "divan",
  "fastrand 2.2.0",
+ "geometry",
  "glam",
  "itertools 0.13.0",
  "ordered-float",
@@ -1320,6 +1321,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "geometry"
+version = "0.1.0"
+dependencies = [
+ "glam",
+ "ordered-float",
+ "serde",
+]
+
+[[package]]
 name = "getrandom"
 version = "0.2.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1660,6 +1670,7 @@ dependencies = [
  "fastrand 2.2.0",
  "flate2",
  "flecs_ecs",
+ "geometry",
  "glam",
  "heapless",
  "heed",

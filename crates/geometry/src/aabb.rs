@@ -3,7 +3,17 @@ use std::fmt::Display;
 use glam::Vec3;
 use serde::{Deserialize, Serialize};
 
-use crate::HasAabb;
+use crate::ray::Ray;
+
+pub trait HasAabb {
+    fn aabb(&self) -> Aabb;
+}
+
+impl HasAabb for Aabb {
+    fn aabb(&self) -> Aabb {
+        *self
+    }
+}
 
 #[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Aabb {
@@ -70,6 +80,7 @@ impl Aabb {
         Self { min, max }
     }
 
+    #[must_use]
     pub fn shrink(self, amount: f32) -> Self {
         Self::expand(self, -amount)
     }
@@ -124,6 +135,7 @@ impl Aabb {
         }
     }
 
+    #[must_use]
     pub fn collides(&self, other: &Self) -> bool {
         self.min.x <= other.max.x
             && self.max.x >= other.min.x
@@ -133,6 +145,7 @@ impl Aabb {
             && self.max.z >= other.min.z
     }
 
+    #[must_use]
     pub fn collides_point(&self, point: Vec3) -> bool {
         self.min.x <= point.x
             && point.x <= self.max.x
@@ -142,6 +155,7 @@ impl Aabb {
             && point.z <= self.max.z
     }
 
+    #[must_use]
     pub fn dist2(&self, point: Vec3) -> f32 {
         let point = point.as_ref();
         let self_min = self.min.as_ref();
@@ -182,10 +196,41 @@ impl Aabb {
         lens.x * lens.y * lens.z
     }
 
+    /// Fast ray-AABB intersection test using the slab method with SIMD operations
+    ///
+    /// Returns Some(t) with the distance to intersection if hit, None if no hit
+    #[must_use]
+    pub fn intersect_ray(&self, ray: &Ray) -> Option<f32> {
+        // Calculate t0 and t1 for all three axes simultaneously using SIMD
+        let t0 = (self.min - ray.origin()) * ray.inv_direction();
+        let t1 = (self.max - ray.origin()) * ray.inv_direction();
+
+        // Find the largest minimum t and smallest maximum t
+        let t_small = t0.min(t1);
+        let t_big = t0.max(t1);
+
+        let t_min = t_small.x.max(t_small.y).max(t_small.z);
+        let t_max = t_big.x.min(t_big.y).min(t_big.z);
+
+        // Check if there's a valid intersection
+        if t_max < 0.0 || t_min > t_max {
+            return None;
+        }
+
+        Some(if t_min > 0.0 { t_min } else { t_max })
+    }
+
+    #[must_use]
     pub fn expand(mut self, amount: f32) -> Self {
         self.min -= Vec3::splat(amount);
         self.max += Vec3::splat(amount);
         self
+    }
+
+    /// Check if a point is inside the AABB
+    #[must_use]
+    pub fn contains_point(&self, point: Vec3) -> bool {
+        point.cmpge(self.min).all() && point.cmple(self.max).all()
     }
 
     pub fn expand_to_fit(&mut self, other: &Self) {
@@ -245,7 +290,7 @@ impl<T: HasAabb> From<&[T]> for Aabb {
 mod tests {
     use glam::Vec3;
 
-    use crate::aabb::Aabb;
+    use crate::{aabb::Aabb, ray::Ray};
 
     #[test]
     fn test_expand_to_fit() {
@@ -315,5 +360,44 @@ mod tests {
             containing_aabb.max,
             Vec3::new(f32::NEG_INFINITY, f32::NEG_INFINITY, f32::NEG_INFINITY)
         );
+    }
+
+    #[test]
+    fn test_ray_aabb_intersection() {
+        let aabb = Aabb::new(Vec3::new(-1.0, -1.0, -1.0), Vec3::new(1.0, 1.0, 1.0));
+
+        // Ray starting outside and hitting the box
+        let ray1 = Ray::new(Vec3::new(-2.0, 0.0, 0.0), Vec3::new(1.0, 0.0, 0.0));
+        assert!(aabb.intersect_ray(&ray1).is_some());
+
+        // Ray starting inside the box
+        let ray2 = Ray::new(Vec3::new(0.0, 0.0, 0.0), Vec3::new(1.0, 0.0, 0.0));
+        assert!(aabb.intersect_ray(&ray2).is_some());
+
+        // Ray missing the box
+        let ray3 = Ray::new(Vec3::new(-2.0, 2.0, 0.0), Vec3::new(1.0, 0.0, 0.0));
+        assert!(aabb.intersect_ray(&ray3).is_none());
+    }
+
+    #[test]
+    fn test_point_containment() {
+        let aabb = Aabb::new(Vec3::new(-1.0, -1.0, -1.0), Vec3::new(1.0, 1.0, 1.0));
+
+        // Test point inside
+        assert!(aabb.contains_point(Vec3::new(0.0, 0.0, 0.0)));
+
+        // Test point on boundary
+        assert!(aabb.contains_point(Vec3::new(1.0, 0.0, 0.0)));
+
+        // Test point outside
+        assert!(!aabb.contains_point(Vec3::new(2.0, 0.0, 0.0)));
+    }
+
+    #[test]
+    fn test_ray_at() {
+        let ray = Ray::new(Vec3::new(0.0, 0.0, 0.0), Vec3::new(1.0, 0.0, 0.0));
+
+        let point = ray.at(2.0);
+        assert_eq!(point, Vec3::new(2.0, 0.0, 0.0));
     }
 }

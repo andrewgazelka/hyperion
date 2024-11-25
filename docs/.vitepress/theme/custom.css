@@ -7,3 +7,36 @@
     --vp-font-family-mono: 'Fira Code', monospace;
     --vp-code-line-height: 1.35;
 }
+
+.medium-zoom-overlay {
+    z-index: 999;
+}
+
+.medium-zoom-image {
+    z-index: 1000;
+}
+
+.vp-doc ul {
+    list-style: disc;
+}
+
+.vp-doc ul ul {
+    list-style: circle;
+}
+
+.vp-doc ul ul ul {
+    list-style: square;
+}
+
+.vp-doc ul ul ul ul {
+    list-style: square;
+    /* Create open square effect by adding a border and transparent background */
+    list-style: none;
+}
+
+.vp-doc ul ul ul ul li::before {
+    content: "□";
+    display: inline-block;
+    width: 1em;
+    margin-left: -1em;
+}

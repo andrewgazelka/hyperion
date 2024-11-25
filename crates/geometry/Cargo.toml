@@ -1,0 +1,15 @@
+[package]
+name = "geometry"
+version = "0.1.0"
+edition = "2021"
+authors = ["Andrew Gazelka <andrew.gazelka@gmail.com>"]
+readme = "README.md"
+publish = false
+
+[dependencies]
+glam = { workspace = true, features = ["serde"] }
+serde = { workspace = true, features = ["derive"] }
+ordered-float = "4.5.0"
+
+[lints]
+workspace = true

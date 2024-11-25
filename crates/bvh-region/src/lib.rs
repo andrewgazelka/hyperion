@@ -10,14 +10,11 @@ use std::{
 };
 
 use arrayvec::ArrayVec;
+use geometry::aabb::{Aabb, HasAabb};
 use glam::Vec3;
-
-use crate::aabb::Aabb;
 
 const ELEMENTS_TO_ACTIVATE_LEAF: usize = 16;
 const VOLUME_TO_ACTIVATE_LEAF: f32 = 5.0;
-
-pub mod aabb;
 
 #[cfg(feature = "plot")]
 pub mod plot;
@@ -257,16 +254,6 @@ impl<T> Bvh<T> {
         }
 
         Node::Internal(&self.nodes[root as usize])
-    }
-}
-
-pub trait HasAabb {
-    fn aabb(&self) -> Aabb;
-}
-
-impl HasAabb for Aabb {
-    fn aabb(&self) -> Aabb {
-        *self
     }
 }
 
