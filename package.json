@@ -6,8 +6,13 @@
   },
   "devDependencies": {
     "@nolebase/vitepress-plugin-inline-link-preview": "^2.10.0",
+    "markdown-it-footnote": "^4.0.0",
+    "markdown-it-mathjax3": "^4.3.2",
     "mermaid": "^11.4.0",
     "vitepress": "^1.5.0",
     "vitepress-plugin-mermaid": "^2.0.17"
+  },
+  "dependencies": {
+    "@fontsource/fira-code": "^5.1.0"
   }
 }

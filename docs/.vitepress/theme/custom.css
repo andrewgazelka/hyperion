@@ -2,3 +2,8 @@
 .green-tps {
     color: #4ade80; /* You can change this to any green color you prefer */
 }
+
+:root {
+    --vp-font-family-mono: 'Fira Code', monospace;
+    --vp-code-line-height: 1.35;
+}
