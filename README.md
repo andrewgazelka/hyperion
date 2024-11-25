@@ -214,4 +214,5 @@ Legend:
 - 🚧 Planned
 - ❌ Not Planned
 
-**Note:** This feature list represents core functionality. Many Minecraft features (like redstone, enchanting, etc.) may be implemented differently or replaced with custom mechanics for our specific use case of large-scale PvP events.
+**Note:** This feature list represents core functionality. Hyperion is designed to be modular meaning you can implement
+your own mechanics and replace the core mechanics with your own.
