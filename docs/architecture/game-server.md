@@ -60,22 +60,6 @@ pub struct Unicast<'a> {
 }
 ```
 
-### Ordering
-
-Many of the rkyv-encoded packets have a specific `order` field. The order is calculated as
-
-```rust
-system_id << 16 | order_id
-```
-
-where `system_id` is the strictly increasing ID of the system that is sending the packet and `order_id` is a
-thread-local
-counter that is incremented on each packet write.
-
-This allows the proxy to reorder the 8 thread-local buffers into one buffer that has the same logical ordering as the
-order of the systems and the order of the packets within each system.
-
-
 ## Ingress
 
 ### Tokio Async Task

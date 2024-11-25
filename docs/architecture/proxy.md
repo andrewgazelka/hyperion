@@ -49,6 +49,17 @@ to a large amount of CPU, memory, and network usage from one server. However, wi
 would only need to send $n$ packets to each proxy. Although there would still be $n^2$ total packets sent from each
 proxy, this work is spread out across multiple proxies instead of being done on one server.
 
-The proxy also reorders all packets such that they are in the same order as the game server even though the
-game server has multiple thread-local buffers.
+### Ordering
 
+Many of the server-to-proxy packets have a specific `order` field. The order is calculated as
+
+```rust
+system_id << 16 | order_id
+```
+
+where `system_id` is the strictly increasing ID of the system that is sending the packet and `order_id` is a
+thread-local
+counter that is incremented on each packet write.
+
+This allows the proxy to reorder the thread-local buffers from the game server into one buffer that has the same
+logical ordering as the order of the systems and the order of the packets within each system.
