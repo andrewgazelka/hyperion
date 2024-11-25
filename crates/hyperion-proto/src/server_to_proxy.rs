@@ -25,7 +25,6 @@ pub struct BroadcastGlobal<'a> {
 }
 
 #[derive(Archive, Deserialize, Serialize, Clone, PartialEq)]
-// #[rkyv(derive(Debug))]
 pub struct BroadcastLocal<'a> {
     pub center: ChunkPosition,
     pub exclude: u64,
@@ -36,7 +35,6 @@ pub struct BroadcastLocal<'a> {
 }
 
 #[derive(Archive, Deserialize, Serialize, Clone, PartialEq)]
-// #[rkyv(derive(Debug))]
 pub struct Unicast<'a> {
     pub stream: u64,
     pub order: u32,
@@ -50,7 +48,6 @@ pub struct Unicast<'a> {
 pub struct Flush;
 
 #[derive(Archive, Deserialize, Serialize, Clone, PartialEq)]
-// #[rkyv(derive(Debug))]
 pub enum ServerToProxyMessage<'a> {
     UpdatePlayerChunkPositions(UpdatePlayerChunkPositions),
     BroadcastGlobal(BroadcastGlobal<'a>),
