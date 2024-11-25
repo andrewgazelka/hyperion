@@ -1,4 +1,5 @@
 use fastrand::u8;
+use geometry::aabb::Aabb;
 use plotters::{
     chart::{ChartBuilder, ChartContext},
     coord::types::RangedCoordf32,
@@ -9,7 +10,7 @@ use plotters::{
 };
 use plotters_bitmap::BitMapBackend;
 
-use crate::{Bvh, HasAabb, Node, aabb::Aabb};
+use crate::{Bvh, HasAabb, Node};
 
 impl<T: HasAabb + Copy> Bvh<T> {
     pub fn plot(&self, filename: &str) -> Result<(), Box<dyn std::error::Error>> {

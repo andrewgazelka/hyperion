@@ -13,6 +13,7 @@ harness = false
 name = "side_by_side"
 
 [dependencies]
+geometry = {workspace = true}
 glam = {workspace = true, features = ["serde"]}
 plotters = {workspace = true, features = [
   "plotters-bitmap",

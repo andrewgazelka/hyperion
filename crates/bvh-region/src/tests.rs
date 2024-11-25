@@ -1,9 +1,9 @@
 use std::collections::HashSet;
 
+use geometry::aabb::CheckableAabb;
 use itertools::Itertools;
 
 use super::*;
-use crate::aabb::CheckableAabb;
 
 fn collisions_naive(
     elements: &[Aabb],

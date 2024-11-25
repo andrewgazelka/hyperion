@@ -21,6 +21,7 @@ tracing-tracy = {workspace = true}
 uuid = {workspace = true}
 anyhow = {workspace = true}
 base64 = {workspace = true}
+geometry = {workspace = true}
 bitfield-struct = {workspace = true}
 bitvec = {workspace = true}
 bumpalo = {workspace = true}

@@ -1,8 +1,8 @@
 use std::{borrow::Borrow, collections::HashMap, hash::Hash, sync::Arc};
 
-use bvh_region::{HasAabb, aabb::Aabb};
 use derive_more::{Deref, DerefMut, Display, From};
 use flecs_ecs::prelude::*;
+use geometry::aabb::{Aabb, HasAabb};
 use glam::{IVec2, IVec3, Vec3};
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
