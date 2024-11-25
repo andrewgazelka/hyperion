@@ -174,32 +174,44 @@ docker compose -f docker-compose.release.yml up --build
 
 # Features
 
-**Language:** Rust
-
-**Goal:** Game engine for massive events
-
+**Language:** Rust  
+**Goal:** Game engine for massive events  
 **Structure:** flecs ECS
 
 **Platform Details:**
-  - Version: Minecraft 1.20.1
-  - Proxy Support: Velocity
-  - Proximity Voice: Simple Voice Chat
-  - Max estimated player count: ~176,056
+- Version: Minecraft 1.20.1
+- Proxy Support: Velocity
+- Proximity Voice: Simple Voice Chat
+- Max estimated player count: ~176,056
 
-**Core Features:**
-- Lighting
-- Block mechanics (placing, breaking, physics)
-- Collisions (entity-entity and block-entity)
-- World borders
-- Block Edit API (WorldEdit-like)
-- PvP
-- Inventory system
-- Particle Support
-- Chat Support
-- Command Support
+## Feature Status
 
-**Technical Features:**
-- Vertical scaling (fully multi-threaded)
-- Horizontal scaling
-- Advanced tracing support (tracy)
-- Proxy Support (Velocity)
+| Feature                      | Status        | Notes                               |
+|------------------------------|---------------|-------------------------------------|
+| **Core Game Mechanics**      |
+| Block Breaking/Placing       | ✅ Implemented | Including physics simulation        |
+| Entity Collisions            | ✅ Implemented | Both entity-entity and block-entity |
+| Lighting Engine              | ✅ Implemented | Dynamic lighting updates            |
+| World Borders                | ✅ Implemented | Configurable boundaries             |
+| Block Edit API               | ✅ Implemented | WorldEdit-like functionality        |
+| PvP Combat                   | ✅ Implemented | Custom combat mechanics             |
+| Inventory System             | ✅ Implemented | Full item management                |
+| Raycasting                   | 🚧 Planned    | Required for ranged combat/arrows   |
+| **Player Experience**        |
+| Particle Effects             | ✅ Implemented | Full particle support               |
+| Chat System                  | ✅ Implemented | Global and proximity chat           |
+| Commands                     | ✅ Implemented | Custom command framework            |
+| Proximity Voice              | ✅ Implemented | Using Simple Voice Chat             |
+| **Technical Infrastructure** |
+| Multi-threading              | ✅ Implemented | Vertical scaling                    |
+| Proxy Layer                  | ✅ Implemented | Horizontal scaling with Velocity    |
+| Performance Tracing          | ✅ Implemented | Using Tracy profiler                |
+| Basic Anti-Cheat             | ✅ Implemented | Core anti-cheat functionality       |
+| Moderator Tools             | 🚧 Planned    | Admin controls and monitoring       |
+
+Legend:
+- ✅ Implemented
+- 🚧 Planned
+- ❌ Not Planned
+
+**Note:** This feature list represents core functionality. Many Minecraft features (like redstone, enchanting, etc.) may be implemented differently or replaced with custom mechanics for our specific use case of large-scale PvP events.
