@@ -25,7 +25,7 @@ members = [
   'crates/hyperion-stats',
   'crates/hyperion-text',
   'crates/hyperion-utils',
-  'events/proof-of-concept',
+  'events/tag',
   'crates/hyperion-permission',
   'crates/hyperion-clap',
   'crates/hyperion-command',

@@ -2856,35 +2856,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "proof-of-concept"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "clap",
- "compact_str",
- "derive_more",
- "dotenvy",
- "fastrand 2.2.0",
- "flecs_ecs",
- "gxhash",
- "hyperion",
- "hyperion-clap",
- "hyperion-inventory",
- "hyperion-permission",
- "hyperion-rank-tree",
- "hyperion-scheduled",
- "hyperion-text",
- "hyperion-utils",
- "rayon",
- "roaring",
- "rustc-hash 2.0.0",
- "tikv-jemallocator",
- "tracing",
- "tracing-subscriber",
- "tracing-tracy",
-]
-
-[[package]]
 name = "ptr_meta"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3644,6 +3615,35 @@ checksum = "8e1d1b10ced5ca923a1fcb8d03e96b8d3268065d724548c0211415ff6ac6bac4"
 dependencies = [
  "core-foundation-sys",
  "libc",
+]
+
+[[package]]
+name = "tag"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "compact_str",
+ "derive_more",
+ "dotenvy",
+ "fastrand 2.2.0",
+ "flecs_ecs",
+ "gxhash",
+ "hyperion",
+ "hyperion-clap",
+ "hyperion-inventory",
+ "hyperion-permission",
+ "hyperion-rank-tree",
+ "hyperion-scheduled",
+ "hyperion-text",
+ "hyperion-utils",
+ "rayon",
+ "roaring",
+ "rustc-hash 2.0.0",
+ "tikv-jemallocator",
+ "tracing",
+ "tracing-subscriber",
+ "tracing-tracy",
 ]
 
 [[package]]
