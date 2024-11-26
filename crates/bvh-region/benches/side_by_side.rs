@@ -1,6 +1,7 @@
 use std::hint::black_box;
 
-use bvh_region::{Bvh, TrivialHeuristic, aabb::Aabb, random_aabb};
+use bvh_region::{Bvh, TrivialHeuristic, random_aabb};
+use geometry::aabb::Aabb;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use tango_bench::{IntoBenchmarks, benchmark_fn, tango_benchmarks, tango_main};
 
