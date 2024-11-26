@@ -453,7 +453,6 @@ dependencies = [
  "plotters-bitmap",
  "rand",
  "rayon",
- "serde",
  "tango-bench",
  "tracing",
  "tracing-subscriber",
@@ -1859,7 +1858,6 @@ dependencies = [
  "hyperion",
  "hyperion-inventory",
  "hyperion-item",
- "paste",
  "toml",
  "valence_protocol",
 ]
@@ -3639,6 +3637,7 @@ dependencies = [
  "dotenvy",
  "fastrand 2.2.0",
  "flecs_ecs",
+ "geometry",
  "gxhash",
  "hyperion",
  "hyperion-clap",

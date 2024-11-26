@@ -11,9 +11,9 @@ publish = false
 [dependencies]
 clap ={ workspace = true }
 flecs_ecs = { workspace = true }
+hyperion = { workspace = true }
 hyperion-command = { workspace = true }
 tracing = { workspace = true }
-hyperion = { workspace = true }
 valence_protocol = { workspace = true }
 
 [lints]

@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::{fmt::Display, ops::Add};
 
 use glam::Vec3;
 use serde::{Deserialize, Serialize};
@@ -29,6 +29,17 @@ impl Display for Aabb {
             "[{:.2}, {:.2}, {:.2}] -> [{:.2}, {:.2}, {:.2}]",
             self.min.x, self.min.y, self.min.z, self.max.x, self.max.y, self.max.z
         )
+    }
+}
+
+impl Add<Vec3> for Aabb {
+    type Output = Self;
+
+    fn add(self, rhs: Vec3) -> Self::Output {
+        Self {
+            min: self.min + rhs,
+            max: self.max + rhs,
+        }
     }
 }
 
@@ -200,7 +211,7 @@ impl Aabb {
     ///
     /// Returns Some(t) with the distance to intersection if hit, None if no hit
     #[must_use]
-    pub fn intersect_ray(&self, ray: &Ray) -> Option<f32> {
+    pub fn intersect_ray(&self, ray: &Ray) -> Option<ordered_float::NotNan<f32>> {
         // Calculate t0 and t1 for all three axes simultaneously using SIMD
         let t0 = (self.min - ray.origin()) * ray.inv_direction();
         let t1 = (self.max - ray.origin()) * ray.inv_direction();
@@ -217,7 +228,11 @@ impl Aabb {
             return None;
         }
 
-        Some(if t_min > 0.0 { t_min } else { t_max })
+        Some(if t_min > 0.0 {
+            ordered_float::NotNan::new(t_min).unwrap()
+        } else {
+            ordered_float::NotNan::new(t_max).unwrap()
+        })
     }
 
     #[must_use]
