@@ -13,7 +13,6 @@ toml = { workspace = true }
 valence_protocol = { workspace = true }
 clap = { workspace = true }
 flecs_ecs = { workspace = true }
-paste = { workspace = true }
 hyperion-item.workspace = true
 
 [lints]

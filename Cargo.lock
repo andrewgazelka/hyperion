@@ -453,7 +453,6 @@ dependencies = [
  "plotters-bitmap",
  "rand",
  "rayon",
- "serde",
  "tango-bench",
  "tracing",
  "tracing-subscriber",
@@ -1859,7 +1858,6 @@ dependencies = [
  "hyperion",
  "hyperion-inventory",
  "hyperion-item",
- "paste",
  "toml",
  "valence_protocol",
 ]

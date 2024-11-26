@@ -74,20 +74,19 @@ pub async fn run_proxy(
 ) -> anyhow::Result<()> {
     let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(None);
 
+    #[cfg(unix)]
     let mut sigterm = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
         .context("failed to register SIGTERM handler")?;
 
+    #[cfg(unix)]
     let mut sigquit = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::quit())
         .context("failed to register SIGQUIT handler")?;
 
+    #[cfg(unix)]
     tokio::spawn({
         let shutdown_tx = shutdown_tx.clone();
         async move {
             tokio::select! {
-                _ = tokio::signal::ctrl_c() => {
-                    warn!("SIGINT/ctrl-c received, shutting down");
-                    shutdown_tx.send(Some(ShutdownType::Full)).unwrap();
-                }
                 _ = sigterm.recv() => {
                     warn!("SIGTERM received, shutting down");
                     shutdown_tx.send(Some(ShutdownType::Full)).unwrap();

@@ -20,7 +20,6 @@ plotters = {workspace = true, features = [
   "image"
 ], optional = true}
 plotters-bitmap = {workspace = true, optional = true}
-serde = {workspace = true}
 arrayvec = {workspace = true}
 fastrand = {workspace = true}
 itertools = {workspace = true}

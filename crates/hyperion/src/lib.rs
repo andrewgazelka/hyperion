@@ -290,6 +290,7 @@ impl Hyperion {
         let (task_tx, task_rx) = kanal::bounded(32);
         let runtime = AsyncRuntime::new(task_tx);
 
+        #[cfg(unix)]
         #[allow(clippy::redundant_pub_crate)]
         runtime.spawn(async move {
             let mut sigterm =
