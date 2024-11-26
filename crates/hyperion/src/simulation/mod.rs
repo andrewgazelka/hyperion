@@ -128,6 +128,9 @@ pub struct Name(Arc<str>);
 #[derive(Component, Deref, DerefMut, From, Debug, Default)]
 pub struct IgnMap(DeferredMap<Arc<str>, Entity>);
 
+#[derive(Component, Debug, Default)]
+pub struct RaycastTravel;
+
 /// A component that represents a Player. In the future, this should be broken up into multiple components.
 ///
 /// Why should it be broken up? The more things are broken up, the more we can take advantage of Rust borrowing rules.

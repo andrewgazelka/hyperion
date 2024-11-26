@@ -9,7 +9,8 @@ use flecs_ecs::{
     core::{Entity, World, WorldGet},
     macros::Component,
 };
-use glam::{IVec2, IVec3};
+use geometry::ray::Ray;
+use glam::{IVec2, IVec3, Vec3};
 use indexmap::IndexMap;
 use loader::{ChunkLoaderHandle, launch_manager};
 use rayon::iter::ParallelIterator;
@@ -51,6 +52,13 @@ pub enum TrySetBlockDeltaError {
     ChunkNotLoaded,
 }
 
+#[derive(Debug)]
+pub struct RayCollision {
+    pub distance: f32,
+    pub location: IVec3,
+    pub block: BlockState,
+}
+
 /// Accessor of blocks.
 #[derive(Component)]
 pub struct Blocks {
@@ -85,6 +93,66 @@ impl Blocks {
                 to_confirm: vec![],
             })
         })
+    }
+
+    #[must_use]
+    pub fn first_collision(&self, ray: Ray, distance_limit: f32) -> Option<RayCollision> {
+        let a = ray.origin();
+        let b = ray.origin() + ray.direction() * distance_limit;
+
+        let min = a.min(b);
+        let max = a.max(b);
+
+        let min = min.floor().as_ivec3();
+        let max = max.ceil().as_ivec3();
+
+        let traversal = ray.voxel_traversal(min, max);
+        println!("traversal = {traversal:?}");
+
+        let mut min: Option<RayCollision> = None;
+
+        for cell in traversal {
+            println!("cell = {cell:?}");
+
+            // if there is no block at this cell, return None
+            let block = self.get_block(cell)?;
+
+            let origin = Vec3::new(cell.x as f32, cell.y as f32, cell.z as f32);
+
+            let min_dist = block
+                .collision_shapes()
+                .map(|shape| {
+                    geometry::aabb::Aabb::new(shape.min().as_vec3(), shape.max().as_vec3())
+                })
+                .map(|shape| shape + origin)
+                .filter_map(|shape| shape.intersect_ray(&ray))
+                .min();
+
+            let Some(min_dist) = min_dist else {
+                continue;
+            };
+
+            match &min {
+                Some(current_min) => {
+                    if min_dist.into_inner() < current_min.distance {
+                        min = Some(RayCollision {
+                            distance: min_dist.into_inner(),
+                            location: cell,
+                            block,
+                        });
+                    }
+                }
+                None => {
+                    min = Some(RayCollision {
+                        distance: min_dist.into_inner(),
+                        location: cell,
+                        block,
+                    });
+                }
+            }
+        }
+
+        min
     }
 
     #[must_use]
