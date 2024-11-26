@@ -35,28 +35,31 @@ chunk locations of each player. This allows to do regional broadcasting very eff
 Taking compute and I/O off of the game server allows for a massive performance boost as the game server can only
 vertically scale while the proxy can horizontally scale.
 
-Given $n$ players and an average $m$ players in a given render distance the runtime & memory of the game server for each
-operation is:
+| Operation Type           | Vanilla Minecraft                                  | Proxy-Based Approach                                                                                            |
+|--------------------------|----------------------------------------------------|-----------------------------------------------------------------------------------------------------------------|
+| Global Broadcast         | Server sends one packet to every player            | Server sends one `BroadcastGlobal` packet to the proxy. The proxy will send a packet to each player.            |
+| Local/Regional Broadcast | Server sends one packet to each player in a region | Server sends one `BroadcastLocal` packet to the proxy. The proxy will send a packet to each player in a region. |
+| Unicast                  | Server sends one packet to a specific player       | Server sends one `Unicast` packet to the proxy. The proxy will send a packet to a specific player.              |
 
-| Operation Type           | Vanilla Minecraft                              | Proxy-Based Approach            | Description                                                                       |
-|--------------------------|------------------------------------------------|---------------------------------|-----------------------------------------------------------------------------------|
-| Global Broadcast         | $O(n)$ packets                                 | $O(1)$ `BroadcastGlobal` packet | One `BroadcastGlobal` with optional `exclude` vs sending to each player           |
-| Local/Regional Broadcast | $O(m)$ packets where $m$ is local cluster size | $O(1)$ `BroadcastLocal` packet  | One `BroadcastLocal` with `center` vs computing and sending to each nearby player |
-| Unicast                  | $O(1)$ direct send                             | $O(1)$ `Unicast` packet         | Similar complexity but proxy adds `order` for sequencing                          |
+Using a proxy is a massive optimization for large player counts. For example, to update player positions in Vanilla
+Minecraft, the server would need to send every player's position to everyone in the same area as that player. In the
+worst-case scenario where every player is in the same area, meaning that every player needs to know the position of
+every other player, the server would need to send $n^2$ packets where $n$ is the number of players. This would lead
+to a large amount of CPU, memory, and network usage from one server. However, with a proxy-based system, the server
+would only need to send $n$ packets to each proxy. Although there would still be $n^2$ total packets sent from each
+proxy, this work is spread out across multiple proxies instead of being done on one server.
 
-Key efficiency gains:
+### Ordering
 
-1. **Global Broadcast**:
-    - Vanilla: Must send $n$ separate packets
-    - Proxy: Single `BroadcastGlobal` with implicit fan-out
+Many of the server-to-proxy packets have a specific `order` field. The order is calculated as
 
-2. **Regional Broadcast**:
-    - Vanilla: Must compute intersections and send $O(m)$ packets
-    - Proxy: Single `BroadcastLocal` lets proxy handle finding nearby players and broadcasting
+```rust
+system_id << 16 | order_id
+```
 
-This is a massive optimization for MMO-scale player counts where sending all the player movement positions would
-be $O(nm)$ for all players whereas when using a proxy it is only $O(n)$.
+where `system_id` is the strictly increasing ID of the system that is sending the packet and `order_id` is a
+thread-local
+counter that is incremented on each packet write.
 
-The proxy also reorders all packets such that they are in the same order as the game server even though the
-game server has multiple thread-local buffers.
-
+This allows the proxy to reorder the thread-local buffers from the game server into one buffer that has the same
+logical ordering as the order of the systems and the order of the packets within each system.
