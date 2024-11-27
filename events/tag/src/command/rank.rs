@@ -19,7 +19,6 @@ use hyperion::{
 };
 use hyperion_clap::{MinecraftCommand, CommandPermission};
 use hyperion_inventory::PlayerInventory;
-use hyperion_permission::Group;
 use hyperion_utils::EntityExt;
 
 #[derive(Parser, CommandPermission, Debug)]
