@@ -58,7 +58,9 @@ pub trait MinecraftCommand: Parser + CommandPermission {
                         caller
                             .entity_view(world)
                             .get::<(&NetworkStreamRef, &Group)>(|(stream, group)| {
-                                if !&elem.has_required_permission(*group) {
+                                if elem.has_required_permission(*group) {
+                                    true
+                                } else {
                                     let chat = agnostic::chat(
                                         "§cYou do not have permission to use this command!",
                                     );
@@ -68,12 +70,10 @@ pub trait MinecraftCommand: Parser + CommandPermission {
                                     bundle.send(world, *stream, SystemId(8)).unwrap();
 
                                     false
-                                } else {
-                                    true
                                 }
                             })
                     }) {
-                        elem.execute(world, caller)
+                        elem.execute(world, caller);
                     }
                 }
                 Err(e) => {
