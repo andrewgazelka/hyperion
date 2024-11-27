@@ -1,0 +1,17 @@
+[package]
+name = "simd-utils"
+version = "0.1.0"
+edition = "2021"
+authors = ["Andrew Gazelka <andrew.gazelka@gmail.com>"]
+readme = "README.md"
+publish = false
+
+[dependencies]
+
+[dev-dependencies]
+proptest = "1.5.0"
+rand = "0.9.0-alpha.2"
+aligned-vec = "0.6.1"
+
+[lints]
+workspace = true

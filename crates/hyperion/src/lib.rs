@@ -20,6 +20,8 @@
 #![feature(split_array)]
 #![feature(never_type)]
 #![feature(duration_constructors)]
+#![feature(array_chunks)]
+#![feature(portable_simd)]
 
 pub const NUM_THREADS: usize = 8;
 pub const CHUNK_HEIGHT_SPAN: u32 = 384; // 512; // usually 384
@@ -86,7 +88,7 @@ pub mod simulation;
 pub mod storage;
 
 /// Tracks previous values
-#[derive(Component, Deref, DerefMut)]
+#[derive(Component, Deref, DerefMut, Clone, Copy)]
 pub struct Prev<T: ComponentId>(pub T);
 
 pub trait PacketBundle {
