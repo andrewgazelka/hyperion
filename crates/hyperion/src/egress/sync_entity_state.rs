@@ -57,7 +57,7 @@ impl Module for EntityStateSyncModule {
                         const _: () = assert!(align_of::<Xp>() == align_of::<u16>());
 
                         /// Number of lanes in the SIMD vector
-                        const CHUNK_SIZE: usize = 8; // todo: up this but need to make sure everything is aligned
+                        const LANES: usize = 64; // up to AVX512
 
                         let compose = table.field_unchecked::<Compose>(0);
                         let compose = compose.first().unwrap();
@@ -75,7 +75,7 @@ impl Module for EntityStateSyncModule {
                         let xp: &mut [u16] =
                             core::slice::from_raw_parts_mut(xp.as_mut_ptr().cast(), count);
 
-                        simd_utils::copy_and_get_diff::<_, CHUNK_SIZE>(
+                        simd_utils::copy_and_get_diff::<_, LANES>(
                             prev_xp,
                             xp,
                             |idx, prev, current| {
