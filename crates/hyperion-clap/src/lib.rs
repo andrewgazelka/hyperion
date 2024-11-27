@@ -6,13 +6,14 @@ use flecs_ecs::{
     prelude::{Component, Module},
 };
 use hyperion::{
-    net::{Compose, agnostic},
+    net::{agnostic, Compose, DataBundle, NetworkStreamRef},
     simulation::{command::get_root_command_entity, handlers::PacketSwitchQuery},
     storage::{CommandCompletionRequest, EventFn},
     system_registry::SystemId,
 };
 pub use hyperion_command;
 use hyperion_command::{CommandHandler, CommandRegistry};
+use hyperion_permission::Group;
 use valence_protocol::{
     VarInt,
     packets::{
@@ -20,8 +21,9 @@ use valence_protocol::{
         play::{command_suggestions_s2c::CommandSuggestionsMatch, command_tree_s2c::StringArg},
     },
 };
+pub use hyperion_clap_macros::CommandPermission;
 
-pub trait MinecraftCommand: Parser {
+pub trait MinecraftCommand: Parser + CommandPermission {
     fn execute(self, world: &World, caller: Entity);
 
     fn register(registry: &mut CommandRegistry, world: &World) {
@@ -51,7 +53,28 @@ pub trait MinecraftCommand: Parser {
             let input = input.split_whitespace();
 
             match Self::try_parse_from(input) {
-                Ok(elem) => elem.execute(world, caller),
+                Ok(elem) => {
+                    if world.get::<&Compose>(|compose| {
+                        caller
+                            .entity_view(world)
+                            .get::<(&NetworkStreamRef, &Group)>(|(stream, group)| {
+                                if !&elem.has_required_permission(*group) {
+                                    let chat = agnostic::chat("§cYou do not have permission to use this command!");
+
+                                    let mut bundle = DataBundle::new(compose);
+                                    bundle.add_packet(&chat, world).unwrap();
+                                    bundle.send(world, *stream, SystemId(8)).unwrap();
+
+                                    false
+                                } else {
+                                    true
+                                }
+                            })
+                        })
+                    {
+                        elem.execute(world, caller)
+                    }
+                },
                 Err(e) => {
                     // add red if not display help
                     let prefix = match e.kind() {
@@ -223,6 +246,10 @@ impl MinecraftArg for ClapArg {
             Arg::Player => self.value_hint(ValueHint::Username),
         }
     }
+}
+
+pub trait CommandPermission {
+    fn has_required_permission(&self, user_group: hyperion_permission::Group) -> bool;
 }
 
 #[derive(Clone, Debug, ValueEnum, PartialEq, Eq)]

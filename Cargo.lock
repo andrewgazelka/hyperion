@@ -1770,9 +1770,21 @@ dependencies = [
  "clap",
  "flecs_ecs",
  "hyperion",
+ "hyperion-clap-macros",
  "hyperion-command",
+ "hyperion-permission",
  "tracing",
  "valence_protocol",
+]
+
+[[package]]
+name = "hyperion-clap-macros"
+version = "0.1.0"
+dependencies = [
+ "convert_case",
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]

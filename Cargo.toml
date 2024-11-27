@@ -136,6 +136,9 @@ path = 'crates/hyperion'
 [workspace.dependencies.hyperion-clap]
 path = 'crates/hyperion-clap'
 
+[workspace.dependencies.hyperion-clap-macros]
+path = 'crates/hyperion-clap-macros'
+
 [workspace.dependencies.hyperion-command]
 path = 'crates/hyperion-command'
 
