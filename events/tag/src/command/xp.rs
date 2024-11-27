@@ -1,10 +1,11 @@
 use clap::Parser;
 use flecs_ecs::core::{Entity, EntityViewGet, World};
 use hyperion::simulation::Xp;
-use hyperion_clap::MinecraftCommand;
+use hyperion_clap::{MinecraftCommand, CommandPermission};
 
-#[derive(Parser, Debug)]
+#[derive(Parser, CommandPermission, Debug)]
 #[command(name = "xp")]
+#[command_permission(group = "Admin")]
 pub struct XpCommand {
     amount: u16,
 }
