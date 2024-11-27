@@ -6,11 +6,12 @@ use flecs_ecs::{
     prelude::{Component, Module},
 };
 use hyperion::{
-    net::{agnostic, Compose, DataBundle, NetworkStreamRef},
+    net::{Compose, DataBundle, NetworkStreamRef, agnostic},
     simulation::{command::get_root_command_entity, handlers::PacketSwitchQuery},
     storage::{CommandCompletionRequest, EventFn},
     system_registry::SystemId,
 };
+pub use hyperion_clap_macros::CommandPermission;
 pub use hyperion_command;
 use hyperion_command::{CommandHandler, CommandRegistry};
 use hyperion_permission::Group;
@@ -21,7 +22,6 @@ use valence_protocol::{
         play::{command_suggestions_s2c::CommandSuggestionsMatch, command_tree_s2c::StringArg},
     },
 };
-pub use hyperion_clap_macros::CommandPermission;
 
 pub trait MinecraftCommand: Parser + CommandPermission {
     fn execute(self, world: &World, caller: Entity);
@@ -59,7 +59,9 @@ pub trait MinecraftCommand: Parser + CommandPermission {
                             .entity_view(world)
                             .get::<(&NetworkStreamRef, &Group)>(|(stream, group)| {
                                 if !&elem.has_required_permission(*group) {
-                                    let chat = agnostic::chat("§cYou do not have permission to use this command!");
+                                    let chat = agnostic::chat(
+                                        "§cYou do not have permission to use this command!",
+                                    );
 
                                     let mut bundle = DataBundle::new(compose);
                                     bundle.add_packet(&chat, world).unwrap();
@@ -70,11 +72,10 @@ pub trait MinecraftCommand: Parser + CommandPermission {
                                     true
                                 }
                             })
-                        })
-                    {
+                    }) {
                         elem.execute(world, caller)
                     }
-                },
+                }
                 Err(e) => {
                     // add red if not display help
                     let prefix = match e.kind() {

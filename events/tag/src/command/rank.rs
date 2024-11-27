@@ -17,7 +17,7 @@ use hyperion::{
         profile::Property,
     },
 };
-use hyperion_clap::{MinecraftCommand, CommandPermission};
+use hyperion_clap::{CommandPermission, MinecraftCommand};
 use hyperion_inventory::PlayerInventory;
 use hyperion_utils::EntityExt;
 

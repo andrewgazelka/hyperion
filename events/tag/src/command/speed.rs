@@ -7,7 +7,7 @@ use hyperion::{
         PlayerAbilitiesS2c, player_abilities_s2c::PlayerAbilitiesFlags,
     },
 };
-use hyperion_clap::{MinecraftCommand, CommandPermission};
+use hyperion_clap::{CommandPermission, MinecraftCommand};
 
 #[derive(Parser, CommandPermission, Debug)]
 #[command(name = "speed")]

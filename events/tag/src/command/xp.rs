@@ -1,7 +1,7 @@
 use clap::Parser;
 use flecs_ecs::core::{Entity, EntityViewGet, World};
 use hyperion::simulation::Xp;
-use hyperion_clap::{MinecraftCommand, CommandPermission};
+use hyperion_clap::{CommandPermission, MinecraftCommand};
 
 #[derive(Parser, CommandPermission, Debug)]
 #[command(name = "xp")]

@@ -5,7 +5,7 @@ use hyperion::{
     glam::Vec3,
     simulation::{Pitch, Position, Yaw, blocks::Blocks},
 };
-use hyperion_clap::{MinecraftCommand, CommandPermission};
+use hyperion_clap::{CommandPermission, MinecraftCommand};
 
 #[derive(Parser, CommandPermission, Debug)]
 #[command(name = "dirt")]

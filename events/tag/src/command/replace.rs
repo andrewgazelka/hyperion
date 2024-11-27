@@ -3,9 +3,8 @@ use std::collections::{HashSet, VecDeque};
 use flecs_ecs::core::{Entity, EntityViewGet, World, WorldGet};
 use gxhash::GxBuildHasher;
 use hyperion::{BlockState, glam::IVec3, simulation::blocks::Blocks};
-use rayon::iter::ParallelIterator;
-
 use hyperion_clap::CommandPermission;
+use rayon::iter::ParallelIterator;
 
 use crate::OreVeins;
 
