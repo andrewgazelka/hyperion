@@ -58,6 +58,7 @@ fastrand = '2.1.0'
 futures-util = '0.3.31'
 glam = '0.29.0'
 heapless = '0.8.0'
+heck = "0.5.0"
 heed = '0.20.5'
 hex = '0.4.3'
 itertools = '0.13.0'

@@ -14,7 +14,9 @@ use hyperion::{
         Compose, NetworkStreamRef, agnostic,
         packets::{BossBarAction, BossBarS2c},
     },
-    simulation::{EntityReaction, Health, PacketState, Player, Position, event},
+    simulation::{
+        EntityReaction, PacketState, Player, Position, event, metadata::living_entity::Health,
+    },
     storage::EventQueue,
     system_registry::SystemId,
     util::TracingExt,

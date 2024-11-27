@@ -1,20 +1,130 @@
 use derive_more::Deref;
-use flecs_ecs::macros::Component;
+use flecs_ecs::{
+    addons::Meta,
+    core::{ComponentId, Entity, EntityView, IdOperations, SystemAPI, World, flecs},
+    macros::Component,
+};
+use heck::ToSnakeCase;
+use tracing::info_span;
 use valence_protocol::{Encode, VarInt};
+
+use crate::Prev;
+
+pub mod block_display;
+pub mod display;
+pub mod entity;
+pub mod living_entity;
+pub mod player;
+
+#[derive(Component)]
+pub struct MetadataPrefabs {
+    pub entity_base: Entity,
+
+    pub display_base: Entity,
+    pub block_display_base: Entity,
+
+    pub living_entity_base: Entity,
+    pub player_base: Entity,
+}
+
+fn component_and_prev<T>(world: &World) -> fn(&mut EntityView<'_>)
+where
+    T: ComponentId + Copy + PartialEq + Metadata + Default + flecs_ecs::core::DataComponent,
+    <T as ComponentId>::UnderlyingType: Meta<<T as ComponentId>::UnderlyingType>,
+{
+    world.component::<T>().meta();
+
+    let type_name = core::any::type_name::<T>();
+
+    // convert to snake_case
+    let type_name = type_name.to_snake_case();
+
+    let system_name = format!("exchange_{type_name}").leak();
+
+    world
+        .system_named::<(
+            &mut (Prev, T),       //            (0)
+            &mut T,               //                  (1)
+            &mut MetadataChanges, //     (2)
+        )>(system_name)
+        .multi_threaded()
+        .kind::<flecs::pipeline::OnStore>()
+        .run(move |mut table| {
+            let span = info_span!("exchange", name = system_name);
+            let _enter = span.enter();
+
+            while table.next() {
+                unsafe {
+                    let mut prev = table.field_unchecked::<T>(0);
+                    let prev = prev.get_mut(..).unwrap();
+
+                    let current = table.field_unchecked::<T>(1);
+                    let current = current.get(..).unwrap();
+
+                    let mut metadata_changes = table.field_unchecked::<MetadataChanges>(2);
+                    let metadata_changes = metadata_changes.get_mut(..).unwrap();
+
+                    // todo(perf): big optimization treating as raw bytes and SIMD
+                    // or code that can easily be compiled to SIMD
+                    // also can do copy_from_slice in one pass but want SIMD-optimized
+                    // first
+                    // todo(learn): reborrowing in-depth
+                    for (idx, (prev, current)) in itertools::zip_eq(&mut *prev, current).enumerate()
+                    {
+                        if prev != current {
+                            let metadata_changes = metadata_changes.get_unchecked_mut(idx);
+                            metadata_changes.encode(*current);
+                        }
+                    }
+
+                    prev.copy_from_slice(current);
+                }
+            }
+        });
+
+    let register = |view: &mut EntityView<'_>| {
+        view.set_pair::<Prev, _>(T::default()).set(T::default());
+    };
+
+    register
+}
+
+#[must_use]
+pub fn register_prefabs(world: &World) -> MetadataPrefabs {
+    world.component::<MetadataChanges>();
+
+    let entity_base = entity::register_prefab(world, None)
+        .add::<MetadataChanges>()
+        .id();
+
+    let display_base = display::register_prefab(world, Some(entity_base)).id();
+    let block_display_base = block_display::register_prefab(world, Some(display_base)).id();
+
+    let living_entity_base = living_entity::register_prefab(world, Some(entity_base)).id();
+    let player_base = player::register_prefab(world, Some(living_entity_base)).id();
+
+    MetadataPrefabs {
+        entity_base,
+        display_base,
+        block_display_base,
+        living_entity_base,
+        player_base,
+    }
+}
 
 use crate::simulation::metadata::r#type::MetadataType;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Component, Clone)]
 // index (u8), type (varint), value (varies)
 /// <https://wiki.vg/Entity_metadata>
 ///
 /// Tracks updates within a gametick for the metadata
-pub struct MetadataBuilder(Vec<u8>);
+pub struct MetadataChanges(Vec<u8>);
 
-unsafe impl Send for MetadataBuilder {}
+unsafe impl Send for MetadataChanges {}
 
 // technically not Sync but I mean do we really care? todo: Indra
-unsafe impl Sync for MetadataBuilder {}
+unsafe impl Sync for MetadataChanges {}
 
 mod status;
 
@@ -26,98 +136,106 @@ pub trait Metadata {
     fn to_type(self) -> Self::Type;
 }
 
-// todo: can be u8
-#[derive(Component, PartialEq, Eq, Copy, Clone, Debug, Deref)]
-pub struct EntityFlags {
-    value: u8,
-}
-
-impl Default for EntityFlags {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl EntityFlags {
-    pub const CROUCHING: Self = Self { value: 0x02 };
-    pub const FLYING_WITH_ELYTRA: Self = Self { value: 0x80 };
-    pub const GLOWING: Self = Self { value: 0x40 };
-    pub const INVISIBLE: Self = Self { value: 0x20 };
-    pub const ON_FIRE: Self = Self { value: 0x01 };
-    // 0x04 skipped (previously riding)
-    pub const SPRINTING: Self = Self { value: 0x08 };
-    pub const SWIMMING: Self = Self { value: 0x10 };
-
-    const fn new() -> Self {
-        Self { value: 0 }
-    }
-}
-
-impl std::ops::BitOrAssign for EntityFlags {
-    fn bitor_assign(&mut self, rhs: Self) {
-        self.value |= rhs.value;
-    }
-}
-
-impl std::ops::BitAndAssign for EntityFlags {
-    fn bitand_assign(&mut self, rhs: Self) {
-        self.value &= rhs.value;
-    }
-}
-
-impl std::ops::BitOr for EntityFlags {
-    type Output = Self;
-
-    fn bitor(self, rhs: Self) -> Self {
-        Self {
-            value: self.value | rhs.value,
+#[macro_export]
+macro_rules! define_metadata_component {
+    ($index:literal, $name:ident -> $type:ty) => {
+        #[derive(
+            Component,
+            Copy,
+            Clone,
+            PartialEq,
+            derive_more::Deref,
+            derive_more::DerefMut,
+            Default
+        )]
+        #[allow(clippy::derive_partial_eq_without_eq)]
+        #[meta]
+        pub struct $name {
+            value: $type,
         }
-    }
-}
 
-impl std::ops::BitAnd for EntityFlags {
-    type Output = Self;
-
-    fn bitand(self, rhs: Self) -> Self {
-        Self {
-            value: self.value & rhs.value,
+        #[allow(warnings)]
+        impl PartialOrd for $name
+        where
+            $type: PartialOrd,
+        {
+            fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+                self.value.partial_cmp(&other.value)
+            }
         }
-    }
+
+        impl Metadata for $name {
+            type Type = $type;
+
+            const INDEX: u8 = $index;
+
+            fn to_type(self) -> Self::Type {
+                self.value
+            }
+        }
+    };
 }
 
-impl std::ops::Not for EntityFlags {
-    type Output = Self;
+#[macro_export]
+macro_rules! register_component_ids {
+    ($world:expr, $entity:ident, $($name:ident),* $(,)?) => {
+        {
+            $(
+                let reg = $crate::simulation::metadata::component_and_prev::<$name>($world);
+                reg(&mut $entity);
+            )*
 
-    fn not(self) -> Self {
-        Self { value: !self.value }
-    }
+            $entity
+        }
+    };
 }
 
-impl Metadata for EntityFlags {
-    type Type = u8;
+#[macro_export]
+macro_rules! define_and_register_components {
+    {
+        $(
+            $index:literal, $name:ident -> $type:ty
+        ),* $(,)?
+    } => {
+        // Define all components
+        $(
+            $crate::define_metadata_component!($index, $name -> $type);
+        )*
 
-    const INDEX: u8 = 0;
+        // Create the registration function
+        #[must_use]
+        pub fn register_prefab(world: &World, entity_base: Option<Entity>) -> EntityView<'_> {
+            // todo: add name
+            let mut entity = world.prefab();
 
-    fn to_type(self) -> Self::Type {
-        self.value
-    }
+            if let Some(entity_base) = entity_base {
+                entity = entity.is_a_id(entity_base);
+            }
+
+            $crate::register_component_ids!(
+                world,
+                entity,
+                $($name),*
+            )
+        }
+    };
 }
 
-// Air supply component
-#[derive(Component, Default)]
-pub struct AirSupply {
-    pub ticks: i32, // VarInt in original, using i32 for Rust
-}
-
-impl Metadata for AirSupply {
-    type Type = VarInt;
-
-    const INDEX: u8 = 1;
-
-    fn to_type(self) -> Self::Type {
-        VarInt(self.ticks)
-    }
-}
+// // Air supply component
+// #[derive(Component, Default)]
+// pub struct AirSupply {
+//     pub ticks: i32, // VarInt in original, using i32 for Rust
+// }
+//
+// impl Metadata for AirSupply {
+//     type Type = VarInt;
+//
+//     const INDEX: u8 = 1;
+//
+//     fn to_type(self) -> Self::Type {
+//         VarInt(self.ticks)
+//     }
+// }
 
 #[derive(Encode, Clone, Copy, Default, PartialEq, Eq, Debug)]
 #[repr(u8)]
@@ -151,7 +269,7 @@ impl Metadata for Pose {
     }
 }
 
-impl MetadataBuilder {
+impl MetadataChanges {
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
@@ -180,7 +298,7 @@ impl MetadataBuilder {
 }
 
 #[derive(Debug)]
-pub struct MetadataView<'a>(&'a mut MetadataBuilder);
+pub struct MetadataView<'a>(&'a mut MetadataChanges);
 
 impl Deref for MetadataView<'_> {
     type Target = [u8];
@@ -195,42 +313,3 @@ impl Drop for MetadataView<'_> {
         self.0.0.clear();
     }
 }
-
-// #[cfg(test)]
-// mod tests {
-//     use super::*;
-//     use crate::simulation::metadata::EntityBitFlags;
-//
-//     #[test]
-//     fn test_metadata_tracker() {
-//         let mut tracker = StateObserver(UnsafeCell::new(vec![]));
-//
-//         let air_supply = AirSupply {
-//             ticks: 10,
-//         };
-//
-//         // &Tracked<AirSupply>
-//         let mut air_supply = Observable::new(air_supply);
-//
-//         let entity_bit_flags = EntityBitFlags::default()
-//             .with_invisible(true)
-//             .with_flying_with_elytra(true);
-//
-//         let mut entity_bit_flags = Observable::new(entity_bit_flags);
-//
-//         air_supply.observe(&mut tracker).ticks = 5;
-//
-//         entity_bit_flags.observe(&mut tracker)
-//             .set_crouching(true);
-//     }
-//
-//     fn modify(
-//         air_supply: &mut Observable<AirSupply>, // ECS &mut Tracked<AirSupply>
-//         ebs: &mut Observable<EntityBitFlags>, // ECS &mut Tracked<EntityBitFlags>
-//         tracker: &StateObserver,
-//     ) {
-//         air_supply.observe(tracker).ticks = 5;
-//         let mut ebs = ebs.observe(tracker);
-//         ebs.set_sprinting(false);
-//     }
-// }
