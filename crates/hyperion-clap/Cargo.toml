@@ -12,7 +12,9 @@ publish = false
 clap ={ workspace = true }
 flecs_ecs = { workspace = true }
 hyperion = { workspace = true }
+hyperion-clap-macros = { workspace = true }
 hyperion-command = { workspace = true }
+hyperion-permission = { workspace = true }
 tracing = { workspace = true }
 valence_protocol = { workspace = true }
 

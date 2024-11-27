@@ -1,0 +1,19 @@
+cargo-features = ["edition2024"]
+
+[dependencies]
+quote.workspace = true
+syn.workspace = true
+
+[lib]
+proc-macro = true
+
+[lints]
+workspace = true
+
+[package]
+authors = ["Andrew Gazelka <andrew.gazelka@gmail.com>"]
+edition = "2024"
+name = "hyperion-clap-macros"
+publish = false
+readme = "README.md"
+version = "0.1.0"

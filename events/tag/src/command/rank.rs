@@ -17,12 +17,13 @@ use hyperion::{
         profile::Property,
     },
 };
-use hyperion_clap::MinecraftCommand;
+use hyperion_clap::{CommandPermission, MinecraftCommand};
 use hyperion_inventory::PlayerInventory;
 use hyperion_utils::EntityExt;
 
-#[derive(Parser, Debug)]
+#[derive(Parser, CommandPermission, Debug)]
 #[command(name = "class")]
+#[command_permission(group = "Normal")]
 pub struct ClassCommand {
     rank: hyperion_rank_tree::Rank,
     team: hyperion_rank_tree::Team,

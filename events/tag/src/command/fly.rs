@@ -7,10 +7,11 @@ use hyperion::{
         PlayerAbilitiesS2c, player_abilities_s2c::PlayerAbilitiesFlags,
     },
 };
-use hyperion_clap::MinecraftCommand;
+use hyperion_clap::{CommandPermission, MinecraftCommand};
 
-#[derive(Parser, Debug)]
+#[derive(Parser, CommandPermission, Debug)]
 #[command(name = "fly")]
+#[command_permission(group = "Moderator")]
 pub struct FlyCommand;
 
 impl MinecraftCommand for FlyCommand {

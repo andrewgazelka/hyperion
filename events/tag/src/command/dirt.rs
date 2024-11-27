@@ -5,10 +5,11 @@ use hyperion::{
     glam::Vec3,
     simulation::{Pitch, Position, Yaw, blocks::Blocks},
 };
-use hyperion_clap::MinecraftCommand;
+use hyperion_clap::{CommandPermission, MinecraftCommand};
 
-#[derive(Parser, Debug)]
+#[derive(Parser, CommandPermission, Debug)]
 #[command(name = "dirt")]
+#[command_permission(group = "Admin")]
 pub struct DirtCommand;
 
 /// Converts Minecraft yaw and pitch angles to a direction vector

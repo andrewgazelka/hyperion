@@ -37,7 +37,7 @@ dependencies = [
  "getrandom",
  "once_cell",
  "version_check",
- "zerocopy 0.7.35",
+ "zerocopy",
 ]
 
 [[package]]
@@ -475,7 +475,7 @@ dependencies = [
  "ordered-float",
  "plotters",
  "plotters-bitmap",
- "rand 0.8.5",
+ "rand",
  "rayon",
  "tango-bench",
  "tracing",
@@ -1770,9 +1770,19 @@ dependencies = [
  "clap",
  "flecs_ecs",
  "hyperion",
+ "hyperion-clap-macros",
  "hyperion-command",
+ "hyperion-permission",
  "tracing",
  "valence_protocol",
+]
+
+[[package]]
+name = "hyperion-clap-macros"
+version = "0.1.0"
+dependencies = [
+ "quote",
+ "syn",
 ]
 
 [[package]]
@@ -1918,7 +1928,7 @@ version = "0.1.0"
 dependencies = [
  "approx",
  "divan",
- "rand 0.8.5",
+ "rand",
 ]
 
 [[package]]
@@ -2752,7 +2762,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "48e4cc64c2ad9ebe670cb8fd69dd50ae301650392e81c05f9bfcb2d5bdbc24b0"
 dependencies = [
  "phf_shared",
- "rand 0.8.5",
+ "rand",
 ]
 
 [[package]]
@@ -2882,7 +2892,7 @@ version = "0.2.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "77957b295656769bb8ad2b6a6b09d897d94f05c41b069aede1fcdaa675eaea04"
 dependencies = [
- "zerocopy 0.7.35",
+ "zerocopy",
 ]
 
 [[package]]
@@ -2928,8 +2938,8 @@ dependencies = [
  "bitflags 2.6.0",
  "lazy_static",
  "num-traits",
- "rand 0.8.5",
- "rand_chacha 0.3.1",
+ "rand",
+ "rand_chacha",
  "rand_xorshift",
  "regex-syntax 0.8.5",
  "rusty-fork",
@@ -2989,7 +2999,7 @@ checksum = "a2fe5ef3495d7d2e377ff17b1a8ce2ee2ec2a18cde8b6ad6619d65d0701c135d"
 dependencies = [
  "bytes",
  "getrandom",
- "rand 0.8.5",
+ "rand",
  "ring",
  "rustc-hash 2.0.0",
  "rustls",
@@ -3046,19 +3056,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "34af8d1a0e25924bc5b7c43c079c942339d8f0a8b57c39049bef581b46327404"
 dependencies = [
  "libc",
- "rand_chacha 0.3.1",
- "rand_core 0.6.4",
-]
-
-[[package]]
-name = "rand"
-version = "0.9.0-beta.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "64535f75665ca4111b59c1b2c9eb99358dc57c3775cc3379675c11dca030f81a"
-dependencies = [
- "rand_chacha 0.9.0-beta.0",
- "rand_core 0.9.0-beta.0",
- "zerocopy 0.8.11",
+ "rand_chacha",
+ "rand_core",
 ]
 
 [[package]]
@@ -3068,17 +3067,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e6c10a63a0fa32252be49d21e7709d4d4baf8d231c2dbce1eaa8141b9b127d88"
 dependencies = [
  "ppv-lite86",
- "rand_core 0.6.4",
-]
-
-[[package]]
-name = "rand_chacha"
-version = "0.9.0-beta.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6ae4df114eac4201e5830fbecc6b8f775425e5782ac6741f5ba2c8d5e7861136"
-dependencies = [
- "ppv-lite86",
- "rand_core 0.9.0-beta.0",
+ "rand_core",
 ]
 
 [[package]]
@@ -3091,22 +3080,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "rand_core"
-version = "0.9.0-beta.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "faff9cb0513c709c88c66ba1c44e7dfb0e6343494c57576614524400ee60d7cb"
-dependencies = [
- "getrandom",
- "zerocopy 0.8.11",
-]
-
-[[package]]
 name = "rand_xorshift"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d25bf25ec5ae4a3f1b92f929810509a2f53d7dca2f50b794ff57e3face536c8f"
 dependencies = [
- "rand_core 0.6.4",
+ "rand_core",
 ]
 
 [[package]]
@@ -3596,7 +3575,6 @@ version = "0.1.0"
 dependencies = [
  "aligned-vec",
  "proptest",
- "rand 0.9.0-beta.0",
 ]
 
 [[package]]
@@ -3811,7 +3789,7 @@ dependencies = [
  "libloading",
  "log",
  "num-traits",
- "rand 0.8.5",
+ "rand",
  "scroll",
  "tempfile",
  "thiserror 1.0.69",
@@ -4471,7 +4449,7 @@ dependencies = [
  "bytes",
  "derive_more",
  "parking_lot",
- "rand 0.8.5",
+ "rand",
  "rustc-hash 2.0.0",
  "tracing",
  "uuid",
@@ -4492,7 +4470,7 @@ dependencies = [
  "bevy_app",
  "bevy_ecs",
  "derive_more",
- "rand 0.8.5",
+ "rand",
  "uuid",
  "valence_protocol",
 ]
@@ -5081,16 +5059,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1b9b4fd18abc82b8136838da5d50bae7bdea537c574d8dc1a34ed098d6c166f0"
 dependencies = [
  "byteorder",
- "zerocopy-derive 0.7.35",
-]
-
-[[package]]
-name = "zerocopy"
-version = "0.8.11"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cce3b5629d87654b53a49002acc2ce64aa5aa7255f5c718374a37ac7fd98c218"
-dependencies = [
- "zerocopy-derive 0.8.11",
+ "zerocopy-derive",
 ]
 
 [[package]]
@@ -5098,17 +5067,6 @@ name = "zerocopy-derive"
 version = "0.7.35"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fa4f8080344d4671fb4e831a13ad1e68092748387dfc4f55e356242fae12ce3e"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
-]
-
-[[package]]
-name = "zerocopy-derive"
-version = "0.8.11"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "74a82c26c3986af2623ec9eb890ff4aa19c006e30a1133dc9bd1830ec1612e20"
 dependencies = [
  "proc-macro2",
  "quote",
