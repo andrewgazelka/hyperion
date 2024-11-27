@@ -1,6 +1,7 @@
 use std::{
     alloc::{Layout, alloc, dealloc, realloc},
     ptr::null_mut,
+    sync::OnceLock,
 };
 
 use flecs_ecs::sys::{
@@ -9,18 +10,23 @@ use flecs_ecs::sys::{
 
 const ALIGNMENT: usize = 64;
 
-// Store size in a prefix, perfectly aligned
-#[repr(C, align(64))] // Ensure the header itself is aligned
-struct AllocHeader {
-    size: usize,
+// Global size tracker using papaya HashMap
+static ALLOC_SIZES: OnceLock<papaya::HashMap<usize, usize>> = OnceLock::new();
+
+fn init_size_map() {
+    ALLOC_SIZES.get_or_init(papaya::HashMap::new);
+}
+
+fn get_size_map() -> &'static papaya::HashMap<usize, usize> {
+    unsafe { ALLOC_SIZES.get().unwrap_unchecked() }
 }
 
 unsafe extern "C-unwind" fn aligned_malloc(size: ecs_size_t) -> *mut core::ffi::c_void {
     #[allow(clippy::cast_possible_wrap, clippy::cast_sign_loss)]
-    let total_size = size as usize + size_of::<AllocHeader>();
+    let size = size as usize;
 
     // Allocate with our desired alignment
-    let Ok(layout) = Layout::from_size_align(total_size, ALIGNMENT) else {
+    let Ok(layout) = Layout::from_size_align(size, ALIGNMENT) else {
         return null_mut();
     };
 
@@ -29,26 +35,16 @@ unsafe extern "C-unwind" fn aligned_malloc(size: ecs_size_t) -> *mut core::ffi::
         return null_mut();
     }
 
-    // Write the header
-    #[allow(clippy::cast_ptr_alignment)]
-    let header = ptr.cast::<AllocHeader>();
+    // Store the size in our global map
+    get_size_map().pin().insert(ptr as usize, size);
 
-    #[allow(clippy::cast_possible_wrap, clippy::cast_sign_loss)]
-    unsafe {
-        (*header).size = size as usize;
-    };
-
-    // Return pointer after the header
-    unsafe {
-        ptr.add(size_of::<AllocHeader>())
-            .cast::<core::ffi::c_void>()
-    }
+    ptr.cast::<core::ffi::c_void>()
 }
 
 unsafe extern "C-unwind" fn aligned_calloc(size: ecs_size_t) -> *mut core::ffi::c_void {
     let ptr = unsafe { aligned_malloc(size) };
     if !ptr.is_null() {
-        // Zero only the user data portion, header already contains size
+        // Zero the entire allocation
         #[allow(clippy::cast_possible_wrap, clippy::cast_sign_loss)]
         unsafe {
             std::ptr::write_bytes(ptr, 0, size as usize);
@@ -65,68 +61,50 @@ unsafe extern "C-unwind" fn aligned_realloc(
         return unsafe { aligned_malloc(new_size) };
     }
 
-    // Get the header pointer from the user pointer
-    #[allow(clippy::cast_ptr_alignment)]
-    let header_ptr = unsafe {
-        ptr.cast::<u8>()
-            .sub(size_of::<AllocHeader>())
-            .cast::<AllocHeader>()
-    };
-    let old_size = unsafe { (*header_ptr).size };
-
     #[allow(clippy::cast_possible_wrap, clippy::cast_sign_loss)]
-    let total_new_size = new_size as usize + size_of::<AllocHeader>();
+    let new_size = new_size as usize;
 
-    // Reallocate with the total size
-    let layout = unsafe {
-        Layout::from_size_align_unchecked(old_size + size_of::<AllocHeader>(), ALIGNMENT)
-    };
+    let size_map = get_size_map().pin();
 
-    let new_ptr = unsafe { realloc(header_ptr.cast::<u8>(), layout, total_new_size) };
+    // Get the old size from our map
+    let old_size = size_map.get(&(ptr as usize)).copied().unwrap_or(0);
 
+    // Create layout for reallocation
+    let layout = unsafe { Layout::from_size_align_unchecked(old_size, ALIGNMENT) };
+
+    let new_ptr = unsafe { realloc(ptr.cast::<u8>(), layout, new_size) };
     if new_ptr.is_null() {
         return null_mut();
     }
 
-    // Update size in header
-    #[allow(clippy::cast_ptr_alignment)]
-    let new_header = new_ptr.cast::<AllocHeader>();
+    // Update size in map
+    size_map.remove(&(ptr as usize));
+    size_map.insert(new_ptr as usize, new_size);
 
-    #[allow(clippy::cast_possible_wrap, clippy::cast_sign_loss)]
-    unsafe {
-        (*new_header).size = new_size as usize;
-    };
-
-    // Return pointer after header
-    unsafe {
-        new_ptr
-            .add(size_of::<AllocHeader>())
-            .cast::<core::ffi::c_void>()
-    }
+    new_ptr.cast::<core::ffi::c_void>()
 }
 
 unsafe extern "C-unwind" fn aligned_free(ptr: *mut core::ffi::c_void) {
     if !ptr.is_null() {
-        // Get the header pointer
-        let header_ptr = unsafe { ptr.cast::<u8>().sub(size_of::<AllocHeader>()) };
-
-        #[allow(clippy::cast_ptr_alignment)]
-        let header = header_ptr.cast::<AllocHeader>();
-        let total_size = unsafe { (*header).size + size_of::<AllocHeader>() };
-
-        // Deallocate the entire block
-        let layout = unsafe { Layout::from_size_align_unchecked(total_size, ALIGNMENT) };
-        unsafe { dealloc(header_ptr, layout) };
+        let size_map = get_size_map().pin();
+        // Get the size from our map
+        if let Some(size) = size_map.remove(&(ptr as usize)) {
+            // Deallocate the block
+            let layout = unsafe { Layout::from_size_align_unchecked(*size, ALIGNMENT) };
+            unsafe { dealloc(ptr.cast::<u8>(), layout) };
+        }
     }
 }
 
-// Setup function remains the same
 pub fn setup_custom_allocators() -> (
     ecs_os_api_malloc_t,
     ecs_os_api_calloc_t,
     ecs_os_api_realloc_t,
     ecs_os_api_free_t,
 ) {
+    // Initialize the global size map if not already initialized
+    init_size_map();
+
     (
         Some(aligned_malloc),
         Some(aligned_calloc),

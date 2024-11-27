@@ -70,10 +70,18 @@ impl Module for EntityStateSyncModule {
                         let prev_xp: &mut [u16] =
                             core::slice::from_raw_parts_mut(prev_xp.as_mut_ptr().cast(), count);
 
+                        debug_assert_eq!(
+                            prev_xp.as_ptr() as usize & 63,
+                            0,
+                            "prev_xp is not 64-byte aligned"
+                        );
+
                         let mut xp = table.field_unchecked::<Xp>(3);
                         let xp = xp.get_mut(..).unwrap();
                         let xp: &mut [u16] =
                             core::slice::from_raw_parts_mut(xp.as_mut_ptr().cast(), count);
+
+                        debug_assert_eq!(xp.as_ptr() as usize & 63, 0, "xp is not 64-byte aligned");
 
                         simd_utils::copy_and_get_diff::<_, LANES>(
                             prev_xp,
