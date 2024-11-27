@@ -36,37 +36,70 @@ impl Module for EntityStateSyncModule {
 
         let metadata: ThreadLocal<UnsafeCell<MetadataBuilder>> = ThreadLocal::new_defaults();
 
-        system!(
-            "entity_xp_sync",
-            world,
-            &Compose($),
-            &NetworkStreamRef,
-            &mut Prev<Xp>,
-            &mut Xp,
-        )
-        .multi_threaded()
-        .kind::<flecs::pipeline::OnStore>()
-        .tracing_each_entity(
-            info_span!("entity_xp_sync"),
-            move |entity, (compose, net, Prev(prev_xp), xp)| {
-                let world = entity.world();
-                if prev_xp.amount != xp.amount {
-                    let visual = xp.get_visual();
+        world
+            .system_named::<(
+                &Compose,          // (0)
+                &NetworkStreamRef, // (1)
+                &mut Prev<Xp>,     // (2)
+                &mut Xp,           // (3)
+            )>("entity_xp_sync")
+            .term_at(0u32)
+            .singleton()
+            .multi_threaded()
+            .kind::<flecs::pipeline::OnStore>()
+            .run(|mut table| {
+                while table.next() {
+                    let count = table.count();
+                    let world = table.world();
 
-                    let packet = play::ExperienceBarUpdateS2c {
-                        bar: visual.prop,
-                        level: VarInt(i32::from(visual.level)),
-                        total_xp: VarInt::default(),
-                    };
+                    unsafe {
+                        const _: () = assert!(size_of::<Xp>() == size_of::<u16>());
+                        const _: () = assert!(align_of::<Xp>() == align_of::<u16>());
 
-                    compose
-                        .unicast(&packet, *net, SystemId(100), &world)
-                        .unwrap();
+                        /// Number of lanes in the SIMD vector
+                        const CHUNK_SIZE: usize = 8; // todo: up this but need to make sure everything is aligned
 
-                    *prev_xp = *xp;
+                        let compose = table.field_unchecked::<Compose>(0);
+                        let compose = compose.first().unwrap();
+
+                        let net = table.field_unchecked::<NetworkStreamRef>(1);
+                        let net = net.get(..).unwrap();
+
+                        let mut prev_xp = table.field_unchecked::<Prev<Xp>>(2);
+                        let prev_xp = prev_xp.get_mut(..).unwrap();
+                        let prev_xp: &mut [u16] =
+                            core::slice::from_raw_parts_mut(prev_xp.as_mut_ptr().cast(), count);
+
+                        let mut xp = table.field_unchecked::<Xp>(3);
+                        let xp = xp.get_mut(..).unwrap();
+                        let xp: &mut [u16] =
+                            core::slice::from_raw_parts_mut(xp.as_mut_ptr().cast(), count);
+
+                        simd_utils::copy_and_get_diff::<_, CHUNK_SIZE>(
+                            prev_xp,
+                            xp,
+                            |idx, prev, current| {
+                                debug_assert!(prev != current);
+
+                                let net = net.get(idx).unwrap();
+
+                                let current = Xp::from(*current);
+                                let visual = current.get_visual();
+
+                                let packet = play::ExperienceBarUpdateS2c {
+                                    bar: visual.prop,
+                                    level: VarInt(i32::from(visual.level)),
+                                    total_xp: VarInt::default(),
+                                };
+
+                                compose
+                                    .unicast(&packet, *net, SystemId(100), &world)
+                                    .unwrap();
+                            },
+                        );
+                    }
                 }
-            },
-        );
+            });
 
         system!(
             "entity_state_sync",

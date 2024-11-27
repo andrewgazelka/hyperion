@@ -1,5 +1,6 @@
 use std::{borrow::Borrow, collections::HashMap, hash::Hash, sync::Arc};
 
+use bytemuck::{Pod, Zeroable};
 use derive_more::{Deref, DerefMut, Display, From};
 use flecs_ecs::prelude::*;
 use geometry::aabb::{Aabb, HasAabb};
@@ -153,9 +154,11 @@ pub enum PacketState {
 pub struct Health(f32);
 
 #[derive(
-    Component, Debug, Deref, DerefMut, PartialEq, Eq, PartialOrd, Copy, Clone, Default
+    Component, Debug, Deref, DerefMut, PartialEq, Eq, PartialOrd, Copy, Clone, Default, Pod,
+    Zeroable, From
 )]
 #[meta]
+#[repr(C)]
 pub struct Xp {
     pub amount: u16,
 }
