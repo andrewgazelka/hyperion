@@ -1,6 +1,6 @@
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{parse_macro_input, DeriveInput, Lit, Error};
+use syn::{parse_macro_input, DeriveInput, Error, Ident, Lit};
 
 #[proc_macro_derive(CommandPermission, attributes(command_permission))]
 pub fn derive_command_permission(input: TokenStream) -> TokenStream {
@@ -15,7 +15,7 @@ pub fn derive_command_permission(input: TokenStream) -> TokenStream {
             if let Err(err) = attr.parse_nested_meta(|meta| {
                 if meta.path.is_ident("group") {
                     if let Ok(Lit::Str(lit)) = meta.value()?.parse::<Lit>() {
-                        group = Some(lit.value());
+                        group = Some(lit);
                     }
                 }
                 Ok(())
@@ -27,8 +27,8 @@ pub fn derive_command_permission(input: TokenStream) -> TokenStream {
         }
     }
 
-    let group = match group {
-        Some(g) => g,
+    let group_ident = match group {
+        Some(g) => Ident::new(&g.value(), g.span()),
         None => {
             return Error::new_spanned(
                 input,
@@ -42,15 +42,14 @@ pub fn derive_command_permission(input: TokenStream) -> TokenStream {
     // Generate the trait implementation
     let expanded = quote! {
         impl CommandPermission for #name {
-            fn has_required_permission(&self, user_group: hyperion_permission::Group) -> bool {
-                use hyperion_permission::Group::*;
-                match (#group, user_group) {
-                    ("Banned", Banned) => true,
-                    ("Banned", _) => false,
-                    ("Normal", Normal | Moderator | Admin) => true,
-                    ("Moderator", Moderator | Admin) => true,
-                    ("Admin", Admin) => true,
-                    _ => false,
+            fn has_required_permission(&self, user_group: ::hyperion_permission::Group) -> bool {
+                const REQUIRED_GROUP: ::hyperion_permission::Group = ::hyperion_permission::Group::#group_ident;
+
+                if REQUIRED_GROUP == ::hyperion_permission::Group::Banned {
+                    // When checking for the group "Banned" we don't want to check for higher groups.
+                    return REQUIRED_GROUP == user_group;
+                } else {
+                    return user_group as u32 >= REQUIRED_GROUP as u32
                 }
             }
         }
