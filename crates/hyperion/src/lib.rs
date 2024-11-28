@@ -23,6 +23,7 @@
 #![feature(array_chunks)]
 #![feature(portable_simd)]
 #![feature(trivial_bounds)]
+#![feature(pointer_is_aligned_to)]
 
 pub const NUM_THREADS: usize = 8;
 pub const CHUNK_HEIGHT_SPAN: u32 = 384; // 512; // usually 384
