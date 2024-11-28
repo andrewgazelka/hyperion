@@ -39,6 +39,7 @@ impl Module for LevelModule {
             .filter()
             .each_entity(
                 |entity, (xp, upgraded_to, rank, team, main_block_count, inventory)| {
+                    println!("update");
                     let new_level = xp.get_visual().level;
                     let world = entity.world();
                     let level_diff = new_level - upgraded_to.value;

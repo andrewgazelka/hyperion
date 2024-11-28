@@ -40,49 +40,27 @@ impl Module for EntityStateSyncModule {
             .singleton()
             .multi_threaded()
             .kind::<flecs::pipeline::OnStore>()
-            .run(|mut table| {
-                while table.next() {
-                    let world = table.world();
-
-                    unsafe {
-                        const _: () = assert!(size_of::<Xp>() == size_of::<u16>());
-                        const _: () = assert!(align_of::<Xp>() == align_of::<u16>());
-
-                        let compose = table.field_unchecked::<Compose>(0);
-                        let compose = compose.first().unwrap();
-
-                        let net = table.field_unchecked::<NetworkStreamRef>(1);
-                        let net = net.get(..).unwrap();
-
-                        let mut prev_xp = table.field_unchecked::<Xp>(2);
-                        let prev_xp = prev_xp.get_mut(..).unwrap();
-
-                        let mut xp = table.field_unchecked::<Xp>(3);
-                        let xp = xp.get_mut(..).unwrap();
-
-                        for (idx, (prev, current)) in itertools::zip_eq(prev_xp, xp).enumerate() {
-                            if prev == current {
-                                continue;
-                            }
-
-                            let net = net.get(idx).unwrap();
-
-                            let visual = current.get_visual();
-
-                            let packet = play::ExperienceBarUpdateS2c {
-                                bar: visual.prop,
-                                level: VarInt(i32::from(visual.level)),
-                                total_xp: VarInt::default(),
-                            };
-
-                            compose
-                                .unicast(&packet, *net, SystemId(100), &world)
-                                .unwrap();
-
-                            *prev = *current;
-                        }
-                    }
+            .each_entity(|entity, (compose, net, prev, current)| {
+                let world = entity.world();
+                if prev == current {
+                    return;
                 }
+
+                entity.modified::<Xp>();
+
+                let visual = current.get_visual();
+
+                let packet = play::ExperienceBarUpdateS2c {
+                    bar: visual.prop,
+                    level: VarInt(i32::from(visual.level)),
+                    total_xp: VarInt::default(),
+                };
+
+                compose
+                    .unicast(&packet, *net, SystemId(100), &world)
+                    .unwrap();
+
+                *prev = *current;
             });
 
         system!("entity_metadata_sync", world, &Compose($), &mut MetadataChanges)
