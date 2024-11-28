@@ -49,6 +49,9 @@ impl Module for EntityStateSyncModule {
                         const _: () = assert!(size_of::<Xp>() == size_of::<u16>());
                         const _: () = assert!(align_of::<Xp>() == align_of::<u16>());
 
+                        /// Number of lanes in the SIMD vector
+                        const LANES: usize = 64; // up to AVX512
+
                         let compose = table.field_unchecked::<Compose>(0);
                         let compose = compose.first().unwrap();
 
@@ -60,39 +63,41 @@ impl Module for EntityStateSyncModule {
                         let prev_xp: &mut [u16] =
                             core::slice::from_raw_parts_mut(prev_xp.as_mut_ptr().cast(), count);
 
-                        // debug_assert_eq!(
-                        //     prev_xp.as_ptr() as usize & 63,
-                        //     0,
-                        //     "prev_xp is not 64-byte aligned"
-                        // );
+                        debug_assert_eq!(
+                            prev_xp.as_ptr() as usize & 63,
+                            0,
+                            "prev_xp is not 64-byte aligned"
+                        );
 
                         let mut xp = table.field_unchecked::<Xp>(3);
                         let xp = xp.get_mut(..).unwrap();
                         let xp: &mut [u16] =
                             core::slice::from_raw_parts_mut(xp.as_mut_ptr().cast(), count);
 
-                        // debug_assert_eq!(xp.as_ptr() as usize & 63, 0, "xp is not 64-byte aligned");
+                        debug_assert_eq!(xp.as_ptr() as usize & 63, 0, "xp is not 64-byte aligned");
 
-                        for (idx, (prev, current)) in itertools::zip_eq(prev_xp, xp).enumerate() {
-                            if prev != current {
-                                continue;
-                            }
+                        simd_utils::copy_and_get_diff::<_, LANES>(
+                            prev_xp,
+                            xp,
+                            |idx, prev, current| {
+                                debug_assert!(prev != current);
 
-                            let net = net.get(idx).unwrap();
+                                let net = net.get(idx).unwrap();
 
-                            let current = Xp::from(*current);
-                            let visual = current.get_visual();
+                                let current = Xp::from(*current);
+                                let visual = current.get_visual();
 
-                            let packet = play::ExperienceBarUpdateS2c {
-                                bar: visual.prop,
-                                level: VarInt(i32::from(visual.level)),
-                                total_xp: VarInt::default(),
-                            };
+                                let packet = play::ExperienceBarUpdateS2c {
+                                    bar: visual.prop,
+                                    level: VarInt(i32::from(visual.level)),
+                                    total_xp: VarInt::default(),
+                                };
 
-                            compose
-                                .unicast(&packet, *net, SystemId(100), &world)
-                                .unwrap();
-                        }
+                                compose
+                                    .unicast(&packet, *net, SystemId(100), &world)
+                                    .unwrap();
+                            },
+                        );
                     }
                 }
             });

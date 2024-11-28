@@ -23,6 +23,7 @@ anyhow = {workspace = true}
 base64 = {workspace = true}
 geometry = {workspace = true}
 bitfield-struct = {workspace = true}
+simd-utils = {workspace = true}
 bitvec = {workspace = true}
 heck = {workspace = true}
 papaya = {workspace = true}
