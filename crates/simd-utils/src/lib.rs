@@ -1,5 +1,7 @@
 #![feature(portable_simd)]
 #![feature(trusted_len)]
+#![feature(slice_as_chunks)]
+#![feature(pointer_is_aligned_to)]
 
 use core::simd;
 use std::{
@@ -11,6 +13,9 @@ use crate::one_bit_positions::OneBitPositionsExt;
 
 mod one_bit_positions;
 
+/// [`prev`] and [`current`] must have the same length. Further optimizations may be possible if
+/// [`prev`] and [`current`] have the same align offset when being aligned to [`std::simd::Simd::<T, Lanes>`]
+/// as defined by [`pointer::align_offset`]
 pub fn copy_and_get_diff<T, const LANES: usize>(
     prev: &mut [T],
     current: &[T],
@@ -22,66 +27,113 @@ pub fn copy_and_get_diff<T, const LANES: usize>(
     LaneCount<LANES>: SupportedLaneCount,
     <Simd<T, LANES> as SimdPartialEq>::Mask: Into<Mask<<T as simd::SimdElement>::Mask, LANES>>,
 {
-    debug_assert_eq!(
+    assert_eq!(
         prev.len(),
         current.len(),
         "prev and current must have the same length"
     );
 
-    let (before_prev, prev, after_prev) = prev.as_simd_mut::<LANES>();
-    let (before_current, current, after_current) = current.as_simd::<LANES>();
+    let (before_prev, prev_simd, after_prev) = prev.as_simd_mut::<LANES>();
+    let (before_current, current_simd, after_current) = current.as_simd::<LANES>();
 
-    debug_assert_eq!(
-        before_prev.len(),
-        before_current.len(),
-        "before_prev and before_current must have the same length"
-    );
+    if before_prev.len() == before_current.len() {
+        // Take advantage of the fact that [`prev`] and [`current`] have the same align offset to
+        // avoid unaligned reads for the SIMD vectors
+        debug_assert_eq!(
+            prev_simd.len(),
+            current_simd.len(),
+            "prev_simd and current_simd must have the same length"
+        );
 
-    debug_assert_eq!(
-        prev.len(),
-        current.len(),
-        "prev and current must have the same length"
-    );
+        debug_assert_eq!(
+            after_prev.len(),
+            after_current.len(),
+            "after_prev and after_current must have the same length"
+        );
 
-    debug_assert_eq!(
-        after_prev.len(),
-        after_current.len(),
-        "after_prev and after_current must have the same length"
-    );
+        copy_and_get_diff_scalar(0, before_prev, before_current, &mut on_diff);
 
-    let mut idx = 0;
+        let mut idx = before_prev.len();
+        for (prev, current) in zip(prev_simd, current_simd) {
+            let not_equal = prev.simd_ne(*current);
+            let not_equal = not_equal.into();
 
-    for (prev, current) in zip(before_prev, before_current) {
-        if prev != current {
-            debug_assert_ne!(prev, current);
-            on_diff(idx, prev, current);
+            let bitmask = Mask::to_bitmask(not_equal);
+
+            for local_idx in bitmask.one_positions() {
+                let prev = prev[local_idx];
+                let current = current[local_idx];
+
+                debug_assert_ne!(prev, current);
+
+                on_diff(idx + local_idx, &prev, &current);
+            }
+
+            idx += LANES;
+
+            current.copy_to_slice(prev.as_mut());
         }
 
-        *prev = *current;
-        idx += 1;
+        copy_and_get_diff_scalar(idx, after_prev, after_current, &mut on_diff);
+    } else {
+        let (prev_chunks, prev_remaining) = prev.as_chunks_mut::<LANES>();
+        let (current_chunks, current_remaining) = current.as_chunks::<LANES>();
+
+        debug_assert_eq!(
+            prev_chunks.len(),
+            current_chunks.len(),
+            "prev_chunks and current_chunks must have the same length"
+        );
+
+        debug_assert_eq!(
+            prev_remaining.len(),
+            current_remaining.len(),
+            "prev_remaining and current_remaining must have the same length"
+        );
+
+        let mut idx = 0;
+
+        for (prev, current) in zip(prev_chunks, current_chunks) {
+            // These will cause unaligned reads from each chunk to a simd vector
+            let prev_simd = Simd::from_array(*prev);
+            let current_simd = Simd::from_array(*current);
+
+            let not_equal = prev_simd.simd_ne(current_simd);
+            let not_equal = not_equal.into();
+
+            let bitmask = Mask::to_bitmask(not_equal);
+
+            for local_idx in bitmask.one_positions() {
+                let prev = prev[local_idx];
+                let current = current[local_idx];
+
+                debug_assert_ne!(prev, current);
+
+                on_diff(idx + local_idx, &prev, &current);
+            }
+
+            idx += LANES;
+
+            current_simd.copy_to_slice(prev);
+        }
+
+        copy_and_get_diff_scalar(idx, prev_remaining, current_remaining, &mut on_diff);
     }
+}
+
+fn copy_and_get_diff_scalar<T>(
+    start_idx: usize,
+    prev: &mut [T],
+    current: &[T],
+    mut on_diff: impl FnMut(usize, &T, &T),
+) where
+    T: Copy + PartialEq + std::fmt::Debug,
+{
+    let mut idx = start_idx;
+
+    debug_assert_eq!(prev.len(), current.len());
 
     for (prev, current) in zip(prev, current) {
-        let not_equal = prev.simd_ne(*current);
-        let not_equal = not_equal.into();
-
-        let bitmask = Mask::to_bitmask(not_equal);
-
-        for local_idx in bitmask.one_positions() {
-            let prev = prev[local_idx];
-            let current = current[local_idx];
-
-            debug_assert_ne!(prev, current);
-
-            on_diff(idx + local_idx, &prev, &current);
-        }
-
-        idx += LANES;
-
-        *prev = *current;
-    }
-
-    for (prev, current) in zip(after_prev, after_current) {
         if prev != current {
             debug_assert_ne!(prev, current);
             on_diff(idx, prev, current);
@@ -95,6 +147,7 @@ pub fn copy_and_get_diff<T, const LANES: usize>(
 #[cfg(test)]
 mod tests {
     const LANES: usize = 8;
+    const SIMD_U32_ALIGN: usize = std::mem::align_of::<Simd<u32, LANES>>();
 
     use std::fmt::Debug;
 
@@ -129,6 +182,14 @@ mod tests {
         T: simd::SimdElement + Arbitrary + 'static,
     {
         prop::collection::vec(any::<T>(), min_size..=min_size + LANES * 2)
+    }
+
+    // Generate arrays of an exact size
+    fn generate_exact_array_strategy<T>(size: usize) -> impl Strategy<Value = Vec<T>>
+    where
+        T: simd::SimdElement + Arbitrary + 'static,
+    {
+        prop::collection::vec(any::<T>(), size)
     }
 
     // Helper to verify that all differences are captured correctly
@@ -185,6 +246,56 @@ mod tests {
 
             let diffs = collect_diffs(&prev, &current);
             verify_differences(&prev, &current, &diffs);
+        }
+
+        // Test with varying align offset
+        #[test]
+        fn test_varying_align_offset(
+            current in generate_exact_array_strategy::<u32>(LANES * 4),
+            mut prev in generate_exact_array_strategy::<u32>(LANES * 4)
+        ) {
+            // Ensure that [`current`] and [`prev`] have a different align offset
+            let current = &current[..(current.len() - 1)];
+            let mut prev = prev.as_mut_slice();
+
+            if prev.as_ptr().align_offset(SIMD_U32_ALIGN) == current.as_ptr().align_offset(SIMD_U32_ALIGN) {
+                // Offset [`prev`] by 1 element to get a different align offset
+                prev = &mut prev[1..];
+            } else {
+                // Keep the align offset of [`prev`] the same but truncate it to the same size as
+                // [`current`]
+                let len = prev.len() - 1;
+                prev = &mut prev[..len];
+            }
+
+            assert_eq!(prev.len(), current.len());
+            assert_ne!(prev.as_ptr().align_offset(SIMD_U32_ALIGN), current.as_ptr().align_offset(SIMD_U32_ALIGN));
+
+            let diffs = collect_diffs(prev, current);
+            verify_differences(prev, current, &diffs);
+        }
+
+        // Test with same align offset but not aligned with a simd vector
+        #[test]
+        fn test_same_align_offset(
+            mut data in generate_exact_array_strategy::<u32>(LANES * 4 + 1),
+        ) {
+            let mut data = data.as_mut_slice();
+            if data.as_ptr().is_aligned_to(SIMD_U32_ALIGN) {
+                data = &mut data[1..];
+            }
+
+            let len = LANES * 2;
+            let (prev, current) = data.split_at_mut(len);
+            let current = &current[..len];
+
+            assert_eq!(prev.len(), current.len());
+            assert!(!prev.as_ptr().is_aligned_to(SIMD_U32_ALIGN));
+            assert!(!current.as_ptr().is_aligned_to(SIMD_U32_ALIGN));
+            assert_eq!(prev.as_ptr().align_offset(SIMD_U32_ALIGN), current.as_ptr().align_offset(SIMD_U32_ALIGN));
+
+            let diffs = collect_diffs(prev, current);
+            verify_differences(prev, current, &diffs);
         }
 
         // Test with exact SIMD lane size
