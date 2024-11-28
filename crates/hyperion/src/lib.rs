@@ -38,10 +38,7 @@ use std::{
 use anyhow::{Context, bail};
 use derive_more::{Deref, DerefMut};
 use egress::EgressModule;
-use flecs_ecs::{
-    prelude::*,
-    sys::{ecs_os_get_api, ecs_os_set_api, ecs_os_set_api_defaults},
-};
+use flecs_ecs::prelude::*;
 pub use glam;
 use glam::IVec2;
 use ingress::IngressModule;
@@ -202,19 +199,19 @@ impl Hyperion {
                 .map_err(|_| anyhow::anyhow!("failed to create compression level"))?,
         });
 
-        unsafe {
-            ecs_os_set_api_defaults();
-            let mut os_api = ecs_os_get_api();
-
-            let (malloc, calloc, realloc, free) = alloc::setup_custom_allocators();
-
-            os_api.malloc_ = malloc;
-            os_api.calloc_ = calloc;
-            os_api.realloc_ = realloc;
-            os_api.free_ = free;
-
-            ecs_os_set_api(&mut os_api);
-        }
+        // unsafe {
+        //     ecs_os_set_api_defaults();
+        //     let mut os_api = ecs_os_get_api();
+        //
+        //     let (malloc, calloc, realloc, free) = alloc::setup_custom_allocators();
+        //
+        //     os_api.malloc_ = malloc;
+        //     os_api.calloc_ = calloc;
+        //     os_api.realloc_ = realloc;
+        //     os_api.free_ = free;
+        //
+        //     ecs_os_set_api(&mut os_api);
+        // }
 
         let world = World::new();
 

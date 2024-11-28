@@ -1746,7 +1746,6 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
- "simd-utils",
  "thiserror 2.0.3",
  "tokio",
  "toml",
