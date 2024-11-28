@@ -4,8 +4,7 @@ use flecs_ecs::{
     macros::Component,
     prelude::Module,
 };
-use hyperion::storage::EventFn;
-use valence_protocol::Hand;
+use hyperion::storage::{ClickEvent, EventFn};
 
 pub mod inventory;
 pub mod skin;
@@ -51,7 +50,7 @@ impl Module for RankTree {
         world.component::<Rank>();
         world.component::<Handles>();
 
-        let handler: EventFn<Hand> = |query, _| {
+        let handler: EventFn<ClickEvent> = |query, _| {
             let cursor = query.inventory.get_cursor();
             println!("clicked {cursor:?}");
         };

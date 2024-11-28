@@ -1,8 +1,11 @@
 use flecs_ecs::core::Entity;
 use valence_protocol::{nbt, nbt::Value, ItemKind, ItemStack};
 
+mod book;
+pub use book::BookBuilder;
+
 /// A builder for creating Minecraft items with NBT data
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 #[must_use]
 pub struct ItemBuilder {
     kind: ItemKind,

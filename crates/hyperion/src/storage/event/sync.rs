@@ -10,9 +10,14 @@ pub struct CommandCompletionRequest<'a> {
     pub id: i32,
 }
 
+pub struct ClickEvent {
+    pub hand: Hand,
+    pub sequence: i32,
+}
+
 #[derive(Component, Default)]
 pub struct GlobalEventHandlers {
-    pub click: EventHandlers<Hand>,
+    pub click: EventHandlers<ClickEvent>,
 
     // todo: this should be a lifetime for<'a>
     pub completion: EventHandlers<CommandCompletionRequest<'static>>,

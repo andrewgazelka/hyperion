@@ -8,7 +8,10 @@ use geometry::aabb::Aabb;
 use glam::{IVec3, Vec3};
 use hyperion_utils::EntityExt;
 use tracing::{info, instrument, trace, warn};
-use valence_generated::block::{BlockKind, BlockState, PropName};
+use valence_generated::{
+    block::{BlockKind, BlockState, PropName},
+    item::ItemKind,
+};
 use valence_protocol::{
     Decode, Hand, ItemStack, Packet, VarInt,
     packets::play::{
@@ -28,7 +31,7 @@ use super::{
 use crate::{
     net::{Compose, NetworkStreamRef, decoder::BorrowedPacketFrame},
     simulation::{Pitch, Yaw, aabb, event, event::PluginMessage, metadata::entity::Pose},
-    storage::{CommandCompletionRequest, Events, GlobalEventHandlers},
+    storage::{ClickEvent, CommandCompletionRequest, Events, GlobalEventHandlers},
     system_registry::SystemId,
 };
 
@@ -334,9 +337,25 @@ pub fn player_interact_item(
     mut data: &'static [u8],
     query: &mut PacketSwitchQuery<'_>,
 ) -> anyhow::Result<()> {
-    let packet = play::PlayerInteractItemC2s::decode(&mut data)?;
+    let play::PlayerInteractItemC2s { hand, sequence } =
+        play::PlayerInteractItemC2s::decode(&mut data)?;
 
-    query.handlers.click.trigger_all(query, &packet.hand);
+    let event = ClickEvent {
+        hand,
+        sequence: sequence.0,
+    };
+
+    let cursor = query.inventory.get_cursor();
+
+    if !cursor.is_empty() && cursor.item == ItemKind::WrittenBook {
+        let packet = play::OpenWrittenBookS2c { hand };
+
+        query
+            .compose
+            .unicast(&packet, query.io_ref, SystemId(0), query.world)?;
+    }
+
+    query.handlers.click.trigger_all(query, &event);
 
     Ok(())
 }

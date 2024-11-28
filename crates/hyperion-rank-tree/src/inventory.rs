@@ -1,6 +1,6 @@
 use flecs_ecs::core::{World, WorldGet};
 use hyperion_inventory::PlayerInventory;
-use hyperion_item::builder::{AttackDamage, Color, ItemBuilder};
+use hyperion_item::builder::{AttackDamage, BookBuilder, Color, ItemBuilder};
 use valence_protocol::ItemKind;
 
 use crate::{Handles, Rank, Team};
@@ -22,7 +22,8 @@ pub const MAIN_SLOT: u16 = 0;
 pub const PICKAXE_SLOT: u16 = 1;
 pub const BLOCK_SLOT: u16 = 2;
 pub const UPGRADE_START_SLOT: u16 = 3;
-pub const GUI_SLOT: u16 = 8;
+pub const GUI_SLOT: u16 = 7;
+pub const HELP_SLOT: u16 = 8;
 
 impl Rank {
     pub fn apply_inventory(
@@ -32,9 +33,34 @@ impl Rank {
         world: &World,
         build_count: i8,
     ) {
+        inventory.clear();
         let upgrade_not_available = ItemBuilder::new(ItemKind::GrayDye);
 
-        inventory.clear();
+        let book = BookBuilder::new("§b@andrewgazelka", "§6§l10k Guide")
+            .add_page(
+                "§6Welcome to Hyperion!\n\n§7This is a §c10,000§7 player PvP battle to break the \
+                 Guinness World Record!\n\n§7Current record: §b8,825 players",
+            )
+            .add_page(
+                "§6§lTeams\n\n§cRed Team\n§9Blue Team\n§aGreen Team\n§6Yellow Team\n\n§7Teams are \
+                 identified by boot color!",
+            )
+            .add_page(
+                "§6§lProgression\n\n§7Gain XP by:\n§7- Mining ores\n§7- Killing players\n\n§7When \
+                 killed:\n§7- Keep §61/3§7 of XP\n§7- Killer gets §61/2§7 of your XP",
+            )
+            .add_page(
+                "§6§lClasses\n\n§7Everyone starts with the §dStick§7 class\n\n§7Unlock new \
+                 classes by gaining XP and defeating players!\n\n§7Upgrade your gear to become \
+                 stronger!",
+            )
+            .add_page(
+                "§6§lControls\n\n§7[1-4] §7Combat Items\n§7[5-6] §7Building Blocks\n§7[7] \
+                 §7Upgrades Menu\n§7[8] §7Help Book\n\n§6Good luck!",
+            )
+            .build();
+
+        inventory.set_hotbar(HELP_SLOT, book);
 
         let color = match team {
             Team::Red => Color(255, 0, 0),
@@ -49,7 +75,7 @@ impl Rank {
 
         inventory.set_boots(boots);
 
-        let upgrades = ["Speed", "Vision", "Health", "Armor", "Damage"];
+        let upgrades = ["Speed", "Health", "Armor", "Damage"];
 
         world.get::<&Handles>(|handles| {
             for (i, upgrade) in upgrades.into_iter().enumerate() {
