@@ -4,11 +4,12 @@ use bytemuck::{Pod, Zeroable};
 use derive_more::{Deref, DerefMut, Display, From};
 use flecs_ecs::prelude::*;
 use geometry::aabb::{Aabb, HasAabb};
-use glam::{IVec2, IVec3, Vec3};
+use glam::{IVec2, IVec3, Quat, Vec3};
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 use skin::PlayerSkin;
 use uuid;
+use valence_generated::block::BlockState;
 use valence_protocol::VarInt;
 
 use crate::{
@@ -529,16 +530,13 @@ impl Module for SimModule {
     fn module(world: &World) {
         component!(world, VarInt).member::<i32>("x");
 
-        world.component::<MetadataPrefabs>();
-        world.component::<EntityFlags>();
-        let prefabs = metadata::register_prefabs(world);
+        component!(world, Quat)
+            .member::<f32>("x")
+            .member::<f32>("y")
+            .member::<f32>("z")
+            .member::<f32>("w");
 
-        world.set(prefabs);
-
-        world.component::<Xp>();
-
-        world.component::<PlayerSkin>();
-        world.component::<Command>();
+        component!(world, BlockState).member::<u16>("id");
 
         component!(world, EntitySize).opaque_func(meta_ser_stringify_type_display::<EntitySize>);
         component!(world, IVec3 {
@@ -551,6 +549,17 @@ impl Module for SimModule {
             y: f32,
             z: f32
         });
+
+        world.component::<MetadataPrefabs>();
+        world.component::<EntityFlags>();
+        let prefabs = metadata::register_prefabs(world);
+
+        world.set(prefabs);
+
+        world.component::<Xp>();
+
+        world.component::<PlayerSkin>();
+        world.component::<Command>();
 
         component!(world, IgnMap);
 
