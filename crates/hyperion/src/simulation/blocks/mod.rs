@@ -5,6 +5,7 @@ use std::{future::Future, ops::Try, path::Path, pin::Pin, sync::Arc};
 use anyhow::Context;
 use bytes::Bytes;
 use chunk::Column;
+use derive_more::Constructor;
 use flecs_ecs::{
     core::{Entity, World, WorldGet},
     macros::Component,
@@ -41,6 +42,7 @@ pub enum GetChunk<'a> {
     Loading,
 }
 
+#[derive(Constructor, Debug)]
 pub struct EntityAndSequence {
     pub entity: Entity,
     pub sequence: i32,

@@ -9,7 +9,7 @@ use flecs_ecs::{
     prelude::Module,
 };
 use hyperion::{
-    BlockKind,
+    BlockKind, chat,
     net::{Compose, NetworkStreamRef, agnostic},
     simulation::{
         Xp,
@@ -41,6 +41,16 @@ pub struct SetLevel {
     pub position: IVec3,
     pub sequence: i32,
     pub stage: u8,
+}
+
+impl SetLevel {
+    pub fn new(position: IVec3, stage: u8) -> Self {
+        Self {
+            position,
+            sequence: fastrand::i32(..),
+            stage,
+        }
+    }
 }
 
 pub struct DestroyValue {
@@ -239,45 +249,58 @@ impl Module for BlockModule {
                 }
             });
 
-        system!("handle_placed_blocks", world, &mut Blocks($), &mut EventQueue<event::PlaceBlock>($), &mut PendingDestruction($))
-            .each_iter(move |it, _, (mc, event_queue, pending_air): (&mut Blocks, &mut EventQueue<event::PlaceBlock>, &mut PendingDestruction)| {
+        system!("handle_placed_blocks", world, &mut Blocks($), &mut EventQueue<event::PlaceBlock>($), &mut PendingDestruction($), &Compose($))
+            .each_iter(move |it, _, (mc, event_queue, pending_air, compose): (&mut Blocks, &mut EventQueue<event::PlaceBlock>, &mut PendingDestruction, &Compose)| {
                 let world = it.world();
                 let span = info_span!("handle_placed_blocks");
                 let _enter = span.enter();
-                for event in event_queue.drain() {
-                    let position = event.position;
+                for event::PlaceBlock { position, block, from, sequence } in event_queue.drain() {
+                    if block.collision_shapes().is_empty() {
+                        mc.to_confirm.push(EntityAndSequence::new(from, sequence));
 
-                    mc.set_block(position, event.block).unwrap();
+                        from.entity_view(world).get::<(&mut PlayerInventory, &NetworkStreamRef)>(|(inventory, stream)| {
+                            // so we send update to player
+                            let _ = inventory.get_cursor_mut();
 
-                    event.from.entity_view(world).get::<&mut MainBlockCount>(|main_block_count| {
+                            let msg = chat!("§cYou can't place this block");
+
+                            compose.unicast(&msg, *stream, SystemId(8), &world).unwrap();
+                        });
+
+                        continue;
+                    }
+
+                    mc.set_block(position, block).unwrap();
+
+                    from.entity_view(world).get::<&mut PlayerInventory>(|inventory| {
+                        inventory.take_one_held();
+                    });
+
+                    from.entity_view(world).get::<&mut MainBlockCount>(|main_block_count| {
                         **main_block_count = (**main_block_count - 1).max(0);
                     });
 
                     let destroy = DestroyValue {
                         position,
-                        from: event.from,
+                        from,
                     };
+
 
                     pending_air.destroy_at.schedule(Instant::now() + TOTAL_DESTRUCTION_TIME, destroy);
 
                     {
-                        let sequence = fastrand::i32(..);
                         // Schedule destruction stages 0 through 9
                         for stage in 0_u8..=10 { // 10 represents no animation
                             let delay = TOTAL_DESTRUCTION_TIME / 10 * u32::from(stage);
                             pending_air.set_level_at.schedule(
                                 Instant::now() + delay,
-                                SetLevel {
-                                    position,
-                                    sequence,
-                                    stage,
-                                },
+                                SetLevel::new(position, stage),
                             );
                         }
                     }
                     mc.to_confirm.push(EntityAndSequence {
-                        entity: event.from,
-                        sequence: event.sequence,
+                        entity: from,
+                        sequence,
                     });
                 }
             });

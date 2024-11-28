@@ -442,8 +442,6 @@ pub fn player_interact_block(
             return Ok(());
         }
 
-        query.inventory.take_one_held();
-
         query.events.push(
             event::PlaceBlock {
                 position,
