@@ -24,11 +24,10 @@ use super::{
     animation::{self, ActiveAnimation},
     block_bounds,
     blocks::Blocks,
-    metadata::Pose,
 };
 use crate::{
     net::{Compose, NetworkStreamRef, decoder::BorrowedPacketFrame},
-    simulation::{Pitch, Yaw, aabb, event, event::PluginMessage},
+    simulation::{Pitch, Yaw, aabb, event, event::PluginMessage, metadata::entity::Pose},
     storage::{CommandCompletionRequest, Events, GlobalEventHandlers},
     system_registry::SystemId,
 };
@@ -301,7 +300,7 @@ fn player_action(mut data: &[u8], query: &PacketSwitchQuery<'_>) -> anyhow::Resu
     Ok(())
 }
 
-// for sneaking
+// for sneaking/crouching/etc
 fn client_command(mut data: &[u8], query: &mut PacketSwitchQuery<'_>) -> anyhow::Result<()> {
     let packet = play::ClientCommandC2s::decode(&mut data)?;
 

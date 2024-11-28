@@ -21,7 +21,7 @@ pub struct Flight {
 
 #[derive(Parser, CommandPermission, Debug)]
 #[command(name = "fly")]
-#[command_permission(group = "Moderator")]
+#[command_permission(group = "Normal")]
 pub struct FlyCommand;
 
 impl MinecraftCommand for FlyCommand {
