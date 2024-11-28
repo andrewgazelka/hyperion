@@ -1,10 +1,11 @@
 use clap::Parser;
 use flecs_ecs::{
-    core::{Entity, EntityViewGet, World, WorldGet},
+    core::{Entity, EntityViewGet, World, WorldGet, flecs},
     macros::Component,
 };
 use hyperion::{
     net::{Compose, DataBundle, NetworkStreamRef, agnostic},
+    simulation::Player,
     system_registry::SystemId,
     valence_protocol::packets::play::{
         PlayerAbilitiesS2c, player_abilities_s2c::PlayerAbilitiesFlags,
@@ -13,7 +14,10 @@ use hyperion::{
 use hyperion_clap::{CommandPermission, MinecraftCommand};
 
 #[derive(Component)]
-pub struct Flight;
+#[meta]
+pub struct Flight {
+    pub allow: bool,
+}
 
 #[derive(Parser, CommandPermission, Debug)]
 #[command(name = "fly")]
@@ -23,19 +27,19 @@ pub struct FlyCommand;
 impl MinecraftCommand for FlyCommand {
     fn execute(self, world: &World, caller: Entity) {
         world.get::<&Compose>(|compose| {
-            let allow_flight: bool = !caller.entity_view(world).has::<Flight>();
-
-            let chat_packet = if allow_flight {
-                agnostic::chat("§aFlying enabled")
-            } else {
-                agnostic::chat("§cFlying disabled")
-            };
-
-            caller.entity_view(world).add_if::<Flight>(allow_flight);
-
             caller
                 .entity_view(world)
-                .get::<&NetworkStreamRef>(|stream| {
+                .get::<(&mut Flight, &NetworkStreamRef)>(|(flight, stream)| {
+                    flight.allow = !flight.allow;
+
+                    let allow_flight = flight.allow;
+
+                    let chat_packet = if allow_flight {
+                        agnostic::chat("§aFlying enabled")
+                    } else {
+                        agnostic::chat("§cFlying disabled")
+                    };
+
                     let packet = fly_packet(allow_flight);
 
                     let mut bundle = DataBundle::new(compose);
@@ -45,6 +49,17 @@ impl MinecraftCommand for FlyCommand {
                     bundle.send(world, *stream, SystemId(8)).unwrap();
                 });
         });
+    }
+
+    fn pre_register(world: &World) {
+        // register the component with meta meaning we can view the value in the flecs
+        // explorer UI
+        world.component::<Flight>().meta();
+
+        // whenever a Player component is added, we add the Flight component to them.
+        world
+            .component::<Player>()
+            .add_trait::<(flecs::With, Flight)>();
     }
 }
 
