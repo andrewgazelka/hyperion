@@ -7,7 +7,7 @@ use flecs_ecs::{
 };
 use hyperion::{
     net::{Compose, DataBundle, NetworkStreamRef, agnostic},
-    simulation::{command::get_root_command_entity, handlers::PacketSwitchQuery},
+    simulation::{IgnMap, command::get_root_command_entity, handlers::PacketSwitchQuery},
     storage::{CommandCompletionRequest, EventFn},
     system_registry::SystemId,
 };
@@ -268,8 +268,97 @@ pub enum GameMode {
 #[derive(Component)]
 pub struct ClapCommandModule;
 
+#[derive(clap::Parser, Debug)]
+pub struct SetCommand {
+    player: String,
+    group: Group,
+}
+
+#[derive(clap::Parser, Debug)]
+pub struct GetCommand {
+    player: String,
+}
+
+#[derive(Parser, CommandPermission, Debug)]
+#[command(name = "perms")]
+#[command_permission(group = "Normal")]
+pub enum PermissionCommand {
+    Set(SetCommand),
+    Get(GetCommand),
+}
+
+impl MinecraftCommand for PermissionCommand {
+    fn execute(self, world: &World, caller: Entity) {
+        world.get::<&IgnMap>(|ign_map| {
+            match self {
+                Self::Set(cmd) => {
+                    // Handle setting permissions
+                    let Some(entity) = ign_map.get(cmd.player.as_str()) else {
+                        caller
+                            .entity_view(world)
+                            .get::<&NetworkStreamRef>(|stream| {
+                                let msg = format!("§c{} not found", cmd.player);
+                                let chat = hyperion::net::agnostic::chat(msg);
+                                world.get::<&Compose>(|compose| {
+                                    compose.unicast(&chat, *stream, SystemId(8), world).unwrap();
+                                });
+                            });
+                        return;
+                    };
+
+                    entity.entity_view(world).get::<&mut Group>(|group| {
+                        *group = cmd.group;
+                        caller
+                            .entity_view(world)
+                            .get::<&NetworkStreamRef>(|stream| {
+                                let msg = format!(
+                                    "§b{}§r's group has been set to §e{:?}",
+                                    cmd.player, cmd.group
+                                );
+                                let chat = hyperion::net::agnostic::chat(msg);
+                                world.get::<&Compose>(|compose| {
+                                    compose.unicast(&chat, *stream, SystemId(8), world).unwrap();
+                                });
+                            });
+                    });
+                }
+                Self::Get(cmd) => {
+                    let Some(entity) = ign_map.get(cmd.player.as_str()) else {
+                        caller
+                            .entity_view(world)
+                            .get::<&NetworkStreamRef>(|stream| {
+                                let msg = format!("§c{} not found", cmd.player);
+                                let chat = hyperion::net::agnostic::chat(msg);
+                                world.get::<&Compose>(|compose| {
+                                    compose.unicast(&chat, *stream, SystemId(8), world).unwrap();
+                                });
+                            });
+                        return;
+                    };
+
+                    entity.entity_view(world).get::<&Group>(|group| {
+                        caller
+                            .entity_view(world)
+                            .get::<&NetworkStreamRef>(|stream| {
+                                let msg = format!("§b{}§r's group is §e{:?}", cmd.player, group);
+                                let chat = hyperion::net::agnostic::chat(msg);
+                                world.get::<&Compose>(|compose| {
+                                    compose.unicast(&chat, *stream, SystemId(8), world).unwrap();
+                                });
+                            });
+                    });
+                }
+            }
+        });
+    }
+}
+
 impl Module for ClapCommandModule {
     fn module(world: &World) {
         world.import::<hyperion_command::CommandModule>();
+
+        world.get::<&mut CommandRegistry>(|registry| {
+            PermissionCommand::register(registry, world);
+        });
     }
 }
