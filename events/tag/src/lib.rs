@@ -17,11 +17,11 @@ use hyperion::{
 use hyperion_clap::hyperion_command::CommandRegistry;
 use module::block::BlockModule;
 
-mod component;
 mod module;
 
 use derive_more::{Deref, DerefMut};
 use hyperion::glam::IVec3;
+use hyperion_rank_tree::Team;
 use module::{attack::AttackModule, level::LevelModule, regeneration::RegenerationModule};
 
 use crate::{
@@ -57,7 +57,6 @@ impl Module for ProofOfConceptModule {
             .component::<Player>()
             .add_trait::<(flecs::With, MainBlockCount)>();
 
-        world.component::<component::team::Team>();
         world.import::<hyperion_rank_tree::RankTree>();
 
         world.component::<OreVeins>();
@@ -65,7 +64,7 @@ impl Module for ProofOfConceptModule {
 
         world
             .component::<Player>()
-            .add_trait::<(flecs::With, component::team::Team)>();
+            .add_trait::<(flecs::With, Team)>();
 
         world.import::<SpawnModule>();
         world.import::<ChatModule>();

@@ -52,7 +52,7 @@ impl MinecraftCommand for ClassCommand {
                 |(stream, uuid, inventory, position, yaw, pitch, main_block_count)| {
                     inventory.clear();
 
-                    rank.apply_inventory(team, inventory, world, **main_block_count);
+                    rank.apply_inventory(team, inventory, world, **main_block_count, 0);
 
                     let minecraft_id = caller.minecraft_id();
                     let mut bundle = DataBundle::new(compose);

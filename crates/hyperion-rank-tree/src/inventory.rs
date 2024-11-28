@@ -32,6 +32,7 @@ impl Rank {
         inventory: &mut PlayerInventory,
         world: &World,
         build_count: i8,
+        extra_levels: u8,
     ) {
         inventory.clear();
         let upgrade_not_available = ItemBuilder::new(ItemKind::GrayDye);
@@ -75,16 +76,33 @@ impl Rank {
 
         inventory.set_boots(boots);
 
-        let upgrades = ["Speed", "Health", "Armor", "Damage"];
+        let upgrades = ["Speed", "Health", "Armor", "Damage"]
+            .into_iter()
+            .map(|title| match extra_levels {
+                0 => format!("§6§l{title}"),
+                _ => format!("§6§l{title}§e §c({extra_levels})"),
+            });
+
+        let upgrade_available = [
+            ItemKind::BlueDye,   // Speed
+            ItemKind::RedDye,    // Health
+            ItemKind::YellowDye, // Armor
+            ItemKind::GreenDye,  // Damage
+        ];
 
         world.get::<&Handles>(|handles| {
-            for (i, upgrade) in upgrades.into_iter().enumerate() {
+            for ((i, upgrade), available_item) in upgrades.enumerate().zip(upgrade_available) {
                 let slot = u16::try_from(i).unwrap() + UPGRADE_START_SLOT;
-                let item = upgrade_not_available
+                let mut item = upgrade_not_available
                     .clone()
                     .name(upgrade)
-                    .handler(handles.speed)
-                    .build();
+                    .handler(handles.speed);
+
+                if extra_levels > 0 {
+                    item = item.kind(available_item);
+                }
+
+                let item = item.build();
                 inventory.set_hotbar(slot, item);
             }
         });
