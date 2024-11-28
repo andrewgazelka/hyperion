@@ -50,7 +50,7 @@ impl Module for EntityStateSyncModule {
                         const _: () = assert!(align_of::<Xp>() == align_of::<u16>());
 
                         /// Number of lanes in the SIMD vector
-                        const LANES: usize = 64; // up to AVX512
+                        const LANES: usize = 32; // up to AVX512
 
                         let compose = table.field_unchecked::<Compose>(0);
                         let compose = compose.first().unwrap();
@@ -62,12 +62,6 @@ impl Module for EntityStateSyncModule {
                         let prev_xp = prev_xp.get_mut(..).unwrap();
                         let prev_xp: &mut [u16] =
                             core::slice::from_raw_parts_mut(prev_xp.as_mut_ptr().cast(), count);
-
-                        debug_assert_eq!(
-                            prev_xp.as_ptr() as usize & 63,
-                            0,
-                            "prev_xp is not 64-byte aligned"
-                        );
 
                         let mut xp = table.field_unchecked::<Xp>(3);
                         let xp = xp.get_mut(..).unwrap();

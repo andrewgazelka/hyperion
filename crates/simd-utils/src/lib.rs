@@ -27,10 +27,29 @@ pub fn copy_and_get_diff<T, const LANES: usize>(
     LaneCount<LANES>: SupportedLaneCount,
     <Simd<T, LANES> as SimdPartialEq>::Mask: Into<Mask<<T as simd::SimdElement>::Mask, LANES>>,
 {
+    // make sure alignment needs to be no larger than 64 bytes
+    const {
+        assert!(
+            align_of::<Simd<T, LANES>>() <= 64,
+            "alignment of Simd<T, LANES> must be <= 64 bytes"
+        );
+    }
+
     assert_eq!(
         prev.len(),
         current.len(),
         "prev and current must have the same length"
+    );
+
+    // assert that both are 64-byte aligned
+    assert!(
+        prev.as_ptr().is_aligned_to(64),
+        "prev slice is not 64-byte aligned even though flecs allocator should be 64-byte aligned"
+    );
+    assert!(
+        current.as_ptr().is_aligned_to(64),
+        "current slice is not 64-byte aligned even though flecs allocator should be 64-byte \
+         aligned"
     );
 
     let (before_prev, prev_simd, after_prev) = prev.as_simd_mut::<LANES>();
