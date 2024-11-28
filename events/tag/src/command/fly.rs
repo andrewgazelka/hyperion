@@ -1,13 +1,23 @@
 use clap::Parser;
-use flecs_ecs::core::{Entity, EntityViewGet, World, WorldGet};
+use flecs_ecs::{
+    core::{Entity, EntityViewGet, World, WorldGet, flecs},
+    macros::Component,
+};
 use hyperion::{
     net::{Compose, DataBundle, NetworkStreamRef, agnostic},
+    simulation::Player,
     system_registry::SystemId,
     valence_protocol::packets::play::{
         PlayerAbilitiesS2c, player_abilities_s2c::PlayerAbilitiesFlags,
     },
 };
 use hyperion_clap::{CommandPermission, MinecraftCommand};
+
+#[derive(Component)]
+#[meta]
+pub struct Flight {
+    pub allow: bool,
+}
 
 #[derive(Parser, CommandPermission, Debug)]
 #[command(name = "fly")]
@@ -16,25 +26,44 @@ pub struct FlyCommand;
 
 impl MinecraftCommand for FlyCommand {
     fn execute(self, world: &World, caller: Entity) {
-        let chat = agnostic::chat("§aFlying enabled");
-
         world.get::<&Compose>(|compose| {
             caller
                 .entity_view(world)
-                .get::<&NetworkStreamRef>(|stream| {
-                    let packet = fly_packet();
+                .get::<(&mut Flight, &NetworkStreamRef)>(|(flight, stream)| {
+                    flight.allow = !flight.allow;
+
+                    let allow_flight = flight.allow;
+
+                    let chat_packet = if allow_flight {
+                        agnostic::chat("§aFlying enabled")
+                    } else {
+                        agnostic::chat("§cFlying disabled")
+                    };
+
+                    let packet = fly_packet(allow_flight);
 
                     let mut bundle = DataBundle::new(compose);
                     bundle.add_packet(&packet, world).unwrap();
-                    bundle.add_packet(&chat, world).unwrap();
+                    bundle.add_packet(&chat_packet, world).unwrap();
 
                     bundle.send(world, *stream, SystemId(8)).unwrap();
                 });
         });
     }
+
+    fn pre_register(world: &World) {
+        // register the component with meta meaning we can view the value in the flecs
+        // explorer UI
+        world.component::<Flight>().meta();
+
+        // whenever a Player component is added, we add the Flight component to them.
+        world
+            .component::<Player>()
+            .add_trait::<(flecs::With, Flight)>();
+    }
 }
 
-fn fly_packet() -> PlayerAbilitiesS2c {
+fn fly_packet(allow_flight: bool) -> PlayerAbilitiesS2c {
     const SPEED_METER_PER_SECOND: f32 = 10.92;
 
     // guessing.. idk what the actual conversion is
@@ -42,8 +71,8 @@ fn fly_packet() -> PlayerAbilitiesS2c {
 
     PlayerAbilitiesS2c {
         flags: PlayerAbilitiesFlags::default()
-            .with_flying(true)
-            .with_allow_flying(true),
+            .with_flying(allow_flight)
+            .with_allow_flying(allow_flight),
         flying_speed: SOME_CONVERSION,
         fov_modifier: 0.0,
     }

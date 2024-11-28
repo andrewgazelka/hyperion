@@ -26,7 +26,11 @@ use valence_protocol::{
 pub trait MinecraftCommand: Parser + CommandPermission {
     fn execute(self, world: &World, caller: Entity);
 
+    fn pre_register(_world: &World) {}
+
     fn register(registry: &mut CommandRegistry, world: &World) {
+        Self::pre_register(world);
+
         let cmd = Self::command();
         let name = cmd.get_name();
 
