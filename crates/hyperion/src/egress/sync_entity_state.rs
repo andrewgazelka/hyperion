@@ -42,7 +42,6 @@ impl Module for EntityStateSyncModule {
             .kind::<flecs::pipeline::OnStore>()
             .run(|mut table| {
                 while table.next() {
-                    let count = table.count();
                     let world = table.world();
 
                     unsafe {
@@ -57,30 +56,17 @@ impl Module for EntityStateSyncModule {
 
                         let mut prev_xp = table.field_unchecked::<Xp>(2);
                         let prev_xp = prev_xp.get_mut(..).unwrap();
-                        let prev_xp: &mut [u16] =
-                            core::slice::from_raw_parts_mut(prev_xp.as_mut_ptr().cast(), count);
-
-                        // debug_assert_eq!(
-                        //     prev_xp.as_ptr() as usize & 63,
-                        //     0,
-                        //     "prev_xp is not 64-byte aligned"
-                        // );
 
                         let mut xp = table.field_unchecked::<Xp>(3);
                         let xp = xp.get_mut(..).unwrap();
-                        let xp: &mut [u16] =
-                            core::slice::from_raw_parts_mut(xp.as_mut_ptr().cast(), count);
-
-                        // debug_assert_eq!(xp.as_ptr() as usize & 63, 0, "xp is not 64-byte aligned");
 
                         for (idx, (prev, current)) in itertools::zip_eq(prev_xp, xp).enumerate() {
-                            if prev != current {
+                            if prev == current {
                                 continue;
                             }
 
                             let net = net.get(idx).unwrap();
 
-                            let current = Xp::from(*current);
                             let visual = current.get_visual();
 
                             let packet = play::ExperienceBarUpdateS2c {
@@ -92,6 +78,8 @@ impl Module for EntityStateSyncModule {
                             compose
                                 .unicast(&packet, *net, SystemId(100), &world)
                                 .unwrap();
+
+                            *prev = *current;
                         }
                     }
                 }
