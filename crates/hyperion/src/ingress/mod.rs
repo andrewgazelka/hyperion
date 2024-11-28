@@ -25,12 +25,12 @@ use crate::{
     runtime::AsyncRuntime,
     simulation::{
         AiTargetable, ChunkPosition, Comms, ConfirmBlockSequences, EntityReaction, EntitySize,
-        Health, IgnMap, ImmuneStatus, Name, PacketState, Pitch, Player, Position, StreamLookup,
-        Uuid, Xp, Yaw,
+        IgnMap, ImmuneStatus, Name, PacketState, Pitch, Player, Position, StreamLookup, Uuid, Xp,
+        Yaw,
         animation::ActiveAnimation,
         blocks::Blocks,
         handlers::PacketSwitchQuery,
-        metadata::{EntityFlags, Pose},
+        metadata::{MetadataPrefabs, Pose},
         skin::PlayerSkin,
     },
     storage::{Events, GlobalEventHandlers, PlayerJoinServer, SkinHandler},
@@ -160,23 +160,22 @@ fn process_login(
 
     ign_map.insert(username.clone(), entity.id(), world);
 
-    entity
-        .set(Name::from(username))
-        .add::<AiTargetable>()
-        .set(ImmuneStatus::default())
-        .set(Uuid::from(uuid))
-        .set(Prev(Health::default()))
-        .add::<Health>()
-        .set(Prev(Xp::default()))
-        .add::<Xp>()
-        .set(Prev(EntityFlags::default()))
-        .set(EntityFlags::default())
-        .set(Prev(Pose::default()))
-        .add::<Pose>()
-        .add::<ChunkSendQueue>()
-        .add::<EntityReaction>()
-        .set(ChunkPosition::null())
-        .set(EntityReaction::default());
+    world.get::<&MetadataPrefabs>(|prefabs| {
+        entity
+            .is_a_id(prefabs.player_base)
+            .set(Name::from(username))
+            .add::<AiTargetable>()
+            .set(ImmuneStatus::default())
+            .set(Uuid::from(uuid))
+            .add::<Xp>()
+            .add::<Pose>()
+            .set_pair::<Prev, _>(Xp::default())
+            .set_pair::<Prev, _>(Pose::default())
+            .add::<ChunkSendQueue>()
+            .add::<EntityReaction>()
+            .set(ChunkPosition::null())
+            .set(EntityReaction::default());
+    });
 
     compose.io_buf().set_receive_broadcasts(stream_id, world);
 

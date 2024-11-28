@@ -33,7 +33,7 @@ use crate::{
     simulation::{
         Comms, Name, Position, Uuid, Yaw,
         command::{Command, ROOT_COMMAND, get_command_packet},
-        metadata::{EntityFlags, MetadataBuilder},
+        metadata::{MetadataChanges, entity::EntityFlags},
         skin::PlayerSkin,
         util::registry_codec_raw,
     },
@@ -239,7 +239,7 @@ pub fn player_join_world(
         // todo: could also be helped by denoting some packets as infallible for serialization
         let mut query_errors = Vec::new();
 
-        let mut metadata = MetadataBuilder::default();
+        let mut metadata = MetadataChanges::default();
 
         query
             .iter_stage(world)

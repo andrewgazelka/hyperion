@@ -6,7 +6,7 @@ use flecs_ecs::{
 use hyperion::{
     Prev,
     net::Compose,
-    simulation::{Health, Player},
+    simulation::{Player, metadata::living_entity::Health},
     util::TracingExt,
 };
 use tracing::info_span;
@@ -35,14 +35,14 @@ impl Module for RegenerationModule {
             "regenerate",
             world,
             &mut LastDamaged,
-            &Prev<Health>,
+            &(Prev, Health),
             &mut Health,
             &Compose($)
         )
         .multi_threaded()
         .tracing_each(
             info_span!("regenerate"),
-            |(last_damaged, Prev(prev_health), health, compose)| {
+            |(last_damaged, prev_health, health, compose)| {
                 let current_tick = compose.global().tick;
 
                 if *health < *prev_health {

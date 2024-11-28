@@ -22,6 +22,7 @@
 #![feature(duration_constructors)]
 #![feature(array_chunks)]
 #![feature(portable_simd)]
+#![feature(trivial_bounds)]
 
 pub const NUM_THREADS: usize = 8;
 pub const CHUNK_HEIGHT_SPAN: u32 = 384; // 512; // usually 384
@@ -74,10 +75,7 @@ use crate::{
     ingress::PendingRemove,
     net::{NetworkStreamRef, PacketDecoder, proxy::ReceiveState},
     runtime::Tasks,
-    simulation::{
-        EgressComm, EntitySize, IgnMap, PacketState, Player,
-        metadata::{EntityFlags, Pose},
-    },
+    simulation::{EgressComm, EntitySize, IgnMap, PacketState, Player, metadata::Pose},
     util::mojang::ApiProvider,
 };
 
@@ -88,9 +86,9 @@ pub mod net;
 pub mod simulation;
 pub mod storage;
 
-/// Tracks previous values
-#[derive(Component, Deref, DerefMut, Clone, Copy)]
-pub struct Prev<T: ComponentId>(pub T);
+/// Relationship for previous values
+#[derive(Component)]
+pub struct Prev;
 
 pub trait PacketBundle {
     fn encode_including_ids(self, w: impl Write) -> anyhow::Result<()>;
@@ -239,12 +237,10 @@ impl Hyperion {
             value: shutdown.clone(),
         });
 
+        world.component::<Prev>();
+
         world.component::<Pose>();
-        world.component::<Prev<Pose>>();
 
-        world.component::<Prev<EntityFlags>>();
-
-        world.component::<EntityFlags>();
         // todo: sadly this requires u32
         // .bit("on_fire", *EntityFlags::ON_FIRE)
         // .bit("crouching", *EntityFlags::CROUCHING)

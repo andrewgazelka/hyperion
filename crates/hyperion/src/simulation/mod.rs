@@ -9,10 +9,14 @@ use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 use skin::PlayerSkin;
 use uuid;
+use valence_protocol::VarInt;
 
 use crate::{
-    Global, Prev,
-    simulation::{command::Command, metadata::Metadata},
+    Global,
+    simulation::{
+        command::Command,
+        metadata::{Metadata, MetadataPrefabs, entity::EntityFlags},
+    },
     storage::ThreadLocalVec,
 };
 
@@ -148,10 +152,6 @@ pub enum PacketState {
     Play,
     Terminate,
 }
-
-#[derive(Component, Debug, Deref, DerefMut, PartialEq, PartialOrd, Copy, Clone)]
-#[meta]
-pub struct Health(f32);
 
 #[derive(
     Component, Debug, Deref, DerefMut, PartialEq, Eq, PartialOrd, Copy, Clone, Default, Pod,
@@ -311,73 +311,10 @@ impl Xp {
     }
 }
 
-impl Metadata for Health {
-    type Type = f32;
-
-    /// <https://wiki.vg/Entity_metadata#:~:text=Float%20(3)-,Health,-1.0>
-    const INDEX: u8 = 9;
-
-    fn to_type(self) -> Self::Type {
-        self.0
-    }
-}
-
-impl Health {
-    #[must_use]
-    pub fn is_dead(&self) -> bool {
-        self.0 <= 0.0
-    }
-
-    pub fn heal(&mut self, amount: f32) {
-        self.0 += amount;
-    }
-
-    pub fn damage(&mut self, amount: f32) {
-        self.0 -= amount;
-    }
-
-    pub fn set_for_alive(&mut self, value: f32) {
-        if self.is_dead() {
-            return;
-        }
-
-        self.0 = value;
-    }
-}
-
 pub const FULL_HEALTH: f32 = 20.0;
 
 #[derive(Component, Debug, Default, Deref, DerefMut)]
 pub struct ConfirmBlockSequences(pub Vec<i32>);
-
-// use unicode hearts
-impl Display for Health {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        #[expect(
-            clippy::cast_possible_truncation,
-            reason = "we want saturating ceiling"
-        )]
-        let normal = usize::try_from(self.0.ceil() as isize).unwrap_or(0);
-
-        let full_hearts = normal / 2;
-        for _ in 0..full_hearts {
-            write!(f, "\u{E001}")?;
-        }
-
-        if normal % 2 == 1 {
-            // half heart
-            write!(f, "\u{E002}")?;
-        }
-
-        Ok(())
-    }
-}
-
-impl Default for Health {
-    fn default() -> Self {
-        Self(20.0)
-    }
-}
 
 #[derive(Component, Debug, Eq, PartialEq, Default)]
 #[expect(missing_docs)]
@@ -590,11 +527,15 @@ pub struct SimModule;
 
 impl Module for SimModule {
     fn module(world: &World) {
-        world.component::<Health>().member::<f32>("level");
-        world.component::<Prev<Health>>();
+        component!(world, VarInt).member::<i32>("x");
+
+        world.component::<MetadataPrefabs>();
+        world.component::<EntityFlags>();
+        let prefabs = metadata::register_prefabs(world);
+
+        world.set(prefabs);
 
         world.component::<Xp>();
-        world.component::<Prev<Xp>>();
 
         world.component::<PlayerSkin>();
         world.component::<Command>();
