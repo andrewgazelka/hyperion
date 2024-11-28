@@ -25,6 +25,8 @@ use hyperion_clap::{CommandPermission, MinecraftCommand};
 use hyperion_inventory::PlayerInventory;
 use hyperion_utils::EntityExt;
 
+use crate::MainBlockCount;
+
 #[derive(Parser, CommandPermission, Debug)]
 #[command(name = "class")]
 #[command_permission(group = "Normal")]
@@ -45,11 +47,12 @@ impl MinecraftCommand for ClassCommand {
                 &Position,
                 &Yaw,
                 &Pitch,
+                &MainBlockCount,
             )>(
-                |(stream, uuid, inventory, position, yaw, pitch)| {
+                |(stream, uuid, inventory, position, yaw, pitch, main_block_count)| {
                     inventory.clear();
 
-                    rank.apply_inventory(team, inventory, world);
+                    rank.apply_inventory(team, inventory, world, **main_block_count);
 
                     let minecraft_id = caller.minecraft_id();
                     let mut bundle = DataBundle::new(compose);

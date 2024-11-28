@@ -40,8 +40,23 @@ struct OreVeins {
     ores: gxhash::HashSet<IVec3>,
 }
 
+#[derive(Component, Deref, DerefMut)]
+struct MainBlockCount(i8);
+
+impl Default for MainBlockCount {
+    fn default() -> Self {
+        Self(16)
+    }
+}
+
 impl Module for ProofOfConceptModule {
     fn module(world: &World) {
+        world.component::<MainBlockCount>();
+
+        world
+            .component::<Player>()
+            .add_trait::<(flecs::With, MainBlockCount)>();
+
         world.component::<component::team::Team>();
         world.import::<hyperion_rank_tree::RankTree>();
 

@@ -25,7 +25,13 @@ pub const UPGRADE_START_SLOT: u16 = 3;
 pub const GUI_SLOT: u16 = 8;
 
 impl Rank {
-    pub fn apply_inventory(self, team: Team, inventory: &mut PlayerInventory, world: &World) {
+    pub fn apply_inventory(
+        self,
+        team: Team,
+        inventory: &mut PlayerInventory,
+        world: &World,
+        build_count: i8,
+    ) {
         let upgrade_not_available = ItemBuilder::new(ItemKind::GrayDye);
 
         inventory.clear();
@@ -60,7 +66,7 @@ impl Rank {
         let default_pickaxe = ItemBuilder::new(ItemKind::WoodenPickaxe).build();
         inventory.set_hotbar(PICKAXE_SLOT, default_pickaxe);
 
-        let default_build_item = team.build_item().count(16).build();
+        let default_build_item = team.build_item().count(build_count).build();
         inventory.set_hotbar(BLOCK_SLOT, default_build_item);
 
         match self {

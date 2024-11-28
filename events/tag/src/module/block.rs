@@ -32,7 +32,7 @@ use hyperion_rank_tree::inventory;
 use hyperion_scheduled::Scheduled;
 use tracing::{error, info_span};
 
-use crate::OreVeins;
+use crate::{MainBlockCount, OreVeins};
 
 #[derive(Component)]
 pub struct BlockModule;
@@ -95,6 +95,7 @@ impl Module for BlockModule {
                             .send(&world)
                             .unwrap();
                     }
+
                     for destroy in pending_air.destroy_at.pop_until(&now) {
                         // Play particle effect for block destruction
                         let center_block = destroy.position.as_dvec3() + DVec3::splat(0.5);
@@ -126,12 +127,13 @@ impl Module for BlockModule {
 
                         destroy.from
                             .entity_view(world)
-                            .get::<&mut PlayerInventory>(|inventory| {
+                            .get::<(&mut PlayerInventory, &mut MainBlockCount)>(|(inventory, main_block_count)| {
                                 let stack = inventory
                                     .get_hand_slot_mut(inventory::BLOCK_SLOT)
                                     .unwrap();
 
                                 stack.count = stack.count.saturating_add(1);
+                                **main_block_count = main_block_count.saturating_add(1);
                             });
 
 
@@ -238,13 +240,18 @@ impl Module for BlockModule {
             });
 
         system!("handle_placed_blocks", world, &mut Blocks($), &mut EventQueue<event::PlaceBlock>($), &mut PendingDestruction($))
-            .each(move |(mc, event_queue, pending_air): (&mut Blocks, &mut EventQueue<event::PlaceBlock>, &mut PendingDestruction)| {
+            .each_iter(move |it, _, (mc, event_queue, pending_air): (&mut Blocks, &mut EventQueue<event::PlaceBlock>, &mut PendingDestruction)| {
+                let world = it.world();
                 let span = info_span!("handle_placed_blocks");
                 let _enter = span.enter();
                 for event in event_queue.drain() {
                     let position = event.position;
 
                     mc.set_block(position, event.block).unwrap();
+
+                    event.from.entity_view(world).get::<&mut MainBlockCount>(|main_block_count| {
+                        **main_block_count = (**main_block_count - 1).max(0);
+                    });
 
                     let destroy = DestroyValue {
                         position,
