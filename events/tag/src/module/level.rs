@@ -1,14 +1,11 @@
 use flecs_ecs::{
-    core::{SystemAPI, World, WorldProvider, flecs},
+    core::{QueryBuilderImpl, SystemAPI, World, WorldProvider, flecs, term::TermBuilderImpl},
     macros::Component,
     prelude::Module,
 };
-use hyperion::{
-    Prev,
-    simulation::{Player, Xp},
-};
+use hyperion::simulation::{Player, Xp};
 use hyperion_inventory::PlayerInventory;
-use hyperion_rank_tree::{Rank, Team};
+use hyperion_rank_tree::{Class, Team};
 
 use crate::MainBlockCount;
 
@@ -29,38 +26,22 @@ impl Module for LevelModule {
             .component::<Player>()
             .add_trait::<(flecs::With, UpgradedTo)>(); // todo: how does this even call Default? (IndraDb)
 
-        // on Xp gain,
         world
-            .system_named::<(
-                &(Prev, Xp),
-                &Xp,
-                &UpgradedTo,
-                &Rank,
-                &Team,
-                &MainBlockCount,
-                &mut PlayerInventory,
-            )>("level_up")
-            .multi_threaded()
-            .kind::<flecs::pipeline::PreStore>()
+            .observer::<flecs::OnSet, (
+                &Xp,                  //                  (0)
+                &UpgradedTo,          //                  (1)
+                &Class,               //                  (2)
+                &Team,                //                  (3)
+                &MainBlockCount,      //                  (4)
+                &mut PlayerInventory, //             (5)
+            )>()
+            .term_at(5u32)
+            .filter()
             .each_entity(
-                |entity, (prev, xp, upgraded_to, rank, team, main_block_count, inventory)| {
-                    if *xp <= *prev {
-                        // we are only considering gains
-                        return;
-                    }
-
-                    let prev_level = prev.get_visual().level;
+                |entity, (xp, upgraded_to, rank, team, main_block_count, inventory)| {
                     let new_level = xp.get_visual().level;
-
-                    if new_level <= prev_level {
-                        // only considering our level increasing
-                        return;
-                    }
-
                     let world = entity.world();
-
                     let level_diff = new_level - upgraded_to.value;
-
                     rank.apply_inventory(*team, inventory, &world, **main_block_count, level_diff);
                 },
             );

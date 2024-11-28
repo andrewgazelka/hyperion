@@ -14,8 +14,11 @@ impl MinecraftCommand for XpCommand {
     fn execute(self, world: &World, caller: Entity) {
         let Self { amount } = self;
 
-        caller.entity_view(world).get::<&mut Xp>(|xp| {
+        let caller = caller.entity_view(world);
+
+        caller.get::<&mut Xp>(|xp| {
             xp.amount = amount;
+            caller.modified::<Xp>();
         });
     }
 }

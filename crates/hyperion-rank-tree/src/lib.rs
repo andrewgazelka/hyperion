@@ -14,7 +14,7 @@ pub mod skin;
 
 #[derive(Copy, Clone, Debug, ValueEnum, PartialEq, Eq, Component, Default)]
 #[repr(C)]
-pub enum Rank {
+pub enum Class {
     /// ![Widget Example](https://i.imgur.com/pW7v0Xn.png)
     ///
     /// The stick is the starting rank.
@@ -55,7 +55,7 @@ impl Module for RankTree {
     fn module(world: &World) {
         world.import::<hyperion_item::ItemModule>();
         world.component::<Team>();
-        world.component::<Rank>();
+        world.component::<Class>();
         world.component::<Handles>();
 
         world
@@ -64,7 +64,7 @@ impl Module for RankTree {
 
         world
             .component::<Player>()
-            .add_trait::<(flecs::With, Rank)>();
+            .add_trait::<(flecs::With, Class)>();
 
         let handler: EventFn<ClickEvent> = |query, _| {
             let cursor = query.inventory.get_cursor();

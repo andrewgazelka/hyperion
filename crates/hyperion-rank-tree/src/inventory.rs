@@ -3,7 +3,7 @@ use hyperion_inventory::PlayerInventory;
 use hyperion_item::builder::{AttackDamage, BookBuilder, Color, ItemBuilder};
 use valence_protocol::ItemKind;
 
-use crate::{Handles, Rank, Team};
+use crate::{Class, Handles, Team};
 
 impl Team {
     pub const fn build_item(self) -> ItemBuilder {
@@ -25,7 +25,7 @@ pub const UPGRADE_START_SLOT: u16 = 3;
 pub const GUI_SLOT: u16 = 7;
 pub const HELP_SLOT: u16 = 8;
 
-impl Rank {
+impl Class {
     pub fn apply_inventory(
         self,
         team: Team,
