@@ -212,7 +212,7 @@ impl Module for BlockModule {
                     }
 
                     // replace with stone
-                    let Ok(previous) = blocks.set_block(event.position, BlockState::STONE) else {
+                    let Ok(..) = blocks.set_block(event.position, BlockState::STONE) else {
                         return;
                     };
 
@@ -223,13 +223,12 @@ impl Module for BlockModule {
                         **xp = xp.saturating_add(xp_amount);
 
 
-                        let previous_kind = previous.to_kind().to_item_kind();
                         // Create a message about the broken block
-                        let msg = format!("previous {previous:?} → {previous_kind:?}");
+                        let msg = format!("{xp_amount}xp");
 
                         let pkt = play::GameMessageS2c {
                             chat: msg.into_cow_text(),
-                            overlay: false,
+                            overlay: true,
                         };
 
                         // Send the message to the player
