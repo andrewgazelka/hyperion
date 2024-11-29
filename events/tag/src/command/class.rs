@@ -48,6 +48,18 @@ impl MinecraftCommand for ClassCommand {
                 &mut Team,
                 &mut Class,
             )>(|(stream, uuid, position, yaw, pitch, team, class)| {
+                if *team == team_param && *class == class_param {
+                    let chat_pkt = agnostic::chat("§cYou’re already using this class!");
+
+                    let mut bundle = DataBundle::new(compose);
+
+                    bundle.add_packet(&chat_pkt, world).unwrap();
+
+                    bundle.send(world, *stream, SystemId(0)).unwrap();
+
+                    return;
+                }
+
                 if *team != team_param {
                     *team = team_param;
                     caller.modified::<Team>();
