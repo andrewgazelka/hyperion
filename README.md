@@ -16,14 +16,14 @@ architecture is ECS-driven using [Flecs Rust](https://github.com/Indra-db/Flecs-
 
 https://github.com/user-attachments/assets/64a4a8c7-f375-4821-a1c7-0efc69c1ae0b
 
-# Event
+## Event
 
 The upcoming 10k-player PvP event draws inspiration from the class progression systems and [tag mode](https://diepio.fandom.com/wiki/Tag) from [diep.io](https://diep.io/). The gameplay mechanics also draw influence from Hypixel Pit's combat systems. Players will gain levels (XP) from mining ore and killing other players.
 
 We're partnering with [TheMisterEpic](https://www.youtube.com/channel/UCJiFgnnYpwlnadzTzhMnX_Q) to run an initial proof-of-concept event with around 2k players. Following its success, we'll host the full-scale 10,000-player PvP battle alongside numerous YouTubers and streamers.
 
 
-# Benchmarks
+## Benchmarks
 
 | Players | Tick Time (ms) | Core Usage (%) | Total CPU Utilization (%) |
 |---------|----------------|----------------|---------------------------|
@@ -59,9 +59,9 @@ be horizontally scaled to maintain performance as player count grows.
 ![image](https://github.com/user-attachments/assets/65fc6d7b-7e73-44e0-afac-cae928d443b6)
 
 
-# Architecture
+## Architecture
 
-## Overview
+### Overview
 ```mermaid
 flowchart TB
     subgraph GameServer["Game Server (↕️ Scaled)"]
@@ -128,7 +128,7 @@ flowchart TB
     class TokioIO async
 ```
 
-## Proxy
+### Proxy
 
 ```mermaid
 sequenceDiagram
@@ -162,21 +162,21 @@ sequenceDiagram
 ```
 
 
-# Running
+## Running
 
-## Debug mode
+### Debug mode
 
 ```bash
 docker compose up --build
 ```
 
-## Release mode
+### Release mode
 
 ```bash
 docker compose -f docker-compose.release.yml up --build
 ```
 
-# Features
+## Features
 
 **Language:** Rust  
 **Goal:** Game engine for massive events  
@@ -221,3 +221,7 @@ Legend:
 
 **Note:** This feature list represents core functionality. Hyperion is designed to be modular meaning you can implement
 your own mechanics and replace the core mechanics with your own.
+
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=andrewgazelka/hyperion&type=Date)](https://star-history.com/#andrewgazelka/hyperion&Date)
