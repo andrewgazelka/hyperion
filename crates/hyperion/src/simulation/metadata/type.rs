@@ -34,7 +34,7 @@
 use valence_generated::block::BlockState;
 use valence_protocol::VarInt;
 
-use crate::simulation::metadata::Pose;
+use crate::simulation::metadata::entity::Pose;
 
 pub trait MetadataType {
     const INDEX: i32;

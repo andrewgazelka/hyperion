@@ -2,13 +2,13 @@ use flecs_ecs::core::World;
 use hyperion_clap::{MinecraftCommand, hyperion_command::CommandRegistry};
 
 use crate::command::{
-    dirt::DirtCommand, fly::FlyCommand, rank::ClassCommand, replace::ReplaceCommand,
+    class::ClassCommand, dirt::DirtCommand, fly::FlyCommand, replace::ReplaceCommand,
     speed::SpeedCommand, xp::XpCommand,
 };
 
+mod class;
 mod dirt;
 mod fly;
-mod rank;
 mod replace;
 mod speed;
 mod xp;

@@ -1,8 +1,11 @@
 use flecs_ecs::core::Entity;
 use valence_protocol::{nbt, nbt::Value, ItemKind, ItemStack};
 
+mod book;
+pub use book::BookBuilder;
+
 /// A builder for creating Minecraft items with NBT data
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 #[must_use]
 pub struct ItemBuilder {
     kind: ItemKind,
@@ -112,6 +115,11 @@ impl ItemBuilder {
         self
     }
 
+    pub const fn kind(mut self, kind: ItemKind) -> Self {
+        self.kind = kind;
+        self
+    }
+
     /// Sets a custom name for the item
     pub fn name(mut self, name: impl Into<String>) -> Self {
         let nbt = self.nbt.get_or_insert_with(nbt::Compound::new);
@@ -124,7 +132,13 @@ impl ItemBuilder {
 
         // Create a new display compound with the name
         let mut new_display = display;
-        new_display.insert("Name", Value::String(name.into()));
+
+        let name = name.into();
+
+        // '{"text":"Your Custom Name"}'
+        let name = format!(r#"{{"text":"{name}"}}"#);
+
+        new_display.insert("Name", Value::String(name));
 
         // Insert the updated display compound
         nbt.insert("display", Value::Compound(new_display));

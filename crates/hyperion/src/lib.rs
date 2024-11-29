@@ -79,7 +79,7 @@ use crate::{
     ingress::PendingRemove,
     net::{NetworkStreamRef, PacketDecoder, proxy::ReceiveState},
     runtime::Tasks,
-    simulation::{EgressComm, EntitySize, IgnMap, PacketState, Player, metadata::Pose},
+    simulation::{EgressComm, EntitySize, IgnMap, PacketState, Player},
     util::mojang::ApiProvider,
 };
 
@@ -242,8 +242,6 @@ impl Hyperion {
         });
 
         world.component::<Prev>();
-
-        world.component::<Pose>();
 
         // todo: sadly this requires u32
         // .bit("on_fire", *EntityFlags::ON_FIRE)

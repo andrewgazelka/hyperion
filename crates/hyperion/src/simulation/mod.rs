@@ -556,7 +556,7 @@ impl Module for SimModule {
 
         world.set(prefabs);
 
-        world.component::<Xp>();
+        world.component::<Xp>().meta();
 
         world.component::<PlayerSkin>();
         world.component::<Command>();

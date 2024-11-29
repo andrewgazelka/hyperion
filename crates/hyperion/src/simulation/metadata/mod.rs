@@ -8,7 +8,10 @@ use heck::ToSnakeCase;
 use tracing::info_span;
 use valence_protocol::{Encode, VarInt};
 
-use crate::Prev;
+use crate::{
+    Prev,
+    simulation::metadata::entity::{EntityFlags, Pose},
+};
 
 pub mod block_display;
 pub mod display;
@@ -93,9 +96,12 @@ where
 pub fn register_prefabs(world: &World) -> MetadataPrefabs {
     world.component::<MetadataChanges>();
 
-    let entity_base = entity::register_prefab(world, None)
-        .add::<MetadataChanges>()
-        .id();
+    let mut entity_base = entity::register_prefab(world, None).add::<MetadataChanges>();
+
+    component_and_prev::<EntityFlags>(world)(&mut entity_base);
+    component_and_prev::<Pose>(world)(&mut entity_base);
+
+    let entity_base = entity_base.id();
 
     let display_base = display::register_prefab(world, Some(entity_base)).id();
     let block_display_base = block_display::register_prefab(world, Some(display_base)).id();
@@ -236,38 +242,6 @@ macro_rules! define_and_register_components {
 //         VarInt(self.ticks)
 //     }
 // }
-
-#[derive(Encode, Clone, Copy, Default, PartialEq, Eq, Debug)]
-#[repr(u8)]
-#[derive(Component)]
-pub enum Pose {
-    #[default]
-    Standing,
-    FallFlying,
-    Sleeping,
-    Swimming,
-    SpinAttack,
-    Sneaking,
-    LongJumping,
-    Dying,
-    Croaking,
-    UsingTongue,
-    Sitting,
-    Roaring,
-    Sniffing,
-    Emerging,
-    Digging,
-}
-
-impl Metadata for Pose {
-    type Type = Self;
-
-    const INDEX: u8 = 6;
-
-    fn to_type(self) -> Self::Type {
-        self
-    }
-}
 
 impl MetadataChanges {
     #[must_use]

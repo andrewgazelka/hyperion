@@ -9,7 +9,7 @@ use flecs_ecs::{
     prelude::Module,
 };
 use hyperion::{
-    BlockKind,
+    BlockKind, chat,
     net::{Compose, NetworkStreamRef, agnostic},
     simulation::{
         Xp,
@@ -32,7 +32,7 @@ use hyperion_rank_tree::inventory;
 use hyperion_scheduled::Scheduled;
 use tracing::{error, info_span};
 
-use crate::OreVeins;
+use crate::{MainBlockCount, OreVeins};
 
 #[derive(Component)]
 pub struct BlockModule;
@@ -41,6 +41,16 @@ pub struct SetLevel {
     pub position: IVec3,
     pub sequence: i32,
     pub stage: u8,
+}
+
+impl SetLevel {
+    pub fn new(position: IVec3, stage: u8) -> Self {
+        Self {
+            position,
+            sequence: fastrand::i32(..),
+            stage,
+        }
+    }
 }
 
 pub struct DestroyValue {
@@ -95,6 +105,7 @@ impl Module for BlockModule {
                             .send(&world)
                             .unwrap();
                     }
+
                     for destroy in pending_air.destroy_at.pop_until(&now) {
                         // Play particle effect for block destruction
                         let center_block = destroy.position.as_dvec3() + DVec3::splat(0.5);
@@ -126,12 +137,13 @@ impl Module for BlockModule {
 
                         destroy.from
                             .entity_view(world)
-                            .get::<&mut PlayerInventory>(|inventory| {
+                            .get::<(&mut PlayerInventory, &mut MainBlockCount)>(|(inventory, main_block_count)| {
                                 let stack = inventory
                                     .get_hand_slot_mut(inventory::BLOCK_SLOT)
                                     .unwrap();
 
                                 stack.count = stack.count.saturating_add(1);
+                                **main_block_count = main_block_count.saturating_add(1);
                             });
 
 
@@ -200,7 +212,7 @@ impl Module for BlockModule {
                     }
 
                     // replace with stone
-                    let Ok(previous) = blocks.set_block(event.position, BlockState::STONE) else {
+                    let Ok(..) = blocks.set_block(event.position, BlockState::STONE) else {
                         return;
                     };
 
@@ -211,13 +223,12 @@ impl Module for BlockModule {
                         **xp = xp.saturating_add(xp_amount);
 
 
-                        let previous_kind = previous.to_kind().to_item_kind();
                         // Create a message about the broken block
-                        let msg = format!("previous {previous:?} → {previous_kind:?}");
+                        let msg = format!("{xp_amount}xp");
 
                         let pkt = play::GameMessageS2c {
                             chat: msg.into_cow_text(),
-                            overlay: false,
+                            overlay: true,
                         };
 
                         // Send the message to the player
@@ -237,40 +248,58 @@ impl Module for BlockModule {
                 }
             });
 
-        system!("handle_placed_blocks", world, &mut Blocks($), &mut EventQueue<event::PlaceBlock>($), &mut PendingDestruction($))
-            .each(move |(mc, event_queue, pending_air): (&mut Blocks, &mut EventQueue<event::PlaceBlock>, &mut PendingDestruction)| {
+        system!("handle_placed_blocks", world, &mut Blocks($), &mut EventQueue<event::PlaceBlock>($), &mut PendingDestruction($), &Compose($))
+            .each_iter(move |it, _, (mc, event_queue, pending_air, compose): (&mut Blocks, &mut EventQueue<event::PlaceBlock>, &mut PendingDestruction, &Compose)| {
+                let world = it.world();
                 let span = info_span!("handle_placed_blocks");
                 let _enter = span.enter();
-                for event in event_queue.drain() {
-                    let position = event.position;
+                for event::PlaceBlock { position, block, from, sequence } in event_queue.drain() {
+                    if block.collision_shapes().is_empty() {
+                        mc.to_confirm.push(EntityAndSequence::new(from, sequence));
 
-                    mc.set_block(position, event.block).unwrap();
+                        from.entity_view(world).get::<(&mut PlayerInventory, &NetworkStreamRef)>(|(inventory, stream)| {
+                            // so we send update to player
+                            let _ = inventory.get_cursor_mut();
+
+                            let msg = chat!("§cYou can't place this block");
+
+                            compose.unicast(&msg, *stream, SystemId(8), &world).unwrap();
+                        });
+
+                        continue;
+                    }
+
+                    mc.set_block(position, block).unwrap();
+
+                    from.entity_view(world).get::<&mut PlayerInventory>(|inventory| {
+                        inventory.take_one_held();
+                    });
+
+                    from.entity_view(world).get::<&mut MainBlockCount>(|main_block_count| {
+                        **main_block_count = (**main_block_count - 1).max(0);
+                    });
 
                     let destroy = DestroyValue {
                         position,
-                        from: event.from,
+                        from,
                     };
+
 
                     pending_air.destroy_at.schedule(Instant::now() + TOTAL_DESTRUCTION_TIME, destroy);
 
                     {
-                        let sequence = fastrand::i32(..);
                         // Schedule destruction stages 0 through 9
                         for stage in 0_u8..=10 { // 10 represents no animation
                             let delay = TOTAL_DESTRUCTION_TIME / 10 * u32::from(stage);
                             pending_air.set_level_at.schedule(
                                 Instant::now() + delay,
-                                SetLevel {
-                                    position,
-                                    sequence,
-                                    stage,
-                                },
+                                SetLevel::new(position, stage),
                             );
                         }
                     }
                     mc.to_confirm.push(EntityAndSequence {
-                        entity: event.from,
-                        sequence: event.sequence,
+                        entity: from,
+                        sequence,
                     });
                 }
             });

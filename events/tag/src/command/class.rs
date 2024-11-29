@@ -8,45 +8,94 @@ use hyperion::{
         player_join::{PlayerListActions, PlayerListEntry, PlayerListS2c},
     },
     net::{Compose, DataBundle, NetworkStreamRef, agnostic},
+    simulation::{Pitch, Position, Yaw},
     system_registry::SystemId,
     valence_ident::ident,
     valence_protocol::{
-        GameMode, VarInt,
+        BlockPos, GameMode, VarInt,
         game_mode::OptGameMode,
-        packets::{play, play::PlayerRespawnS2c},
+        packets::{
+            play,
+            play::{PlayerRespawnS2c, player_position_look_s2c::PlayerPositionLookFlags},
+        },
         profile::Property,
     },
 };
 use hyperion_clap::{CommandPermission, MinecraftCommand};
-use hyperion_inventory::PlayerInventory;
+use hyperion_rank_tree::{Class, Team};
 use hyperion_utils::EntityExt;
 
 #[derive(Parser, CommandPermission, Debug)]
 #[command(name = "class")]
 #[command_permission(group = "Normal")]
 pub struct ClassCommand {
-    rank: hyperion_rank_tree::Rank,
-    team: hyperion_rank_tree::Team,
+    class: Class,
+    team: Team,
 }
 impl MinecraftCommand for ClassCommand {
     fn execute(self, world: &World, caller: Entity) {
-        let rank = self.rank;
-        let team = self.team;
-        let msg = format!("Setting rank to {rank:?}");
-        let chat = agnostic::chat(msg);
+        let class_param = self.class;
+        let team_param = self.team;
 
         world.get::<&Compose>(|compose| {
-            caller.entity_view(world).get::<(
+            let caller = caller.entity_view(world);
+            caller.get::<(
                 &NetworkStreamRef,
                 &hyperion::simulation::Uuid,
-                &mut PlayerInventory,
-            )>(|(stream, uuid, inventory)| {
-                inventory.clear();
+                &Position,
+                &Yaw,
+                &Pitch,
+                &mut Team,
+                &mut Class,
+            )>(|(stream, uuid, position, yaw, pitch, team, class)| {
+                if *team == team_param && *class == class_param {
+                    let chat_pkt = agnostic::chat("§cYou’re already using this class!");
 
-                rank.apply_inventory(team, inventory, world);
+                    let mut bundle = DataBundle::new(compose);
+
+                    bundle.add_packet(&chat_pkt, world).unwrap();
+
+                    bundle.send(world, *stream, SystemId(0)).unwrap();
+
+                    return;
+                }
+
+                if *team != team_param {
+                    *team = team_param;
+                    caller.modified::<Team>();
+                }
+
+                if *class != class_param {
+                    *class = class_param;
+                    caller.modified::<Class>();
+                }
 
                 let minecraft_id = caller.minecraft_id();
                 let mut bundle = DataBundle::new(compose);
+
+                let mut position_block = position.floor().as_ivec3();
+                position_block.y -= 1;
+
+                // Add bundle splitter so these are all received at once
+                bundle.add_packet(&play::BundleSplitterS2c, world).unwrap();
+
+                // Set respawn position to player's position
+                bundle
+                    .add_packet(
+                        &play::PlayerSpawnPositionS2c {
+                            position: BlockPos::new(
+                                position_block.x,
+                                position_block.y,
+                                position_block.z,
+                            ),
+                            // todo: seems to not do anything; perhaps angle is different than yaw?
+                            // regardless doesn't matter as we teleport to the correct position
+                            // later anyway
+                            angle: **yaw,
+                        },
+                        world,
+                    )
+                    .unwrap();
 
                 // Remove player info
                 bundle
@@ -68,7 +117,7 @@ impl MinecraftCommand for ClassCommand {
                     )
                     .unwrap();
 
-                let skin = rank.skin();
+                let skin = class.skin();
                 let property = Property {
                     name: "textures".to_string(),
                     value: skin.textures.clone(),
@@ -116,10 +165,28 @@ impl MinecraftCommand for ClassCommand {
                     )
                     .unwrap();
 
+                // look and teleport to more accurate position than full-block respawn position
+                bundle
+                    .add_packet(
+                        &play::PlayerPositionLookS2c {
+                            position: position.as_dvec3(),
+                            yaw: **yaw,
+                            pitch: **pitch,
+                            flags: PlayerPositionLookFlags::default(),
+                            teleport_id: VarInt(fastrand::i32(..)),
+                        },
+                        world,
+                    )
+                    .unwrap();
+
+                let msg = format!("Setting rank to {class:?} with yaw {yaw:?}");
+                let chat = agnostic::chat(msg);
                 bundle.add_packet(&chat, world).unwrap();
 
                 let show_all = show_all(minecraft_id);
                 bundle.add_packet(show_all.borrow_packet(), world).unwrap();
+
+                bundle.add_packet(&play::BundleSplitterS2c, world).unwrap();
 
                 bundle.send(world, *stream, SystemId(0)).unwrap();
             });

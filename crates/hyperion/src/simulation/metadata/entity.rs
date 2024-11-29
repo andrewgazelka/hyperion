@@ -14,7 +14,7 @@
 //! ```
 
 use flecs_ecs::prelude::*;
-use valence_protocol::VarInt;
+use valence_protocol::{Encode, VarInt};
 
 use crate::{define_and_register_components, simulation::Metadata};
 
@@ -36,3 +36,36 @@ define_and_register_components! {
 //         Self(VarInt(300))
 //     }
 // }
+
+#[derive(Encode, Clone, Copy, Default, PartialEq, Eq, Debug)]
+#[derive(Component)]
+#[meta]
+#[repr(C)] // ideally this would be u8
+pub enum Pose {
+    #[default]
+    Standing,
+    FallFlying,
+    Sleeping,
+    Swimming,
+    SpinAttack,
+    Sneaking,
+    LongJumping,
+    Dying,
+    Croaking,
+    UsingTongue,
+    Sitting,
+    Roaring,
+    Sniffing,
+    Emerging,
+    Digging,
+}
+
+impl Metadata for Pose {
+    type Type = Self;
+
+    const INDEX: u8 = 6;
+
+    fn to_type(self) -> Self::Type {
+        self
+    }
+}

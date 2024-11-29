@@ -2,7 +2,7 @@ use std::sync::LazyLock;
 
 use hyperion::simulation::skin::PlayerSkin;
 
-use crate::Rank;
+use crate::Class;
 
 macro_rules! define_skin {
     ($name:ident, $path:literal) => {
@@ -22,7 +22,7 @@ define_skin!(BUILDER_SKIN, "skin/builder.toml");
 define_skin!(MINER_SKIN, "skin/miner.toml");
 define_skin!(EXCAVATOR_SKIN, "skin/excavator.toml");
 
-impl Rank {
+impl Class {
     #[must_use]
     pub fn skin(&self) -> &'static PlayerSkin {
         match self {

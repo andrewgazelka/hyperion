@@ -33,24 +33,6 @@ pub enum Group {
     Admin,
 }
 
-#[derive(clap::Parser, Debug)]
-pub struct SetCommand {
-    player: String,
-    group: Group,
-}
-
-#[derive(clap::Parser, Debug)]
-pub struct GetCommand {
-    player: String,
-}
-
-#[derive(clap::Parser, Debug)]
-#[command(name = "perms")]
-pub enum PermissionCommand {
-    Set(SetCommand),
-    Get(GetCommand),
-}
-
 // todo:
 
 impl Module for PermissionModule {

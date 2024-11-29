@@ -85,6 +85,9 @@ impl Module for EntityStateSyncModule {
                                     total_xp: VarInt::default(),
                                 };
 
+                                let entity = table.entity(idx);
+                                entity.modified::<Xp>();
+
                                 compose
                                     .unicast(&packet, *net, SystemId(100), &world)
                                     .unwrap();

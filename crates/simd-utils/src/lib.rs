@@ -14,7 +14,7 @@ use crate::one_bit_positions::OneBitPositionsExt;
 mod one_bit_positions;
 
 /// [`prev`] and [`current`] must have the same length. Further optimizations may be possible if
-/// [`prev`] and [`current`] have the same align offset when being aligned to [`std::simd::Simd::<T, Lanes>`]
+/// [`prev`] and [`current`] have the same align offset when being aligned to [`std::simd::Simd::<T, { LANES }>`]
 /// as defined by [`pointer::align_offset`]
 pub fn copy_and_get_diff<T, const LANES: usize>(
     prev: &mut [T],
@@ -39,17 +39,6 @@ pub fn copy_and_get_diff<T, const LANES: usize>(
         prev.len(),
         current.len(),
         "prev and current must have the same length"
-    );
-
-    // assert that both are 64-byte aligned
-    assert!(
-        prev.as_ptr().is_aligned_to(64),
-        "prev slice is not 64-byte aligned even though flecs allocator should be 64-byte aligned"
-    );
-    assert!(
-        current.as_ptr().is_aligned_to(64),
-        "current slice is not 64-byte aligned even though flecs allocator should be 64-byte \
-         aligned"
     );
 
     let (before_prev, prev_simd, after_prev) = prev.as_simd_mut::<LANES>();

@@ -30,7 +30,7 @@ use crate::{
         animation::ActiveAnimation,
         blocks::Blocks,
         handlers::PacketSwitchQuery,
-        metadata::{MetadataPrefabs, Pose},
+        metadata::{MetadataPrefabs, entity::Pose},
         skin::PlayerSkin,
     },
     storage::{Events, GlobalEventHandlers, PlayerJoinServer, SkinHandler},
@@ -168,9 +168,7 @@ fn process_login(
             .set(ImmuneStatus::default())
             .set(Uuid::from(uuid))
             .add::<Xp>()
-            .add::<Pose>()
             .set_pair::<Prev, _>(Xp::default())
-            .set_pair::<Prev, _>(Pose::default())
             .add::<ChunkSendQueue>()
             .add::<EntityReaction>()
             .set(ChunkPosition::null())
@@ -271,17 +269,6 @@ impl Module for IngressModule {
     #[expect(clippy::too_many_lines)]
     fn module(world: &World) {
         system!(
-            "update_ign_map",
-            world,
-            &mut IgnMap($),
-        )
-        .each_iter(|_, _, ign_map| {
-            let span = info_span!("update_ign_map");
-            let _enter = span.enter();
-            ign_map.update();
-        });
-
-        system!(
             "shutdown",
             world,
             &Shutdown($),
@@ -293,6 +280,18 @@ impl Module for IngressModule {
                 info!("shutting down");
                 world.quit();
             }
+        });
+
+        system!(
+            "update_ign_map",
+            world,
+            &mut IgnMap($),
+        )
+        .kind::<flecs::pipeline::OnLoad>()
+        .each_iter(|_, _, ign_map| {
+            let span = info_span!("update_ign_map");
+            let _enter = span.enter();
+            ign_map.update();
         });
 
         system!(

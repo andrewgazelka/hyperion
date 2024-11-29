@@ -40,7 +40,7 @@ pub struct AttackEntity {
     /// The entity that is performing the attack.
     pub origin: Entity,
     pub target: Entity,
-    /// The damage dealt by the attack. This corresponds to the same unit as [`crate::simulation::Health`].
+    /// The damage dealt by the attack. This corresponds to the same unit as [`crate::simulation::metadata::living_entity::Health`].
     pub damage: f32,
 }
 

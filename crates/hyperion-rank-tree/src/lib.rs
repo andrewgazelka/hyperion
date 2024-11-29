@@ -1,21 +1,24 @@
 use clap::ValueEnum;
 use flecs_ecs::{
-    core::{Entity, IdOperations, World},
+    core::{flecs, Entity, IdOperations, World},
     macros::Component,
     prelude::Module,
 };
-use hyperion::storage::EventFn;
-use valence_protocol::Hand;
+use hyperion::{
+    simulation::Player,
+    storage::{ClickEvent, EventFn},
+};
 
 pub mod inventory;
 pub mod skin;
 
-#[derive(Copy, Clone, Debug, ValueEnum, PartialEq, Eq, Component)]
+#[derive(Copy, Clone, Debug, ValueEnum, PartialEq, Eq, Component, Default)]
 #[repr(C)]
-pub enum Rank {
+pub enum Class {
     /// ![Widget Example](https://i.imgur.com/pW7v0Xn.png)
     ///
     /// The stick is the starting rank.
+    #[default]
     Stick, // -> [Pickaxe | Sword | Bow ]
 
     Archer,
@@ -29,8 +32,11 @@ pub enum Rank {
     Builder,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum, PartialOrd, Ord)]
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, ValueEnum, PartialOrd, Ord, Component, Default
+)]
 pub enum Team {
+    #[default]
     Blue,
     Green,
     Red,
@@ -48,10 +54,19 @@ pub struct Handles {
 impl Module for RankTree {
     fn module(world: &World) {
         world.import::<hyperion_item::ItemModule>();
-        world.component::<Rank>();
+        world.component::<Team>();
+        world.component::<Class>();
         world.component::<Handles>();
 
-        let handler: EventFn<Hand> = |query, _| {
+        world
+            .component::<Player>()
+            .add_trait::<(flecs::With, Team)>();
+
+        world
+            .component::<Player>()
+            .add_trait::<(flecs::With, Class)>();
+
+        let handler: EventFn<ClickEvent> = |query, _| {
             let cursor = query.inventory.get_cursor();
             println!("clicked {cursor:?}");
         };
