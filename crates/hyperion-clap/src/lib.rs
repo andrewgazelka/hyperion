@@ -37,12 +37,11 @@ pub trait MinecraftCommand: Parser + CommandPermission {
         let has_permissions = |world: &World, caller: Entity| {
             caller
                 .entity_view(world)
-                .get::<&Group>(|group| {
-                    return Self::has_required_permission(*group);
-                })
+                .get::<&Group>(|group| Self::has_required_permission(*group))
         };
 
-        let node_to_register = hyperion::simulation::command::Command::literal(name, has_permissions);
+        let node_to_register =
+            hyperion::simulation::command::Command::literal(name, has_permissions);
 
         let mut on = world
             .entity()

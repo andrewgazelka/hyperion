@@ -12,7 +12,7 @@ use valence_protocol::{
 #[derive(Component)]
 pub struct Command {
     data: NodeData,
-    has_permission: fn(world: &World, caller: Entity) -> bool
+    has_permission: fn(world: &World, caller: Entity) -> bool,
 }
 
 pub(crate) static ROOT_COMMAND: once_cell::sync::OnceCell<Entity> =
@@ -25,11 +25,14 @@ pub fn get_root_command_entity() -> Entity {
 impl Command {
     pub const ROOT: Self = Self {
         data: NodeData::Root,
-        has_permission: |_:_, _:_| { true },
+        has_permission: |_: _, _: _| true,
     };
 
     #[must_use]
-    pub fn literal(name: impl Into<String>, has_permission: fn(world: &World, caller: Entity) -> bool) -> Self {
+    pub fn literal(
+        name: impl Into<String>,
+        has_permission: fn(world: &World, caller: Entity) -> bool,
+    ) -> Self {
         let name = name.into();
         Self {
             data: NodeData::Literal { name },
@@ -46,7 +49,7 @@ impl Command {
                 parser,
                 suggestion: Some(Suggestion::AskServer),
             },
-            has_permission: |_:_, _:_| { true },
+            has_permission: |_: _, _: _| true,
         }
     }
 }
@@ -94,7 +97,11 @@ pub fn get_command_packet(
 
         world.entity_from_id(entity).each_child(|child| {
             child.get::<&Command>(|command| {
-                if let Some(player) = player_opt && !(command.has_permission)(world, player) { return; };
+                if let Some(player) = player_opt
+                    && !(command.has_permission)(world, player)
+                {
+                    return;
+                };
 
                 let ptr = commands.len();
 
@@ -154,7 +161,7 @@ mod tests {
                 data: NodeData::Literal {
                     name: "test".to_string(),
                 },
-                has_permission: |_:_, _:_| { true },
+                has_permission: |_: _, _: _| true,
             })
             .child_of_id(root);
 
@@ -182,7 +189,7 @@ mod tests {
                 data: NodeData::Literal {
                     name: "parent".to_string(),
                 },
-                has_permission: |_:_, _:_| { true },
+                has_permission: |_: _, _: _| true,
             })
             .child_of_id(root);
 
@@ -192,7 +199,7 @@ mod tests {
                 data: NodeData::Literal {
                     name: "child".to_string(),
                 },
-                has_permission: |_:_, _:_| { true },
+                has_permission: |_: _, _: _| true,
             })
             .child_of_id(parent);
 
@@ -225,7 +232,7 @@ mod tests {
                     data: NodeData::Literal {
                         name: format!("command_{i}"),
                     },
-                    has_permission: |_:_, _:_| { true },
+                    has_permission: |_: _, _: _| true,
                 })
                 .child_of_id(parent);
             parent = child;

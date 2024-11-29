@@ -28,11 +28,14 @@ impl CommandRegistry {
     }
 
     pub fn get_permitted(&self, world: &World, caller: Entity) -> impl Iterator<Item = &str> {
-        self
-            .commands
+        self.commands
             .iter()
             .filter_map(move |(cmd_name, handler)| {
-                if (handler.has_permissions)(world, caller) { Some (cmd_name) } else { None }
+                if (handler.has_permissions)(world, caller) {
+                    Some(cmd_name)
+                } else {
+                    None
+                }
             })
             .map(String::as_str)
     }
