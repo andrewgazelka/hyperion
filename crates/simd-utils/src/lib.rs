@@ -13,9 +13,36 @@ use crate::one_bit_positions::OneBitPositionsExt;
 
 mod one_bit_positions;
 
-/// [`prev`] and [`current`] must have the same length. Further optimizations may be possible if
-/// [`prev`] and [`current`] have the same align offset when being aligned to [`std::simd::Simd::<T, { LANES }>`]
-/// as defined by [`pointer::align_offset`]
+/// Efficiently compares two slices and copies `current` into `prev`, calling `on_diff` for each difference found.
+///
+/// This function uses SIMD instructions when possible to accelerate the comparison and copy operations.
+/// It handles two main cases:
+///
+/// 1. When `prev` and `current` have the same alignment offset:
+///    - Uses aligned SIMD loads/stores for better performance
+///    - Processes data in three parts:
+///      a. Scalar comparison of unaligned prefix
+///      b. SIMD comparison of aligned middle section
+///      c. Scalar comparison of unaligned suffix
+///
+/// 2. When `prev` and `current` have different alignment offsets:
+///    - Uses unaligned SIMD loads/stores
+///    - Processes data in chunks:
+///      a. SIMD comparison of main chunks with unaligned access
+///      b. Scalar comparison of remaining elements
+///
+/// # Arguments
+/// * `prev` - Mutable slice that will be updated with values from `current`
+/// * `current` - Slice containing new values to compare against
+/// * `on_diff` - Callback function called for each difference found with:
+///   - Index of the difference
+///   - Reference to old value from `prev`
+///   - Reference to new value from `current`
+///
+/// # Requirements
+/// - `prev` and `current` must have the same length
+/// - Type `T` must support SIMD operations and comparisons
+/// - SIMD alignment must not exceed 64 bytes
 pub fn copy_and_get_diff<T, const LANES: usize>(
     prev: &mut [T],
     current: &[T],
@@ -27,7 +54,7 @@ pub fn copy_and_get_diff<T, const LANES: usize>(
     LaneCount<LANES>: SupportedLaneCount,
     <Simd<T, LANES> as SimdPartialEq>::Mask: Into<Mask<<T as simd::SimdElement>::Mask, LANES>>,
 {
-    // make sure alignment needs to be no larger than 64 bytes
+    // Verify SIMD alignment requirement at compile time
     const {
         assert!(
             align_of::<Simd<T, LANES>>() <= 64,
@@ -41,49 +68,49 @@ pub fn copy_and_get_diff<T, const LANES: usize>(
         "prev and current must have the same length"
     );
 
+    // Split slices into SIMD-aligned sections
     let (before_prev, prev_simd, after_prev) = prev.as_simd_mut::<LANES>();
     let (before_current, current_simd, after_current) = current.as_simd::<LANES>();
 
     if before_prev.len() == before_current.len() {
-        // Take advantage of the fact that [`prev`] and [`current`] have the same align offset to
-        // avoid unaligned reads for the SIMD vectors
+        // CASE 1: Same alignment offset - can use aligned SIMD operations
         debug_assert_eq!(
             prev_simd.len(),
             current_simd.len(),
             "prev_simd and current_simd must have the same length"
         );
-
         debug_assert_eq!(
             after_prev.len(),
             after_current.len(),
             "after_prev and after_current must have the same length"
         );
 
+        // Handle unaligned prefix
         copy_and_get_diff_scalar(0, before_prev, before_current, &mut on_diff);
 
+        // Process aligned middle section using SIMD
         let mut idx = before_prev.len();
         for (prev, current) in zip(prev_simd, current_simd) {
             let not_equal = prev.simd_ne(*current);
             let not_equal = not_equal.into();
-
             let bitmask = Mask::to_bitmask(not_equal);
 
+            // Process each difference found in the SIMD lane
             for local_idx in bitmask.one_positions() {
                 let prev = prev[local_idx];
                 let current = current[local_idx];
-
                 debug_assert_ne!(prev, current);
-
                 on_diff(idx + local_idx, &prev, &current);
             }
 
             idx += LANES;
-
             current.copy_to_slice(prev.as_mut());
         }
 
+        // Handle unaligned suffix
         copy_and_get_diff_scalar(idx, after_prev, after_current, &mut on_diff);
     } else {
+        // CASE 2: Different alignment offsets - use unaligned SIMD operations
         let (prev_chunks, prev_remaining) = prev.as_chunks_mut::<LANES>();
         let (current_chunks, current_remaining) = current.as_chunks::<LANES>();
 
@@ -92,7 +119,6 @@ pub fn copy_and_get_diff<T, const LANES: usize>(
             current_chunks.len(),
             "prev_chunks and current_chunks must have the same length"
         );
-
         debug_assert_eq!(
             prev_remaining.len(),
             current_remaining.len(),
@@ -100,35 +126,33 @@ pub fn copy_and_get_diff<T, const LANES: usize>(
         );
 
         let mut idx = 0;
-
+        // Process main chunks with unaligned SIMD operations
         for (prev, current) in zip(prev_chunks, current_chunks) {
-            // These will cause unaligned reads from each chunk to a simd vector
             let prev_simd = Simd::from_array(*prev);
             let current_simd = Simd::from_array(*current);
 
             let not_equal = prev_simd.simd_ne(current_simd);
             let not_equal = not_equal.into();
-
             let bitmask = Mask::to_bitmask(not_equal);
 
             for local_idx in bitmask.one_positions() {
                 let prev = prev[local_idx];
                 let current = current[local_idx];
-
                 debug_assert_ne!(prev, current);
-
                 on_diff(idx + local_idx, &prev, &current);
             }
 
             idx += LANES;
-
             current_simd.copy_to_slice(prev);
         }
 
+        // Handle remaining elements
         copy_and_get_diff_scalar(idx, prev_remaining, current_remaining, &mut on_diff);
     }
 }
 
+/// Scalar (non-SIMD) implementation of [`copy_and_get_diff`] for handling small sections
+/// or remainders that can't be processed with SIMD.
 fn copy_and_get_diff_scalar<T>(
     start_idx: usize,
     prev: &mut [T],
@@ -138,7 +162,6 @@ fn copy_and_get_diff_scalar<T>(
     T: Copy + PartialEq + std::fmt::Debug,
 {
     let mut idx = start_idx;
-
     debug_assert_eq!(prev.len(), current.len());
 
     for (prev, current) in zip(prev, current) {
@@ -146,7 +169,6 @@ fn copy_and_get_diff_scalar<T>(
             debug_assert_ne!(prev, current);
             on_diff(idx, prev, current);
         }
-
         *prev = *current;
         idx += 1;
     }
