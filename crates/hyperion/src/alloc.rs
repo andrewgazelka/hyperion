@@ -39,9 +39,7 @@ unsafe extern "C-unwind" fn aligned_malloc(size: ecs_size_t) -> *mut core::ffi::
     // Store the size in our global map
     get_size_map().pin().insert(ptr as usize, size);
 
-    let ptr = ptr.cast::<core::ffi::c_void>();
-    check_alignment(ptr);
-    ptr
+    ptr.cast::<core::ffi::c_void>()
 }
 
 unsafe extern "C-unwind" fn aligned_calloc(size: ecs_size_t) -> *mut core::ffi::c_void {
@@ -53,8 +51,6 @@ unsafe extern "C-unwind" fn aligned_calloc(size: ecs_size_t) -> *mut core::ffi::
             std::ptr::write_bytes(ptr, 0, size as usize);
         };
     }
-
-    check_alignment(ptr);
 
     ptr
 }
@@ -87,18 +83,7 @@ unsafe extern "C-unwind" fn aligned_realloc(
     size_map.remove(&(ptr as usize));
     size_map.insert(new_ptr as usize, new_size);
 
-    let new_ptr = new_ptr.cast::<core::ffi::c_void>();
-    check_alignment(new_ptr);
-    new_ptr
-}
-
-fn check_alignment(ptr: *mut core::ffi::c_void) {
-    #[cfg(debug_assertions)]
-    {
-        if !ptr.is_aligned_to(ALIGNMENT) {
-            println!("pointer is not aligned to {}", ALIGNMENT);
-        }
-    }
+    new_ptr.cast::<core::ffi::c_void>()
 }
 
 unsafe extern "C-unwind" fn aligned_free(ptr: *mut core::ffi::c_void) {
