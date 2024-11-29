@@ -42,7 +42,7 @@ pub fn derive_command_permission(input: TokenStream) -> TokenStream {
     // Generate the trait implementation
     let expanded = quote! {
         impl CommandPermission for #name {
-            fn has_required_permission(&self, user_group: ::hyperion_permission::Group) -> bool {
+            fn has_required_permission(user_group: ::hyperion_permission::Group) -> bool {
                 const REQUIRED_GROUP: ::hyperion_permission::Group = ::hyperion_permission::Group::#group_ident;
 
                 if REQUIRED_GROUP == ::hyperion_permission::Group::Banned {
