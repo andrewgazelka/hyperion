@@ -22,7 +22,7 @@ pub const MAIN_SLOT: u16 = 0;
 pub const PICKAXE_SLOT: u16 = 1;
 pub const BLOCK_SLOT: u16 = 2;
 pub const UPGRADE_START_SLOT: u16 = 3;
-pub const GUI_SLOT: u16 = 7;
+pub const UPGRADE_CLASS_SLOT: u16 = 7;
 pub const HELP_SLOT: u16 = 8;
 
 impl Class {
@@ -84,10 +84,10 @@ impl Class {
             });
 
         let upgrade_available = [
-            ItemKind::BlueDye,   // Speed
-            ItemKind::RedDye,    // Health
-            ItemKind::YellowDye, // Armor
-            ItemKind::GreenDye,  // Damage
+            ItemKind::Feather, // Speed
+            ItemKind::Apple,   // Health
+            ItemKind::Shield,  // Armor
+            ItemKind::Cactus,  // Damage
         ];
 
         world.get::<&Handles>(|handles| {
@@ -197,10 +197,13 @@ impl Class {
             }
         }
 
-        let upgrade_item = ItemBuilder::new(ItemKind::FireworkStar)
-            .name("Upgrades")
-            .build();
+        let mut upgrade_item = ItemBuilder::new(ItemKind::FireworkStar).name("Upgrades");
 
-        inventory.set_hotbar(GUI_SLOT, upgrade_item);
+        if extra_levels > 0 {
+            upgrade_item = upgrade_item.kind(ItemKind::NetherStar).glowing();
+        }
+
+        let upgrade_item = upgrade_item.build();
+        inventory.set_hotbar(UPGRADE_CLASS_SLOT, upgrade_item);
     }
 }
