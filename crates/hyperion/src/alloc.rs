@@ -31,6 +31,7 @@ unsafe extern "C-unwind" fn aligned_malloc(size: ecs_size_t) -> *mut core::ffi::
     };
 
     let ptr = unsafe { alloc(layout) };
+
     if ptr.is_null() {
         return null_mut();
     }
@@ -50,6 +51,7 @@ unsafe extern "C-unwind" fn aligned_calloc(size: ecs_size_t) -> *mut core::ffi::
             std::ptr::write_bytes(ptr, 0, size as usize);
         };
     }
+
     ptr
 }
 
