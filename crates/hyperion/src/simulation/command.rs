@@ -12,6 +12,7 @@ use valence_protocol::{
 #[derive(Component)]
 pub struct Command {
     data: NodeData,
+    has_permission: fn(world: &World, caller: Entity) -> bool,
 }
 
 pub(crate) static ROOT_COMMAND: once_cell::sync::OnceCell<Entity> =
@@ -24,13 +25,18 @@ pub fn get_root_command_entity() -> Entity {
 impl Command {
     pub const ROOT: Self = Self {
         data: NodeData::Root,
+        has_permission: |_: _, _: _| true,
     };
 
     #[must_use]
-    pub fn literal(name: impl Into<String>) -> Self {
+    pub fn literal(
+        name: impl Into<String>,
+        has_permission: fn(world: &World, caller: Entity) -> bool,
+    ) -> Self {
         let name = name.into();
         Self {
             data: NodeData::Literal { name },
+            has_permission,
         }
     }
 
@@ -43,6 +49,7 @@ impl Command {
                 parser,
                 suggestion: Some(Suggestion::AskServer),
             },
+            has_permission: |_: _, _: _| true,
         }
     }
 }
@@ -54,6 +61,7 @@ const MAX_DEPTH: usize = 64;
 pub fn get_command_packet(
     world: &World,
     root: Entity,
+    player_opt: Option<Entity>,
 ) -> valence_protocol::packets::play::CommandTreeS2c {
     struct StackElement {
         depth: usize,
@@ -89,6 +97,12 @@ pub fn get_command_packet(
 
         world.entity_from_id(entity).each_child(|child| {
             child.get::<&Command>(|command| {
+                if let Some(player) = player_opt
+                    && !(command.has_permission)(world, player)
+                {
+                    return;
+                };
+
                 let ptr = commands.len();
 
                 commands.push(Node {
@@ -127,7 +141,7 @@ mod tests {
         world.component::<Command>();
         let root = world.entity();
 
-        let packet = get_command_packet(&world, root.id());
+        let packet = get_command_packet(&world, root.id(), None);
 
         assert_eq!(packet.commands.len(), 1);
         assert_eq!(packet.root_index, VarInt(0));
@@ -147,16 +161,17 @@ mod tests {
                 data: NodeData::Literal {
                     name: "test".to_string(),
                 },
+                has_permission: |_: _, _: _| true,
             })
             .child_of_id(root);
 
-        let packet = get_command_packet(&world, root.id());
+        let packet = get_command_packet(&world, root.id(), None);
 
         assert_eq!(packet.commands.len(), 2);
         assert_eq!(packet.root_index, VarInt(0));
         assert_eq!(packet.commands[0].children, vec![VarInt(1)]);
         assert_eq!(packet.commands[1].data, NodeData::Literal {
-            name: "test".to_string()
+            name: "test".to_string(),
         });
     }
 
@@ -174,6 +189,7 @@ mod tests {
                 data: NodeData::Literal {
                     name: "parent".to_string(),
                 },
+                has_permission: |_: _, _: _| true,
             })
             .child_of_id(root);
 
@@ -183,20 +199,21 @@ mod tests {
                 data: NodeData::Literal {
                     name: "child".to_string(),
                 },
+                has_permission: |_: _, _: _| true,
             })
             .child_of_id(parent);
 
-        let packet = get_command_packet(&world, root.id());
+        let packet = get_command_packet(&world, root.id(), None);
 
         assert_eq!(packet.commands.len(), 3);
         assert_eq!(packet.root_index, VarInt(0));
         assert_eq!(packet.commands[0].children, vec![VarInt(1)]);
         assert_eq!(packet.commands[1].children, vec![VarInt(2)]);
         assert_eq!(packet.commands[1].data, NodeData::Literal {
-            name: "parent".to_string()
+            name: "parent".to_string(),
         });
         assert_eq!(packet.commands[2].data, NodeData::Literal {
-            name: "child".to_string()
+            name: "child".to_string(),
         });
     }
 
@@ -215,12 +232,13 @@ mod tests {
                     data: NodeData::Literal {
                         name: format!("command_{i}"),
                     },
+                    has_permission: |_: _, _: _| true,
                 })
                 .child_of_id(parent);
             parent = child;
         }
 
-        let packet = get_command_packet(&world, root.id());
+        let packet = get_command_packet(&world, root.id(), None);
 
         assert_eq!(packet.commands.len(), MAX_DEPTH + 1);
     }

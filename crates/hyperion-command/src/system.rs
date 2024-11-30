@@ -42,7 +42,7 @@ impl Module for CommandSystemModule {
                     let mut msg = String::new();
                     write!(&mut msg, "§cAvailable commands: §r[").unwrap();
 
-                    for w in registry.all().intersperse(", ") {
+                    for w in registry.get_permitted(&world, by).intersperse(", ") {
                         write!(&mut msg, "{w}").unwrap();
                     }
 

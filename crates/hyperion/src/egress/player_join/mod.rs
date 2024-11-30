@@ -384,7 +384,7 @@ pub fn player_join_world(
         )
         .context("failed to send team packet")?;
 
-    let command_packet = get_command_packet(world, root_command);
+    let command_packet = get_command_packet(world, root_command, Some(**entity));
 
     bundle.add_packet(&command_packet, world)?;
 

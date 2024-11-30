@@ -34,7 +34,14 @@ pub trait MinecraftCommand: Parser + CommandPermission {
         let cmd = Self::command();
         let name = cmd.get_name();
 
-        let node_to_register = hyperion::simulation::command::Command::literal(name);
+        let has_permissions = |world: &World, caller: Entity| {
+            caller
+                .entity_view(world)
+                .get::<&Group>(|group| Self::has_required_permission(*group))
+        };
+
+        let node_to_register =
+            hyperion::simulation::command::Command::literal(name, has_permissions);
 
         let mut on = world
             .entity()
@@ -62,7 +69,7 @@ pub trait MinecraftCommand: Parser + CommandPermission {
                         caller
                             .entity_view(world)
                             .get::<(&NetworkStreamRef, &Group)>(|(stream, group)| {
-                                if elem.has_required_permission(*group) {
+                                if Self::has_required_permission(*group) {
                                     true
                                 } else {
                                     let chat = agnostic::chat(
@@ -226,6 +233,7 @@ pub trait MinecraftCommand: Parser + CommandPermission {
         let handler = CommandHandler {
             on_execute,
             on_tab_complete,
+            has_permissions,
         };
 
         tracing::info!("registering command {name}");
@@ -254,7 +262,7 @@ impl MinecraftArg for ClapArg {
 }
 
 pub trait CommandPermission {
-    fn has_required_permission(&self, user_group: hyperion_permission::Group) -> bool;
+    fn has_required_permission(user_group: hyperion_permission::Group) -> bool;
 }
 
 #[derive(Clone, Debug, ValueEnum, PartialEq, Eq)]
@@ -307,7 +315,11 @@ impl MinecraftCommand for PermissionCommand {
                     };
 
                     entity.entity_view(world).get::<&mut Group>(|group| {
-                        *group = cmd.group;
+                        if *group != cmd.group {
+                            *group = cmd.group;
+                            entity.entity_view(world).modified::<Group>();
+                        }
+
                         caller
                             .entity_view(world)
                             .get::<&NetworkStreamRef>(|stream| {

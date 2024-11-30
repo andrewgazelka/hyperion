@@ -9,6 +9,7 @@ use indexmap::IndexMap;
 pub struct CommandHandler {
     pub on_execute: fn(input: &str, world: &World, caller: Entity),
     pub on_tab_complete: EventFn<CommandCompletionRequest<'static>>,
+    pub has_permissions: fn(world: &World, caller: Entity) -> bool,
 }
 
 #[derive(Component)]
@@ -24,6 +25,21 @@ impl CommandRegistry {
 
     pub fn all(&self) -> impl Iterator<Item = &str> {
         self.commands.keys().map(String::as_str)
+    }
+
+    /// Returns an iterator over the names of commands (`&str`) that the given entity (`caller`)
+    /// has permission to execute.
+    pub fn get_permitted(&self, world: &World, caller: Entity) -> impl Iterator<Item = &str> {
+        self.commands
+            .iter()
+            .filter_map(move |(cmd_name, handler)| {
+                if (handler.has_permissions)(world, caller) {
+                    Some(cmd_name)
+                } else {
+                    None
+                }
+            })
+            .map(String::as_str)
     }
 }
 
