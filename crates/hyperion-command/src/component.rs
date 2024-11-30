@@ -27,6 +27,8 @@ impl CommandRegistry {
         self.commands.keys().map(String::as_str)
     }
 
+    /// Returns an iterator over the names of commands (`&str`) that the given entity (`caller`)
+    /// has permission to execute.
     pub fn get_permitted(&self, world: &World, caller: Entity) -> impl Iterator<Item = &str> {
         self.commands
             .iter()
