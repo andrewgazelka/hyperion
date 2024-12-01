@@ -1,5 +1,3 @@
-cargo-features = ["edition2024"]
-
 [dependencies]
 quote.workspace = true
 syn.workspace = true

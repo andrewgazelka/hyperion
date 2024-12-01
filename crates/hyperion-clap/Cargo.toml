@@ -1,5 +1,3 @@
-cargo-features = ["edition2024"]
-
 [package]
 name = "hyperion-clap"
 version = "0.1.0"

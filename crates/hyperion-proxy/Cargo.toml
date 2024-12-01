@@ -1,5 +1,3 @@
-cargo-features = ["edition2024"]
-
 [dependencies]
 colored = {workspace = true}
 kanal = {workspace = true}

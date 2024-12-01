@@ -1,5 +1,3 @@
-cargo-features = ["edition2024"]
-
 [dependencies]
 hyperion-crafting = {workspace = true}
 roaring = {workspace = true}
