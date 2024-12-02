@@ -3,7 +3,7 @@ use hyperion_clap::{MinecraftCommand, hyperion_command::CommandRegistry};
 
 use crate::command::{
     class::ClassCommand, fly::FlyCommand, raycast::RaycastCommand, replace::ReplaceCommand,
-    speed::SpeedCommand, xp::XpCommand,
+    speed::SpeedCommand, xp::XpCommand, zombie::ZombieCommand,
 };
 
 mod class;
@@ -13,11 +13,15 @@ mod replace;
 mod speed;
 mod xp;
 
+// spawn zombie
+mod zombie;
+
 pub fn register(registry: &mut CommandRegistry, world: &World) {
-    SpeedCommand::register(registry, world);
-    FlyCommand::register(registry, world);
     ClassCommand::register(registry, world);
-    XpCommand::register(registry, world);
-    ReplaceCommand::register(registry, world);
+    FlyCommand::register(registry, world);
     RaycastCommand::register(registry, world);
+    ReplaceCommand::register(registry, world);
+    SpeedCommand::register(registry, world);
+    XpCommand::register(registry, world);
+    ZombieCommand::register(registry, world);
 }

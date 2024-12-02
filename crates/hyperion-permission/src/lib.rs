@@ -8,7 +8,7 @@ use flecs_ecs::{
 };
 use hyperion::{
     net::{Compose, NetworkStreamRef},
-    simulation::{Uuid, command::get_command_packet},
+    simulation::{Player, Uuid, command::get_command_packet},
     storage::LocalDb,
     system_registry::SystemId,
 };
@@ -52,18 +52,18 @@ impl Module for PermissionModule {
             world.set(storage);
         });
 
-        observer!(world, flecs::OnSet, &Uuid, &storage::PermissionStorage($)).each_entity(
-            |entity, (uuid, permissions)| {
+        observer!(world, flecs::OnSet, &Uuid, &storage::PermissionStorage($))
+            .with::<Player>()
+            .each_entity(|entity, (uuid, permissions)| {
                 let group = permissions.get(**uuid);
                 entity.set(group);
-            },
-        );
+            });
 
-        observer!(world, flecs::OnRemove, &Uuid, &Group, &storage::PermissionStorage($)).each(
-            |(uuid, group, permissions)| {
+        observer!(world, flecs::OnRemove, &Uuid, &Group, &storage::PermissionStorage($))
+            .with::<Player>()
+            .each(|(uuid, group, permissions)| {
                 permissions.set(**uuid, *group).unwrap();
-            },
-        );
+            });
 
         observer!(world, flecs::OnSet, &Group).each_entity(|entity, _group| {
             let world = entity.world();

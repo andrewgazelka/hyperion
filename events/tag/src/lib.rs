@@ -20,7 +20,10 @@ use module::block::BlockModule;
 mod module;
 
 use derive_more::{Deref, DerefMut};
-use hyperion::glam::IVec3;
+use hyperion::{
+    glam::IVec3,
+    simulation::{EntityKind, Uuid},
+};
 use hyperion_rank_tree::Team;
 use module::{attack::AttackModule, level::LevelModule, regeneration::RegenerationModule};
 
@@ -51,6 +54,18 @@ impl Default for MainBlockCount {
 
 impl Module for ProofOfConceptModule {
     fn module(world: &World) {
+        // on entity kind set UUID
+
+        world
+            .observer::<flecs::OnAdd, ()>()
+            .with::<EntityKind>()
+            .without::<Uuid>()
+            .each_entity(|entity, ()| {
+                println!("adding uuid to entity");
+                let uuid = uuid::Uuid::new_v4();
+                entity.set(Uuid::from(uuid));
+            });
+
         world.component::<MainBlockCount>();
 
         world

@@ -22,6 +22,7 @@ rayon = { workspace = true }
 gxhash = { workspace = true }
 derive_more = { workspace = true }
 geometry = { workspace = true }
+uuid = { version = "1.11.0", features = ["v4"] }
 
 [dev-dependencies]
 tracing = {workspace = true, features = ["release_max_level_info"]}

@@ -14,9 +14,7 @@ use hyperion::{
         Compose, NetworkStreamRef, agnostic,
         packets::{BossBarAction, BossBarS2c},
     },
-    simulation::{
-        EntityReaction, PacketState, Player, Position, event, metadata::living_entity::Health,
-    },
+    simulation::{PacketState, Player, Position, Velocity, event, metadata::living_entity::Health},
     storage::EventQueue,
     system_registry::SystemId,
     util::TracingExt,
@@ -148,20 +146,22 @@ impl Module for AttackModule {
                         let origin = world.entity_from_id(event.origin);
                         origin.get::<(&Position, &mut KillCount, &mut PlayerInventory, &mut Armor, &CombatStats, &PlayerInventory)>(|(origin_pos, kill_count, inventory, origin_armor, from_stats, from_inventory)| {
                             let damage = from_stats.damage + calculate_stats(from_inventory).damage;
-                            target.get::<(
-                                &mut ImmuneUntil,
+                            target.try_get::<(
+                                Option<&mut ImmuneUntil>,
                                 &mut Health,
                                 &mut Position,
-                                &mut EntityReaction,
+                                &mut Velocity,
                                 &CombatStats,
                                 &PlayerInventory
                             )>(
                                 |(immune_until, health, target_position, reaction, stats, target_inventory)| {
-                                    if immune_until.tick > current_tick {
-                                        return;
+                                    if let Some(immune_until) = immune_until {
+                                        if immune_until.tick > current_tick {
+                                            return;
+                                        }
+                                        immune_until.tick = current_tick + IMMUNE_TICK_DURATION;
                                     }
 
-                                    immune_until.tick = current_tick + IMMUNE_TICK_DURATION;
 
                                     let calculated_stats = calculate_stats(target_inventory);
                                     let armor = stats.armor + calculated_stats.armor;

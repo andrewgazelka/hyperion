@@ -24,8 +24,8 @@ use crate::{
     },
     runtime::AsyncRuntime,
     simulation::{
-        AiTargetable, ChunkPosition, Comms, ConfirmBlockSequences, EntityReaction, EntitySize,
-        IgnMap, ImmuneStatus, Name, PacketState, Pitch, Player, Position, StreamLookup, Uuid, Xp,
+        AiTargetable, ChunkPosition, Comms, ConfirmBlockSequences, EntitySize, IgnMap,
+        ImmuneStatus, Name, PacketState, Pitch, Player, Position, StreamLookup, Uuid, Velocity, Xp,
         Yaw,
         animation::ActiveAnimation,
         blocks::Blocks,
@@ -170,9 +170,9 @@ fn process_login(
             .add::<Xp>()
             .set_pair::<Prev, _>(Xp::default())
             .add::<ChunkSendQueue>()
-            .add::<EntityReaction>()
+            .add::<Velocity>()
             .set(ChunkPosition::null())
-            .set(EntityReaction::default());
+            .set(Velocity::default());
     });
 
     compose.io_buf().set_receive_broadcasts(stream_id, world);
