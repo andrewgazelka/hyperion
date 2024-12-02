@@ -180,7 +180,7 @@ path = 'crates/hyperion-utils'
 
 [workspace.dependencies.indexmap]
 features = ['rayon']
-version = '2.6.0'
+version = '2.7.0'
 
 [workspace.dependencies.ndarray]
 features = ['blas']
