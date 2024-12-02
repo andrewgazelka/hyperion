@@ -1,5 +1,3 @@
-cargo-features = ["edition2024"]
-
 [dependencies]
 flecs_ecs = {workspace = true}
 anyhow = {workspace = true}
