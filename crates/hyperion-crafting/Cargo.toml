@@ -1,5 +1,3 @@
-cargo-features = ["edition2024"]
-
 [dependencies]
 anyhow = { workspace = true }
 derive-build = { workspace = true }
