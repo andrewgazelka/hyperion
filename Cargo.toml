@@ -190,10 +190,6 @@ version = '0.16.1'
 default-features = false
 version = '0.3.6'
 
-[workspace.dependencies.regex]
-features = ['perf-dfa-full']
-version = '1.11.1'
-
 [workspace.dependencies.reqwest]
 features = ['rustls-tls', 'stream']
 version = '0.12.9'
