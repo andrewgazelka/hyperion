@@ -8,9 +8,9 @@ use hyperion::{
 use hyperion_clap::{CommandPermission, MinecraftCommand};
 
 #[derive(Parser, CommandPermission, Debug)]
-#[command(name = "dirt")]
+#[command(name = "raycast")]
 #[command_permission(group = "Admin")]
-pub struct DirtCommand;
+pub struct RaycastCommand;
 
 /// Converts Minecraft yaw and pitch angles to a direction vector
 ///
@@ -41,7 +41,7 @@ pub fn get_direction_from_rotation(yaw: f32, pitch: f32) -> Vec3 {
     .normalize()
 }
 
-impl MinecraftCommand for DirtCommand {
+impl MinecraftCommand for RaycastCommand {
     fn execute(self, world: &World, caller: Entity) {
         const EYE_HEIGHT: f32 = 1.62;
 
