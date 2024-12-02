@@ -22,7 +22,7 @@ mod module;
 use derive_more::{Deref, DerefMut};
 use hyperion::{
     glam::IVec3,
-    simulation::{EntityKind, Uuid},
+    simulation::{Uuid, entity_kind::EntityKind},
 };
 use hyperion_rank_tree::Team;
 use module::{attack::AttackModule, level::LevelModule, regeneration::RegenerationModule};
@@ -58,7 +58,7 @@ impl Module for ProofOfConceptModule {
 
         world
             .observer::<flecs::OnAdd, ()>()
-            .with::<EntityKind>()
+            .with_enum(EntityKind::Zombie)
             .without::<Uuid>()
             .each_entity(|entity, ()| {
                 println!("adding uuid to entity");
