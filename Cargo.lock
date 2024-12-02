@@ -1794,7 +1794,6 @@ dependencies = [
  "gxhash",
  "hyperion",
  "indexmap",
- "regex",
  "tracing",
 ]
 
