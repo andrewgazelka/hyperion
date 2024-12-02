@@ -658,7 +658,6 @@ impl Module for SimModule {
         world.component::<animation::ActiveAnimation>();
 
         world.component::<hyperion_inventory::PlayerInventory>();
-        
 
         observer!(
             world,

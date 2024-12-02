@@ -1,6 +1,6 @@
 use clap::Parser;
 use flecs_ecs::core::{Entity, World};
-use hyperion::simulation::{Pitch, Position, Spawn, Uuid, Velocity, Yaw, entity_kind::EntityKind};
+use hyperion::simulation::{Pitch, Position, Spawn, Velocity, Yaw, entity_kind::EntityKind};
 use hyperion_clap::{CommandPermission, MinecraftCommand};
 
 #[derive(Parser, CommandPermission, Debug)]
@@ -12,7 +12,7 @@ impl MinecraftCommand for SpawnCommand {
     fn execute(self, world: &World, _caller: Entity) {
         world
             .entity()
-            .add_enum(EntityKind::BlockDisplay)
+            .add_enum(EntityKind::Skeleton)
             // .set(Uuid::new_v4())
             // .add_enum(EntityKind::Zombie)
             .set(Position::new(0.0, 20.0, 0.0))

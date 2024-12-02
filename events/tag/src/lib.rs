@@ -58,7 +58,7 @@ impl Module for ProofOfConceptModule {
 
         world
             .observer::<flecs::OnAdd, ()>()
-            .with_enum(EntityKind::Zombie)
+            .with_enum_wildcard::<EntityKind>()
             .without::<Uuid>()
             .each_entity(|entity, ()| {
                 println!("adding uuid to entity");
