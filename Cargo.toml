@@ -210,7 +210,7 @@ version = '0.7.12'
 
 [workspace.dependencies.tracing]
 features = ['release_max_level_info']
-version = '0.1.40'
+version = '0.1.41'
 
 [workspace.dependencies.tracing-subscriber]
 features = ['env-filter', 'time']
