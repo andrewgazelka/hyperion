@@ -1,4 +1,4 @@
-use std::{fmt::Write, sync::OnceLock};
+use std::fmt::Write;
 
 use flecs_ecs::{
     core::{EntityViewGet, QueryBuilderImpl, SystemAPI, TermBuilderImpl, World, WorldGet},
@@ -71,7 +71,9 @@ impl Module for CommandSystemModule {
                 let input = completion.query;
 
                 // should be in form "/{command}"
-                let command = input.strip_prefix("/").unwrap_or(input)
+                let command = input
+                    .strip_prefix("/")
+                    .unwrap_or(input)
                     .split_whitespace()
                     .next()
                     .unwrap_or("");
