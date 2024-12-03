@@ -11,6 +11,7 @@ use tokio::{
     runtime::Runtime,
     sync::{mpsc, oneshot},
 };
+use tracing::info;
 
 use super::region::Region;
 
@@ -28,7 +29,7 @@ pub struct RegionManager {
 
 impl RegionManager {
     pub fn new(runtime: &Runtime, save: &Path) -> anyhow::Result<Self> {
-        println!("region manager root: {save:?}");
+        info!("region manager root: {}", save.display());
         let root = save.join("region");
 
         ensure!(root.exists(), "{} directory does not exist", root.display());

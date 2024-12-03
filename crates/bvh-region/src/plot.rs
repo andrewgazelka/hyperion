@@ -9,6 +9,7 @@ use plotters::{
     style::{BLACK, Color, RED, RGBColor, ShapeStyle},
 };
 use plotters_bitmap::BitMapBackend;
+use tracing::debug;
 
 use crate::{Bvh, HasAabb, Node};
 
@@ -23,7 +24,7 @@ impl<T: HasAabb + Copy> Bvh<T> {
             panic!("Root node is not internal")
         };
 
-        println!(
+        debug!(
             "min x = {}, min y = {}, max x = {}, max y = {}",
             internal.aabb.min.x, internal.aabb.min.y, internal.aabb.max.x, internal.aabb.max.y
         );

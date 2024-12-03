@@ -68,7 +68,7 @@ impl Module for RankTree {
 
         let handler: EventFn<ClickEvent> = |query, _| {
             let cursor = query.inventory.get_cursor();
-            println!("clicked {cursor:?}");
+            tracing::debug!("clicked {cursor:?}");
         };
 
         let speed = world.entity().set(hyperion_item::Handler::new(handler));

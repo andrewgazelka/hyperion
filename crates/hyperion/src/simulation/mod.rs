@@ -9,6 +9,7 @@ use hyperion_utils::EntityExt;
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 use skin::PlayerSkin;
+use tracing::debug;
 use uuid;
 use valence_generated::block::BlockState;
 use valence_protocol::{ByteAngle, VarInt, packets::play};
@@ -419,6 +420,7 @@ impl Position {
 }
 
 #[derive(Component, Copy, Clone, Debug, Deref, DerefMut, Default, Constructor)]
+#[meta]
 pub struct Yaw {
     yaw: f32,
 }
@@ -438,6 +440,7 @@ impl Display for Pitch {
 }
 
 #[derive(Component, Copy, Clone, Debug, Deref, DerefMut, Default, Constructor)]
+#[meta]
 pub struct Pitch {
     pitch: f32,
 }
@@ -672,7 +675,7 @@ impl Module for SimModule {
         .with::<flecs::Any>()
         .with_enum_wildcard::<EntityKind>()
         .each_entity(|entity, (compose, uuid, position, pitch, yaw, velocity)| {
-            println!("spawn");
+            debug!("spawned entity");
             let minecraft_id = entity.minecraft_id();
             let world = entity.world();
 
@@ -697,6 +700,21 @@ impl Module for SimModule {
                     .unwrap();
             });
         });
+
+        world
+            .observer::<flecs::OnSet, ()>()
+            .with_enum_wildcard::<EntityKind>()
+            .each_entity(move |entity, ()| {
+                entity.get::<&EntityKind>(|kind| match kind {
+                    EntityKind::BlockDisplay => {
+                        entity.is_a_id(prefabs.block_display_base);
+                    }
+                    EntityKind::Player => {
+                        entity.is_a_id(prefabs.player_base);
+                    }
+                    _ => {}
+                });
+            });
     }
 }
 

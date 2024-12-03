@@ -21,6 +21,7 @@ use hyperion::{
     },
 };
 use hyperion_utils::EntityExt;
+use tracing::debug;
 
 #[derive(Component)]
 pub struct SkinModule;
@@ -31,7 +32,7 @@ impl Module for SkinModule {
             |it, _, (event_queue, compose)| {
                 let world = it.world();
                 for event in event_queue.drain() {
-                    println!("got {event:?}");
+                    debug!("got {event:?}");
                     event
                         .by
                         .entity_view(world)

@@ -1,16 +1,9 @@
 use clap::Parser;
-use flecs_ecs::core::{Entity, World, WorldGet};
-use hyperion::{
-    BlockState,
-    simulation::{
-        Pitch, Position, Spawn, Uuid, Velocity, Yaw,
-        entity_kind::EntityKind,
-        metadata::{
-            MetadataPrefabs,
-            block_display::DisplayedBlockState,
-            display::{Height, Width},
-        },
-    },
+use flecs_ecs::core::{Entity, World};
+use hyperion::simulation::{
+    Pitch, Position, Spawn, Uuid, Velocity, Yaw,
+    entity_kind::EntityKind,
+    metadata::display::{Height, Width},
 };
 use hyperion_clap::{CommandPermission, MinecraftCommand};
 
@@ -21,23 +14,21 @@ pub struct SpawnCommand;
 
 impl MinecraftCommand for SpawnCommand {
     fn execute(self, world: &World, _caller: Entity) {
-        world.get::<&MetadataPrefabs>(|prefabs| {
-            world
-                .entity()
-                .add_enum(EntityKind::BlockDisplay)
-                // .set(EntityFlags::ON_FIRE)
-                .set(Uuid::new_v4())
-                .set(Width::new(1.0))
-                .set(Height::new(1.0))
-                // .set(ViewRange::new(100.0))
-                // .add_enum(EntityKind::Zombie)
-                .set(Position::new(0.0, 22.0, 0.0))
-                .set(Pitch::new(0.0))
-                .set(Yaw::new(0.0))
-                .set(Velocity::ZERO)
-                .set(DisplayedBlockState::new(BlockState::DIRT))
-                .is_a_id(prefabs.block_display_base)
-                .enqueue(Spawn);
-        });
+        world
+            .entity()
+            .add_enum(EntityKind::BlockDisplay)
+            // .set(EntityFlags::ON_FIRE)
+            .set(Uuid::new_v4())
+            .set(Width::new(1.0))
+            .set(Height::new(1.0))
+            // .set(ViewRange::new(100.0))
+            // .add_enum(EntityKind::Zombie)
+            .set(Position::new(0.0, 22.0, 0.0))
+            .set(Pitch::new(0.0))
+            .set(Yaw::new(0.0))
+            .set(Velocity::ZERO)
+            // .set(DisplayedBlockState::new(BlockState::DIRT))
+            // .is_a_id(prefabs.block_display_base)
+            .enqueue(Spawn);
     }
 }

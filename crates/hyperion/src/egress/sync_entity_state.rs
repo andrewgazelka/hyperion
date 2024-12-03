@@ -108,7 +108,6 @@ impl Module for EntityStateSyncModule {
                     let metadata = metadata_changes.get_and_clear();
 
                     if let Some(view) = metadata {
-                        println!("metadata = {view:?}");
                         let pkt = play::EntityTrackerUpdateS2c {
                             entity_id,
                             tracked_values: RawBytes(&view),

@@ -19,7 +19,7 @@ pub mod entity;
 pub mod living_entity;
 pub mod player;
 
-#[derive(Component)]
+#[derive(Component, Copy, Clone, Debug, PartialEq, Eq, Default)]
 pub struct MetadataPrefabs {
     pub entity_base: Entity,
 
