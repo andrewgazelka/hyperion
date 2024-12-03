@@ -1,29 +1,33 @@
-use std::{borrow::Borrow, collections::HashMap, hash::Hash, sync::Arc};
+use std::{borrow::Borrow, collections::HashMap, hash::Hash, num::TryFromIntError, sync::Arc};
 
 use bytemuck::{Pod, Zeroable};
-use derive_more::{Deref, DerefMut, Display, From};
+use derive_more::{Constructor, Deref, DerefMut, Display, From};
 use flecs_ecs::prelude::*;
 use geometry::aabb::{Aabb, HasAabb};
 use glam::{IVec2, IVec3, Quat, Vec3};
+use hyperion_utils::EntityExt;
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 use skin::PlayerSkin;
 use uuid;
 use valence_generated::block::BlockState;
-use valence_protocol::VarInt;
+use valence_protocol::{ByteAngle, VarInt, packets::play};
 
 use crate::{
     Global,
+    net::Compose,
     simulation::{
         command::Command,
         metadata::{Metadata, MetadataPrefabs, entity::EntityFlags},
     },
     storage::ThreadLocalVec,
+    system_registry::SystemId,
 };
 
 pub mod animation;
 pub mod blocks;
 pub mod command;
+pub mod entity_kind;
 pub mod event;
 pub mod handlers;
 pub mod metadata;
@@ -352,7 +356,9 @@ impl Default for Comms {
 }
 
 /// A UUID component. Generally speaking, this tends to be tied to entities with a [`Player`] component.
-#[derive(Component, Copy, Clone, Debug, Deref, From, Hash, Eq, PartialEq)]
+#[derive(
+    Component, Copy, Clone, Debug, Deref, From, Hash, Eq, PartialEq, Display
+)]
 pub struct Uuid(pub uuid::Uuid);
 
 /// Any living minecraft entity that is NOT a player.
@@ -395,7 +401,16 @@ pub struct Position {
     position: Vec3,
 }
 
-#[derive(Component, Copy, Clone, Debug, Deref, DerefMut, Default)]
+impl Position {
+    #[must_use]
+    pub const fn new(x: f32, y: f32, z: f32) -> Self {
+        Self {
+            position: Vec3::new(x, y, z),
+        }
+    }
+}
+
+#[derive(Component, Copy, Clone, Debug, Deref, DerefMut, Default, Constructor)]
 pub struct Yaw {
     yaw: f32,
 }
@@ -414,7 +429,7 @@ impl Display for Pitch {
     }
 }
 
-#[derive(Component, Copy, Clone, Debug, Deref, DerefMut, Default)]
+#[derive(Component, Copy, Clone, Debug, Deref, DerefMut, Default, Constructor)]
 pub struct Pitch {
     pitch: f32,
 }
@@ -514,14 +529,59 @@ impl Position {
 /// - Since we are accessing bounding boxes in parallel,
 ///   we need to be able to make sure the bounding boxes are immutable (unless we have something like a
 ///   [`std::sync::Arc`] or [`std::sync::RwLock`], but this is not efficient).
-/// - Therefore, we have an [`EntityReaction`] component which is used to store the reaction of an entity to collisions.
+/// - Therefore, we have an [`Velocity`] component which is used to store the reaction of an entity to collisions.
 /// - Later we can apply the reaction to the entity's [`Position`] to move the entity.
-#[derive(Component, Default, Debug)]
+#[derive(Component, Default, Debug, Copy, Clone)]
 #[meta]
-pub struct EntityReaction {
+pub struct Velocity {
     /// The velocity of the entity.
     pub velocity: Vec3,
 }
+
+impl Velocity {
+    pub const ZERO: Self = Self {
+        velocity: Vec3::ZERO,
+    };
+
+    #[allow(unused)]
+    const fn new(x: f32, y: f32, z: f32) -> Self {
+        Self {
+            velocity: Vec3::new(x, y, z),
+        }
+    }
+}
+
+impl TryFrom<&Velocity> for valence_protocol::Velocity {
+    type Error = TryFromIntError;
+
+    fn try_from(value: &Velocity) -> Result<Self, Self::Error> {
+        let nums = value
+            .velocity
+            .to_array()
+            .try_map(|a| {
+                #[expect(
+                    clippy::cast_possible_truncation,
+                    reason = "https://blog.rust-lang.org/2020/07/16/Rust-1.45.0.html#:~:text=as%20would%20perform%20a%20%22saturating%20cast%22 as is saturating."
+                )]
+                let num = (a * 8000.0) as i32;
+                i16::try_from(num)
+            })?;
+
+        Ok(Self(nums))
+    }
+}
+
+impl TryFrom<Velocity> for valence_protocol::Velocity {
+    type Error = TryFromIntError;
+
+    fn try_from(value: Velocity) -> Result<Self, Self::Error> {
+        (&value).try_into()
+    }
+}
+
+#[derive(Component, Copy, Clone, Debug, Default, PartialEq, Eq, Hash)]
+#[meta]
+pub struct EntityKind(pub i32);
 
 #[derive(Component)]
 pub struct SimModule;
@@ -530,15 +590,6 @@ impl Module for SimModule {
     fn module(world: &World) {
         component!(world, VarInt).member::<i32>("x");
 
-        component!(world, Quat)
-            .member::<f32>("x")
-            .member::<f32>("y")
-            .member::<f32>("z")
-            .member::<f32>("w");
-
-        component!(world, BlockState).member::<u16>("id");
-
-        component!(world, EntitySize).opaque_func(meta_ser_stringify_type_display::<EntitySize>);
         component!(world, IVec3 {
             x: i32,
             y: i32,
@@ -549,6 +600,29 @@ impl Module for SimModule {
             y: f32,
             z: f32
         });
+
+        component!(world, Quat)
+            .member::<f32>("x")
+            .member::<f32>("y")
+            .member::<f32>("z")
+            .member::<f32>("w");
+
+        component!(world, BlockState).member::<u16>("id");
+
+        component!(world, EntitySize).opaque_func(meta_ser_stringify_type_display::<EntitySize>);
+
+        world.component::<Velocity>().meta();
+        world.component::<Player>();
+        world.component::<Visible>();
+        world.component::<Spawn>();
+
+        world.component::<EntityKind>().meta();
+
+        world
+            .component::<EntityKind>()
+            .add_trait::<(flecs::With, Yaw)>()
+            .add_trait::<(flecs::With, Pitch)>()
+            .add_trait::<(flecs::With, Velocity)>();
 
         world.component::<MetadataPrefabs>();
         world.component::<EntityFlags>();
@@ -565,19 +639,62 @@ impl Module for SimModule {
 
         world.component::<Position>().meta();
 
-        world.component::<Player>();
-
         world.component::<Name>();
         component!(world, Name).opaque_func(meta_ser_stringify_type_display::<Name>);
 
         world.component::<AiTargetable>();
         world.component::<ImmuneStatus>().meta();
+
         world.component::<Uuid>();
+        component!(world, Uuid).opaque_func(meta_ser_stringify_type_display::<Uuid>);
+
         world.component::<ChunkPosition>().meta();
-        world.component::<EntityReaction>().meta();
         world.component::<ConfirmBlockSequences>();
         world.component::<animation::ActiveAnimation>();
 
         world.component::<hyperion_inventory::PlayerInventory>();
+
+        observer!(
+            world,
+            Spawn,
+            &Compose($),
+            [filter] & Uuid,
+            [filter] & EntityKind,
+            [filter] & Position,
+            [filter] & Pitch,
+            [filter] & Yaw,
+            [filter] & Velocity,
+        )
+        .with::<flecs::Any>()
+        .each_entity(
+            |entity, (compose, uuid, kind, position, pitch, yaw, velocity)| {
+                println!("spawn");
+                let minecraft_id = entity.minecraft_id();
+                let world = entity.world();
+
+                let packet = play::EntitySpawnS2c {
+                    entity_id: VarInt(minecraft_id),
+                    object_uuid: uuid.0,
+                    kind: VarInt(kind.0),
+                    position: position.as_dvec3(),
+                    pitch: ByteAngle::from_degrees(**pitch),
+                    yaw: ByteAngle::from_degrees(**yaw),
+                    head_yaw: ByteAngle(0),  // todo:
+                    data: VarInt::default(), // todo:
+                    velocity: velocity.try_into().unwrap(),
+                };
+
+                compose
+                    .broadcast(&packet, SystemId(0))
+                    .send(&world)
+                    .unwrap();
+            },
+        );
     }
 }
+
+#[derive(Component)]
+pub struct Spawn;
+
+#[derive(Component)]
+pub struct Visible;

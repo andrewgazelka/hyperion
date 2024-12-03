@@ -1,7 +1,7 @@
 use derive_more::Deref;
 use flecs_ecs::{
     addons::Meta,
-    core::{ComponentId, Entity, EntityView, IdOperations, SystemAPI, World, flecs},
+    core::{ComponentId, Entity, EntityView, IdOperations, SystemAPI, World, WorldProvider, flecs},
     macros::Component,
 };
 use heck::ToSnakeCase;
@@ -92,22 +92,43 @@ where
     register
 }
 
+trait EntityViewExt {
+    fn component_and_prev<T>(self) -> Self
+    where
+        T: ComponentId + Copy + PartialEq + Metadata + Default + flecs_ecs::core::DataComponent,
+        <T as ComponentId>::UnderlyingType: Meta<<T as ComponentId>::UnderlyingType>;
+}
+
+impl EntityViewExt for EntityView<'_> {
+    fn component_and_prev<T>(mut self) -> Self
+    where
+        T: ComponentId + Copy + PartialEq + Metadata + Default + flecs_ecs::core::DataComponent,
+        <T as ComponentId>::UnderlyingType: Meta<<T as ComponentId>::UnderlyingType>,
+    {
+        let world = self.world();
+        // todo: how this possible exclusive mut
+        component_and_prev::<T>(&world)(&mut self);
+        self
+    }
+}
+
 #[must_use]
 pub fn register_prefabs(world: &World) -> MetadataPrefabs {
     world.component::<MetadataChanges>();
 
-    let mut entity_base = entity::register_prefab(world, None).add::<MetadataChanges>();
-
-    component_and_prev::<EntityFlags>(world)(&mut entity_base);
-    component_and_prev::<Pose>(world)(&mut entity_base);
-
-    let entity_base = entity_base.id();
+    let entity_base = entity::register_prefab(world, None)
+        .add::<MetadataChanges>()
+        .component_and_prev::<EntityFlags>()
+        .component_and_prev::<Pose>()
+        .id();
 
     let display_base = display::register_prefab(world, Some(entity_base)).id();
     let block_display_base = block_display::register_prefab(world, Some(display_base)).id();
 
     let living_entity_base = living_entity::register_prefab(world, Some(entity_base)).id();
-    let player_base = player::register_prefab(world, Some(living_entity_base)).id();
+    let player_base = player::register_prefab(world, Some(living_entity_base))
+        // .add::<Player>()
+        .id();
 
     MetadataPrefabs {
         entity_base,

@@ -71,6 +71,7 @@ impl Module for SpawnModule {
             &mut Blocks($),
             &AsyncRuntime($) ,
         )
+        .without::<Position>()
         .each_entity({
             let positions = Rc::clone(&positions);
             move |entity, (uuid, blocks, runtime)| {
