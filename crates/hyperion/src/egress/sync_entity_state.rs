@@ -108,13 +108,17 @@ impl Module for EntityStateSyncModule {
                     let metadata = metadata_changes.get_and_clear();
 
                     if let Some(view) = metadata {
+                        println!("metadata = {view:?}");
                         let pkt = play::EntityTrackerUpdateS2c {
                             entity_id,
                             tracked_values: RawBytes(&view),
                         };
 
                         // todo(perf): do so locally
-                        compose.broadcast(&pkt, system_id).send(&world).unwrap();
+                        compose
+                            .broadcast(&pkt, SystemId(9999))
+                            .send(&world)
+                            .unwrap();
                     }
                 },
             );

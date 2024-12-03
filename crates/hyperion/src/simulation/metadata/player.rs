@@ -41,3 +41,27 @@ define_and_register_components! {
     // 20	NBT (16)	Right shoulder entity data (for occupying parrot)	Empty
     // 20, RightShoulderEntityData -> Option<nbt::Compound<String>>,
 }
+
+impl Default for AdditionalHearts {
+    fn default() -> Self {
+        Self::new(0.0)
+    }
+}
+
+impl Default for Score {
+    fn default() -> Self {
+        Self::new(VarInt(0))
+    }
+}
+
+impl Default for DisplayedSkinParts {
+    fn default() -> Self {
+        Self::new(0)
+    }
+}
+
+impl Default for MainHand {
+    fn default() -> Self {
+        Self::new(1) // 1 = Right hand
+    }
+}

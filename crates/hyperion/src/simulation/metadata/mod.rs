@@ -1,17 +1,17 @@
+use std::fmt::Debug;
+
 use derive_more::Deref;
 use flecs_ecs::{
     addons::Meta,
-    core::{ComponentId, Entity, EntityView, IdOperations, SystemAPI, World, WorldProvider, flecs},
-    macros::Component,
+    core::{
+        ComponentId, Entity, EntityView, IdOperations, QueryBuilderImpl, SystemAPI,
+        TermBuilderImpl, World, WorldProvider, flecs,
+    },
+    macros::{Component, observer},
 };
-use heck::ToSnakeCase;
-use tracing::info_span;
 use valence_protocol::{Encode, VarInt};
 
-use crate::{
-    Prev,
-    simulation::metadata::entity::{EntityFlags, Pose},
-};
+use crate::simulation::metadata::entity::{EntityFlags, Pose};
 
 pub mod block_display;
 pub mod display;
@@ -32,61 +32,65 @@ pub struct MetadataPrefabs {
 
 fn component_and_prev<T>(world: &World) -> fn(&mut EntityView<'_>)
 where
-    T: ComponentId + Copy + PartialEq + Metadata + Default + flecs_ecs::core::DataComponent,
+    T: ComponentId + Copy + PartialEq + Metadata + Default + flecs_ecs::core::DataComponent + Debug,
     <T as ComponentId>::UnderlyingType: Meta<<T as ComponentId>::UnderlyingType>,
 {
     world.component::<T>().meta();
 
-    let type_name = core::any::type_name::<T>();
+    // let type_name = core::any::type_name::<T>();
 
     // convert to snake_case
-    let type_name = type_name.to_snake_case();
+    // let type_name = type_name.to_snake_case();
 
-    let system_name = format!("exchange_{type_name}").leak();
+    // let system_name = format!("exchange_{type_name}").leak();
 
-    world
-        .system_named::<(
-            &mut (Prev, T),       //            (0)
-            &mut T,               //                  (1)
-            &mut MetadataChanges, //     (2)
-        )>(system_name)
-        .multi_threaded()
-        .kind::<flecs::pipeline::OnStore>()
-        .run(move |mut table| {
-            let span = info_span!("exchange", name = system_name);
-            let _enter = span.enter();
+    observer!(world, flecs::OnSet, &T, [filter] &mut MetadataChanges,).each(|(value, changes)| {
+        changes.encode(*value);
+    });
 
-            while table.next() {
-                unsafe {
-                    let mut prev = table.field_unchecked::<T>(0);
-                    let prev = prev.get_mut(..).unwrap();
-
-                    let current = table.field_unchecked::<T>(1);
-                    let current = current.get(..).unwrap();
-
-                    let mut metadata_changes = table.field_unchecked::<MetadataChanges>(2);
-                    let metadata_changes = metadata_changes.get_mut(..).unwrap();
-
-                    // todo(perf): big optimization treating as raw bytes and SIMD
-                    // or code that can easily be compiled to SIMD
-                    // also can do copy_from_slice in one pass but want SIMD-optimized
-                    // first
-                    // todo(learn): reborrowing in-depth
-                    for (idx, (prev, current)) in itertools::zip_eq(&mut *prev, current).enumerate()
-                    {
-                        if prev != current {
-                            let metadata_changes = metadata_changes.get_unchecked_mut(idx);
-                            metadata_changes.encode(*current);
-                        }
-                    }
-
-                    prev.copy_from_slice(current);
-                }
-            }
-        });
+    // world
+    //     .system_named::<(
+    //         &mut (Prev, T),       //            (0)
+    //         &mut T,               //                  (1)
+    //         &mut MetadataChanges, //     (2)
+    //     )>(system_name)
+    //     .multi_threaded()
+    //     .kind::<flecs::pipeline::OnStore>()
+    //     .run(move |mut table| {
+    //         let span = info_span!("exchange", name = system_name);
+    //         let _enter = span.enter();
+    //
+    //         while table.next() {
+    //             unsafe {
+    //                 let mut prev = table.field_unchecked::<T>(0);
+    //                 let prev = prev.get_mut(..).unwrap();
+    //
+    //                 let current = table.field_unchecked::<T>(1);
+    //                 let current = current.get(..).unwrap();
+    //
+    //                 let mut metadata_changes = table.field_unchecked::<MetadataChanges>(2);
+    //                 let metadata_changes = metadata_changes.get_mut(..).unwrap();
+    //
+    //                 // todo(perf): big optimization treating as raw bytes and SIMD
+    //                 // or code that can easily be compiled to SIMD
+    //                 // also can do copy_from_slice in one pass but want SIMD-optimized
+    //                 // first
+    //                 // todo(learn): reborrowing in-depth
+    //                 for (idx, (prev, current)) in itertools::zip_eq(&mut *prev, current).enumerate()
+    //                 {
+    //                     if prev != current {
+    //                         let metadata_changes = metadata_changes.get_unchecked_mut(idx);
+    //                         metadata_changes.encode(*current);
+    //                     }
+    //                 }
+    //
+    //                 prev.copy_from_slice(current);
+    //             }
+    //         }
+    //     });
 
     let register = |view: &mut EntityView<'_>| {
-        view.set_pair::<Prev, _>(T::default()).set(T::default());
+        view.set(T::default());
     };
 
     register
@@ -95,14 +99,26 @@ where
 trait EntityViewExt {
     fn component_and_prev<T>(self) -> Self
     where
-        T: ComponentId + Copy + PartialEq + Metadata + Default + flecs_ecs::core::DataComponent,
+        T: ComponentId
+            + Copy
+            + PartialEq
+            + Metadata
+            + Default
+            + flecs_ecs::core::DataComponent
+            + Debug,
         <T as ComponentId>::UnderlyingType: Meta<<T as ComponentId>::UnderlyingType>;
 }
 
 impl EntityViewExt for EntityView<'_> {
     fn component_and_prev<T>(mut self) -> Self
     where
-        T: ComponentId + Copy + PartialEq + Metadata + Default + flecs_ecs::core::DataComponent,
+        T: ComponentId
+            + Copy
+            + PartialEq
+            + Metadata
+            + Default
+            + flecs_ecs::core::DataComponent
+            + Debug,
         <T as ComponentId>::UnderlyingType: Meta<<T as ComponentId>::UnderlyingType>,
     {
         let world = self.world();
@@ -173,7 +189,8 @@ macro_rules! define_metadata_component {
             PartialEq,
             derive_more::Deref,
             derive_more::DerefMut,
-            Default
+            derive_more::Constructor,
+            Debug
         )]
         #[allow(clippy::derive_partial_eq_without_eq)]
         #[meta]
