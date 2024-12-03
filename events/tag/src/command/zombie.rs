@@ -8,12 +8,9 @@ use hyperion::{
         metadata::{
             MetadataPrefabs,
             block_display::DisplayedBlockState,
-            display::{Height, ViewRange, Width},
-            entity::EntityFlags,
-            living_entity::ArrowsInEntity,
+            display::{Height, Width},
         },
     },
-    valence_protocol::VarInt,
 };
 use hyperion_clap::{CommandPermission, MinecraftCommand};
 

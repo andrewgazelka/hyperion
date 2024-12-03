@@ -9,14 +9,9 @@ use flecs_ecs::{
     },
     macros::{Component, observer},
 };
-use heck::ToSnakeCase;
-use tracing::info_span;
 use valence_protocol::{Encode, VarInt};
 
-use crate::{
-    Prev,
-    simulation::metadata::entity::{EntityFlags, Pose},
-};
+use crate::simulation::metadata::entity::{EntityFlags, Pose};
 
 pub mod block_display;
 pub mod display;
@@ -42,19 +37,16 @@ where
 {
     world.component::<T>().meta();
 
-    let type_name = core::any::type_name::<T>();
+    // let type_name = core::any::type_name::<T>();
 
     // convert to snake_case
-    let type_name = type_name.to_snake_case();
+    // let type_name = type_name.to_snake_case();
 
-    let system_name = format!("exchange_{type_name}").leak();
+    // let system_name = format!("exchange_{type_name}").leak();
 
-    observer!(world, flecs::OnSet, &T, [filter] &mut MetadataChanges,).each_entity(
-        |entity, (value, changes)| {
-            println!("setting {value:?}");
-            changes.encode(*value);
-        },
-    );
+    observer!(world, flecs::OnSet, &T, [filter] &mut MetadataChanges,).each(|(value, changes)| {
+        changes.encode(*value);
+    });
 
     // world
     //     .system_named::<(
