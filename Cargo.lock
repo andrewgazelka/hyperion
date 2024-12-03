@@ -1898,6 +1898,7 @@ dependencies = [
  "hyperion-inventory",
  "hyperion-item",
  "toml",
+ "tracing",
  "valence_protocol",
 ]
 

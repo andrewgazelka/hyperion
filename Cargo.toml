@@ -255,6 +255,7 @@ branch = 'feat-open'
 git = 'https://github.com/andrewgazelka/valence'
 
 [workspace.lints]
+
 [workspace.lints.clippy]
 cast_precision_loss = 'allow'
 future_not_send = 'allow'
@@ -264,6 +265,8 @@ module_name_repetitions = 'allow'
 single_match_else = 'allow'
 too_long_first_doc_paragraph = 'allow'
 too_many_lines = 'allow'
+
+print_stdout = 'deny'
 
 [workspace.lints.clippy.complexity]
 level = 'deny'

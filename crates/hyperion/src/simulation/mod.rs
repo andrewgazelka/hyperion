@@ -9,6 +9,7 @@ use hyperion_utils::EntityExt;
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 use skin::PlayerSkin;
+use tracing::debug;
 use uuid;
 use valence_generated::block::BlockState;
 use valence_protocol::{ByteAngle, VarInt, packets::play};
@@ -672,7 +673,7 @@ impl Module for SimModule {
         .with::<flecs::Any>()
         .with_enum_wildcard::<EntityKind>()
         .each_entity(|entity, (compose, uuid, position, pitch, yaw, velocity)| {
-            println!("spawn");
+            debug!("spawned entity");
             let minecraft_id = entity.minecraft_id();
             let world = entity.world();
 

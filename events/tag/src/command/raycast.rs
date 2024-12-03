@@ -6,6 +6,7 @@ use hyperion::{
     simulation::{Pitch, Position, Yaw, blocks::Blocks},
 };
 use hyperion_clap::{CommandPermission, MinecraftCommand};
+use tracing::debug;
 
 #[derive(Parser, CommandPermission, Debug)]
 #[command(name = "raycast")]
@@ -57,14 +58,14 @@ impl MinecraftCommand for RaycastCommand {
                     geometry::ray::Ray::new(eye, direction)
                 });
 
-        println!("ray = {ray:?}");
+        debug!("ray = {ray:?}");
 
         world.get::<&mut Blocks>(|blocks| {
             let Some(collision) = blocks.first_collision(ray, 10.0) else {
                 return;
             };
 
-            println!("collision = {collision:?}");
+            debug!("collision = {collision:?}");
 
             blocks
                 .set_block(collision.location, BlockState::DIRT)

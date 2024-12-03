@@ -26,6 +26,7 @@ use hyperion::{
 };
 use hyperion_rank_tree::Team;
 use module::{attack::AttackModule, level::LevelModule, regeneration::RegenerationModule};
+use tracing::debug;
 
 use crate::{
     module::{chat::ChatModule, spawn::SpawnModule, stats::StatsModule},
@@ -61,7 +62,7 @@ impl Module for ProofOfConceptModule {
             .with_enum_wildcard::<EntityKind>()
             .without::<Uuid>()
             .each_entity(|entity, ()| {
-                println!("adding uuid to entity");
+                debug!("adding uuid to entity");
                 let uuid = uuid::Uuid::new_v4();
                 entity.set(Uuid::from(uuid));
             });

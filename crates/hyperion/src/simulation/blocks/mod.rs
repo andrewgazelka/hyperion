@@ -109,13 +109,10 @@ impl Blocks {
         let max = max.ceil().as_ivec3();
 
         let traversal = ray.voxel_traversal(min, max);
-        println!("traversal = {traversal:?}");
 
         let mut min: Option<RayCollision> = None;
 
         for cell in traversal {
-            println!("cell = {cell:?}");
-
             // if there is no block at this cell, return None
             let block = self.get_block(cell)?;
 
