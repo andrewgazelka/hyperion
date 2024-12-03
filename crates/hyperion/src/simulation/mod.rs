@@ -698,6 +698,21 @@ impl Module for SimModule {
                     .unwrap();
             });
         });
+
+        world
+            .observer::<flecs::OnSet, ()>()
+            .with_enum_wildcard::<EntityKind>()
+            .each_entity(move |entity, ()| {
+                entity.get::<&EntityKind>(|kind| match kind {
+                    EntityKind::BlockDisplay => {
+                        entity.is_a_id(prefabs.block_display_base);
+                    }
+                    EntityKind::Player => {
+                        entity.is_a_id(prefabs.player_base);
+                    }
+                    _ => {}
+                });
+            });
     }
 }
 

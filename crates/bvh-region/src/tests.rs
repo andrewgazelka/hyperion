@@ -1,3 +1,5 @@
+#![expect(clippy::print_stdout)]
+
 use std::collections::HashSet;
 
 use geometry::aabb::CheckableAabb;

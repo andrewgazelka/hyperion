@@ -173,7 +173,7 @@ impl MojangClient {
 }
 
 #[cfg(test)]
-#[expect(clippy::unwrap_used, reason = "these are tests")]
+#[expect(clippy::unwrap_used, clippy::print_stdout, reason = "these are tests")]
 mod tests {
     use std::str::FromStr;
 
