@@ -8,3 +8,9 @@ use crate::define_and_register_components;
 define_and_register_components! {
     23, DisplayedBlockState -> BlockState,
 }
+
+impl Default for DisplayedBlockState {
+    fn default() -> Self {
+        Self::new(BlockState::EMERALD_BLOCK)
+    }
+}

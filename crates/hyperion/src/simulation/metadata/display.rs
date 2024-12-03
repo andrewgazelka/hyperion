@@ -41,3 +41,93 @@ define_and_register_components! {
     21, Height -> f32,
     22, GlowColorOverride -> VarInt,
 }
+
+impl Default for InterpolationDelay {
+    fn default() -> Self {
+        Self::new(VarInt(0))
+    }
+}
+
+impl Default for TransformationInterpolationDuration {
+    fn default() -> Self {
+        Self::new(VarInt(0))
+    }
+}
+
+impl Default for PositionRotationInterpolationDuration {
+    fn default() -> Self {
+        Self::new(VarInt(0))
+    }
+}
+
+impl Default for Translation {
+    fn default() -> Self {
+        Self::new(glam::Vec3::ZERO)
+    }
+}
+
+impl Default for Scale {
+    fn default() -> Self {
+        Self::new(glam::Vec3::ONE)
+    }
+}
+
+impl Default for RotationLeft {
+    fn default() -> Self {
+        Self::new(glam::Quat::IDENTITY)
+    }
+}
+
+impl Default for RotationRight {
+    fn default() -> Self {
+        Self::new(glam::Quat::IDENTITY)
+    }
+}
+
+impl Default for BillboardConstraints {
+    fn default() -> Self {
+        Self::new(0)
+    }
+}
+
+impl Default for BrightnessOverride {
+    fn default() -> Self {
+        Self::new(VarInt(-1))
+    }
+}
+
+impl Default for ViewRange {
+    fn default() -> Self {
+        Self::new(1.0)
+    }
+}
+
+impl Default for ShadowRadius {
+    fn default() -> Self {
+        Self::new(0.0)
+    }
+}
+
+impl Default for ShadowStrength {
+    fn default() -> Self {
+        Self::new(1.0)
+    }
+}
+
+impl Default for Width {
+    fn default() -> Self {
+        Self::new(0.0)
+    }
+}
+
+impl Default for Height {
+    fn default() -> Self {
+        Self::new(0.0)
+    }
+}
+
+impl Default for GlowColorOverride {
+    fn default() -> Self {
+        Self::new(VarInt(-1))
+    }
+}

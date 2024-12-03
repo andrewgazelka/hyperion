@@ -62,7 +62,7 @@ async fn inner(
                     panic!("{error_msg}");
                 }
                 Ok(None) => {
-                    panic!("{error_msg}");
+                    panic!("{error_msg} for port {port}");
                 }
                 Err(e) => {
                     let error_msg = format!("{error_msg}\n{e}");

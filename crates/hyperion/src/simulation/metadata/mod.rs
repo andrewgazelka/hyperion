@@ -1,8 +1,13 @@
+use std::fmt::Debug;
+
 use derive_more::Deref;
 use flecs_ecs::{
     addons::Meta,
-    core::{ComponentId, Entity, EntityView, IdOperations, SystemAPI, World, WorldProvider, flecs},
-    macros::Component,
+    core::{
+        ComponentId, Entity, EntityView, IdOperations, QueryBuilderImpl, SystemAPI,
+        TermBuilderImpl, World, WorldProvider, flecs,
+    },
+    macros::{Component, observer},
 };
 use heck::ToSnakeCase;
 use tracing::info_span;
@@ -32,7 +37,7 @@ pub struct MetadataPrefabs {
 
 fn component_and_prev<T>(world: &World) -> fn(&mut EntityView<'_>)
 where
-    T: ComponentId + Copy + PartialEq + Metadata + Default + flecs_ecs::core::DataComponent,
+    T: ComponentId + Copy + PartialEq + Metadata + Default + flecs_ecs::core::DataComponent + Debug,
     <T as ComponentId>::UnderlyingType: Meta<<T as ComponentId>::UnderlyingType>,
 {
     world.component::<T>().meta();
@@ -43,6 +48,13 @@ where
     let type_name = type_name.to_snake_case();
 
     let system_name = format!("exchange_{type_name}").leak();
+
+    observer!(world, flecs::OnSet, &T, [filter] &mut MetadataChanges,).each_entity(
+        |entity, (value, changes)| {
+            println!("setting {value:?}");
+            changes.encode(*value);
+        },
+    );
 
     world
         .system_named::<(
@@ -95,14 +107,26 @@ where
 trait EntityViewExt {
     fn component_and_prev<T>(self) -> Self
     where
-        T: ComponentId + Copy + PartialEq + Metadata + Default + flecs_ecs::core::DataComponent,
+        T: ComponentId
+            + Copy
+            + PartialEq
+            + Metadata
+            + Default
+            + flecs_ecs::core::DataComponent
+            + Debug,
         <T as ComponentId>::UnderlyingType: Meta<<T as ComponentId>::UnderlyingType>;
 }
 
 impl EntityViewExt for EntityView<'_> {
     fn component_and_prev<T>(mut self) -> Self
     where
-        T: ComponentId + Copy + PartialEq + Metadata + Default + flecs_ecs::core::DataComponent,
+        T: ComponentId
+            + Copy
+            + PartialEq
+            + Metadata
+            + Default
+            + flecs_ecs::core::DataComponent
+            + Debug,
         <T as ComponentId>::UnderlyingType: Meta<<T as ComponentId>::UnderlyingType>,
     {
         let world = self.world();
@@ -173,7 +197,8 @@ macro_rules! define_metadata_component {
             PartialEq,
             derive_more::Deref,
             derive_more::DerefMut,
-            Default
+            derive_more::Constructor,
+            Debug
         )]
         #[allow(clippy::derive_partial_eq_without_eq)]
         #[meta]

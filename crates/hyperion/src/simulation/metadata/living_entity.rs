@@ -39,6 +39,42 @@ define_and_register_components! {
     // 14, SleepingPosition -> Option<glam::Vec3>,
 }
 
+impl Default for HandStates {
+    fn default() -> Self {
+        Self::new(0)
+    }
+}
+
+impl Default for PotionEffectColor {
+    fn default() -> Self {
+        Self::new(VarInt(0))
+    }
+}
+
+impl Default for IsPotionEffectAmbient {
+    fn default() -> Self {
+        Self::new(false)
+    }
+}
+
+impl Default for BeeStingersInEntity {
+    fn default() -> Self {
+        Self::new(VarInt(0))
+    }
+}
+
+impl Default for ArrowsInEntity {
+    fn default() -> Self {
+        Self::new(VarInt(0))
+    }
+}
+
+impl Default for Health {
+    fn default() -> Self {
+        Self::new(20.0)
+    }
+}
+
 // impl Default for Health {
 //     fn default() -> Self {
 //         Self(20.0)
