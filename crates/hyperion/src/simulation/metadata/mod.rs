@@ -190,13 +190,12 @@ macro_rules! define_metadata_component {
             derive_more::Deref,
             derive_more::DerefMut,
             derive_more::Constructor,
+            derive_more::From,
             Debug
         )]
         #[allow(clippy::derive_partial_eq_without_eq)]
         #[meta]
-        pub struct $name {
-            value: $type,
-        }
+        pub struct $name($type);
 
         #[allow(warnings)]
         impl PartialOrd for $name
@@ -204,7 +203,7 @@ macro_rules! define_metadata_component {
             $type: PartialOrd,
         {
             fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-                self.value.partial_cmp(&other.value)
+                self.0.partial_cmp(&other.0)
             }
         }
 
@@ -214,7 +213,7 @@ macro_rules! define_metadata_component {
             const INDEX: u8 = $index;
 
             fn to_type(self) -> Self::Type {
-                self.value
+                self.0
             }
         }
     };

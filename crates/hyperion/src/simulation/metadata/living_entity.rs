@@ -84,11 +84,11 @@ impl Default for Health {
 impl Health {
     #[must_use]
     pub fn is_dead(&self) -> bool {
-        self.value <= 0.0
+        self.0 <= 0.0
     }
 
     pub fn damage(&mut self, damage: f32) {
-        self.update(self.value - damage);
+        self.update(self.0 - damage);
     }
 
     fn update(&mut self, value: f32) {
@@ -96,11 +96,11 @@ impl Health {
             return;
         }
 
-        self.value = value.clamp(0.0, 20.0);
+        self.0 = value.clamp(0.0, 20.0);
     }
 
     pub fn heal(&mut self, heal: f32) {
-        self.update(self.value + heal);
+        self.update(self.0 + heal);
     }
 }
 
@@ -111,7 +111,7 @@ impl Display for Health {
             clippy::cast_possible_truncation,
             reason = "we want saturating ceiling"
         )]
-        let normal = usize::try_from(self.value.ceil() as isize).unwrap_or(0);
+        let normal = usize::try_from(self.0.ceil() as isize).unwrap_or(0);
 
         let full_hearts = normal / 2;
         for _ in 0..full_hearts {
