@@ -420,6 +420,7 @@ impl Position {
 }
 
 #[derive(Component, Copy, Clone, Debug, Deref, DerefMut, Default, Constructor)]
+#[meta]
 pub struct Yaw {
     yaw: f32,
 }
@@ -439,6 +440,7 @@ impl Display for Pitch {
 }
 
 #[derive(Component, Copy, Clone, Debug, Deref, DerefMut, Default, Constructor)]
+#[meta]
 pub struct Pitch {
     pitch: f32,
 }

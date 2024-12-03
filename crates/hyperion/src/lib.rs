@@ -255,11 +255,9 @@ impl Hyperion {
         component!(world, IVec2 { x: i32, y: i32 });
         world.component::<PendingRemove>();
 
-        world.component::<Yaw>();
-        component!(world, Yaw).opaque_func(meta_ser_stringify_type_display::<Yaw>);
+        world.component::<Yaw>().meta();
 
-        world.component::<Pitch>();
-        component!(world, Pitch).opaque_func(meta_ser_stringify_type_display::<Pitch>);
+        world.component::<Pitch>().meta();
 
         world.component::<PacketDecoder>();
 
