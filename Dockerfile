@@ -53,7 +53,7 @@ RUN --mount=type=cache,target=${CARGO_HOME}/registry \
     cargo build --frozen && \
     mkdir -p /app/build && \
     cp target/debug/hyperion-proxy /app/build/ && \
-    cp target/debug/proof-of-concept /app/build/
+    cp target/debug/tag /app/build/
 
 # Release builder
 FROM builder-base AS build-release
@@ -64,7 +64,7 @@ RUN --mount=type=cache,target=${CARGO_HOME}/registry \
     cargo build --profile release-full --frozen && \
     mkdir -p /app/build && \
     cp target/release-full/hyperion-proxy /app/build/ && \
-    cp target/release-full/proof-of-concept /app/build/
+    cp target/release-full/tag /app/build/
 
 # Runtime base image
 FROM ubuntu:22.04 AS runtime-base
@@ -97,19 +97,19 @@ ENTRYPOINT ["/hyperion-proxy"]
 CMD ["0.0.0.0:8080"]
 
 # NYC Debug
-FROM runtime-base AS proof-of-concept-debug
-COPY --from=build-debug /app/build/proof-of-concept /
-LABEL org.opencontainers.image.source="https://github.com/yourusername/proof-of-concept" \
+FROM runtime-base AS tag-debug
+COPY --from=build-debug /app/build/tag /
+LABEL org.opencontainers.image.source="https://github.com/yourusername/tag" \
       org.opencontainers.image.description="Debug Build - NYC Server" \
       org.opencontainers.image.version="1.0.0"
-ENTRYPOINT ["/proof-of-concept"]
+ENTRYPOINT ["/tag"]
 CMD ["--ip", "0.0.0.0", "--port", "35565"]
 
 # NYC Release
-FROM runtime-base AS proof-of-concept-release
-COPY --from=build-release /app/build/proof-of-concept /
-LABEL org.opencontainers.image.source="https://github.com/yourusername/proof-of-concept" \
+FROM runtime-base AS tag-release
+COPY --from=build-release /app/build/tag /
+LABEL org.opencontainers.image.source="https://github.com/yourusername/tag" \
       org.opencontainers.image.description="Release Build - NYC Server" \
       org.opencontainers.image.version="1.0.0"
-ENTRYPOINT ["/proof-of-concept"]
+ENTRYPOINT ["/tag"]
 CMD ["--ip", "0.0.0.0", "--port", "35565"]

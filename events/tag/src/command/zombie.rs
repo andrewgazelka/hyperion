@@ -9,8 +9,11 @@ use hyperion::{
             MetadataPrefabs,
             block_display::DisplayedBlockState,
             display::{Height, ViewRange, Width},
+            entity::EntityFlags,
+            living_entity::ArrowsInEntity,
         },
     },
+    valence_protocol::VarInt,
 };
 use hyperion_clap::{CommandPermission, MinecraftCommand};
 
@@ -22,22 +25,21 @@ pub struct SpawnCommand;
 impl MinecraftCommand for SpawnCommand {
     fn execute(self, world: &World, _caller: Entity) {
         world.get::<&MetadataPrefabs>(|prefabs| {
-            let block_display = prefabs.block_display_base;
-
             world
                 .entity()
                 .add_enum(EntityKind::BlockDisplay)
+                // .set(EntityFlags::ON_FIRE)
                 .set(Uuid::new_v4())
                 .set(Width::new(1.0))
                 .set(Height::new(1.0))
-                .set(ViewRange::new(100.0))
+                // .set(ViewRange::new(100.0))
                 // .add_enum(EntityKind::Zombie)
                 .set(Position::new(0.0, 22.0, 0.0))
                 .set(Pitch::new(0.0))
                 .set(Yaw::new(0.0))
                 .set(Velocity::ZERO)
                 .set(DisplayedBlockState::new(BlockState::DIRT))
-                .is_a_id(block_display)
+                .is_a_id(prefabs.block_display_base)
                 .enqueue(Spawn);
         });
     }

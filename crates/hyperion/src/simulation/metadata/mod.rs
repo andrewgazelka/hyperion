@@ -56,49 +56,49 @@ where
         },
     );
 
-    world
-        .system_named::<(
-            &mut (Prev, T),       //            (0)
-            &mut T,               //                  (1)
-            &mut MetadataChanges, //     (2)
-        )>(system_name)
-        .multi_threaded()
-        .kind::<flecs::pipeline::OnStore>()
-        .run(move |mut table| {
-            let span = info_span!("exchange", name = system_name);
-            let _enter = span.enter();
-
-            while table.next() {
-                unsafe {
-                    let mut prev = table.field_unchecked::<T>(0);
-                    let prev = prev.get_mut(..).unwrap();
-
-                    let current = table.field_unchecked::<T>(1);
-                    let current = current.get(..).unwrap();
-
-                    let mut metadata_changes = table.field_unchecked::<MetadataChanges>(2);
-                    let metadata_changes = metadata_changes.get_mut(..).unwrap();
-
-                    // todo(perf): big optimization treating as raw bytes and SIMD
-                    // or code that can easily be compiled to SIMD
-                    // also can do copy_from_slice in one pass but want SIMD-optimized
-                    // first
-                    // todo(learn): reborrowing in-depth
-                    for (idx, (prev, current)) in itertools::zip_eq(&mut *prev, current).enumerate()
-                    {
-                        if prev != current {
-                            let metadata_changes = metadata_changes.get_unchecked_mut(idx);
-                            metadata_changes.encode(*current);
-                        }
-                    }
-
-                    prev.copy_from_slice(current);
-                }
-            }
-        });
+    // world
+    //     .system_named::<(
+    //         &mut (Prev, T),       //            (0)
+    //         &mut T,               //                  (1)
+    //         &mut MetadataChanges, //     (2)
+    //     )>(system_name)
+    //     .multi_threaded()
+    //     .kind::<flecs::pipeline::OnStore>()
+    //     .run(move |mut table| {
+    //         let span = info_span!("exchange", name = system_name);
+    //         let _enter = span.enter();
+    //
+    //         while table.next() {
+    //             unsafe {
+    //                 let mut prev = table.field_unchecked::<T>(0);
+    //                 let prev = prev.get_mut(..).unwrap();
+    //
+    //                 let current = table.field_unchecked::<T>(1);
+    //                 let current = current.get(..).unwrap();
+    //
+    //                 let mut metadata_changes = table.field_unchecked::<MetadataChanges>(2);
+    //                 let metadata_changes = metadata_changes.get_mut(..).unwrap();
+    //
+    //                 // todo(perf): big optimization treating as raw bytes and SIMD
+    //                 // or code that can easily be compiled to SIMD
+    //                 // also can do copy_from_slice in one pass but want SIMD-optimized
+    //                 // first
+    //                 // todo(learn): reborrowing in-depth
+    //                 for (idx, (prev, current)) in itertools::zip_eq(&mut *prev, current).enumerate()
+    //                 {
+    //                     if prev != current {
+    //                         let metadata_changes = metadata_changes.get_unchecked_mut(idx);
+    //                         metadata_changes.encode(*current);
+    //                     }
+    //                 }
+    //
+    //                 prev.copy_from_slice(current);
+    //             }
+    //         }
+    //     });
 
     let register = |view: &mut EntityView<'_>| {
-        view.set_pair::<Prev, _>(T::default()).set(T::default());
+        view.set(T::default());
     };
 
     register
