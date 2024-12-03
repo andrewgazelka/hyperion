@@ -26,20 +26,19 @@ use crate::define_and_register_components;
 // Example usage:
 define_and_register_components! {
     8, InterpolationDelay -> VarInt,
-    9, TransformationInterpolationDuration -> VarInt,
-    10, PositionRotationInterpolationDuration -> VarInt,
-    11, Translation -> glam::Vec3,
-    12, Scale -> glam::Vec3,
-    13, RotationLeft -> glam::Quat,
-    14, RotationRight -> glam::Quat,
-    15, BillboardConstraints -> u8,
-    16, BrightnessOverride -> VarInt,
-    17, ViewRange -> f32,
-    18, ShadowRadius -> f32,
-    19, ShadowStrength -> f32,
-    20, Width -> f32,
-    21, Height -> f32,
-    22, GlowColorOverride -> VarInt,
+    9, InterpolationDuration -> VarInt,
+    10, Translation -> glam::Vec3,
+    11, Scale -> glam::Vec3,
+    12, RotationLeft -> glam::Quat,
+    13, RotationRight -> glam::Quat,
+    14, BillboardConstraints -> u8,
+    15, BrightnessOverride -> VarInt,
+    16, ViewRange -> f32,
+    17, ShadowRadius -> f32,
+    18, ShadowStrength -> f32,
+    19, Width -> f32,
+    20, Height -> f32,
+    21, GlowColorOverride -> VarInt,
 }
 
 impl Default for InterpolationDelay {
@@ -48,13 +47,7 @@ impl Default for InterpolationDelay {
     }
 }
 
-impl Default for TransformationInterpolationDuration {
-    fn default() -> Self {
-        Self::new(VarInt(0))
-    }
-}
-
-impl Default for PositionRotationInterpolationDuration {
+impl Default for InterpolationDuration {
     fn default() -> Self {
         Self::new(VarInt(0))
     }

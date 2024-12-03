@@ -6,7 +6,7 @@ use crate::define_and_register_components;
 
 // Example usage:
 define_and_register_components! {
-    23, DisplayedBlockState -> BlockState,
+    22, DisplayedBlockState -> BlockState,
 }
 
 impl Default for DisplayedBlockState {
