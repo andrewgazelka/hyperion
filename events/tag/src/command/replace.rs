@@ -1,7 +1,6 @@
 use std::collections::{HashSet, VecDeque};
 
 use flecs_ecs::core::{Entity, EntityViewGet, World, WorldGet};
-use gxhash::GxBuildHasher;
 use hyperion::{BlockState, glam::IVec3, simulation::blocks::Blocks};
 use hyperion_clap::CommandPermission;
 use rayon::iter::ParallelIterator;
@@ -65,8 +64,8 @@ const ADJACENT: [IVec3; 6] = [
 
 /// Groups connected positions in 3D space
 /// Returns a vector of groups, where each group is a vector of connected positions
-fn group(positions: &HashSet<IVec3, GxBuildHasher>) -> Vec<Vec<IVec3>> {
-    let mut visited: HashSet<IVec3, GxBuildHasher> = HashSet::default();
+fn group(positions: &HashSet<IVec3>) -> Vec<Vec<IVec3>> {
+    let mut visited: HashSet<IVec3> = HashSet::default();
     let mut groups: Vec<Vec<IVec3>> = Vec::new();
 
     // Iterate through all positions
@@ -111,7 +110,7 @@ impl hyperion_clap::MinecraftCommand for ReplaceCommand {
         world.get::<&mut Blocks>(|blocks| {
             let started_time = std::time::Instant::now();
 
-            let concrete_positions: HashSet<_, GxBuildHasher> =
+            let concrete_positions: HashSet<_> =
                 blocks.par_scan_for(BlockState::PINK_CONCRETE).collect();
 
             let scan_time = started_time.elapsed();

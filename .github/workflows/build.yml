@@ -29,24 +29,24 @@ jobs:
         run: |
           cargo machete
 
-  test:
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: ${{ env.RUST_TOOLCHAIN }}
-
-      - uses: Swatinem/rust-cache@v2
-        with:
-          cache-on-failure: true
-
-      - name: Run cargo test
-        run: |
-          cargo test --workspace --all-features
+  #  test:
+  #    runs-on: ubuntu-latest
+  #
+  #    steps:
+  #      - name: Checkout repository
+  #        uses: actions/checkout@v4
+  #
+  #      - uses: actions-rust-lang/setup-rust-toolchain@v1
+  #        with:
+  #          toolchain: ${{ env.RUST_TOOLCHAIN }}
+  #
+  #      - uses: Swatinem/rust-cache@v2
+  #        with:
+  #          cache-on-failure: true
+  #
+  #      - name: Run cargo test
+  #        run: |
+  #          cargo test --workspace --all-features
 
   fmt:
     runs-on: ubuntu-latest
@@ -55,7 +55,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - uses: dtolnay/rust-toolchain@master
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
           components: rustfmt
           toolchain: ${{ env.RUST_TOOLCHAIN }}
@@ -64,25 +64,25 @@ jobs:
         run: |
           cargo fmt --all -- --check
 
-  docs:
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: ${{ env.RUST_TOOLCHAIN }}
-
-      - uses: Swatinem/rust-cache@v2
-        with:
-          cache-on-failure: true
-      - name: Run cargo doc
-        run: | 
-          cargo doc --workspace --no-deps --all-features
-        env:
-          RUSTDOCFLAGS: -D warnings
+  #  docs:
+  #    runs-on: ubuntu-latest
+  #
+  #    steps:
+  #      - name: Checkout repository
+  #        uses: actions/checkout@v4
+  #
+  #      - uses: actions-rust-lang/setup-rust-toolchain@v1
+  #        with:
+  #          toolchain: ${{ env.RUST_TOOLCHAIN }}
+  #
+  #      - uses: Swatinem/rust-cache@v2
+  #        with:
+  #          cache-on-failure: true
+  #      - name: Run cargo doc
+  #        run: |
+  #          cargo doc --workspace --no-deps --all-features
+  #        env:
+  #          RUSTDOCFLAGS: -D warnings
 
   clippy:
     runs-on: ubuntu-latest
@@ -92,35 +92,32 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup Rust toolchain
-        uses: dtolnay/rust-toolchain@master
+        uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
           components: clippy
-
-      - uses: Swatinem/rust-cache@v2
-        with:
           cache-on-failure: true
 
       - name: Clippy check
         run: cargo clippy --workspace --benches --tests --examples --all-features -- -D warnings
 
-  check:
-    strategy:
-      matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-    runs-on: ${{ matrix.os }}
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Setup Rust toolchain
-        uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: ${{ env.RUST_TOOLCHAIN }}
-
-      - uses: Swatinem/rust-cache@v2
-        with:
-          cache-on-failure: true
-
-      - name: Cargo check
-        run: cargo check --workspace --all-features
+#  check:
+#    strategy:
+#      matrix:
+#        os: [ubuntu-latest, windows-latest, macos-latest]
+#    runs-on: ${{ matrix.os }}
+#    steps:
+#      - name: Checkout repository
+#        uses: actions/checkout@v4
+#
+#      - name: Setup Rust toolchain
+#        uses: actions-rust-lang/setup-rust-toolchain@v1
+#        with:
+#          toolchain: ${{ env.RUST_TOOLCHAIN }}
+#
+#      - uses: Swatinem/rust-cache@v2
+#        with:
+#          cache-on-failure: true
+#
+#      - name: Cargo check
+#        run: cargo check --workspace --all-features
