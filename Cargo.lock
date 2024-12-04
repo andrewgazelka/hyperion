@@ -1808,7 +1808,6 @@ dependencies = [
  "flecs_ecs",
  "hyperion",
  "serde",
- "uuid",
  "valence_protocol",
 ]
 
