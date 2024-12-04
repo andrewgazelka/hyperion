@@ -18,6 +18,7 @@ use hyperion::{
         text::IntoText,
     },
 };
+use hyperion_inventory::PlayerInventory;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -171,8 +172,32 @@ impl Gui {
 
                 (item.on_click)(player, button);
                 gui.draw(query.world, player);
-                // TODO: REDRAW USER INVENTORY
-                // IF THEY SHIFT CLICK IT STAYS IN THEIR INVENTORY
+
+                let player = query.id;
+                // re-draw the inventory
+                player
+                    .entity_view(query.world) 
+                    .get::<&PlayerInventory>(|inventory| {
+                        let player_inv = inventory.slots();
+                        
+                        let set_content_packet = InventoryS2c {
+                            window_id: 0,
+                            state_id: VarInt(0),
+                            slots: Cow::Borrowed(player_inv),
+                            carried_item: Cow::Borrowed(&ItemStack::EMPTY),
+                        };
+
+                        query.world
+                            .get::<&Compose>(|compose| {
+                                player
+                                    .entity_view(query.world)
+                                    .get::<&NetworkStreamRef>(|stream| {
+                                        compose
+                                            .unicast(&set_content_packet, *stream, SystemId(8), query.world)
+                                            .unwrap();
+                                    });
+                            });
+                    });
             });
         });
     }
