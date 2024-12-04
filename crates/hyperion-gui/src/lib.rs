@@ -10,6 +10,7 @@ use hyperion::{
     valence_protocol::{
         ItemStack, VarInt,
         packets::play::{
+            click_slot_c2s::ClickMode,
             close_screen_s2c::CloseScreenS2c,
             inventory_s2c::InventoryS2c,
             open_screen_s2c::{OpenScreenS2c, WindowType},
@@ -48,7 +49,7 @@ pub struct Gui {
 #[derive(Clone)]
 pub struct GuiItem {
     item: ItemStack,
-    on_click: fn(Entity),
+    on_click: fn(Entity, ClickMode),
 }
 
 /// Thread-local non-zero id means that it will be very unlikely that one player will have two
@@ -157,6 +158,8 @@ impl Gui {
             let items = self.items.clone();
             let gui = self.clone();
             event_handlers.click.register(move |query, event| {
+                let button = event.mode;
+
                 if event.window_id != window_id {
                     return;
                 }
@@ -166,8 +169,10 @@ impl Gui {
                     return;
                 };
 
-                (item.on_click)(player);
+                (item.on_click)(player, button);
                 gui.draw(query.world, player);
+                // TODO: REDRAW USER INVENTORY
+                // IF THEY SHIFT CLICK IT STAYS IN THEIR INVENTORY
             });
         });
     }
@@ -178,7 +183,7 @@ impl Gui {
 }
 
 impl GuiItem {
-    pub fn new(item: ItemStack, on_click: fn(Entity)) -> Self {
+    pub fn new(item: ItemStack, on_click: fn(Entity, ClickMode)) -> Self {
         Self { item, on_click }
     }
 }
