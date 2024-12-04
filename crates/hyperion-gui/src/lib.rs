@@ -18,7 +18,6 @@ use hyperion::{
         text::IntoText,
     },
 };
-use hyperion_inventory::PlayerInventory;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
