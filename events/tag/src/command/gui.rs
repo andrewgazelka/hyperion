@@ -1,5 +1,6 @@
 use clap::Parser;
 use flecs_ecs::core::{Entity, World};
+use hyperion::valence_protocol::packets::play::click_slot_c2s::ClickMode;
 use hyperion_clap::{CommandPermission, MinecraftCommand};
 use hyperion_gui::{ContainerType, Gui, GuiItem};
 use hyperion_item::builder::ItemBuilder;
@@ -19,8 +20,14 @@ impl MinecraftCommand for GuiCommand {
                 .name("Information")
                 .glowing()
                 .build(),
-            |_player| {
-                debug!("Clicked on info item");
+            |_player, click_mode| match click_mode {
+                ClickMode::Click => debug!("Left Click"),
+                ClickMode::ShiftClick => debug!("Shift Click"),
+                ClickMode::Hotbar => debug!("Hotbar"),
+                ClickMode::CreativeMiddleClick => debug!("Creative Middle Click"),
+                ClickMode::DropKey => debug!("Drop Key"),
+                ClickMode::Drag => debug!("Drag"),
+                ClickMode::DoubleClick => debug!("Double Click"),
             },
         );
 
