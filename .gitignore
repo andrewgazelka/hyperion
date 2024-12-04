@@ -24,3 +24,4 @@ db/
 .trigger-debug
 .trigger-release
 crates/run/config.toml
+valence/
