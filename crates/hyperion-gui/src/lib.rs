@@ -1,4 +1,6 @@
-use std::{borrow::Cow, collections::HashMap};
+#![feature(thread_local)]
+
+use std::{borrow::Cow, cell::Cell, collections::HashMap};
 
 use flecs_ecs::core::{Entity, EntityViewGet, World, WorldGet};
 use hyperion::{
@@ -8,7 +10,6 @@ use hyperion::{
     valence_protocol::{
         ItemStack, VarInt,
         packets::play::{
-            // click_slot_c2s::ClickSlotC2s,
             close_screen_s2c::CloseScreenS2c,
             inventory_s2c::InventoryS2c,
             open_screen_s2c::{OpenScreenS2c, WindowType},
@@ -17,7 +18,6 @@ use hyperion::{
     },
 };
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct InventoryItem {
@@ -51,12 +51,28 @@ pub struct GuiItem {
     on_click: fn(Entity),
 }
 
+/// Thread-local non-zero id means that it will be very unlikely that one player will have two
+/// of the same IDs at the same time when opening GUIs in succession.
+///
+/// We are skipping 0 because it is reserved for the player's inventory.
+fn non_zero_window_id() -> u8 {
+    #[thread_local]
+    static ID: Cell<u8> = Cell::new(0);
+
+    ID.set(ID.get().wrapping_add(1));
+
+    if ID.get() == 0 {
+        ID.set(1);
+    }
+
+    ID.get()
+}
+
 impl Gui {
     #[must_use]
     pub fn new(size: usize, title: String, container_type: ContainerType) -> Self {
         Self {
-            #[allow(clippy::cast_possible_truncation)]
-            window_id: Uuid::new_v4().as_u128() as u8,
+            window_id: non_zero_window_id(),
             title,
             size,
             container_type,
