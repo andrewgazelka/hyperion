@@ -176,10 +176,10 @@ impl Gui {
                 let player = query.id;
                 // re-draw the inventory
                 player
-                    .entity_view(query.world) 
+                    .entity_view(query.world)
                     .get::<&PlayerInventory>(|inventory| {
                         let player_inv = inventory.slots();
-                        
+
                         let set_content_packet = InventoryS2c {
                             window_id: 0,
                             state_id: VarInt(0),
@@ -187,16 +187,20 @@ impl Gui {
                             carried_item: Cow::Borrowed(&ItemStack::EMPTY),
                         };
 
-                        query.world
-                            .get::<&Compose>(|compose| {
-                                player
-                                    .entity_view(query.world)
-                                    .get::<&NetworkStreamRef>(|stream| {
-                                        compose
-                                            .unicast(&set_content_packet, *stream, SystemId(8), query.world)
-                                            .unwrap();
-                                    });
-                            });
+                        query.world.get::<&Compose>(|compose| {
+                            player
+                                .entity_view(query.world)
+                                .get::<&NetworkStreamRef>(|stream| {
+                                    compose
+                                        .unicast(
+                                            &set_content_packet,
+                                            *stream,
+                                            SystemId(8),
+                                            query.world,
+                                        )
+                                        .unwrap();
+                                });
+                        });
                     });
             });
         });
