@@ -6,6 +6,7 @@ mod tests {
     use super::*;
 
     #[test]
+    #[expect(clippy::print_stdout)]
     fn print_chars() {
         println!("Rocket: {NERD_ROCKET}");
         println!("Fail: {FAIL_ROCKET}");

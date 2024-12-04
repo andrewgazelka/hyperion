@@ -31,11 +31,35 @@ define_and_register_components! {
     7, TicksFrozenInPowderSnow -> VarInt,
 }
 
-// impl Default for AirSupply {
-//     fn default() -> Self {
-//         Self(VarInt(300))
-//     }
-// }
+impl Default for AirSupply {
+    fn default() -> Self {
+        Self::new(VarInt(300))
+    }
+}
+
+impl Default for CustomNameVisible {
+    fn default() -> Self {
+        Self::new(false)
+    }
+}
+
+impl Default for Silent {
+    fn default() -> Self {
+        Self::new(false)
+    }
+}
+
+impl Default for NoGravity {
+    fn default() -> Self {
+        Self::new(false)
+    }
+}
+
+impl Default for TicksFrozenInPowderSnow {
+    fn default() -> Self {
+        Self::new(VarInt(0))
+    }
+}
 
 #[derive(Encode, Clone, Copy, Default, PartialEq, Eq, Debug)]
 #[derive(Component)]

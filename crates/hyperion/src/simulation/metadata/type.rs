@@ -58,6 +58,6 @@ impl_metadata_type! {
     8 => bool,
     14 => BlockState,
     20 => Pose,
-    28 => glam::Vec3,
-    29 => glam::Quat,
+    26 => glam::Vec3,
+    27 => glam::Quat,
 }

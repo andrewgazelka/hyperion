@@ -4,7 +4,7 @@ use flecs_ecs::{
     macros::Component,
     prelude::Module,
 };
-use hyperion::storage::{ClickEvent, EventFn, GlobalEventHandlers};
+use hyperion::storage::{EventFn, GlobalEventHandlers, InteractEvent};
 use valence_protocol::nbt;
 
 pub mod builder;
@@ -14,7 +14,7 @@ pub struct ItemModule;
 
 #[derive(Component, Constructor, Deref, DerefMut)]
 pub struct Handler {
-    on_click: EventFn<ClickEvent>,
+    on_click: EventFn<InteractEvent>,
 }
 
 impl Module for ItemModule {
@@ -23,7 +23,7 @@ impl Module for ItemModule {
         world.component::<Handler>();
 
         world.get::<&mut GlobalEventHandlers>(|handlers| {
-            handlers.click.register(|query, event| {
+            handlers.interact.register(|query, event| {
                 let world = query.world;
                 let inventory = &mut *query.inventory;
 

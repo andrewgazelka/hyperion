@@ -1700,7 +1700,6 @@ dependencies = [
  "geometry",
  "glam",
  "heapless",
- "heck 0.5.0",
  "heed",
  "hyperion-crafting",
  "hyperion-event-macros",
@@ -1899,6 +1898,7 @@ dependencies = [
  "hyperion-inventory",
  "hyperion-item",
  "toml",
+ "tracing",
  "valence_protocol",
 ]
 

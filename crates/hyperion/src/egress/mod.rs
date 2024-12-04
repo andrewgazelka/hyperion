@@ -158,7 +158,6 @@ impl Module for EgressModule {
             }
 
             if let Err(e) = egress.send(flush.clone()) {
-                println!("QUEUE FLUSH");
                 error!("failed to send flush: {e}");
             }
         });

@@ -6,7 +6,7 @@ use flecs_ecs::{
 };
 use hyperion::{
     simulation::Player,
-    storage::{ClickEvent, EventFn},
+    storage::{EventFn, InteractEvent},
 };
 
 pub mod inventory;
@@ -66,9 +66,9 @@ impl Module for RankTree {
             .component::<Player>()
             .add_trait::<(flecs::With, Class)>();
 
-        let handler: EventFn<ClickEvent> = |query, _| {
+        let handler: EventFn<InteractEvent> = |query, _| {
             let cursor = query.inventory.get_cursor();
-            println!("clicked {cursor:?}");
+            tracing::debug!("clicked {cursor:?}");
         };
 
         let speed = world.entity().set(hyperion_item::Handler::new(handler));

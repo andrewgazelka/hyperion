@@ -23,7 +23,6 @@ geometry = {workspace = true}
 bitfield-struct = {workspace = true}
 simd-utils = {workspace = true}
 bitvec = {workspace = true}
-heck = {workspace = true}
 papaya = {workspace = true}
 bumpalo = {workspace = true}
 bvh-region = {workspace = true}

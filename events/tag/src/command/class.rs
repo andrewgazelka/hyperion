@@ -8,15 +8,14 @@ use hyperion::{
         player_join::{PlayerListActions, PlayerListEntry, PlayerListS2c},
     },
     net::{Compose, DataBundle, NetworkStreamRef, agnostic},
-    simulation::{Pitch, Position, Yaw},
+    simulation::{Pitch, Position, Xp, Yaw},
     system_registry::SystemId,
     valence_ident::ident,
     valence_protocol::{
         BlockPos, GameMode, VarInt,
         game_mode::OptGameMode,
-        packets::{
-            play,
-            play::{PlayerRespawnS2c, player_position_look_s2c::PlayerPositionLookFlags},
+        packets::play::{
+            self, PlayerRespawnS2c, player_position_look_s2c::PlayerPositionLookFlags,
         },
         profile::Property,
     },
@@ -47,7 +46,8 @@ impl MinecraftCommand for ClassCommand {
                 &Pitch,
                 &mut Team,
                 &mut Class,
-            )>(|(stream, uuid, position, yaw, pitch, team, class)| {
+                &Xp,
+            )>(|(stream, uuid, position, yaw, pitch, team, class, xp)| {
                 if *team == team_param && *class == class_param {
                     let chat_pkt = agnostic::chat("§cYou’re already using this class!");
 
@@ -178,6 +178,16 @@ impl MinecraftCommand for ClassCommand {
                         world,
                     )
                     .unwrap();
+
+                let visual = xp.get_visual();
+
+                let xp_packet = play::ExperienceBarUpdateS2c {
+                    bar: visual.prop,
+                    level: VarInt(i32::from(visual.level)),
+                    total_xp: VarInt::default(),
+                };
+
+                bundle.add_packet(&xp_packet, world).unwrap();
 
                 let msg = format!("Setting rank to {class:?} with yaw {yaw:?}");
                 let chat = agnostic::chat(msg);

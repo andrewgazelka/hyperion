@@ -31,7 +31,9 @@ use super::{
 use crate::{
     net::{Compose, NetworkStreamRef, decoder::BorrowedPacketFrame},
     simulation::{Pitch, Yaw, aabb, event, event::PluginMessage, metadata::entity::Pose},
-    storage::{ClickEvent, CommandCompletionRequest, Events, GlobalEventHandlers},
+    storage::{
+        ClickSlotEvent, CommandCompletionRequest, Events, GlobalEventHandlers, InteractEvent,
+    },
     system_registry::SystemId,
 };
 
@@ -340,7 +342,7 @@ pub fn player_interact_item(
     let play::PlayerInteractItemC2s { hand, sequence } =
         play::PlayerInteractItemC2s::decode(&mut data)?;
 
-    let event = ClickEvent {
+    let event = InteractEvent {
         hand,
         sequence: sequence.0,
     };
@@ -355,7 +357,7 @@ pub fn player_interact_item(
             .unicast(&packet, query.io_ref, SystemId(0), query.world)?;
     }
 
-    query.handlers.click.trigger_all(query, &event);
+    query.handlers.interact.trigger_all(query, &event);
 
     Ok(())
 }
@@ -533,7 +535,7 @@ pub fn custom_payload(
 }
 
 // keywords: inventory
-fn click_slot(mut data: &'static [u8], query: &PacketSwitchQuery<'_>) -> anyhow::Result<()> {
+fn click_slot(mut data: &'static [u8], query: &mut PacketSwitchQuery<'_>) -> anyhow::Result<()> {
     let pkt = play::ClickSlotC2s::decode(&mut data)?;
 
     let to_send_pkt = play::ScreenHandlerSlotUpdateS2c {
@@ -584,6 +586,9 @@ fn click_slot(mut data: &'static [u8], query: &PacketSwitchQuery<'_>) -> anyhow:
     query
         .compose
         .unicast(&set_item_pkt, query.io_ref, query.system_id, query.world)?;
+
+    let event = ClickSlotEvent::from(pkt);
+    query.handlers.click.trigger_all(query, &event);
 
     Ok(())
 }

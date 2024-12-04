@@ -1,5 +1,11 @@
 use flecs_ecs::{core::Entity, macros::Component};
-use valence_protocol::Hand;
+use valence_protocol::{
+    Hand, ItemStack,
+    packets::{
+        play,
+        play::click_slot_c2s::{ClickMode, SlotChange},
+    },
+};
 
 use crate::simulation::handlers::PacketSwitchQuery;
 
@@ -10,14 +16,53 @@ pub struct CommandCompletionRequest<'a> {
     pub id: i32,
 }
 
-pub struct ClickEvent {
+pub struct InteractEvent {
     pub hand: Hand,
     pub sequence: i32,
 }
 
+pub struct ClickSlotEvent {
+    pub window_id: u8,
+    pub state_id: i32,
+    pub slot_idx: i16,
+    /// The button used to click the slot. An enum can't easily be used for this
+    /// because the meaning of this value depends on the mode.
+    pub button: i8,
+    pub mode: ClickMode,
+    pub slot_changes: Vec<SlotChange>,
+    pub carried_item: ItemStack,
+}
+
+impl From<play::ClickSlotC2s<'static>> for ClickSlotEvent {
+    fn from(event: play::ClickSlotC2s<'static>) -> Self {
+        let play::ClickSlotC2s {
+            window_id,
+            state_id,
+            slot_idx,
+            button,
+            mode,
+            slot_changes,
+            carried_item,
+        } = event;
+
+        let slot_changes = slot_changes.into_owned();
+
+        Self {
+            window_id,
+            state_id: state_id.0,
+            slot_idx,
+            button,
+            mode,
+            slot_changes,
+            carried_item,
+        }
+    }
+}
+
 #[derive(Component, Default)]
 pub struct GlobalEventHandlers {
-    pub click: EventHandlers<ClickEvent>,
+    pub click: EventHandlers<ClickSlotEvent>,
+    pub interact: EventHandlers<InteractEvent>,
 
     // todo: this should be a lifetime for<'a>
     pub completion: EventHandlers<CommandCompletionRequest<'static>>,

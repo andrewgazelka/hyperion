@@ -114,7 +114,10 @@ impl Module for EntityStateSyncModule {
                         };
 
                         // todo(perf): do so locally
-                        compose.broadcast(&pkt, system_id).send(&world).unwrap();
+                        compose
+                            .broadcast(&pkt, SystemId(9999))
+                            .send(&world)
+                            .unwrap();
                     }
                 },
             );

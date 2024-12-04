@@ -9,6 +9,7 @@ use hyperion_utils::EntityExt;
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 use skin::PlayerSkin;
+use tracing::debug;
 use uuid;
 use valence_generated::block::BlockState;
 use valence_protocol::{ByteAngle, VarInt, packets::play};
@@ -18,6 +19,7 @@ use crate::{
     net::Compose,
     simulation::{
         command::Command,
+        entity_kind::EntityKind,
         metadata::{Metadata, MetadataPrefabs, entity::EntityFlags},
     },
     storage::ThreadLocalVec,
@@ -361,6 +363,13 @@ impl Default for Comms {
 )]
 pub struct Uuid(pub uuid::Uuid);
 
+impl Uuid {
+    #[must_use]
+    pub fn new_v4() -> Self {
+        Self(uuid::Uuid::new_v4())
+    }
+}
+
 /// Any living minecraft entity that is NOT a player.
 ///
 /// Example: zombie, skeleton, etc.
@@ -411,6 +420,7 @@ impl Position {
 }
 
 #[derive(Component, Copy, Clone, Debug, Deref, DerefMut, Default, Constructor)]
+#[meta]
 pub struct Yaw {
     yaw: f32,
 }
@@ -430,6 +440,7 @@ impl Display for Pitch {
 }
 
 #[derive(Component, Copy, Clone, Debug, Deref, DerefMut, Default, Constructor)]
+#[meta]
 pub struct Pitch {
     pitch: f32,
 }
@@ -579,10 +590,6 @@ impl TryFrom<Velocity> for valence_protocol::Velocity {
     }
 }
 
-#[derive(Component, Copy, Clone, Debug, Default, PartialEq, Eq, Hash)]
-#[meta]
-pub struct EntityKind(pub i32);
-
 #[derive(Component)]
 pub struct SimModule;
 
@@ -618,11 +625,12 @@ impl Module for SimModule {
 
         world.component::<EntityKind>().meta();
 
-        world
-            .component::<EntityKind>()
-            .add_trait::<(flecs::With, Yaw)>()
-            .add_trait::<(flecs::With, Pitch)>()
-            .add_trait::<(flecs::With, Velocity)>();
+        // todo: how
+        // world
+        //     .component::<EntityKind>()
+        //     .add_trait::<(flecs::With, Yaw)>()
+        //     .add_trait::<(flecs::With, Pitch)>()
+        //     .add_trait::<(flecs::With, Velocity)>();
 
         world.component::<MetadataPrefabs>();
         world.component::<EntityFlags>();
@@ -659,23 +667,25 @@ impl Module for SimModule {
             Spawn,
             &Compose($),
             [filter] & Uuid,
-            [filter] & EntityKind,
             [filter] & Position,
             [filter] & Pitch,
             [filter] & Yaw,
             [filter] & Velocity,
         )
         .with::<flecs::Any>()
-        .each_entity(
-            |entity, (compose, uuid, kind, position, pitch, yaw, velocity)| {
-                println!("spawn");
-                let minecraft_id = entity.minecraft_id();
-                let world = entity.world();
+        .with_enum_wildcard::<EntityKind>()
+        .each_entity(|entity, (compose, uuid, position, pitch, yaw, velocity)| {
+            debug!("spawned entity");
+            let minecraft_id = entity.minecraft_id();
+            let world = entity.world();
+
+            entity.get::<&EntityKind>(|kind| {
+                let kind = *kind as i32;
 
                 let packet = play::EntitySpawnS2c {
                     entity_id: VarInt(minecraft_id),
                     object_uuid: uuid.0,
-                    kind: VarInt(kind.0),
+                    kind: VarInt(kind),
                     position: position.as_dvec3(),
                     pitch: ByteAngle::from_degrees(**pitch),
                     yaw: ByteAngle::from_degrees(**yaw),
@@ -688,8 +698,23 @@ impl Module for SimModule {
                     .broadcast(&packet, SystemId(0))
                     .send(&world)
                     .unwrap();
-            },
-        );
+            });
+        });
+
+        world
+            .observer::<flecs::OnSet, ()>()
+            .with_enum_wildcard::<EntityKind>()
+            .each_entity(move |entity, ()| {
+                entity.get::<&EntityKind>(|kind| match kind {
+                    EntityKind::BlockDisplay => {
+                        entity.is_a_id(prefabs.block_display_base);
+                    }
+                    EntityKind::Player => {
+                        entity.is_a_id(prefabs.player_base);
+                    }
+                    _ => {}
+                });
+            });
     }
 }
 
