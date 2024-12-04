@@ -52,7 +52,7 @@ pub struct GuiItem {
 }
 
 impl Gui {
-    pub fn new(size: usize, title: String, container_type: ContainerType) -> Self {
+    #[must_use] pub fn new(size: usize, title: String, container_type: ContainerType) -> Self {
         Self {
             window_id: Uuid::new_v4().as_u128() as u8,
             title,
@@ -62,7 +62,7 @@ impl Gui {
         }
     }
 
-    pub fn get_window_type(&self) -> WindowType {
+    #[must_use] pub const fn get_window_type(&self) -> WindowType {
         match self.container_type {
             ContainerType::Chest => WindowType::Generic9x3,
             ContainerType::ShulkerBox => WindowType::ShulkerBox,
@@ -114,9 +114,9 @@ impl Gui {
         });
     }
 
-    pub fn open<'a>(&'a mut self, world: &World, player: Entity) {
+    pub fn open(&mut self, world: &World, player: Entity) {
         let open_screen_packet = OpenScreenS2c {
-            window_id: VarInt(self.window_id as i32),
+            window_id: VarInt(i32::from(self.window_id)),
             window_type: self.get_window_type(),
             window_title: self.title.clone().into_cow_text(),
         };
@@ -142,7 +142,7 @@ impl Gui {
                     return;
                 }
 
-                let slot = event.slot_idx as usize;
+                let slot = usize::try_from(event.slot_idx).unwrap();
                 let Some(item) = items.get(&slot) else {
                     return;
                 };

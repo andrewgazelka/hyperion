@@ -87,7 +87,10 @@ impl<T> EventHandlers<T> {
         }
     }
 
-    pub fn register(&mut self, handler: impl Fn(&mut PacketSwitchQuery<'_>, &T) + 'static + Send + Sync) {
+    pub fn register(
+        &mut self,
+        handler: impl Fn(&mut PacketSwitchQuery<'_>, &T) + 'static + Send + Sync,
+    ) {
         self.handlers.push(Box::new(handler));
     }
 }
