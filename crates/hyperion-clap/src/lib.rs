@@ -112,7 +112,7 @@ pub trait MinecraftCommand: Parser + CommandPermission {
         };
 
         let on_tab_complete: EventFn<CommandCompletionRequest<'static>> =
-            |packet_switch_query: &mut PacketSwitchQuery<'_>,
+            Box::new(|packet_switch_query: &mut PacketSwitchQuery<'_>,
              completion: &CommandCompletionRequest<'_>| {
                 let full_query = completion.query;
                 let id = completion.id;
@@ -228,7 +228,7 @@ pub trait MinecraftCommand: Parser + CommandPermission {
                         packet_switch_query.world,
                     )
                     .unwrap();
-            };
+            });
 
         let handler = CommandHandler {
             on_execute,

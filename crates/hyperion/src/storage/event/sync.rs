@@ -9,7 +9,7 @@ use valence_protocol::{
 
 use crate::simulation::handlers::PacketSwitchQuery;
 
-pub type EventFn<T> = fn(&mut PacketSwitchQuery<'_>, &T);
+pub type EventFn<T> = Box<dyn Fn(&mut PacketSwitchQuery<'_>, &T) + 'static + Send + Sync>;
 
 pub struct CommandCompletionRequest<'a> {
     pub query: &'a str,
@@ -87,8 +87,8 @@ impl<T> EventHandlers<T> {
         }
     }
 
-    pub fn register(&mut self, handler: EventFn<T>) {
-        self.handlers.push(handler);
+    pub fn register(&mut self, handler: impl Fn(&mut PacketSwitchQuery<'_>, &T) + 'static + Send + Sync) {
+        self.handlers.push(Box::new(handler));
     }
 }
 
