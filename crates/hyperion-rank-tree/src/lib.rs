@@ -5,7 +5,7 @@ use flecs_ecs::{
     prelude::Module,
 };
 use hyperion::{
-    simulation::Player,
+    simulation::{handlers::PacketSwitchQuery, Player},
     storage::{EventFn, InteractEvent},
 };
 
@@ -66,10 +66,10 @@ impl Module for RankTree {
             .component::<Player>()
             .add_trait::<(flecs::With, Class)>();
 
-        let handler: EventFn<InteractEvent> = |query, _| {
+        let handler: EventFn<InteractEvent> = Box::new(|query: &mut PacketSwitchQuery<'_>, _| {
             let cursor = query.inventory.get_cursor();
             tracing::debug!("clicked {cursor:?}");
-        };
+        });
 
         let speed = world.entity().set(hyperion_item::Handler::new(handler));
 

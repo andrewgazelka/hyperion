@@ -6,6 +6,7 @@ dotenvy = { workspace = true }
 fastrand = { workspace = true }
 flecs_ecs = { workspace = true }
 hyperion-clap = { workspace = true }
+hyperion-gui = { path = "../../crates/hyperion-gui" }
 hyperion-inventory = { workspace = true }
 hyperion-permission = { workspace = true }
 hyperion-scheduled = { workspace = true }
@@ -23,6 +24,8 @@ gxhash = { workspace = true }
 derive_more = { workspace = true }
 geometry = { workspace = true }
 uuid = { version = "1.11.0", features = ["v4"] }
+hyperion-item = { workspace = true }
+
 
 [dev-dependencies]
 tracing = {workspace = true, features = ["release_max_level_info"]}

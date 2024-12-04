@@ -86,7 +86,7 @@ impl Module for CommandSystemModule {
                     let Some(cmd) = registry.commands.get(command) else {
                         return;
                     };
-                    let on_tab = cmd.on_tab_complete;
+                    let on_tab = &cmd.on_tab_complete;
                     on_tab(query, completion);
                 });
             });
