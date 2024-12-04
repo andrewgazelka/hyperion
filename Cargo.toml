@@ -126,9 +126,6 @@ git = 'https://github.com/Indra-db/Flecs-Rust'
 [workspace.dependencies.geometry]
 path = 'crates/geometry'
 
-[workspace.dependencies.gxhash]
-version = '3.4.1'
-
 [workspace.dependencies.hyperion]
 path = 'crates/hyperion'
 

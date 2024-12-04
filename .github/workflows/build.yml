@@ -96,9 +96,6 @@ jobs:
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
           components: clippy
-
-      - uses: Swatinem/rust-cache@v2
-        with:
           cache-on-failure: true
 
       - name: Clippy check

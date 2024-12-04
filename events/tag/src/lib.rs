@@ -6,7 +6,7 @@
 #![feature(iter_from_coroutine)]
 #![feature(exact_size_is_empty)]
 
-use std::net::ToSocketAddrs;
+use std::{collections::HashSet, net::ToSocketAddrs};
 
 use flecs_ecs::prelude::*;
 use hyperion::{
@@ -41,7 +41,7 @@ mod skin;
 
 #[derive(Component, Default, Deref, DerefMut)]
 struct OreVeins {
-    ores: gxhash::HashSet<IVec3>,
+    ores: HashSet<IVec3>,
 }
 
 #[derive(Component, Deref, DerefMut)]
