@@ -1807,9 +1807,7 @@ version = "0.1.0"
 dependencies = [
  "flecs_ecs",
  "hyperion",
- "rand",
  "serde",
- "tracing",
  "uuid",
  "valence_protocol",
 ]
@@ -3775,8 +3773,6 @@ dependencies = [
  "tracing-subscriber",
  "tracing-tracy",
  "uuid",
- "valence_nbt",
- "valence_server",
 ]
 
 [[package]]

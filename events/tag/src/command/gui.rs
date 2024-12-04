@@ -3,6 +3,7 @@ use flecs_ecs::core::{Entity, World};
 use hyperion_clap::{CommandPermission, MinecraftCommand};
 use hyperion_gui::{ContainerType, Gui, GuiItem};
 use hyperion_item::builder::ItemBuilder;
+use tracing::debug;
 
 #[derive(Parser, CommandPermission, Debug)]
 #[command(name = "testgui")]
@@ -19,7 +20,7 @@ impl MinecraftCommand for GuiCommand {
                 .glowing()
                 .build(),
             |_player| {
-                println!("Hello world!");
+                debug!("Clicked on info item");
             },
         );
 

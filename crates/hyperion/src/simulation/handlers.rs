@@ -587,7 +587,7 @@ fn click_slot(mut data: &'static [u8], query: &mut PacketSwitchQuery<'_>) -> any
         .compose
         .unicast(&set_item_pkt, query.io_ref, query.system_id, query.world)?;
 
-    let event = ClickSlotEvent::from(pkt);
+    let event = ClickSlotEvent::try_from(pkt)?;
     query.handlers.click.trigger_all(query, &event);
 
     Ok(())

@@ -52,8 +52,10 @@ pub struct GuiItem {
 }
 
 impl Gui {
-    #[must_use] pub fn new(size: usize, title: String, container_type: ContainerType) -> Self {
+    #[must_use]
+    pub fn new(size: usize, title: String, container_type: ContainerType) -> Self {
         Self {
+            #[allow(clippy::cast_possible_truncation)]
             window_id: Uuid::new_v4().as_u128() as u8,
             title,
             size,
@@ -62,7 +64,8 @@ impl Gui {
         }
     }
 
-    #[must_use] pub const fn get_window_type(&self) -> WindowType {
+    #[must_use]
+    pub const fn get_window_type(&self) -> WindowType {
         match self.container_type {
             ContainerType::Chest => WindowType::Generic9x3,
             ContainerType::ShulkerBox => WindowType::ShulkerBox,
@@ -142,7 +145,7 @@ impl Gui {
                     return;
                 }
 
-                let slot = usize::try_from(event.slot_idx).unwrap();
+                let slot = usize::from(event.slot_idx);
                 let Some(item) = items.get(&slot) else {
                     return;
                 };

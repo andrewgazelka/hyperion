@@ -24,9 +24,7 @@ gxhash = { workspace = true }
 derive_more = { workspace = true }
 geometry = { workspace = true }
 uuid = { version = "1.11.0", features = ["v4"] }
-valence_nbt = { workspace = true }
 hyperion-item = { workspace = true }
-valence_server = { workspace = true }
 
 
 [dev-dependencies]
