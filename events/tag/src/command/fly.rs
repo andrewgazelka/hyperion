@@ -4,7 +4,7 @@ use flecs_ecs::{
     macros::Component,
 };
 use hyperion::{
-    net::{Compose, DataBundle, NetworkStreamRef, agnostic},
+    net::{Compose, ConnectionId, DataBundle, agnostic},
     simulation::Player,
     system_registry::SystemId,
     valence_protocol::packets::play::{
@@ -29,7 +29,7 @@ impl MinecraftCommand for FlyCommand {
         world.get::<&Compose>(|compose| {
             caller
                 .entity_view(world)
-                .get::<(&mut Flight, &NetworkStreamRef)>(|(flight, stream)| {
+                .get::<(&mut Flight, &ConnectionId)>(|(flight, stream)| {
                     flight.allow = !flight.allow;
 
                     let allow_flight = flight.allow;

@@ -19,7 +19,7 @@ use crate::{
     Prev, Shutdown,
     egress::sync_chunks::ChunkSendQueue,
     net::{
-        Compose, MINECRAFT_VERSION, NetworkStreamRef, PROTOCOL_VERSION, PacketDecoder,
+        Compose, ConnectionId, MINECRAFT_VERSION, PROTOCOL_VERSION, PacketDecoder,
         decoder::BorrowedPacketFrame, proxy::ReceiveState,
     },
     runtime::AsyncRuntime,
@@ -86,7 +86,7 @@ fn process_login(
     skins_collection: SkinHandler,
     mojang: MojangClient,
     packet: &BorrowedPacketFrame<'_>,
-    stream_id: NetworkStreamRef,
+    stream_id: ConnectionId,
     compose: &Compose,
     entity: &EntityView<'_>,
     system_id: SystemId,
@@ -195,7 +195,7 @@ fn process_status(
     login_state: &mut PacketState,
     system_id: SystemId,
     packet: &BorrowedPacketFrame<'_>,
-    packets: NetworkStreamRef,
+    packets: ConnectionId,
     compose: &Compose,
     world: &World,
 ) -> anyhow::Result<()> {
@@ -319,7 +319,7 @@ impl Module for IngressModule {
                 info!("player_connect");
                 let view = world
                     .entity()
-                    .set(NetworkStreamRef::new(connect))
+                    .set(ConnectionId::new(connect))
                     .set(hyperion_inventory::PlayerInventory::default())
                     .set(ConfirmBlockSequences::default())
                     .set(PacketState::Handshake)
@@ -409,7 +409,7 @@ impl Module for IngressModule {
             world,
             &Uuid,
             &Compose($),
-            &NetworkStreamRef,
+            &ConnectionId,
             &PendingRemove,
         )
         .kind::<flecs::pipeline::PostLoad>()
@@ -473,7 +473,7 @@ impl Module for IngressModule {
             &GlobalEventHandlers($),
             &mut PacketDecoder,
             &mut PacketState,
-            &NetworkStreamRef,
+            &ConnectionId,
             ?&mut Pose,
             &Events($),
             &EntitySize,

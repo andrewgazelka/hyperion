@@ -4,7 +4,7 @@ use flecs_ecs::{
     prelude::Module,
 };
 use hyperion::{
-    net::NetworkStreamRef,
+    net::ConnectionId,
     simulation::{Name, Player, Position, event},
     storage::EventQueue,
     system_registry::SystemId,
@@ -53,7 +53,7 @@ impl Module for ChatModule {
 
                     // Check cooldown
                     // todo: try_get if entity is dead/not found what will happen?
-                    by.get::<(&Name, &Position, &mut ChatCooldown, &NetworkStreamRef)>(|(name, position, cooldown, io)| {
+                    by.get::<(&Name, &Position, &mut ChatCooldown, &ConnectionId)>(|(name, position, cooldown, io)| {
                         // Check if player is still on cooldown
                         if cooldown.expires > current_tick {
                             let remaining_ticks = cooldown.expires - current_tick;

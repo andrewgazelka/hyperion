@@ -32,8 +32,6 @@ pub mod proxy;
 /// The Minecraft protocol version this library currently targets.
 pub const PROTOCOL_VERSION: i32 = 763;
 
-// todo: this is one off.. why?
-// pub const MAX_PACKET_SIZE: usize = 0x001F_FFFF;
 /// The maximum number of bytes that can be sent in a single packet.
 pub const MAX_PACKET_SIZE: usize = valence_protocol::MAX_PACKET_SIZE as usize;
 
@@ -58,22 +56,66 @@ impl Compressors {
     }
 }
 
-/// A reference to a network stream, identified by a stream ID and used to ensure packet order during transmission.
+/// A unique identifier for a client connection
 ///
-/// This struct contains a stream ID that serves as a unique identifier for the network stream and a packet order counter
-/// that helps in maintaining the correct sequence of packets being sent through the proxy.
+/// Each `ConnectionId` represents an active network connection between the server and a client,
+/// corresponding to a single player session. The ID is used throughout the networking
+/// system to:
+///
+/// - Route packets to a specific client
+/// - Target or exclude specific clients in broadcast operations
+/// - Track connection state through the proxy layer
+///
+/// # Example
+/// ```no_run
+/// // Create a new connection ID
+/// # use flecs_ecs::core::World;
+/// use hyperion::net::ConnectionId;
+/// use valence_protocol::packets::play;
+/// # use hyperion::simulation::Compose;
+/// # use hyperion::system_registry::SystemId;
+/// # let compose: Compose = todo!();
+/// # let system_id: SystemId = todo!();
+/// # let world: &World = todo!();
+/// let conn_id = ConnectionId::new(12345);
+///
+/// let packet: play::ChatMessageS2c = todo!();
+///
+/// // Use it to send a packet to a specific client
+/// compose.unicast(&packet, conn_id, system_id)?;
+///
+/// // Exclude a client from a broadcast
+/// compose
+///     .broadcast(&packet, system_id)
+///     .exclude(conn_id)
+///     .send(world)?;
+/// ```
+///
+/// Note: Connection IDs are managed internally by the networking system and should be obtained
+/// through the appropriate connection establishment handlers rather than created directly.
 #[derive(Component, Copy, Clone, Debug)]
-pub struct NetworkStreamRef {
-    /// Unique identifier for the network stream.
+pub struct ConnectionId {
+    /// The underlying unique identifier for this connection.
+    /// This value is guaranteed to be unique among all active connections.
     stream_id: u64,
 }
 
-impl NetworkStreamRef {
+impl ConnectionId {
+    /// Creates a new connection ID with the specified stream identifier.
+    ///
+    /// This is an internal API used by the connection management system.
+    /// External code should obtain connection IDs through the appropriate
+    /// connection handlers.
     #[must_use]
-    pub(crate) const fn new(stream_id: u64) -> Self {
+    pub const fn new(stream_id: u64) -> Self {
         Self { stream_id }
     }
 
+    /// Returns the underlying stream identifier.
+    ///
+    /// This method is primarily used by internal networking code to interact
+    /// with the proxy layer. Most application code should work with the
+    /// `ConnectionId` type directly rather than the raw ID.
     #[must_use]
     pub const fn inner(self) -> u64 {
         self.stream_id
@@ -121,7 +163,7 @@ impl<'a> DataBundle<'a> {
     pub fn send(
         self,
         world: &World,
-        stream: NetworkStreamRef,
+        stream: ConnectionId,
         system_id: SystemId,
     ) -> anyhow::Result<()> {
         if self.data.is_empty() {
@@ -212,7 +254,7 @@ impl Compose {
     pub fn unicast<P>(
         &self,
         packet: P,
-        stream_id: NetworkStreamRef,
+        stream_id: ConnectionId,
         system_id: SystemId,
         world: &World,
     ) -> anyhow::Result<()>
@@ -236,7 +278,7 @@ impl Compose {
     pub fn unicast_no_compression<P>(
         &self,
         packet: &P,
-        stream_id: NetworkStreamRef,
+        stream_id: ConnectionId,
         system_id: SystemId,
         world: &World,
     ) -> anyhow::Result<()>
@@ -308,7 +350,7 @@ pub struct Broadcast<'a, P> {
 #[must_use]
 struct Unicast<'a, P> {
     packet: P,
-    stream_id: NetworkStreamRef,
+    stream_id: ConnectionId,
     compose: &'a Compose,
     compress: bool,
     system_id: SystemId,
@@ -349,12 +391,14 @@ impl<P> Broadcast<'_, P> {
     }
 
     /// Exclude a certain player from the broadcast. This can only be called once.
-    pub fn exclude(self, exclude: NetworkStreamRef) -> Self {
+    pub fn exclude(self, exclude: impl Into<Option<ConnectionId>>) -> Self {
+        let exclude = exclude.into();
+        let exclude = exclude.map(|id| id.stream_id).unwrap_or_default();
         Broadcast {
             packet: self.packet,
             compose: self.compose,
             system_id: self.system_id,
-            exclude: exclude.stream_id,
+            exclude,
         }
     }
 }
@@ -392,12 +436,14 @@ impl<P> BroadcastLocal<'_, P> {
     }
 
     /// Exclude a certain player from the broadcast. This can only be called once.
-    pub fn exclude(self, exclude: NetworkStreamRef) -> Self {
+    pub fn exclude(self, exclude: impl Into<Option<ConnectionId>>) -> Self {
+        let exclude = exclude.into();
+        let exclude = exclude.map(|id| id.stream_id).unwrap_or_default();
         BroadcastLocal {
             packet: self.packet,
             compose: self.compose,
             center: self.center,
-            exclude: exclude.stream_id,
+            exclude,
             system_id: self.system_id,
         }
     }
@@ -463,7 +509,7 @@ impl IoBuf {
     fn unicast_private<P>(
         &self,
         packet: P,
-        id: NetworkStreamRef,
+        id: ConnectionId,
         compose: &Compose,
         compress: bool,
         system_id: SystemId,
@@ -550,7 +596,7 @@ impl IoBuf {
     pub(crate) fn unicast_raw(
         &self,
         data: &[u8],
-        stream: NetworkStreamRef,
+        stream: ConnectionId,
         system_id: SystemId,
         world: &World,
     ) {
@@ -578,7 +624,7 @@ impl IoBuf {
         buffer[len..(len + 8)].copy_from_slice(&packet_len.to_be_bytes());
     }
 
-    pub(crate) fn set_receive_broadcasts(&self, stream: NetworkStreamRef, world: &World) {
+    pub(crate) fn set_receive_broadcasts(&self, stream: ConnectionId, world: &World) {
         let buffer = self.buffer.get(world);
         let buffer = &mut *buffer.borrow_mut();
 

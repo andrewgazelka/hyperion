@@ -23,18 +23,6 @@ const SPAWN_MIN_Y: i16 = 40;
 const SPAWN_MAX_Y: i16 = 100;
 
 fn position_in_radius() -> IVec2 {
-    // let r = fastrand::i32(MIN_RADIUS..=MAX_RADIUS) as f32;
-    // let theta = fastrand::f32() * 2.0 * std::f32::consts::PI;
-    //
-    // let x = r * theta.cos();
-    // let z = r * theta.sin();
-    //
-    // #[allow(clippy::cast_possible_truncation)]
-    // let x = x.round() as i32;
-    //
-    // #[allow(clippy::cast_possible_truncation)]
-    // let z = z.round() as i32;
-
     let x = fastrand::i32(-RADIUS..=RADIUS);
     let z = fastrand::i32(-RADIUS..=RADIUS);
 

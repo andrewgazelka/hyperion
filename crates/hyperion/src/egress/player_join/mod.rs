@@ -29,7 +29,7 @@ use crate::{
     config::Config,
     egress::metadata::show_all,
     ingress::PendingRemove,
-    net::{Compose, DataBundle, NetworkStreamRef},
+    net::{Compose, ConnectionId, DataBundle},
     simulation::{
         Comms, Name, Position, Uuid, Yaw,
         command::{Command, ROOT_COMMAND, get_command_packet},
@@ -51,7 +51,7 @@ pub fn player_join_world(
     compose: &Compose,
     uuid: uuid::Uuid,
     name: &str,
-    io: NetworkStreamRef,
+    io: ConnectionId,
     position: &Position,
     yaw: &Yaw,
     pitch: &Pitch,
@@ -447,28 +447,6 @@ fn generate_cached_packet_bytes(
         },
     })?;
 
-    // if let Some(diameter) = config.border_diameter {
-    //     debug!("Setting world border to diameter {}", diameter);
-    //
-    //     encoder.append_packet(&play::WorldBorderInitializeS2c {
-    //         x: f64::from(PLAYER_SPAWN_POSITION.x),
-    //         z: f64::from(PLAYER_SPAWN_POSITION.z),
-    //         old_diameter: diameter,
-    //         new_diameter: diameter,
-    //         duration_millis: 1.into(),
-    //         portal_teleport_boundary: 29_999_984.into(),
-    //         warning_blocks: 50.into(),
-    //         warning_time: 200.into(),
-    //     })?;
-    //
-    //     encoder.append_packet(&play::WorldBorderSizeChangedS2c { diameter })?;
-    //
-    //     encoder.append_packet(&play::WorldBorderCenterChangedS2c {
-    //         x_pos: f64::from(PLAYER_SPAWN_POSITION.x),
-    //         z_pos: f64::from(PLAYER_SPAWN_POSITION.z),
-    //     })?;
-    // }
-
     if let Some(pkt) = crafting_registry.packet() {
         encoder.append_packet(&pkt)?;
     }
@@ -597,7 +575,7 @@ impl Module for PlayerJoinModule {
 
                 let entity = world.entity_from_id(entity);
 
-                entity.get::<(&Uuid, &Name, &Position, &Yaw, &Pitch, &NetworkStreamRef)>(
+                entity.get::<(&Uuid, &Name, &Position, &Yaw, &Pitch, &ConnectionId)>(
                     |(uuid, name, position, yaw, pitch, &stream_id)| {
                         let query = &query;
                         let query = &query.0;

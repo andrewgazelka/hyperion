@@ -7,7 +7,7 @@ use flecs_ecs::{
 };
 use hyperion::{
     egress::player_join::{PlayerListActions, PlayerListEntry, PlayerListS2c},
-    net::{Compose, DataBundle, NetworkStreamRef},
+    net::{Compose, ConnectionId, DataBundle},
     simulation::{event, skin::PlayerSkin},
     storage::EventQueue,
     system_registry::SystemId,
@@ -36,7 +36,7 @@ impl Module for SkinModule {
                     event
                         .by
                         .entity_view(world)
-                        .get::<(&NetworkStreamRef, &hyperion::simulation::Uuid)>(|(io, uuid)| {
+                        .get::<(&ConnectionId, &hyperion::simulation::Uuid)>(|(io, uuid)| {
                             on_set_skin(event.by, &world, compose, uuid.0, event.skin, *io);
                         });
                 }
@@ -51,7 +51,7 @@ fn on_set_skin(
     compose: &Compose,
     uuid: Uuid,
     skin: PlayerSkin,
-    io: NetworkStreamRef,
+    io: ConnectionId,
 ) {
     let minecraft_id = id.minecraft_id();
     let mut bundle = DataBundle::new(compose);
