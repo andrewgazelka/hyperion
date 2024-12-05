@@ -30,16 +30,14 @@ pub struct RaycastCommand;
 /// A normalized Vec3 representing the look direction
 pub fn get_direction_from_rotation(yaw: f32, pitch: f32) -> Vec3 {
     // Convert angles from degrees to radians
-    let yaw_rad = (yaw + 90.0).to_radians(); // Add 90° to match Minecraft's coordinate system
-    let pitch_rad = (-pitch).to_radians(); // Negate pitch because Minecraft's pitch is inverted
+    let yaw_rad = yaw.to_radians();
+    let pitch_rad = pitch.to_radians();
 
-    // Calculate direction vector components
     Vec3::new(
-        pitch_rad.cos() * yaw_rad.cos(), // X component
-        pitch_rad.sin(),                 // Y component
-        pitch_rad.cos() * yaw_rad.sin(), // Z component
+        -pitch_rad.cos() * yaw_rad.sin(),  // x = -cos(pitch) * sin(yaw)
+        -pitch_rad.sin(),                  // y = -sin(pitch)
+        pitch_rad.cos() * yaw_rad.cos()    // z = cos(pitch) * cos(yaw)
     )
-    .normalize()
 }
 
 impl MinecraftCommand for RaycastCommand {

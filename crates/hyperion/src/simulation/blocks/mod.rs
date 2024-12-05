@@ -99,16 +99,18 @@ impl Blocks {
 
     #[must_use]
     pub fn first_collision(&self, ray: Ray, distance_limit: f32) -> Option<RayCollision> {
-        let a = ray.origin();
-        let b = ray.origin() + ray.direction() * distance_limit;
+        // Calculate exact start position (the block we're in)
+        let start_pos = ray.origin();
+        
+        // Calculate end position with a small offset to handle edge cases
+        let end_pos = ray.origin() + ray.direction() * (distance_limit + 0.0001);
+        
+        // Convert to block coordinates, expanding bounds to ensure we catch all blocks
+        let min_block = start_pos.min(end_pos).floor().as_ivec3();
+        let max_block = start_pos.max(end_pos).ceil().as_ivec3();
 
-        let min = a.min(b);
-        let max = a.max(b);
-
-        let min = min.floor().as_ivec3();
-        let max = max.ceil().as_ivec3();
-
-        let traversal = ray.voxel_traversal(min, max);
+        // Set up voxel traversal through the blocks
+        let traversal = ray.voxel_traversal(min_block, max_block);
 
         let mut min: Option<RayCollision> = None;
 
