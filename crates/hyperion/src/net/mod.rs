@@ -391,12 +391,14 @@ impl<P> Broadcast<'_, P> {
     }
 
     /// Exclude a certain player from the broadcast. This can only be called once.
-    pub fn exclude(self, exclude: ConnectionId) -> Self {
+    pub fn exclude(self, exclude: impl Into<Option<ConnectionId>>) -> Self {
+        let exclude = exclude.into();
+        let exclude = exclude.map(|id| id.stream_id).unwrap_or_default();
         Broadcast {
             packet: self.packet,
             compose: self.compose,
             system_id: self.system_id,
-            exclude: exclude.stream_id,
+            exclude,
         }
     }
 }

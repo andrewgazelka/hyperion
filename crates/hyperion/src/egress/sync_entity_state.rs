@@ -264,7 +264,7 @@ impl Module for EntityStateSyncModule {
             &Position,
             &Yaw,
             &Pitch,
-            &ConnectionId,
+            ?&ConnectionId,
         )
         .multi_threaded()
         .kind::<flecs::pipeline::OnStore>()
@@ -274,7 +274,7 @@ impl Module for EntityStateSyncModule {
                 let run = || {
                     let entity_id = VarInt(entity.minecraft_id());
 
-                    let io = *io;
+                    let io = io.copied();
 
                     let world = entity.world();
 
