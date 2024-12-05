@@ -1,10 +1,9 @@
 #![feature(maybe_uninit_slice)]
 #![feature(allocator_api)]
 #![feature(let_chains)]
-#![feature(coroutines)]
 #![feature(never_type)]
-#![feature(iter_from_coroutine)]
 #![feature(stmt_expr_attributes)]
+#![feature(gen_blocks)]
 #![allow(
     clippy::redundant_pub_crate,
     clippy::cast_possible_truncation,
