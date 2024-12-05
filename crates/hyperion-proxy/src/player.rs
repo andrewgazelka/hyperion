@@ -266,8 +266,7 @@ fn apply_exclusions<'a>(
     exclusions: Option<&'a ExclusionsManager>,
     player_id: u64,
 ) -> impl Iterator<Item = IoSlice<'a>> + 'a {
-    let coroutine = #[coroutine]
-    move || {
+    gen move {
         let mut current_offset = 0;
 
         if let Some(exclusions) = exclusions {
@@ -305,9 +304,8 @@ fn apply_exclusions<'a>(
             let remaining_slice = &packet_data[current_offset..];
             yield IoSlice::new(remaining_slice);
         }
-    };
-
-    core::iter::from_coroutine(coroutine).filter(|iovec| !iovec.is_empty())
+    }
+    .filter(|iovec| !iovec.is_empty())
 }
 
 trait RangeExt {

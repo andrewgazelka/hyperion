@@ -15,7 +15,6 @@
 #![feature(let_chains)]
 #![feature(ptr_metadata)]
 #![feature(stmt_expr_attributes)]
-#![feature(coroutines)]
 #![feature(array_try_map)]
 #![feature(split_array)]
 #![feature(never_type)]
