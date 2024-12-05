@@ -190,20 +190,6 @@ fn position_and_on_ground(
     Ok(())
 }
 
-// fn update_selected_slot(
-//     mut data: &[u8],
-//     world: &'static World,
-//     player_id: Entity,
-// ) -> anyhow::Result<()> {
-//     let pkt = play::UpdateSelectedSlotC2s::decode(&mut data)?;
-//
-//     let play::UpdateSelectedSlotC2s { slot } = pkt;
-//
-//     world.send_to(player_id, event::UpdateSelectedSlot { slot });
-//
-//     Ok(())
-// }
-
 fn chat_command(mut data: &'static [u8], query: &PacketSwitchQuery<'_>) -> anyhow::Result<()> {
     let pkt = play::CommandExecutionC2s::decode(&mut data)?;
 
@@ -410,30 +396,6 @@ pub fn player_interact_block(
         if held.is_empty() {
             return Ok(());
         }
-
-        // todo: this is only applicable for adventure mode. It will have weird effects in survival
-        // let Some(nbt) = &held.nbt else {
-        //     return Ok(());
-        // };
-        //
-        // let Some(can_place_on) = nbt.get("CanPlaceOn") else {
-        //     return Ok(());
-        // };
-        //
-        // let nbt::Value::List(can_place_on) = can_place_on else {
-        //     return Ok(());
-        // };
-        //
-        // let nbt::list::List::String(can_place_on) = can_place_on else {
-        //     return Ok(());
-        // };
-        //
-        // let kind_name = interacted_block.to_kind().to_str();
-        // let kind_name = format!("minecraft:{kind_name}");
-        //
-        // if !can_place_on.iter().any(|s| s == &kind_name) {
-        //     return Ok(());
-        // }
 
         let kind = held.item;
 

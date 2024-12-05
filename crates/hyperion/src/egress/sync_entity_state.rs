@@ -148,65 +148,6 @@ impl Module for EntityStateSyncModule {
 
                     let chunk_pos = position.to_chunk();
 
-                    // let health_updated = *prev_health != *health;
-                    //
-                    // if health_updated {
-                    //     let to = *health;
-                    //     let from = *prev_health;
-                    //
-                    //     observer.encode(*health);
-                    //     *prev_health = *health;
-                    //
-                    //     if to < from {
-                    //         let pkt = play::EntityDamageS2c {
-                    //             entity_id,
-                    //             source_type_id: VarInt::default(),
-                    //             source_cause_id: VarInt::default(),
-                    //             source_direct_id: VarInt::default(),
-                    //             source_pos: None,
-                    //         };
-                    //
-                    //         compose.broadcast_local(&pkt, chunk_pos, system_id).send(&world)?;
-                    //
-                    //         let packet = agnostic::sound(
-                    //             ident!("minecraft:entity.player.hurt"),
-                    //             **position,
-                    //         ).build();
-                    //
-                    //         compose.broadcast_local(&packet, chunk_pos, system_id).send(&world)?;
-                    //     }
-                    //
-                    //     if *to == 0.0 {
-                    //         // send respawn packet
-                    //         let pkt = play::PlayerRespawnS2c {
-                    //             dimension_type_name: ident!("minecraft:overworld").into(),
-                    //             dimension_name: ident!("minecraft:overworld").into(),
-                    //             hashed_seed: 0,
-                    //             game_mode: GameMode::Survival,
-                    //             previous_game_mode: OptGameMode::default(),
-                    //             is_debug: false,
-                    //             is_flat: false,
-                    //             copy_metadata: false,
-                    //             last_death_location: None,
-                    //             portal_cooldown: VarInt::default(),
-                    //         };
-                    //         // position.position = PLAYER_SPAWN_POSITION;
-                    //         compose.unicast(&pkt, io, system_id, &world)?;
-                    //
-                    //         **health = 20.0;
-                    //
-                    //         let show_all = show_all(entity.minecraft_id());
-                    //         compose.unicast(show_all.borrow_packet(), io, system_id, &world)?;
-                    //     }
-                    // }
-
-                    // let entity_flags_updated = *prev_entity_flags != *entity_flags;
-
-                    // if entity_flags_updated {
-                    //     observer.encode(*entity_flags);
-                    //     *prev_entity_flags = *entity_flags;
-                    // }
-
                     let pkt = play::EntityPositionS2c {
                         entity_id,
                         position: position.as_dvec3(),
