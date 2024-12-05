@@ -238,7 +238,7 @@ impl Hyperion {
         let shutdown = Arc::new(AtomicBool::new(false));
 
         world.set(Shutdown {
-            value: shutdown.clone(),
+            value: shutdown,
         });
 
         world.component::<Prev>();

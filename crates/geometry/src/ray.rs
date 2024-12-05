@@ -46,6 +46,7 @@ impl Ray {
     /// Returns an iterator over the grid cells ([`IVec3`]) that the ray passes through.
     pub fn voxel_traversal(&self, bounds_min: IVec3, bounds_max: IVec3) -> VoxelTraversal {
         // Convert ray origin to grid coordinates and handle negative coordinates correctly
+        #[allow(clippy::cast_possible_truncation)]
         let current_pos = if self.origin.x < 0.0 || self.origin.y < 0.0 || self.origin.z < 0.0 {
             IVec3::new(
                 self.origin.x.floor() as i32,
