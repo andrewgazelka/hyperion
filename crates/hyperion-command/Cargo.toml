@@ -8,7 +8,6 @@ publish = false
 
 [dependencies]
 flecs_ecs = { workspace = true }
-gxhash = { workspace = true }
 hyperion = { workspace = true }
 indexmap = { workspace = true }
 tracing = { workspace = true }
