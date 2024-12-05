@@ -34,9 +34,9 @@ pub fn get_direction_from_rotation(yaw: f32, pitch: f32) -> Vec3 {
     let pitch_rad = pitch.to_radians();
 
     Vec3::new(
-        -pitch_rad.cos() * yaw_rad.sin(),  // x = -cos(pitch) * sin(yaw)
-        -pitch_rad.sin(),                  // y = -sin(pitch)
-        pitch_rad.cos() * yaw_rad.cos()    // z = cos(pitch) * cos(yaw)
+        -pitch_rad.cos() * yaw_rad.sin(), // x = -cos(pitch) * sin(yaw)
+        -pitch_rad.sin(),                 // y = -sin(pitch)
+        pitch_rad.cos() * yaw_rad.cos(),  // z = cos(pitch) * cos(yaw)
     )
 }
 

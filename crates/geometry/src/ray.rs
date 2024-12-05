@@ -50,7 +50,7 @@ impl Ray {
             IVec3::new(
                 self.origin.x.floor() as i32,
                 self.origin.y.floor() as i32,
-                self.origin.z.floor() as i32
+                self.origin.z.floor() as i32,
             )
         } else {
             self.origin.as_ivec3()
@@ -58,14 +58,34 @@ impl Ray {
 
         // Calculate step direction for each axis
         let step = IVec3::new(
-            if self.direction.x > 0.0 { 1 } else if self.direction.x < 0.0 { -1 } else { 0 },
-            if self.direction.y > 0.0 { 1 } else if self.direction.y < 0.0 { -1 } else { 0 },
-            if self.direction.z > 0.0 { 1 } else if self.direction.z < 0.0 { -1 } else { 0 }
+            if self.direction.x > 0.0 {
+                1
+            } else if self.direction.x < 0.0 {
+                -1
+            } else {
+                0
+            },
+            if self.direction.y > 0.0 {
+                1
+            } else if self.direction.y < 0.0 {
+                -1
+            } else {
+                0
+            },
+            if self.direction.z > 0.0 {
+                1
+            } else if self.direction.z < 0.0 {
+                -1
+            } else {
+                0
+            },
         );
 
         // Calculate t_max - distance to next voxel boundary for each axis
         let t_max = Vec3::new(
-            if self.direction.x == 0.0 { f32::INFINITY } else {
+            if self.direction.x == 0.0 {
+                f32::INFINITY
+            } else {
                 let next_x = if self.direction.x > 0.0 {
                     current_pos.x as f32 + 1.0 - self.origin.x
                 } else {
@@ -73,7 +93,9 @@ impl Ray {
                 };
                 next_x * self.inv_direction.x.abs()
             },
-            if self.direction.y == 0.0 { f32::INFINITY } else {
+            if self.direction.y == 0.0 {
+                f32::INFINITY
+            } else {
                 let next_y = if self.direction.y > 0.0 {
                     current_pos.y as f32 + 1.0 - self.origin.y
                 } else {
@@ -81,21 +103,35 @@ impl Ray {
                 };
                 next_y * self.inv_direction.y.abs()
             },
-            if self.direction.z == 0.0 { f32::INFINITY } else {
+            if self.direction.z == 0.0 {
+                f32::INFINITY
+            } else {
                 let next_z = if self.direction.z > 0.0 {
                     current_pos.z as f32 + 1.0 - self.origin.z
                 } else {
                     self.origin.z - current_pos.z as f32
                 };
                 next_z * self.inv_direction.z.abs()
-            }
+            },
         );
 
         // Calculate t_delta - distance between voxel boundaries
         let t_delta = Vec3::new(
-            if self.direction.x == 0.0 { f32::INFINITY } else { self.inv_direction.x.abs() },
-            if self.direction.y == 0.0 { f32::INFINITY } else { self.inv_direction.y.abs() },
-            if self.direction.z == 0.0 { f32::INFINITY } else { self.inv_direction.z.abs() }
+            if self.direction.x == 0.0 {
+                f32::INFINITY
+            } else {
+                self.inv_direction.x.abs()
+            },
+            if self.direction.y == 0.0 {
+                f32::INFINITY
+            } else {
+                self.inv_direction.y.abs()
+            },
+            if self.direction.z == 0.0 {
+                f32::INFINITY
+            } else {
+                self.inv_direction.z.abs()
+            },
         );
 
         VoxelTraversal {
