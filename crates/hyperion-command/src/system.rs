@@ -49,7 +49,7 @@ impl Module for CommandSystemModule {
 
                     world.get::<&hyperion::net::Compose>(|compose| {
                         by.entity_view(world)
-                            .get::<&hyperion::net::NetworkStreamRef>(|stream| {
+                            .get::<&hyperion::net::ConnectionId>(|stream| {
                                 compose
                                     .unicast(&chat, *stream, SystemId(8), &world)
                                     .unwrap();

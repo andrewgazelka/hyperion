@@ -7,7 +7,7 @@ use hyperion::{
         metadata::show_all,
         player_join::{PlayerListActions, PlayerListEntry, PlayerListS2c},
     },
-    net::{Compose, DataBundle, NetworkStreamRef, agnostic},
+    net::{Compose, ConnectionId, DataBundle, agnostic},
     simulation::{Pitch, Position, Xp, Yaw},
     system_registry::SystemId,
     valence_ident::ident,
@@ -39,7 +39,7 @@ impl MinecraftCommand for ClassCommand {
         world.get::<&Compose>(|compose| {
             let caller = caller.entity_view(world);
             caller.get::<(
-                &NetworkStreamRef,
+                &ConnectionId,
                 &hyperion::simulation::Uuid,
                 &Position,
                 &Yaw,

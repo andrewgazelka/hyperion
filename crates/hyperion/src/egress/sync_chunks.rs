@@ -11,7 +11,7 @@ use valence_protocol::{
 
 use crate::{
     config::Config,
-    net::{Compose, DataBundle, NetworkStreamRef},
+    net::{Compose, ConnectionId, DataBundle},
     simulation::{
         ChunkPosition, PacketState, Position,
         blocks::{Blocks, GetChunk},
@@ -43,7 +43,7 @@ impl Module for SyncChunksModule {
             &Compose($),
             &mut ChunkPosition,
             &Position,
-            &NetworkStreamRef,
+            &ConnectionId,
             &mut ChunkSendQueue,
         )
         .with_enum(PacketState::Play)
@@ -164,7 +164,7 @@ impl Module for SyncChunksModule {
 
         let system_id = SEND_FULL_LOADED_CHUNKS;
 
-        system!("send_full_loaded_chunks", world, &Blocks($), &Compose($), &NetworkStreamRef, &mut ChunkSendQueue)
+        system!("send_full_loaded_chunks", world, &Blocks($), &Compose($), &ConnectionId, &mut ChunkSendQueue)
             .with_enum(PacketState::Play)
             .kind::<flecs::pipeline::OnUpdate>()
             .multi_threaded()

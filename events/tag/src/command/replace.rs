@@ -141,7 +141,7 @@ impl hyperion_clap::MinecraftCommand for ReplaceCommand {
             world.get::<&hyperion::net::Compose>(|compose| {
                 caller
                     .entity_view(world)
-                    .get::<&hyperion::net::NetworkStreamRef>(|stream| {
+                    .get::<&hyperion::net::ConnectionId>(|stream| {
                         let mut bundle = hyperion::net::DataBundle::new(compose);
                         bundle.add_packet(&msg, world).unwrap();
                         bundle

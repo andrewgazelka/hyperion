@@ -29,7 +29,7 @@ use crate::{
     config::Config,
     egress::metadata::show_all,
     ingress::PendingRemove,
-    net::{Compose, DataBundle, NetworkStreamRef},
+    net::{Compose, ConnectionId, DataBundle},
     simulation::{
         Comms, Name, Position, Uuid, Yaw,
         command::{Command, ROOT_COMMAND, get_command_packet},
@@ -51,7 +51,7 @@ pub fn player_join_world(
     compose: &Compose,
     uuid: uuid::Uuid,
     name: &str,
-    io: NetworkStreamRef,
+    io: ConnectionId,
     position: &Position,
     yaw: &Yaw,
     pitch: &Pitch,
@@ -597,7 +597,7 @@ impl Module for PlayerJoinModule {
 
                 let entity = world.entity_from_id(entity);
 
-                entity.get::<(&Uuid, &Name, &Position, &Yaw, &Pitch, &NetworkStreamRef)>(
+                entity.get::<(&Uuid, &Name, &Position, &Yaw, &Pitch, &ConnectionId)>(
                     |(uuid, name, position, yaw, pitch, &stream_id)| {
                         let query = &query;
                         let query = &query.0;

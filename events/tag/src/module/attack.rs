@@ -11,7 +11,7 @@ use flecs_ecs::{
 };
 use hyperion::{
     net::{
-        Compose, NetworkStreamRef, agnostic,
+        Compose, ConnectionId, agnostic,
         packets::{BossBarAction, BossBarS2c},
     },
     simulation::{PacketState, Player, Position, Velocity, event, metadata::living_entity::Health},
@@ -89,7 +89,7 @@ impl Module for AttackModule {
             world,
             &Compose($),
             &KillCount,
-            &NetworkStreamRef,
+            &ConnectionId,
         )
         .with_enum(PacketState::Play)
         .multi_threaded()

@@ -19,7 +19,7 @@ use sync_chunks::SyncChunksModule;
 use sync_entity_state::EntityStateSyncModule;
 
 use crate::{
-    net::NetworkStreamRef,
+    net::ConnectionId,
     simulation::{ChunkPosition, blocks::Blocks},
     system_registry::SystemId,
 };
@@ -86,7 +86,7 @@ impl Module for EgressModule {
                     sequence: VarInt(to_confirm.sequence),
                 };
 
-                entity.get::<&NetworkStreamRef>(|stream| {
+                entity.get::<&ConnectionId>(|stream| {
                     if let Err(e) = compose.unicast(&pkt, *stream, SystemId(99), &world) {
                         error!("failed to send player action response: {e}");
                     }
@@ -94,7 +94,7 @@ impl Module for EgressModule {
             }
         });
 
-        let player_location_query = world.new_query::<(&NetworkStreamRef, &ChunkPosition)>();
+        let player_location_query = world.new_query::<(&ConnectionId, &ChunkPosition)>();
 
         system!(
             "egress",

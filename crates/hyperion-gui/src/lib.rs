@@ -4,7 +4,7 @@ use std::{borrow::Cow, cell::Cell, collections::HashMap};
 
 use flecs_ecs::core::{Entity, EntityViewGet, World, WorldGet};
 use hyperion::{
-    net::{Compose, NetworkStreamRef},
+    net::{Compose, ConnectionId},
     storage::GlobalEventHandlers,
     system_registry::SystemId,
     valence_protocol::{
@@ -124,13 +124,11 @@ impl Gui {
         };
 
         world.get::<&Compose>(|compose| {
-            player
-                .entity_view(world)
-                .get::<&NetworkStreamRef>(|stream| {
-                    compose
-                        .unicast(&set_content_packet, *stream, SystemId(8), world)
-                        .unwrap();
-                });
+            player.entity_view(world).get::<&ConnectionId>(|stream| {
+                compose
+                    .unicast(&set_content_packet, *stream, SystemId(8), world)
+                    .unwrap();
+            });
         });
     }
 
@@ -142,13 +140,11 @@ impl Gui {
         };
 
         world.get::<&Compose>(|compose| {
-            player
-                .entity_view(world)
-                .get::<&NetworkStreamRef>(|stream| {
-                    compose
-                        .unicast(&open_screen_packet, *stream, SystemId(8), world)
-                        .unwrap();
-                });
+            player.entity_view(world).get::<&ConnectionId>(|stream| {
+                compose
+                    .unicast(&open_screen_packet, *stream, SystemId(8), world)
+                    .unwrap();
+            });
         });
 
         self.draw(world, player);
