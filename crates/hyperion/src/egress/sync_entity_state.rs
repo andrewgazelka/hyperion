@@ -236,9 +236,7 @@ impl Module for EntityStateSyncModule {
                             velocity: (*reaction).try_into()?,
                         };
 
-                        compose.unicast(&pkt, io, system_id, &world)?;
-
-                        reaction.velocity = Vec3::ZERO;
+                        compose.broadcast(&pkt, system_id).send(&world)?;
                     }
 
                     for pkt in animation.packets(entity_id) {
@@ -302,6 +300,65 @@ impl Module for EntityStateSyncModule {
                 };
                 if let Err(e) = run() {
                     error!("failed to run sync_position: {e}");
+                }
+            },
+        );
+
+        // Add a new system specifically for projectiles (arrows)
+        system!(
+            "projectile_sync",
+            world,
+            &Compose($),
+            &Position,
+            &Yaw,
+            &Pitch,
+            &mut Velocity,
+        )
+        .multi_threaded()
+        .kind::<flecs::pipeline::OnStore>()
+        .tracing_each_entity(
+            info_span!("projectile_sync"),
+            move |entity, (compose, position, yaw, pitch, velocity)| {
+                let mut run = || {
+                    let entity_id = VarInt(entity.minecraft_id());
+                    let world = entity.world();
+                    let chunk_pos = position.to_chunk();
+
+                    let yaw = **yaw;
+                    let pitch = **pitch;
+                    // Sync position and rotation
+                    let pkt = play::EntityPositionS2c {
+                        entity_id,
+                        position: position.as_dvec3(),
+                        yaw: ByteAngle::from_radians(yaw.to_radians()),
+                        pitch: ByteAngle::from_radians(pitch.to_radians()),
+                        on_ground: false,
+                    };
+
+                    compose
+                        .broadcast_local(&pkt, chunk_pos, system_id)
+                        .send(&world)?;
+
+                    // Sync velocity if non-zero
+                    if velocity.velocity != Vec3::ZERO {
+                        let pkt = play::EntityVelocityUpdateS2c {
+                            entity_id,
+                            velocity: (*velocity).try_into().unwrap_or(
+                                Velocity::ZERO
+                                    .try_into()
+                                    .expect("failed to convert velocity to i16"),
+                            ),
+                        };
+
+                        compose.broadcast(&pkt, system_id).send(&world)?;
+                        //velocity.velocity = Vec3::ZERO;
+                    }
+
+                    anyhow::Ok(())
+                };
+
+                if let Err(err) = run() {
+                    error!(?err, "failed to sync projectile state");
                 }
             },
         );

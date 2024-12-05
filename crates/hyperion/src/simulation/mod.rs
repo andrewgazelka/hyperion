@@ -216,7 +216,7 @@ impl Xp {
             1897..=2044 => 34,
             2045..=2201 => 35,
             2202..=2367 => 36,
-            2368..=2542 => 37,
+            2368..=2543 => 37,
             2543..=2726 => 38,
             2727..=2919 => 39,
             2920..=3121 => 40,
@@ -229,7 +229,7 @@ impl Xp {
             4523..=4787 => 47,
             4788..=5061 => 48,
             5062..=5344 => 49,
-            5345..=5636 => 50,
+            5062..=5636 => 50,
             5637..=5937 => 51,
             5938..=6247 => 52,
             6248..=6566 => 53,
@@ -555,7 +555,7 @@ impl Velocity {
     };
 
     #[allow(unused)]
-    const fn new(x: f32, y: f32, z: f32) -> Self {
+    pub const fn new(x: f32, y: f32, z: f32) -> Self {
         Self {
             velocity: Vec3::new(x, y, z),
         }
@@ -566,14 +566,17 @@ impl TryFrom<&Velocity> for valence_protocol::Velocity {
     type Error = TryFromIntError;
 
     fn try_from(value: &Velocity) -> Result<Self, Self::Error> {
-        let nums = value
-            .velocity
+        // Clamp velocity components to prevent overflow when converting to network protocol
+        // Max i16 value is 32767, so max velocity is ~4.096 (32767/8000)
+        let max_velocity = 4.0;
+        let clamped_velocity = value.velocity.clamp(
+            Vec3::splat(-max_velocity),
+            Vec3::splat(max_velocity)
+        );
+
+        let nums = clamped_velocity
             .to_array()
             .try_map(|a| {
-                #[expect(
-                    clippy::cast_possible_truncation,
-                    reason = "https://blog.rust-lang.org/2020/07/16/Rust-1.45.0.html#:~:text=as%20would%20perform%20a%20%22saturating%20cast%22 as is saturating."
-                )]
                 let num = (a * 8000.0) as i32;
                 i16::try_from(num)
             })?;
@@ -624,6 +627,9 @@ impl Module for SimModule {
         world.component::<Spawn>();
 
         world.component::<EntityKind>().meta();
+
+        world.component::<DeltaTime>();
+        world.singleton::<DeltaTime>().set(DeltaTime(0.0));
 
         // todo: how
         // world
@@ -715,6 +721,63 @@ impl Module for SimModule {
                     _ => {}
                 });
             });
+
+        system!("update_delta_time", world, &mut DeltaTime($))
+            .kind::<flecs::pipeline::PreUpdate>()
+            .run(|mut iter| {
+                while iter.next() {
+                    let mut delta = iter.field::<DeltaTime>(0).unwrap();
+                    let delta = delta.get_mut(0).unwrap();
+                    *delta = DeltaTime(iter.world().info().frame_time_total);
+                }
+            });
+
+        system!(
+            "update_projectile_positions",
+            world,
+            &mut Position,
+            &mut Velocity,
+            &mut Yaw,
+            &mut Pitch,
+            &DeltaTime($)
+        )
+        .kind::<flecs::pipeline::PostUpdate>()
+        .each_entity(|_entity, (position, velocity, yaw, pitch, delta)| {
+            if velocity.velocity != Vec3::ZERO {
+
+                // Update position based on velocity with delta time
+                position.x += velocity.velocity.x;
+                position.y += velocity.velocity.y;
+                position.z += velocity.velocity.z;
+
+                // Update rotation based on velocity direction
+                // let vel = velocity.velocity;
+
+                // Calculate yaw: -180° to +180°, where:
+                // -180° or +180°: facing North (negative Z)
+                // -90°: facing East (positive X)
+                // 0°: facing South (positive Z)
+                // +90°: facing West (negative X)
+                //**yaw = vel.x.atan2(vel.z) * 180.0 / std::f32::consts::PI;
+
+                // Calculate pitch: -90° to +90°, where:
+                // -90°: looking straight up (positive Y)
+                // 0°: looking horizontal
+                // +90°: looking straight down (negative Y)
+                // let horizontal_length = (vel.x * vel.x + vel.z * vel.z).sqrt();
+                //**pitch = -(vel.y.atan2(horizontal_length) * 180.0 / std::f32::consts::PI);
+
+                // https://minecraft.fandom.com/wiki/Arrow#Usage
+                // Apply drag (0.99 per tick = ~0.2 per second at 20 ticks/sec)
+                velocity.velocity.x *= 0.99;
+                velocity.velocity.z *= 0.99;
+                
+                // Apply gravity (scaled down to fit within network protocol limits)
+                // Network protocol multiplies velocity by 8000 and converts to i16 (-32768 to 32767)
+                // So our max velocity magnitude should be 32767/8000 ≈ 4.096
+                velocity.velocity.y -= 0.05;
+            }
+        });
     }
 }
 
@@ -723,3 +786,6 @@ pub struct Spawn;
 
 #[derive(Component)]
 pub struct Visible;
+
+#[derive(Component, Debug)]
+pub struct DeltaTime(pub f32);
