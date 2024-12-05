@@ -10,7 +10,7 @@ use flecs_ecs::{
 };
 use hyperion::{
     BlockKind, chat,
-    net::{Compose, NetworkStreamRef, agnostic},
+    net::{Compose, ConnectionId, agnostic},
     simulation::{
         Xp,
         blocks::{Blocks, EntityAndSequence},
@@ -178,7 +178,7 @@ impl Module for BlockModule {
                             block_id: current,
                         };
 
-                        event.from.entity_view(world).get::<&NetworkStreamRef>(|stream| {
+                        event.from.entity_view(world).get::<&ConnectionId>(|stream| {
                             compose.unicast(&pkt, *stream, SystemId(100), &world).unwrap();
                         });
 
@@ -204,7 +204,7 @@ impl Module for BlockModule {
                             block_id: current,
                         };
 
-                        event.from.entity_view(world).get::<&NetworkStreamRef>(|stream| {
+                        event.from.entity_view(world).get::<&ConnectionId>(|stream| {
                             compose.unicast(&pkt, *stream, SystemId(100), &world).unwrap();
                         });
 
@@ -219,7 +219,7 @@ impl Module for BlockModule {
 
                     let from = event.from;
                     let from_entity = world.entity_from_id(from);
-                    from_entity.get::<(&NetworkStreamRef, &mut Xp)>(|(&net, xp)| {
+                    from_entity.get::<(&ConnectionId, &mut Xp)>(|(&net, xp)| {
                         **xp = xp.saturating_add(xp_amount);
 
 
@@ -257,7 +257,7 @@ impl Module for BlockModule {
                     if block.collision_shapes().is_empty() {
                         mc.to_confirm.push(EntityAndSequence::new(from, sequence));
 
-                        from.entity_view(world).get::<(&mut PlayerInventory, &NetworkStreamRef)>(|(inventory, stream)| {
+                        from.entity_view(world).get::<(&mut PlayerInventory, &ConnectionId)>(|(inventory, stream)| {
                             // so we send update to player
                             let _ = inventory.get_cursor_mut();
 

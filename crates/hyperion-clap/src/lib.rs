@@ -6,7 +6,7 @@ use flecs_ecs::{
     prelude::{Component, Module},
 };
 use hyperion::{
-    net::{Compose, DataBundle, NetworkStreamRef, agnostic},
+    net::{Compose, ConnectionId, DataBundle, agnostic},
     simulation::{IgnMap, command::get_root_command_entity, handlers::PacketSwitchQuery},
     storage::{CommandCompletionRequest, EventFn},
     system_registry::SystemId,
@@ -66,9 +66,8 @@ pub trait MinecraftCommand: Parser + CommandPermission {
             match Self::try_parse_from(input) {
                 Ok(elem) => {
                     if world.get::<&Compose>(|compose| {
-                        caller
-                            .entity_view(world)
-                            .get::<(&NetworkStreamRef, &Group)>(|(stream, group)| {
+                        caller.entity_view(world).get::<(&ConnectionId, &Group)>(
+                            |(stream, group)| {
                                 if Self::has_required_permission(*group) {
                                     true
                                 } else {
@@ -82,7 +81,8 @@ pub trait MinecraftCommand: Parser + CommandPermission {
 
                                     false
                                 }
-                            })
+                            },
+                        )
                     }) {
                         elem.execute(world, caller);
                     }
@@ -100,7 +100,7 @@ pub trait MinecraftCommand: Parser + CommandPermission {
                     world.get::<&Compose>(|compose| {
                         caller
                             .entity_view(world)
-                            .get::<&hyperion::net::NetworkStreamRef>(|stream| {
+                            .get::<&hyperion::net::ConnectionId>(|stream| {
                                 let msg = agnostic::chat(msg);
                                 compose.unicast(&msg, *stream, SystemId(8), world).unwrap();
                             });
@@ -303,15 +303,13 @@ impl MinecraftCommand for PermissionCommand {
                 Self::Set(cmd) => {
                     // Handle setting permissions
                     let Some(entity) = ign_map.get(cmd.player.as_str()) else {
-                        caller
-                            .entity_view(world)
-                            .get::<&NetworkStreamRef>(|stream| {
-                                let msg = format!("§c{} not found", cmd.player);
-                                let chat = hyperion::net::agnostic::chat(msg);
-                                world.get::<&Compose>(|compose| {
-                                    compose.unicast(&chat, *stream, SystemId(8), world).unwrap();
-                                });
+                        caller.entity_view(world).get::<&ConnectionId>(|stream| {
+                            let msg = format!("§c{} not found", cmd.player);
+                            let chat = hyperion::net::agnostic::chat(msg);
+                            world.get::<&Compose>(|compose| {
+                                compose.unicast(&chat, *stream, SystemId(8), world).unwrap();
                             });
+                        });
                         return;
                     };
 
@@ -321,44 +319,38 @@ impl MinecraftCommand for PermissionCommand {
                             entity.entity_view(world).modified::<Group>();
                         }
 
-                        caller
-                            .entity_view(world)
-                            .get::<&NetworkStreamRef>(|stream| {
-                                let msg = format!(
-                                    "§b{}§r's group has been set to §e{:?}",
-                                    cmd.player, cmd.group
-                                );
-                                let chat = hyperion::net::agnostic::chat(msg);
-                                world.get::<&Compose>(|compose| {
-                                    compose.unicast(&chat, *stream, SystemId(8), world).unwrap();
-                                });
+                        caller.entity_view(world).get::<&ConnectionId>(|stream| {
+                            let msg = format!(
+                                "§b{}§r's group has been set to §e{:?}",
+                                cmd.player, cmd.group
+                            );
+                            let chat = hyperion::net::agnostic::chat(msg);
+                            world.get::<&Compose>(|compose| {
+                                compose.unicast(&chat, *stream, SystemId(8), world).unwrap();
                             });
+                        });
                     });
                 }
                 Self::Get(cmd) => {
                     let Some(entity) = ign_map.get(cmd.player.as_str()) else {
-                        caller
-                            .entity_view(world)
-                            .get::<&NetworkStreamRef>(|stream| {
-                                let msg = format!("§c{} not found", cmd.player);
-                                let chat = hyperion::net::agnostic::chat(msg);
-                                world.get::<&Compose>(|compose| {
-                                    compose.unicast(&chat, *stream, SystemId(8), world).unwrap();
-                                });
+                        caller.entity_view(world).get::<&ConnectionId>(|stream| {
+                            let msg = format!("§c{} not found", cmd.player);
+                            let chat = hyperion::net::agnostic::chat(msg);
+                            world.get::<&Compose>(|compose| {
+                                compose.unicast(&chat, *stream, SystemId(8), world).unwrap();
                             });
+                        });
                         return;
                     };
 
                     entity.entity_view(world).get::<&Group>(|group| {
-                        caller
-                            .entity_view(world)
-                            .get::<&NetworkStreamRef>(|stream| {
-                                let msg = format!("§b{}§r's group is §e{:?}", cmd.player, group);
-                                let chat = hyperion::net::agnostic::chat(msg);
-                                world.get::<&Compose>(|compose| {
-                                    compose.unicast(&chat, *stream, SystemId(8), world).unwrap();
-                                });
+                        caller.entity_view(world).get::<&ConnectionId>(|stream| {
+                            let msg = format!("§b{}§r's group is §e{:?}", cmd.player, group);
+                            let chat = hyperion::net::agnostic::chat(msg);
+                            world.get::<&Compose>(|compose| {
+                                compose.unicast(&chat, *stream, SystemId(8), world).unwrap();
                             });
+                        });
                     });
                 }
             }

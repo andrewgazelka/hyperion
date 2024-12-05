@@ -29,7 +29,7 @@ use super::{
     blocks::Blocks,
 };
 use crate::{
-    net::{Compose, NetworkStreamRef, decoder::BorrowedPacketFrame},
+    net::{Compose, ConnectionId, decoder::BorrowedPacketFrame},
     simulation::{Pitch, Yaw, aabb, event, event::PluginMessage, metadata::entity::Pose},
     storage::{
         ClickSlotEvent, CommandCompletionRequest, Events, GlobalEventHandlers, InteractEvent,
@@ -264,7 +264,7 @@ pub struct PacketSwitchQuery<'a> {
     pub handlers: &'a GlobalEventHandlers,
     pub view: EntityView<'a>,
     pub compose: &'a Compose,
-    pub io_ref: NetworkStreamRef,
+    pub io_ref: ConnectionId,
     pub position: &'a mut Position,
     pub yaw: &'a mut Yaw,
     pub pitch: &'a mut Pitch,

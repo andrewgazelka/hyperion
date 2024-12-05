@@ -76,7 +76,7 @@ pub use valence_ident;
 
 use crate::{
     ingress::PendingRemove,
-    net::{NetworkStreamRef, PacketDecoder, proxy::ReceiveState},
+    net::{ConnectionId, PacketDecoder, proxy::ReceiveState},
     runtime::Tasks,
     simulation::{EgressComm, EntitySize, IgnMap, PacketState, Player},
     util::mojang::ApiProvider,
@@ -262,7 +262,7 @@ impl Hyperion {
 
         world.component::<PacketState>();
 
-        world.component::<NetworkStreamRef>();
+        world.component::<ConnectionId>();
         world.component::<ReceiveState>();
         world.component::<Compose>();
         world.component::<CraftingRegistry>();

@@ -13,7 +13,7 @@ use valence_protocol::{
 
 use crate::{
     Prev,
-    net::{Compose, NetworkStreamRef},
+    net::{Compose, ConnectionId},
     simulation::{
         Pitch, Position, Velocity, Xp, Yaw, animation::ActiveAnimation, metadata::MetadataChanges,
     },
@@ -30,10 +30,10 @@ impl Module for EntityStateSyncModule {
 
         world
             .system_named::<(
-                &Compose,          // (0)
-                &NetworkStreamRef, // (1)
-                &mut (Prev, Xp),   // (2)
-                &mut Xp,           // (3)
+                &Compose,        // (0)
+                &ConnectionId,   // (1)
+                &mut (Prev, Xp), // (2)
+                &mut Xp,         // (3)
             )>("entity_xp_sync")
             .term_at(0u32)
             .singleton()
@@ -54,7 +54,7 @@ impl Module for EntityStateSyncModule {
                         let compose = table.field_unchecked::<Compose>(0);
                         let compose = compose.first().unwrap();
 
-                        let net = table.field_unchecked::<NetworkStreamRef>(1);
+                        let net = table.field_unchecked::<ConnectionId>(1);
                         let net = net.get(..).unwrap();
 
                         let mut prev_xp = table.field_unchecked::<Xp>(2);
@@ -129,7 +129,7 @@ impl Module for EntityStateSyncModule {
             &mut Position,
             &Yaw,
             &Pitch,
-            &NetworkStreamRef,
+            &ConnectionId,
             &mut ActiveAnimation,
             &mut PlayerInventory,
             &mut Velocity,

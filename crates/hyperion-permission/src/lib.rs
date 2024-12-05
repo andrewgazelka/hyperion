@@ -7,7 +7,7 @@ use flecs_ecs::{
     prelude::{Module, flecs},
 };
 use hyperion::{
-    net::{Compose, NetworkStreamRef},
+    net::{Compose, ConnectionId},
     simulation::{Player, Uuid, command::get_command_packet},
     storage::LocalDb,
     system_registry::SystemId,
@@ -72,7 +72,7 @@ impl Module for PermissionModule {
 
             let cmd_pkt = get_command_packet(&world, root_command, Some(*entity));
 
-            entity.get::<&NetworkStreamRef>(|stream| {
+            entity.get::<&ConnectionId>(|stream| {
                 world.get::<&Compose>(|compose| {
                     compose
                         .unicast(&cmd_pkt, *stream, SystemId(999), &world)
