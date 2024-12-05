@@ -524,10 +524,12 @@ pub const PLAYER_SPAWN_POSITION: Vec3 = Vec3::new(-8_526_209_f32, 100f32, -6_028
 impl Position {
     /// Get the chunk position of the center of the player's bounding box.
     #[must_use]
+    #[expect(clippy::cast_possible_truncation)]
     pub fn to_chunk(&self) -> IVec2 {
-        let position = self.position.as_ivec3();
-        let x = position.x >> 4;
-        let z = position.z >> 4;
+        let x = self.x as i32;
+        let z = self.z as i32;
+        let x = x >> 4;
+        let z = z >> 4;
         IVec2::new(x, z)
     }
 }

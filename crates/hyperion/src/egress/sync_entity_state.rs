@@ -6,10 +6,7 @@ use glam::Vec3;
 use hyperion_inventory::PlayerInventory;
 use hyperion_utils::EntityExt;
 use tracing::{error, info_span};
-use valence_protocol::{
-    ByteAngle, RawBytes, VarInt,
-    packets::{play, play::entity_equipment_update_s2c::EquipmentEntry},
-};
+use valence_protocol::{ByteAngle, RawBytes, VarInt, packets::play};
 
 use crate::{
     Prev,
@@ -23,6 +20,28 @@ use crate::{
 
 #[derive(Component)]
 pub struct EntityStateSyncModule;
+
+fn track_previous<T: ComponentId + Copy>(world: &World) {
+    // we include names so that if we call this multiple times, we don't get multiple observers/systems
+    let component_name = std::any::type_name::<T>();
+    let observer_name = format!("init_prev_{component_name}");
+    let system_name = format!("track_prev_{component_name}");
+
+    world
+        .observer_named::<flecs::OnSet, &T>(&observer_name)
+        .without::<(Prev, T)>() // we have not set Prev yet
+        .each_entity(|entity, value| {
+            entity.set_pair::<Prev, T>(*value);
+        });
+
+    world
+        .system_named::<(&mut (Prev, T), &T)>(system_name.as_str())
+        .multi_threaded()
+        .kind::<flecs::pipeline::OnStore>()
+        .each(|(prev, value)| {
+            *prev = *value;
+        });
+}
 
 impl Module for EntityStateSyncModule {
     fn module(world: &World) {
@@ -123,73 +142,52 @@ impl Module for EntityStateSyncModule {
             );
 
         system!(
-            "entity_state_sync",
+            "active_animation_sync",
             world,
+            &Position,
             &Compose($),
-            &mut Position,
-            &Yaw,
-            &Pitch,
-            &ConnectionId,
+            ?&ConnectionId,
             &mut ActiveAnimation,
-            &mut PlayerInventory,
-            &mut Velocity,
         )
         .multi_threaded()
         .kind::<flecs::pipeline::OnStore>()
         .tracing_each_entity(
-            info_span!("entity_state_sync"),
-            move |entity, (compose, position, yaw, pitch, io, animation, inventory, reaction)| {
-                let mut run = || {
-                    let entity_id = VarInt(entity.minecraft_id());
+            info_span!("active_animation_sync"),
+            move |entity, (position, compose, connection_id, animation)| {
+                let io = connection_id.copied();
 
-                    let io = *io;
+                let world = entity.world();
+                let entity_id = VarInt(entity.minecraft_id());
 
-                    let world = entity.world();
+                let chunk_pos = position.to_chunk();
 
-                    let chunk_pos = position.to_chunk();
-
-                    let pkt = play::EntityPositionS2c {
-                        entity_id,
-                        position: position.as_dvec3(),
-                        yaw: ByteAngle::from_degrees(**yaw),
-                        pitch: ByteAngle::from_degrees(**pitch),
-                        on_ground: false,
-                    };
-
+                for pkt in animation.packets(entity_id) {
                     compose
                         .broadcast_local(&pkt, chunk_pos, system_id)
                         .exclude(io)
-                        .send(&world)?;
+                        .send(&world)
+                        .unwrap();
+                }
 
-                    let pkt = play::EntitySetHeadYawS2c {
-                        entity_id,
-                        head_yaw: ByteAngle::from_degrees(**yaw),
-                    };
+                animation.clear();
+            },
+        );
 
-                    compose
-                        .broadcast(&pkt, system_id)
-                        .exclude(io)
-                        .send(&world)?;
-
-                    if reaction.velocity != Vec3::ZERO {
-                        let pkt = play::EntityVelocityUpdateS2c {
-                            entity_id,
-                            velocity: (*reaction).try_into()?,
-                        };
-
-                        compose.unicast(&pkt, io, system_id, &world)?;
-
-                        reaction.velocity = Vec3::ZERO;
-                    }
-
-                    for pkt in animation.packets(entity_id) {
-                        compose
-                            .broadcast_local(&pkt, chunk_pos, system_id)
-                            .exclude(io)
-                            .send(&world)?;
-                    }
-
-                    animation.clear();
+        system!(
+            "player_inventory_sync",
+            world,
+            &Compose($),
+            &mut PlayerInventory,
+            &ConnectionId,
+        )
+        .multi_threaded()
+        .kind::<flecs::pipeline::OnStore>()
+        .tracing_each_entity(
+            info_span!("player_inventory_sync"),
+            move |entity, (compose, inventory, io)| {
+                let mut run = || {
+                    let io = *io;
+                    let world = entity.world();
 
                     for slot in &inventory.updated_since_last_tick {
                         let Ok(slot) = u16::try_from(slot) else {
@@ -214,30 +212,97 @@ impl Module for EntityStateSyncModule {
                             .context("failed to send inventory update")?;
                     }
 
-                    let cursor = inventory.get_cursor_index();
-
-                    if inventory
-                        .updated_since_last_tick
-                        .contains(u32::from(cursor))
-                        || inventory.hand_slot_updated_since_last_tick
-                    {
-                        let pkt = play::EntityEquipmentUpdateS2c {
-                            entity_id,
-                            equipment: vec![EquipmentEntry {
-                                slot: 0,
-                                item: inventory.get_cursor().clone(),
-                            }],
-                        };
-
-                        compose
-                            .broadcast_local(&pkt, chunk_pos, system_id)
-                            .exclude(io)
-                            .send(&world)
-                            .context("failed to send equipment update")?;
-                    }
-
                     inventory.updated_since_last_tick.clear();
                     inventory.hand_slot_updated_since_last_tick = false;
+
+                    anyhow::Ok(())
+                };
+
+                if let Err(e) = run() {
+                    error!("Failed to sync player inventory: {}", e);
+                }
+            },
+        );
+
+        system!(
+            "entity_velocity_sync",
+            world,
+            &Compose($),
+            &Velocity,
+        )
+        .multi_threaded()
+        .kind::<flecs::pipeline::OnStore>()
+        .tracing_each_entity(
+            info_span!("entity_velocity_sync"),
+            move |entity, (compose, velocity)| {
+                let run = || {
+                    let entity_id = VarInt(entity.minecraft_id());
+                    let world = entity.world();
+
+                    if velocity.velocity != Vec3::ZERO {
+                        let pkt = play::EntityVelocityUpdateS2c {
+                            entity_id,
+                            velocity: (*velocity).try_into()?,
+                        };
+
+                        compose.broadcast(&pkt, system_id).send(&world)?;
+                    }
+
+                    anyhow::Ok(())
+                };
+
+                if let Err(e) = run() {
+                    error!("failed to run velocity sync: {e}");
+                }
+            },
+        );
+
+        system!(
+            "entity_state_sync",
+            world,
+            &Compose($),
+            &Position,
+            &Yaw,
+            &Pitch,
+            &ConnectionId,
+        )
+        .multi_threaded()
+        .kind::<flecs::pipeline::OnStore>()
+        .tracing_each_entity(
+            info_span!("entity_state_sync"),
+            move |entity, (compose, position, yaw, pitch, io)| {
+                let run = || {
+                    let entity_id = VarInt(entity.minecraft_id());
+
+                    let io = *io;
+
+                    let world = entity.world();
+
+                    let chunk_pos = position.to_chunk();
+
+                    let pkt = play::EntityPositionS2c {
+                        entity_id,
+                        position: position.as_dvec3(),
+                        yaw: ByteAngle::from_degrees(**yaw),
+                        pitch: ByteAngle::from_degrees(**pitch),
+                        on_ground: false,
+                    };
+
+                    compose
+                        .broadcast_local(&pkt, chunk_pos, system_id)
+                        .exclude(io)
+                        .send(&world)?;
+
+                    // todo: unsure if we always want to set this
+                    let pkt = play::EntitySetHeadYawS2c {
+                        entity_id,
+                        head_yaw: ByteAngle::from_degrees(**yaw),
+                    };
+
+                    compose
+                        .broadcast(&pkt, system_id)
+                        .exclude(io)
+                        .send(&world)?;
 
                     anyhow::Ok(())
                 };
@@ -246,5 +311,9 @@ impl Module for EntityStateSyncModule {
                 }
             },
         );
+
+        track_previous::<Position>(world);
+        track_previous::<Yaw>(world);
+        track_previous::<Pitch>(world);
     }
 }
