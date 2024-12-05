@@ -1,10 +1,5 @@
 use flecs_ecs::core::{ComponentId, EntityView, QueryTuple, SystemAPI, builder};
 use tracing::Span;
-// SystemAPI<'a, P, T>: Builder<'a> + private::internal_SystemAPI<'a, P, T>
-// where
-//     T: QueryTuple,
-//     P: ComponentId,
-// {
 
 pub trait TracingExt<'a, P, T>: SystemAPI<'a, P, T>
 where

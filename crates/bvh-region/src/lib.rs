@@ -98,7 +98,7 @@ impl<T> Debug for BvhBuild<T> {
 unsafe impl<T: Send> Send for BvhBuild<T> {}
 unsafe impl<T: Sync> Sync for BvhBuild<T> {}
 
-// get number of threads that is pow of 2
+/// get number of threads that is pow of 2
 fn thread_count_pow2() -> usize {
     let max_threads_tentative = rayon::current_num_threads();
     // let max

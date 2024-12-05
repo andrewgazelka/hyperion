@@ -37,57 +37,9 @@ where
 {
     world.component::<T>().meta();
 
-    // let type_name = core::any::type_name::<T>();
-
-    // convert to snake_case
-    // let type_name = type_name.to_snake_case();
-
-    // let system_name = format!("exchange_{type_name}").leak();
-
     observer!(world, flecs::OnSet, &T, [filter] &mut MetadataChanges,).each(|(value, changes)| {
         changes.encode(*value);
     });
-
-    // world
-    //     .system_named::<(
-    //         &mut (Prev, T),       //            (0)
-    //         &mut T,               //                  (1)
-    //         &mut MetadataChanges, //     (2)
-    //     )>(system_name)
-    //     .multi_threaded()
-    //     .kind::<flecs::pipeline::OnStore>()
-    //     .run(move |mut table| {
-    //         let span = info_span!("exchange", name = system_name);
-    //         let _enter = span.enter();
-    //
-    //         while table.next() {
-    //             unsafe {
-    //                 let mut prev = table.field_unchecked::<T>(0);
-    //                 let prev = prev.get_mut(..).unwrap();
-    //
-    //                 let current = table.field_unchecked::<T>(1);
-    //                 let current = current.get(..).unwrap();
-    //
-    //                 let mut metadata_changes = table.field_unchecked::<MetadataChanges>(2);
-    //                 let metadata_changes = metadata_changes.get_mut(..).unwrap();
-    //
-    //                 // todo(perf): big optimization treating as raw bytes and SIMD
-    //                 // or code that can easily be compiled to SIMD
-    //                 // also can do copy_from_slice in one pass but want SIMD-optimized
-    //                 // first
-    //                 // todo(learn): reborrowing in-depth
-    //                 for (idx, (prev, current)) in itertools::zip_eq(&mut *prev, current).enumerate()
-    //                 {
-    //                     if prev != current {
-    //                         let metadata_changes = metadata_changes.get_unchecked_mut(idx);
-    //                         metadata_changes.encode(*current);
-    //                     }
-    //                 }
-    //
-    //                 prev.copy_from_slice(current);
-    //             }
-    //         }
-    //     });
 
     let register = |view: &mut EntityView<'_>| {
         view.set(T::default());
@@ -264,22 +216,6 @@ macro_rules! define_and_register_components {
         }
     };
 }
-
-// // Air supply component
-// #[derive(Component, Default)]
-// pub struct AirSupply {
-//     pub ticks: i32, // VarInt in original, using i32 for Rust
-// }
-//
-// impl Metadata for AirSupply {
-//     type Type = VarInt;
-//
-//     const INDEX: u8 = 1;
-//
-//     fn to_type(self) -> Self::Type {
-//         VarInt(self.ticks)
-//     }
-// }
 
 impl MetadataChanges {
     #[must_use]

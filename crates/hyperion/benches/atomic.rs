@@ -9,10 +9,6 @@ use hyperion::{
     util::SendableRef,
 };
 
-// chunks
-// [queue] for region
-//
-
 const THREADS: &[usize] = &[1, 2, 4, 8];
 
 fn main() {

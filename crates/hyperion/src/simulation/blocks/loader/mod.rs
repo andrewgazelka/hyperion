@@ -203,7 +203,6 @@ async fn load_chunk(position: IVec2, shared: &WorldShared) -> anyhow::Result<Col
     })
 }
 
-// #[instrument(skip_all, level = "trace", fields(location = ?location))]
 fn encode_chunk_packet(
     chunk: &ColumnData,
     location: IVec2,

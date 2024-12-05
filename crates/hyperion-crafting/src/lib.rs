@@ -95,83 +95,12 @@ pub struct CraftingShapelessData {
     result: ItemStack,
 }
 
-// /// Represents data for a shaped crafting recipe.
-// #[derive(Clone, Debug)]
-// pub struct CraftingShapedData<'a> {
-//     /// The width of the crafting grid.
-//     pub width: u32,
-//     /// The height of the crafting grid.
-//     pub height: u32,
-//     /// Used to group similar recipes together in the recipe book.
-//     pub group: Cow<'a, str>,
-//     /// The category of the recipe.
-//     pub category: CraftingCategory,
-//     /// The ingredients for the recipe, indexed by x + (y * width).
-//     pub ingredients: Cow<'a, [Ingredient<'a>]>,
-//     /// The result of the crafting recipe.
-//     pub result: ItemStack,
-//     /// Whether to show a notification when the recipe is added.
-//     pub show_notification: bool,
-// }
-//
 /// Represents data for special crafting recipes.
 #[derive(Clone, Debug)]
 pub struct CraftingSpecialData {
     /// The category of the special crafting recipe.
     pub category: CraftingCategory,
 }
-
-// /// Represents data for smelting-type recipes (smelting, blasting, smoking, campfire cooking).
-// #[derive(Clone, Debug)]
-// pub struct SmeltingData<'a> {
-//     /// Used to group similar recipes together in the recipe book.
-//     pub group: Cow<'a, str>,
-//     /// The category of the smelting recipe.
-//     pub category: SmeltingCategory,
-//     /// The ingredient for the smelting recipe.
-//     pub ingredient: Ingredient<'a>,
-//     /// The result of the smelting recipe.
-//     pub result: ItemStack,
-//     /// The amount of experience granted by this recipe.
-//     pub experience: f32,
-//     /// The time it takes to complete this recipe.
-//     pub cooking_time: u32,
-// }
-//
-// /// Represents data for a stonecutting recipe.
-// #[derive(Clone, Debug)]
-// pub struct StonecuttingData<'a> {
-//     /// Used to group similar recipes together in the recipe book.
-//     pub group: Cow<'a, str>,
-//     /// The ingredient for the stonecutting recipe.
-//     pub ingredient: Ingredient<'a>,
-//     /// The result of the stonecutting recipe.
-//     pub result: ItemStack,
-// }
-//
-// /// Represents data for a smithing transform recipe.
-// #[derive(Clone, Debug)]
-// pub struct SmithingTransformData<'a> {
-//     /// The smithing template.
-//     pub template: Ingredient<'a>,
-//     /// The base item.
-//     pub base: Ingredient<'a>,
-//     /// The additional ingredient.
-//     pub addition: Ingredient<'a>,
-//     /// The result of the smithing transform.
-//     pub result: ItemStack,
-// }
-//
-// /// Represents data for a smithing trim recipe.
-// #[derive(Clone, Debug)]
-// pub struct SmithingTrimData<'a> {
-//     /// The smithing template.
-//     pub template: Ingredient<'a>,
-//     /// The base item.
-//     pub base: Ingredient<'a>,
-//     /// The additional ingredient.
-//     pub addition: Ingredient<'a>,
-// }
 
 /// Represents the categories for crafting recipes.
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Encode, Default)]
@@ -223,59 +152,11 @@ impl Encode for CraftingShapelessData {
     }
 }
 
-// impl Encode for CraftingShapedData<'_> {
-//     fn encode(&self, mut w: impl Write) -> anyhow::Result<()> {
-//         self.width.encode(&mut w)?;
-//         self.height.encode(&mut w)?;
-//         self.group.encode(&mut w)?;
-//         self.category.encode(&mut w)?;
-//         self.ingredients.encode(&mut w)?;
-//         self.result.encode(&mut w)?;
-//         self.show_notification.encode(w)
-//     }
-// }
-
 impl Encode for CraftingSpecialData {
     fn encode(&self, w: impl Write) -> anyhow::Result<()> {
         self.category.encode(w)
     }
 }
-
-// impl Encode for SmeltingData<'_> {
-//     fn encode(&self, mut w: impl Write) -> anyhow::Result<()> {
-//         self.group.encode(&mut w)?;
-//         self.category.encode(&mut w)?;
-//         self.ingredient.encode(&mut w)?;
-//         self.result.encode(&mut w)?;
-//         self.experience.encode(&mut w)?;
-//         self.cooking_time.encode(w)
-//     }
-// }
-//
-// impl Encode for StonecuttingData<'_> {
-//     fn encode(&self, mut w: impl Write) -> anyhow::Result<()> {
-//         self.group.encode(&mut w)?;
-//         self.ingredient.encode(&mut w)?;
-//         self.result.encode(w)
-//     }
-// }
-//
-// impl Encode for SmithingTransformData<'_> {
-//     fn encode(&self, mut w: impl Write) -> anyhow::Result<()> {
-//         self.template.encode(&mut w)?;
-//         self.base.encode(&mut w)?;
-//         self.addition.encode(&mut w)?;
-//         self.result.encode(w)
-//     }
-// }
-//
-// impl Encode for SmithingTrimData<'_> {
-//     fn encode(&self, mut w: impl Write) -> anyhow::Result<()> {
-//         self.template.encode(&mut w)?;
-//         self.base.encode(&mut w)?;
-//         self.addition.encode(w)
-//     }
-// }
 
 #[derive(Debug, Encode, Packet)]
 pub struct UnlockRecipesS2c {

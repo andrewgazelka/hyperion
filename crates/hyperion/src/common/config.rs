@@ -32,31 +32,6 @@ pub enum Radius {
     Euclidean,
 }
 
-// impl Radius {
-//     #[allow(clippy::cast_possible_truncation)]
-//     pub fn get_random_2d(self) -> IVec2 {
-//         match self {
-//             Self::Chebyshev(radius) => {
-//                 let x = fastrand::i32(-radius..radius);
-//                 let z = fastrand::i32(-radius..radius);
-//                 IVec2::new(x, z)
-//             }
-//             Self::Euclidean(radius) => {
-//                 let r = fastrand::f32() * radius as f32;
-//                 let theta = fastrand::f32() * 2.0 * std::f32::consts::PI;
-//
-//                 let x = r * theta.cos();
-//                 let z = r * theta.sin();
-//
-//                 let x = x as i32;
-//                 let z = z as i32;
-//
-//                 IVec2::new(x, z)
-//             }
-//         }
-//     }
-// }
-
 impl Default for Config {
     fn default() -> Self {
         Self {
