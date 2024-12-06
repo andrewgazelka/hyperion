@@ -3,7 +3,8 @@ use hyperion_clap::{MinecraftCommand, hyperion_command::CommandRegistry};
 
 use crate::command::{
     class::ClassCommand, fly::FlyCommand, gui::GuiCommand, raycast::RaycastCommand,
-    replace::ReplaceCommand, shoot::ShootCommand, spawn::SpawnCommand, speed::SpeedCommand, xp::XpCommand,
+    replace::ReplaceCommand, shoot::ShootCommand, spawn::SpawnCommand, speed::SpeedCommand,
+    xp::XpCommand,
 };
 
 mod class;

@@ -6,13 +6,13 @@ use glam::Vec3;
 use hyperion_inventory::PlayerInventory;
 use hyperion_utils::EntityExt;
 use tracing::{error, info_span};
-use valence_protocol::{ByteAngle, RawBytes, VarInt, packets::play};
+use valence_protocol::{RawBytes, VarInt, packets::play};
 
 use crate::{
     Prev,
     net::{Compose, ConnectionId},
     simulation::{
-        Pitch, Position, PrevPosition, Velocity, Xp, Yaw, animation::ActiveAnimation,
+        Position, PrevPosition, Velocity, Xp, animation::ActiveAnimation,
         metadata::MetadataChanges,
     },
     system_registry::{SYNC_ENTITY_POSITION, SystemId},

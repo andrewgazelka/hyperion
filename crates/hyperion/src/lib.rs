@@ -51,7 +51,7 @@ use libc::{RLIMIT_NOFILE, getrlimit, setrlimit};
 use libdeflater::CompressionLvl;
 use simulation::{Comms, SimModule, StreamLookup, blocks::Blocks};
 use storage::{Events, GlobalEventHandlers, LocalDb, SkinHandler, ThreadLocal};
-use tracing::{info, info_span, warn};
+use tracing::{info, info_span};
 use util::mojang::MojangClient;
 pub use uuid;
 // todo: slowly move more and more things to arbitrary module

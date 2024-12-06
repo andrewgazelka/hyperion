@@ -2,7 +2,9 @@ use clap::Parser;
 use flecs_ecs::core::{Entity, EntityViewGet, World};
 use hyperion::{
     glam::Vec3,
-    simulation::{entity_kind::EntityKind, Pitch, Position, PrevPosition, Spawn, Uuid, Velocity, Yaw},
+    simulation::{
+        Pitch, Position, PrevPosition, Spawn, Uuid, Velocity, Yaw, entity_kind::EntityKind,
+    },
 };
 use hyperion_clap::{CommandPermission, MinecraftCommand};
 use tracing::debug;
