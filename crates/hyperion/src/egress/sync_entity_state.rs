@@ -225,47 +225,6 @@ impl Module for EntityStateSyncModule {
             },
         );
 
-        // system!(
-        // "entity_state_sync",
-        // world,
-        // &Compose($),
-        // &Velocity,
-        // ?&ConnectionId,
-        // )
-        // .multi_threaded()
-        // .kind::<flecs::pipeline::OnStore>()
-        // .tracing_each_entity(
-        // info_span!("entity_state_sync"),
-        // move |entity, (compose, velocity, io)| {
-        // let run = || {
-        // let entity_id = VarInt(entity.minecraft_id());
-        //
-        // let io = io.copied();
-        // let world = entity.world();
-        //
-        // Create a packet for syncing velocity
-        // let pkt = play::EntityVelocityUpdateS2c {
-        // entity_id,
-        // velocity: (*velocity).try_into()?,
-        // };
-        //
-        // compose
-        // .broadcast(&pkt, system_id)
-        // .exclude(io)
-        // .send(&world)?;
-        //
-        // anyhow::Ok(())
-        // };
-        // if let Err(e) = run() {
-        // error!("failed to run sync_velocity: {e}");
-        // }
-        // },
-        // );
-
-        // track_previous::<Position>(world);
-        // track_previous::<Yaw>(world);
-        // track_previous::<Pitch>(world);
-
         // Add a new system specifically for projectiles (arrows)
         system!(
             "projectile_sync",
