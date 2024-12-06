@@ -9,6 +9,9 @@ inherits = 'release'
 lto = 'fat'
 panic = 'abort'
 
+[profile.dev]
+incremental = true
+
 [workspace]
 members = [
   'crates/bvh-region',

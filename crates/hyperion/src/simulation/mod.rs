@@ -1,5 +1,6 @@
 use std::{borrow::Borrow, collections::HashMap, hash::Hash, num::TryFromIntError, sync::Arc};
 
+use blocks::Blocks;
 use bytemuck::{Pod, Zeroable};
 use derive_more::{Constructor, Deref, DerefMut, Display, From};
 use flecs_ecs::prelude::*;
@@ -419,6 +420,35 @@ impl Position {
     }
 }
 
+/// The full pose of an entity. This is used for both [`Player`] and [`Npc`].
+#[derive(
+    Component,
+    Copy,
+    Clone,
+    Debug,
+    Serialize,
+    Deserialize,
+    Deref,
+    DerefMut,
+    From
+)]
+#[meta]
+pub struct PrevPosition {
+    /// The (x, y, z) position of the entity.
+    /// Note we are using [`Vec3`] instead of [`glam::DVec3`] because *cache locality* is important.
+    /// However, the Notchian server uses double precision floating point numbers for the position.
+    position: Vec3,
+}
+
+impl PrevPosition {
+    #[must_use]
+    pub const fn new(x: f32, y: f32, z: f32) -> Self {
+        Self {
+            position: Vec3::new(x, y, z),
+        }
+    }
+}
+
 #[derive(Component, Copy, Clone, Debug, Deref, DerefMut, Default, Constructor)]
 #[meta]
 pub struct Yaw {
@@ -568,20 +598,15 @@ impl TryFrom<&Velocity> for valence_protocol::Velocity {
     type Error = TryFromIntError;
 
     fn try_from(value: &Velocity) -> Result<Self, Self::Error> {
-        // Clamp velocity components to prevent overflow when converting to network protocol
-        // Max i16 value is 32767, so max velocity is ~4.096 (32767/8000)
-        let max_velocity = 4.0;
-        let clamped_velocity = value.velocity.clamp(
-            Vec3::splat(-max_velocity),
-            Vec3::splat(max_velocity)
-        );
+        let max_velocity = 75.0;
+        let clamped_velocity = value
+            .velocity
+            .clamp(Vec3::splat(-max_velocity), Vec3::splat(max_velocity));
 
-        let nums = clamped_velocity
-            .to_array()
-            .try_map(|a| {
-                let num = (a * 8000.0) as i32;
-                i16::try_from(num)
-            })?;
+        let nums = clamped_velocity.to_array().try_map(|a| {
+            let num = (a * 8000.0) as i32;
+            i16::try_from(num)
+        })?;
 
         Ok(Self(nums))
     }
@@ -630,9 +655,6 @@ impl Module for SimModule {
 
         world.component::<EntityKind>().meta();
 
-        world.component::<DeltaTime>();
-        world.singleton::<DeltaTime>().set(DeltaTime(0.0));
-
         // todo: how
         // world
         //     .component::<EntityKind>()
@@ -654,6 +676,7 @@ impl Module for SimModule {
         component!(world, IgnMap);
 
         world.component::<Position>().meta();
+        world.component::<PrevPosition>().meta();
 
         world.component::<Name>();
         component!(world, Name).opaque_func(meta_ser_stringify_type_display::<Name>);
@@ -697,8 +720,23 @@ impl Module for SimModule {
                     position: position.as_dvec3(),
                     pitch: ByteAngle::from_degrees(**pitch),
                     yaw: ByteAngle::from_degrees(**yaw),
-                    head_yaw: ByteAngle(0),  // todo:
-                    data: VarInt::default(), // todo:
+                    head_yaw: ByteAngle::from_degrees(0.0), // todo:
+                    data: VarInt::default(),                // todo:
+                    velocity: velocity.try_into().unwrap(),
+                };
+
+                compose
+                    .broadcast(&packet, SystemId(0))
+                    .send(&world)
+                    .unwrap();
+
+                // broadcast entity velocity as well if velocity is non-zero
+                if velocity.velocity == Vec3::ZERO {
+                    return;
+                }
+
+                let packet = play::EntityVelocityUpdateS2c {
+                    entity_id: VarInt(minecraft_id),
                     velocity: velocity.try_into().unwrap(),
                 };
 
@@ -724,60 +762,59 @@ impl Module for SimModule {
                 });
             });
 
-        system!("update_delta_time", world, &mut DeltaTime($))
-            .kind::<flecs::pipeline::PreUpdate>()
-            .run(|mut iter| {
-                while iter.next() {
-                    let mut delta = iter.field::<DeltaTime>(0).unwrap();
-                    let delta = delta.get_mut(0).unwrap();
-                    *delta = DeltaTime(iter.world().info().frame_time_total);
-                }
-            });
-
         system!(
             "update_projectile_positions",
             world,
             &mut Position,
-            &mut Velocity,
             &mut Yaw,
             &mut Pitch,
-            &DeltaTime($)
+            &mut Velocity,
         )
-        .kind::<flecs::pipeline::PostUpdate>()
-        .each_entity(|_entity, (position, velocity, yaw, pitch, delta)| {
+        .kind::<flecs::pipeline::OnStore>()
+        .with_enum_wildcard::<EntityKind>()
+        .each_entity(|entity, (position, yaw, pitch, velocity)| {
             if velocity.velocity != Vec3::ZERO {
-
                 // Update position based on velocity with delta time
                 position.x += velocity.velocity.x;
                 position.y += velocity.velocity.y;
                 position.z += velocity.velocity.z;
 
-                // Update rotation based on velocity direction
-                // let vel = velocity.velocity;
+                // re calculate yaw and pitch based on velocity
+                let (new_yaw, new_pitch) = get_rotation_from_velocity(velocity.velocity);
+                *yaw = Yaw::new(new_yaw);
+                *pitch = Pitch::new(new_pitch);
 
-                // Calculate yaw: -180° to +180°, where:
-                // -180° or +180°: facing North (negative Z)
-                // -90°: facing East (positive X)
-                // 0°: facing South (positive Z)
-                // +90°: facing West (negative X)
-                //**yaw = vel.x.atan2(vel.z) * 180.0 / std::f32::consts::PI;
+                let ray = entity.get::<(&Position, &Yaw, &Pitch)>(|(position, yaw, pitch)| {
+                    let center = **position;
 
-                // Calculate pitch: -90° to +90°, where:
-                // -90°: looking straight up (positive Y)
-                // 0°: looking horizontal
-                // +90°: looking straight down (negative Y)
-                // let horizontal_length = (vel.x * vel.x + vel.z * vel.z).sqrt();
-                //**pitch = -(vel.y.atan2(horizontal_length) * 180.0 / std::f32::consts::PI);
+                    let direction = get_direction_from_rotation(**yaw, **pitch);
 
-                // https://minecraft.fandom.com/wiki/Arrow#Usage
-                // Apply drag (0.99 per tick = ~0.2 per second at 20 ticks/sec)
-                velocity.velocity.x *= 0.99;
-                velocity.velocity.z *= 0.99;
-                
-                // Apply gravity (scaled down to fit within network protocol limits)
-                // Network protocol multiplies velocity by 8000 and converts to i16 (-32768 to 32767)
-                // So our max velocity magnitude should be 32767/8000 ≈ 4.096
-                velocity.velocity.y -= 0.05;
+                    geometry::ray::Ray::new(center, direction)
+                });
+
+                entity.world().get::<&mut Blocks>(|blocks| {
+                    // calculate distance limit based on velocity
+                    let distance_limit = velocity.velocity.length();
+                    let Some(collision) = blocks.first_collision(ray, distance_limit) else {
+                        velocity.velocity.x *= 0.99;
+                        velocity.velocity.z *= 0.99;
+
+                        velocity.velocity.y -= 0.005;
+                        return;
+                    };
+                    debug!("distance_limit = {}", distance_limit);
+
+                    debug!("collision = {collision:?}");
+
+                    velocity.velocity = Vec3::ZERO;
+
+                    // Set arrow position to the collision location
+                    **position = collision.normal;
+
+                    blocks
+                        .set_block(collision.location, BlockState::DIRT)
+                        .unwrap();
+                });
             }
         });
     }
@@ -789,5 +826,20 @@ pub struct Spawn;
 #[derive(Component)]
 pub struct Visible;
 
-#[derive(Component, Debug)]
-pub struct DeltaTime(pub f32);
+pub fn get_rotation_from_velocity(velocity: Vec3) -> (f32, f32) {
+    let yaw = (-velocity.x).atan2(velocity.z).to_degrees(); // Correct yaw calculation
+    let pitch = (-velocity.y).atan2(velocity.length()).to_degrees(); // Correct pitch calculation
+    (yaw, pitch)
+}
+
+pub fn get_direction_from_rotation(yaw: f32, pitch: f32) -> Vec3 {
+    // Convert angles from degrees to radians
+    let yaw_rad = yaw.to_radians();
+    let pitch_rad = pitch.to_radians();
+
+    Vec3::new(
+        -pitch_rad.cos() * yaw_rad.sin(), // x = -cos(pitch) * sin(yaw)
+        -pitch_rad.sin(),                 // y = -sin(pitch)
+        pitch_rad.cos() * yaw_rad.cos(),  // z = cos(pitch) * cos(yaw)
+    )
+}

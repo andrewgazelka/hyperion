@@ -2,7 +2,7 @@ use clap::Parser;
 use flecs_ecs::core::{Entity, EntityViewGet, World};
 use hyperion::{
     glam::Vec3,
-    simulation::{Pitch, Position, Spawn, Uuid, Velocity, Yaw, entity_kind::EntityKind},
+    simulation::{entity_kind::EntityKind, Pitch, Position, PrevPosition, Spawn, Uuid, Velocity, Yaw},
 };
 use hyperion_clap::{CommandPermission, MinecraftCommand};
 use tracing::debug;
@@ -37,19 +37,16 @@ impl MinecraftCommand for ShootCommand {
                     velocity.x, velocity.y, velocity.z
                 );
 
-                // Set arrow's rotation to match player's view direction
-                let arrow_yaw = **yaw; // Use player's yaw
-                let arrow_pitch = **pitch; // Use player's pitch
-
                 // Create arrow entity with velocity
                 world
                     .entity()
                     .add_enum(EntityKind::Arrow)
                     .set(Uuid::new_v4())
                     .set(Position::new(spawn_pos.x, spawn_pos.y, spawn_pos.z))
+                    .set(PrevPosition::new(spawn_pos.x, spawn_pos.y, spawn_pos.z))
                     .set(Velocity::new(velocity.x, velocity.y, velocity.z))
-                    .set(Yaw::new(arrow_yaw))
-                    .set(Pitch::new(arrow_pitch))
+                    .set(Yaw::new(**yaw))
+                    .set(Pitch::new(**pitch))
                     .enqueue(Spawn);
             });
     }
