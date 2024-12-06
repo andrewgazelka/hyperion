@@ -3732,6 +3732,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "system-order"
+version = "0.1.0"
+dependencies = [
+ "flecs_ecs",
+]
+
+[[package]]
 name = "tag"
 version = "0.1.0"
 dependencies = [

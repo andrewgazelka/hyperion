@@ -1,3 +1,4 @@
+[profile]
 [profile.release-debug]
 debug = true
 inherits = 'release'
@@ -36,6 +37,7 @@ members = [
   'crates/hyperion-item',
   'crates/geometry',
   'crates/simd-utils',
+  'crates/system-order',
 ]
 resolver = '2'
 
@@ -203,6 +205,9 @@ version = '0.10.8'
 [workspace.dependencies.simd-utils]
 path = 'crates/simd-utils'
 
+[workspace.dependencies.system-order]
+path = 'crates/system-order'
+
 [workspace.dependencies.tokio-util]
 features = ['full']
 version = '0.7.12'
@@ -255,18 +260,16 @@ branch = 'feat-open'
 git = 'https://github.com/andrewgazelka/valence'
 
 [workspace.lints]
-
 [workspace.lints.clippy]
 cast_precision_loss = 'allow'
 future_not_send = 'allow'
 missing_errors_doc = 'allow'
 missing_panics_doc = 'allow'
 module_name_repetitions = 'allow'
+print_stdout = 'deny'
 single_match_else = 'allow'
 too_long_first_doc_paragraph = 'allow'
 too_many_lines = 'allow'
-
-print_stdout = 'deny'
 
 [workspace.lints.clippy.complexity]
 level = 'deny'
