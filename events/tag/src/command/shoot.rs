@@ -2,9 +2,7 @@ use clap::Parser;
 use flecs_ecs::core::{Entity, EntityViewGet, World};
 use hyperion::{
     glam::Vec3,
-    simulation::{
-        Pitch, Position, PrevPosition, Spawn, Uuid, Velocity, Yaw, entity_kind::EntityKind,
-    },
+    simulation::{Pitch, Position, Spawn, Uuid, Velocity, Yaw, entity_kind::EntityKind},
 };
 use hyperion_clap::{CommandPermission, MinecraftCommand};
 use tracing::debug;
@@ -45,7 +43,6 @@ impl MinecraftCommand for ShootCommand {
                     .add_enum(EntityKind::Arrow)
                     .set(Uuid::new_v4())
                     .set(Position::new(spawn_pos.x, spawn_pos.y, spawn_pos.z))
-                    .set(PrevPosition::new(spawn_pos.x, spawn_pos.y, spawn_pos.z))
                     .set(Velocity::new(velocity.x, velocity.y, velocity.z))
                     .set(Yaw::new(**yaw))
                     .set(Pitch::new(**pitch))

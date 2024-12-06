@@ -11,15 +11,35 @@ use valence_protocol::{RawBytes, VarInt, packets::play};
 use crate::{
     Prev,
     net::{Compose, ConnectionId},
-    simulation::{
-        Position, PrevPosition, Velocity, Xp, animation::ActiveAnimation, metadata::MetadataChanges,
-    },
+    simulation::{Position, Velocity, Xp, animation::ActiveAnimation, metadata::MetadataChanges},
     system_registry::{SYNC_ENTITY_POSITION, SystemId},
     util::TracingExt,
 };
 
 #[derive(Component)]
 pub struct EntityStateSyncModule;
+
+fn track_previous<T: ComponentId + Copy>(world: &World) {
+    // we include names so that if we call this multiple times, we don't get multiple observers/systems
+    let component_name = std::any::type_name::<T>();
+    let observer_name = format!("init_prev_{component_name}");
+    let system_name = format!("track_prev_{component_name}");
+
+    world
+        .observer_named::<flecs::OnSet, &T>(&observer_name)
+        .without::<(Prev, T)>() // we have not set Prev yet
+        .each_entity(|entity, value| {
+            entity.set_pair::<Prev, T>(*value);
+        });
+
+    world
+        .system_named::<(&mut (Prev, T), &T)>(system_name.as_str())
+        .multi_threaded()
+        .kind::<flecs::pipeline::OnStore>()
+        .each(|(prev, value)| {
+            *prev = *value;
+        });
+}
 
 impl Module for EntityStateSyncModule {
     fn module(world: &World) {
@@ -208,21 +228,21 @@ impl Module for EntityStateSyncModule {
             world,
             &Compose($),
             &Position,
-            &mut PrevPosition,
+            &(Prev, Position),
             &mut Velocity,
         )
         .multi_threaded()
         .kind::<flecs::pipeline::PreStore>()
         .tracing_each_entity(
             info_span!("projectile_sync"),
-            move |entity, (compose, position, prevpos, velocity)| {
+            move |entity, (compose, position, previous_position, velocity)| {
                 let entity_id = VarInt(entity.minecraft_id());
                 let world = entity.world();
                 let chunk_pos = position.to_chunk();
 
-                let position_delta = **position - **prevpos;
+                let position_delta = **position - **previous_position;
                 let needs_teleport = position_delta.abs().max_element() >= 8.0;
-                let changed_position = **position != **prevpos;
+                let changed_position = **position != **previous_position;
 
                 if changed_position && !needs_teleport {
                     let pkt = play::MoveRelativeS2c {
@@ -252,9 +272,9 @@ impl Module for EntityStateSyncModule {
                     compose.broadcast(&pkt, system_id).send(&world).unwrap();
                     // velocity.velocity = Vec3::ZERO;
                 }
-
-                **prevpos = **position;
             },
         );
+
+        track_previous::<Position>(world);
     }
 }

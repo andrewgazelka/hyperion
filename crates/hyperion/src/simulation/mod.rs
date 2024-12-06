@@ -217,8 +217,8 @@ impl Xp {
             1897..=2044 => 34,
             2045..=2201 => 35,
             2202..=2367 => 36,
-            2368..=2543 => 37,
-            2544..=2726 => 38,
+            2368..=2542 => 37,
+            2543..=2726 => 38,
             2727..=2919 => 39,
             2920..=3121 => 40,
             3122..=3332 => 41,
@@ -412,35 +412,6 @@ pub struct Position {
 }
 
 impl Position {
-    #[must_use]
-    pub const fn new(x: f32, y: f32, z: f32) -> Self {
-        Self {
-            position: Vec3::new(x, y, z),
-        }
-    }
-}
-
-/// The full pose of an entity. This is used for both [`Player`] and [`Npc`].
-#[derive(
-    Component,
-    Copy,
-    Clone,
-    Debug,
-    Serialize,
-    Deserialize,
-    Deref,
-    DerefMut,
-    From
-)]
-#[meta]
-pub struct PrevPosition {
-    /// The (x, y, z) position of the entity.
-    /// Note we are using [`Vec3`] instead of [`glam::DVec3`] because *cache locality* is important.
-    /// However, the Notchian server uses double precision floating point numbers for the position.
-    position: Vec3,
-}
-
-impl PrevPosition {
     #[must_use]
     pub const fn new(x: f32, y: f32, z: f32) -> Self {
         Self {
@@ -677,7 +648,6 @@ impl Module for SimModule {
         component!(world, IgnMap);
 
         world.component::<Position>().meta();
-        world.component::<PrevPosition>().meta();
 
         world.component::<Name>();
         component!(world, Name).opaque_func(meta_ser_stringify_type_display::<Name>);
