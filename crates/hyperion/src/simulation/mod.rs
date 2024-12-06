@@ -1,5 +1,6 @@
 use std::{borrow::Borrow, collections::HashMap, hash::Hash, num::TryFromIntError, sync::Arc};
 
+use anyhow::Context;
 use blocks::Blocks;
 use bytemuck::{Pod, Zeroable};
 use derive_more::{Constructor, Deref, DerefMut, Display, From};
@@ -10,7 +11,7 @@ use hyperion_utils::EntityExt;
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 use skin::PlayerSkin;
-use tracing::debug;
+use tracing::{debug, error};
 use uuid;
 use valence_generated::block::BlockState;
 use valence_protocol::{ByteAngle, VarInt, packets::play};
@@ -677,12 +678,14 @@ impl Module for SimModule {
         .with::<flecs::Any>()
         .with_enum_wildcard::<EntityKind>()
         .each_entity(|entity, (compose, uuid, position, pitch, yaw, velocity)| {
-            debug!("spawned entity");
             let minecraft_id = entity.minecraft_id();
             let world = entity.world();
 
-            entity.get::<&EntityKind>(|kind| {
-                let kind = *kind as i32;
+            let spawn_entity = move |kind: EntityKind| -> anyhow::Result<()> {
+                let kind = kind as i32;
+
+                let velocity = valence_protocol::Velocity::try_from(velocity)
+                    .context("failed to convert velocity")?;
 
                 let packet = play::EntitySpawnS2c {
                     entity_id: VarInt(minecraft_id),
@@ -693,7 +696,7 @@ impl Module for SimModule {
                     yaw: ByteAngle::from_degrees(**yaw),
                     head_yaw: ByteAngle::from_degrees(0.0), // todo:
                     data: VarInt::default(),                // todo:
-                    velocity: velocity.try_into().unwrap(),
+                    velocity,
                 };
 
                 compose
@@ -701,20 +704,15 @@ impl Module for SimModule {
                     .send(&world)
                     .unwrap();
 
-                // broadcast entity velocity as well if velocity is non-zero
-                if velocity.velocity == Vec3::ZERO {
-                    return;
+                Ok(())
+            };
+
+            debug!("spawned entity");
+
+            entity.get::<&EntityKind>(|kind| {
+                if let Err(e) = spawn_entity(*kind) {
+                    error!("failed to spawn entity: {e}");
                 }
-
-                let packet = play::EntityVelocityUpdateS2c {
-                    entity_id: VarInt(minecraft_id),
-                    velocity: velocity.try_into().unwrap(),
-                };
-
-                compose
-                    .broadcast(&packet, SystemId(0))
-                    .send(&world)
-                    .unwrap();
             });
         });
 
