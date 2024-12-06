@@ -230,7 +230,7 @@ impl Xp {
             4523..=4787 => 47,
             4788..=5061 => 48,
             5062..=5344 => 49,
-            5062..=5636 => 50,
+            5345..=5636 => 50,
             5637..=5937 => 51,
             5938..=6247 => 52,
             6248..=6566 => 53,
@@ -586,7 +586,7 @@ impl Velocity {
         velocity: Vec3::ZERO,
     };
 
-    #[allow(unused)]
+    #[must_use]
     pub const fn new(x: f32, y: f32, z: f32) -> Self {
         Self {
             velocity: Vec3::new(x, y, z),
@@ -604,6 +604,7 @@ impl TryFrom<&Velocity> for valence_protocol::Velocity {
             .clamp(Vec3::splat(-max_velocity), Vec3::splat(max_velocity));
 
         let nums = clamped_velocity.to_array().try_map(|a| {
+            #[allow(clippy::cast_possible_truncation)]
             let num = (a * 8000.0) as i32;
             i16::try_from(num)
         })?;
@@ -826,12 +827,14 @@ pub struct Spawn;
 #[derive(Component)]
 pub struct Visible;
 
+#[must_use]
 pub fn get_rotation_from_velocity(velocity: Vec3) -> (f32, f32) {
     let yaw = (-velocity.x).atan2(velocity.z).to_degrees(); // Correct yaw calculation
     let pitch = (-velocity.y).atan2(velocity.length()).to_degrees(); // Correct pitch calculation
     (yaw, pitch)
 }
 
+#[must_use]
 pub fn get_direction_from_rotation(yaw: f32, pitch: f32) -> Vec3 {
     // Convert angles from degrees to radians
     let yaw_rad = yaw.to_radians();

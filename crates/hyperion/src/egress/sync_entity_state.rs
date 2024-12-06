@@ -227,6 +227,7 @@ impl Module for EntityStateSyncModule {
                 if changed_position && !needs_teleport {
                     let pkt = play::MoveRelativeS2c {
                         entity_id,
+                        #[allow(clippy::cast_possible_truncation)]
                         delta: (position_delta * 4096.0).to_array().map(|x| x as i16),
                         on_ground: false,
                     };
@@ -241,11 +242,11 @@ impl Module for EntityStateSyncModule {
                 if velocity.velocity != Vec3::ZERO {
                     let pkt = play::EntityVelocityUpdateS2c {
                         entity_id,
-                        velocity: (*velocity).try_into().unwrap_or(
+                        velocity: (*velocity).try_into().unwrap_or_else(|_| {
                             Velocity::ZERO
                                 .try_into()
-                                .expect("failed to convert velocity to i16"),
-                        ),
+                                .expect("failed to convert velocity to i16")
+                        }),
                     };
 
                     compose.broadcast(&pkt, system_id).send(&world).unwrap();
