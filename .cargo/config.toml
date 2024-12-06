@@ -2,4 +2,4 @@
 rustflags = ["--cfg", "tokio_unstable", "-Ctarget-cpu=native"]
 
 [env]
-RUST_LOG = "debug"
+RUST_LOG="debug"
