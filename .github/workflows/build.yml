@@ -29,25 +29,6 @@ jobs:
         run: |
           cargo machete
 
-  #  test:
-  #    runs-on: ubuntu-latest
-  #
-  #    steps:
-  #      - name: Checkout repository
-  #        uses: actions/checkout@v4
-  #
-  #      - uses: actions-rust-lang/setup-rust-toolchain@v1
-  #        with:
-  #          toolchain: ${{ env.RUST_TOOLCHAIN }}
-  #
-  #      - uses: Swatinem/rust-cache@v2
-  #        with:
-  #          cache-on-failure: true
-  #
-  #      - name: Run cargo test
-  #        run: |
-  #          cargo test --workspace --all-features
-
   fmt:
     runs-on: ubuntu-latest
 
@@ -64,25 +45,19 @@ jobs:
         run: |
           cargo fmt --all -- --check
 
-  #  docs:
-  #    runs-on: ubuntu-latest
-  #
-  #    steps:
-  #      - name: Checkout repository
-  #        uses: actions/checkout@v4
-  #
-  #      - uses: actions-rust-lang/setup-rust-toolchain@v1
-  #        with:
-  #          toolchain: ${{ env.RUST_TOOLCHAIN }}
-  #
-  #      - uses: Swatinem/rust-cache@v2
-  #        with:
-  #          cache-on-failure: true
-  #      - name: Run cargo doc
-  #        run: |
-  #          cargo doc --workspace --no-deps --all-features
-  #        env:
-  #          RUSTDOCFLAGS: -D warnings
+  format-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Taplo
+        run: |
+          curl -sSfL https://github.com/tamasfe/taplo/releases/latest/download/taplo-x86_64-unknown-linux-gnu.tar.gz | tar -xz
+          sudo mv taplo /usr/local/bin/
+
+      - name: Lint TOML files
+        run: taplo lint .
 
   clippy:
     runs-on: ubuntu-latest
@@ -101,23 +76,3 @@ jobs:
       - name: Clippy check
         run: cargo clippy --workspace --benches --tests --examples --all-features -- -D warnings
 
-#  check:
-#    strategy:
-#      matrix:
-#        os: [ubuntu-latest, windows-latest, macos-latest]
-#    runs-on: ${{ matrix.os }}
-#    steps:
-#      - name: Checkout repository
-#        uses: actions/checkout@v4
-#
-#      - name: Setup Rust toolchain
-#        uses: actions-rust-lang/setup-rust-toolchain@v1
-#        with:
-#          toolchain: ${{ env.RUST_TOOLCHAIN }}
-#
-#      - uses: Swatinem/rust-cache@v2
-#        with:
-#          cache-on-failure: true
-#
-#      - name: Cargo check
-#        run: cargo check --workspace --all-features
