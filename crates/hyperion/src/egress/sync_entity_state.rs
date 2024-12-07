@@ -6,14 +6,12 @@ use glam::Vec3;
 use hyperion_inventory::PlayerInventory;
 use hyperion_utils::EntityExt;
 use tracing::{error, info_span};
-use valence_protocol::{ByteAngle, RawBytes, VarInt, packets::play};
+use valence_protocol::{RawBytes, VarInt, packets::play};
 
 use crate::{
     Prev,
     net::{Compose, ConnectionId},
-    simulation::{
-        Pitch, Position, Velocity, Xp, Yaw, animation::ActiveAnimation, metadata::MetadataChanges,
-    },
+    simulation::{Position, Velocity, Xp, animation::ActiveAnimation, metadata::MetadataChanges},
     system_registry::{SYNC_ENTITY_POSITION, SystemId},
     util::TracingExt,
 };
@@ -224,96 +222,59 @@ impl Module for EntityStateSyncModule {
             },
         );
 
+        // Add a new system specifically for projectiles (arrows)
         system!(
-            "entity_velocity_sync",
-            world,
-            &Compose($),
-            &Velocity,
-        )
-        .multi_threaded()
-        .kind::<flecs::pipeline::OnStore>()
-        .tracing_each_entity(
-            info_span!("entity_velocity_sync"),
-            move |entity, (compose, velocity)| {
-                let run = || {
-                    let entity_id = VarInt(entity.minecraft_id());
-                    let world = entity.world();
-
-                    if velocity.velocity != Vec3::ZERO {
-                        let pkt = play::EntityVelocityUpdateS2c {
-                            entity_id,
-                            velocity: (*velocity).try_into()?,
-                        };
-
-                        compose.broadcast(&pkt, system_id).send(&world)?;
-                    }
-
-                    anyhow::Ok(())
-                };
-
-                if let Err(e) = run() {
-                    error!("failed to run velocity sync: {e}");
-                }
-            },
-        );
-
-        system!(
-            "entity_state_sync",
+            "projectile_sync",
             world,
             &Compose($),
             &Position,
-            &Yaw,
-            &Pitch,
-            ?&ConnectionId,
+            &(Prev, Position),
+            &mut Velocity,
         )
         .multi_threaded()
-        .kind::<flecs::pipeline::OnStore>()
+        .kind::<flecs::pipeline::PreStore>()
         .tracing_each_entity(
-            info_span!("entity_state_sync"),
-            move |entity, (compose, position, yaw, pitch, io)| {
-                let run = || {
-                    let entity_id = VarInt(entity.minecraft_id());
+            info_span!("projectile_sync"),
+            move |entity, (compose, position, previous_position, velocity)| {
+                let entity_id = VarInt(entity.minecraft_id());
+                let world = entity.world();
+                let chunk_pos = position.to_chunk();
 
-                    let io = io.copied();
+                let position_delta = **position - **previous_position;
+                let needs_teleport = position_delta.abs().max_element() >= 8.0;
+                let changed_position = **position != **previous_position;
 
-                    let world = entity.world();
-
-                    let chunk_pos = position.to_chunk();
-
-                    let pkt = play::EntityPositionS2c {
+                if changed_position && !needs_teleport {
+                    let pkt = play::MoveRelativeS2c {
                         entity_id,
-                        position: position.as_dvec3(),
-                        yaw: ByteAngle::from_degrees(**yaw),
-                        pitch: ByteAngle::from_degrees(**pitch),
+                        #[allow(clippy::cast_possible_truncation)]
+                        delta: (position_delta * 4096.0).to_array().map(|x| x as i16),
                         on_ground: false,
                     };
 
                     compose
                         .broadcast_local(&pkt, chunk_pos, system_id)
-                        .exclude(io)
-                        .send(&world)?;
+                        .send(&world)
+                        .unwrap();
+                }
 
-                    // todo: unsure if we always want to set this
-                    let pkt = play::EntitySetHeadYawS2c {
+                // Sync velocity if non-zero
+                if velocity.velocity != Vec3::ZERO {
+                    let pkt = play::EntityVelocityUpdateS2c {
                         entity_id,
-                        head_yaw: ByteAngle::from_degrees(**yaw),
+                        velocity: (*velocity).try_into().unwrap_or_else(|_| {
+                            Velocity::ZERO
+                                .try_into()
+                                .expect("failed to convert velocity to i16")
+                        }),
                     };
 
-                    compose
-                        .broadcast(&pkt, system_id)
-                        .exclude(io)
-                        .send(&world)?;
-
-                    anyhow::Ok(())
-                };
-                if let Err(e) = run() {
-                    error!("failed to run sync_position: {e}");
+                    compose.broadcast(&pkt, system_id).send(&world).unwrap();
+                    // velocity.velocity = Vec3::ZERO;
                 }
             },
         );
 
         track_previous::<Position>(world);
-        track_previous::<Yaw>(world);
-        track_previous::<Pitch>(world);
     }
 }

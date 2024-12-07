@@ -1,5 +1,7 @@
 use std::{borrow::Borrow, collections::HashMap, hash::Hash, num::TryFromIntError, sync::Arc};
 
+use anyhow::Context;
+use blocks::Blocks;
 use bytemuck::{Pod, Zeroable};
 use derive_more::{Constructor, Deref, DerefMut, Display, From};
 use flecs_ecs::prelude::*;
@@ -9,7 +11,7 @@ use hyperion_utils::EntityExt;
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 use skin::PlayerSkin;
-use tracing::debug;
+use tracing::{debug, error};
 use uuid;
 use valence_generated::block::BlockState;
 use valence_protocol::{ByteAngle, VarInt, packets::play};
@@ -556,8 +558,8 @@ impl Velocity {
         velocity: Vec3::ZERO,
     };
 
-    #[allow(unused)]
-    const fn new(x: f32, y: f32, z: f32) -> Self {
+    #[must_use]
+    pub const fn new(x: f32, y: f32, z: f32) -> Self {
         Self {
             velocity: Vec3::new(x, y, z),
         }
@@ -568,17 +570,16 @@ impl TryFrom<&Velocity> for valence_protocol::Velocity {
     type Error = TryFromIntError;
 
     fn try_from(value: &Velocity) -> Result<Self, Self::Error> {
-        let nums = value
+        let max_velocity = 75.0;
+        let clamped_velocity = value
             .velocity
-            .to_array()
-            .try_map(|a| {
-                #[expect(
-                    clippy::cast_possible_truncation,
-                    reason = "https://blog.rust-lang.org/2020/07/16/Rust-1.45.0.html#:~:text=as%20would%20perform%20a%20%22saturating%20cast%22 as is saturating."
-                )]
-                let num = (a * 8000.0) as i32;
-                i16::try_from(num)
-            })?;
+            .clamp(Vec3::splat(-max_velocity), Vec3::splat(max_velocity));
+
+        let nums = clamped_velocity.to_array().try_map(|a| {
+            #[allow(clippy::cast_possible_truncation)]
+            let num = (a * 8000.0) as i32;
+            i16::try_from(num)
+        })?;
 
         Ok(Self(nums))
     }
@@ -677,12 +678,14 @@ impl Module for SimModule {
         .with::<flecs::Any>()
         .with_enum_wildcard::<EntityKind>()
         .each_entity(|entity, (compose, uuid, position, pitch, yaw, velocity)| {
-            debug!("spawned entity");
             let minecraft_id = entity.minecraft_id();
             let world = entity.world();
 
-            entity.get::<&EntityKind>(|kind| {
-                let kind = *kind as i32;
+            let spawn_entity = move |kind: EntityKind| -> anyhow::Result<()> {
+                let kind = kind as i32;
+
+                let velocity = valence_protocol::Velocity::try_from(velocity)
+                    .context("failed to convert velocity")?;
 
                 let packet = play::EntitySpawnS2c {
                     entity_id: VarInt(minecraft_id),
@@ -691,15 +694,25 @@ impl Module for SimModule {
                     position: position.as_dvec3(),
                     pitch: ByteAngle::from_degrees(**pitch),
                     yaw: ByteAngle::from_degrees(**yaw),
-                    head_yaw: ByteAngle(0),  // todo:
-                    data: VarInt::default(), // todo:
-                    velocity: velocity.try_into().unwrap(),
+                    head_yaw: ByteAngle::from_degrees(0.0), // todo:
+                    data: VarInt::default(),                // todo:
+                    velocity,
                 };
 
                 compose
                     .broadcast(&packet, SystemId(0))
                     .send(&world)
                     .unwrap();
+
+                Ok(())
+            };
+
+            debug!("spawned entity");
+
+            entity.get::<&EntityKind>(|kind| {
+                if let Err(e) = spawn_entity(*kind) {
+                    error!("failed to spawn entity: {e}");
+                }
             });
         });
 
@@ -717,6 +730,62 @@ impl Module for SimModule {
                     _ => {}
                 });
             });
+
+        system!(
+            "update_projectile_positions",
+            world,
+            &mut Position,
+            &mut Yaw,
+            &mut Pitch,
+            &mut Velocity,
+        )
+        .kind::<flecs::pipeline::OnStore>()
+        .with_enum_wildcard::<EntityKind>()
+        .each_entity(|entity, (position, yaw, pitch, velocity)| {
+            if velocity.velocity != Vec3::ZERO {
+                // Update position based on velocity with delta time
+                position.x += velocity.velocity.x;
+                position.y += velocity.velocity.y;
+                position.z += velocity.velocity.z;
+
+                // re calculate yaw and pitch based on velocity
+                let (new_yaw, new_pitch) = get_rotation_from_velocity(velocity.velocity);
+                *yaw = Yaw::new(new_yaw);
+                *pitch = Pitch::new(new_pitch);
+
+                let ray = entity.get::<(&Position, &Yaw, &Pitch)>(|(position, yaw, pitch)| {
+                    let center = **position;
+
+                    let direction = get_direction_from_rotation(**yaw, **pitch);
+
+                    geometry::ray::Ray::new(center, direction)
+                });
+
+                entity.world().get::<&mut Blocks>(|blocks| {
+                    // calculate distance limit based on velocity
+                    let distance_limit = velocity.velocity.length();
+                    let Some(collision) = blocks.first_collision(ray, distance_limit) else {
+                        velocity.velocity.x *= 0.99;
+                        velocity.velocity.z *= 0.99;
+
+                        velocity.velocity.y -= 0.005;
+                        return;
+                    };
+                    debug!("distance_limit = {}", distance_limit);
+
+                    debug!("collision = {collision:?}");
+
+                    velocity.velocity = Vec3::ZERO;
+
+                    // Set arrow position to the collision location
+                    **position = collision.normal;
+
+                    blocks
+                        .set_block(collision.location, BlockState::DIRT)
+                        .unwrap();
+                });
+            }
+        });
     }
 }
 
@@ -725,3 +794,23 @@ pub struct Spawn;
 
 #[derive(Component)]
 pub struct Visible;
+
+#[must_use]
+pub fn get_rotation_from_velocity(velocity: Vec3) -> (f32, f32) {
+    let yaw = (-velocity.x).atan2(velocity.z).to_degrees(); // Correct yaw calculation
+    let pitch = (-velocity.y).atan2(velocity.length()).to_degrees(); // Correct pitch calculation
+    (yaw, pitch)
+}
+
+#[must_use]
+pub fn get_direction_from_rotation(yaw: f32, pitch: f32) -> Vec3 {
+    // Convert angles from degrees to radians
+    let yaw_rad = yaw.to_radians();
+    let pitch_rad = pitch.to_radians();
+
+    Vec3::new(
+        -pitch_rad.cos() * yaw_rad.sin(), // x = -cos(pitch) * sin(yaw)
+        -pitch_rad.sin(),                 // y = -sin(pitch)
+        pitch_rad.cos() * yaw_rad.cos(),  // z = cos(pitch) * cos(yaw)
+    )
+}

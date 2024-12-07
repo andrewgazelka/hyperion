@@ -58,6 +58,7 @@ pub enum TrySetBlockDeltaError {
 pub struct RayCollision {
     pub distance: f32,
     pub location: IVec3,
+    pub normal: Vec3,
     pub block: BlockState,
 }
 
@@ -133,12 +134,16 @@ impl Blocks {
                 continue;
             };
 
+            let collision_point = ray.origin() + ray.direction() * min_dist.into_inner();
+            let collision_normal = (collision_point - origin).normalize();
+
             match &min {
                 Some(current_min) => {
                     if min_dist.into_inner() < current_min.distance {
                         min = Some(RayCollision {
                             distance: min_dist.into_inner(),
                             location: cell,
+                            normal: collision_normal,
                             block,
                         });
                     }
@@ -147,6 +152,7 @@ impl Blocks {
                     min = Some(RayCollision {
                         distance: min_dist.into_inner(),
                         location: cell,
+                        normal: collision_normal,
                         block,
                     });
                 }
