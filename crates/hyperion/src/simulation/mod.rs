@@ -65,21 +65,6 @@ impl HasAabb for LookupData {
     }
 }
 
-#[derive(Component, Debug, Default)]
-pub struct PlayerBoundingBoxes {
-    /// The bounding boxes of all players
-    pub query: bvh_region::Bvh<LookupData>,
-}
-
-impl PlayerBoundingBoxes {
-    /// Get the closest player to the given position.
-    #[must_use]
-    pub fn closest_to(&self, point: Vec3) -> Option<&LookupData> {
-        let (target, _) = self.query.get_closest(point)?;
-        Some(target)
-    }
-}
-
 /// Communicates with the proxy server.
 #[derive(Component, Deref, DerefMut, From)]
 pub struct EgressComm {

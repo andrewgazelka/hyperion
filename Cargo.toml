@@ -14,7 +14,6 @@ incremental = true
 
 [workspace]
 members = [
-  'crates/bvh-region',
   'crates/hyperion',
   'crates/hyperion-crafting',
   'crates/hyperion-event-macros',
