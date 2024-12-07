@@ -1,4 +1,3 @@
-[profile]
 [profile.release-debug]
 debug = true
 inherits = 'release'
@@ -38,6 +37,7 @@ members = [
   'crates/geometry',
   'crates/simd-utils',
   'crates/system-order',
+  'crates/spatial',
 ]
 resolver = '2'
 
@@ -207,6 +207,9 @@ path = 'crates/simd-utils'
 
 [workspace.dependencies.system-order]
 path = 'crates/system-order'
+
+[workspace.dependencies.spatial]
+path = 'crates/spatial'
 
 [workspace.dependencies.tokio-util]
 features = ['full']

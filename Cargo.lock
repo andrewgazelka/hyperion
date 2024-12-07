@@ -1677,7 +1677,6 @@ dependencies = [
  "bitfield-struct",
  "bitvec",
  "bumpalo",
- "bvh-region",
  "bytemuck",
  "byteorder",
  "bytes",
@@ -3633,6 +3632,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "spatial"
+version = "0.1.0"
+dependencies = [
+ "bvh-region",
+ "flecs_ecs",
+ "geometry",
+ "hyperion",
+ "rayon",
+]
+
+[[package]]
 name = "spin"
 version = "0.9.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3766,6 +3776,7 @@ dependencies = [
  "rayon",
  "roaring",
  "rustc-hash 2.1.0",
+ "spatial",
  "tikv-jemallocator",
  "tracing",
  "tracing-subscriber",

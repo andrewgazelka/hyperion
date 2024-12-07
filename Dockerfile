@@ -1,5 +1,5 @@
 # Define base arguments for versioning and optimization
-ARG RUST_NIGHTLY_VERSION=nightly-2024-11-29
+ARG RUST_NIGHTLY_VERSION=nightly-2024-12-07
 ARG RUST_TARGET_CPU=native
 ARG RUSTFLAGS="-C target-cpu=${RUST_TARGET_CPU} -Z share-generics=y -Z threads=8 --cfg tokio_unstable"
 ARG CARGO_HOME=/usr/local/cargo

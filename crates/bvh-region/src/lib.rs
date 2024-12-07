@@ -1,4 +1,6 @@
 #![feature(portable_simd)]
+#![feature(gen_blocks)]
+#![feature(coroutines)]
 #![allow(clippy::redundant_pub_crate, clippy::pedantic)]
 
 // https://www.haroldserrano.com/blog/visualizing-the-boundary-volume-hierarchy-collision-algorithm
@@ -10,11 +12,15 @@ use std::{
 };
 
 use arrayvec::ArrayVec;
-use geometry::aabb::{Aabb, HasAabb};
+use geometry::aabb::Aabb;
 use glam::Vec3;
 
 const ELEMENTS_TO_ACTIVATE_LEAF: usize = 16;
 const VOLUME_TO_ACTIVATE_LEAF: f32 = 5.0;
+
+pub trait GetAabb<T>: Sync + Fn(&T) -> Aabb {}
+
+impl<T, F> GetAabb<T> for F where F: Fn(&T) -> Aabb + Sync {}
 
 #[cfg(feature = "plot")]
 pub mod plot;
@@ -72,7 +78,7 @@ impl<T> Bvh<T> {
 }
 
 impl<T: Debug> Debug for Bvh<T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Bvh")
             .field("nodes", &self.nodes)
             .field("elems", &self.elements)
@@ -113,9 +119,9 @@ fn thread_count_pow2() -> usize {
     max_threads
 }
 
-impl<T: HasAabb + Send + Copy + Sync + Debug> Bvh<T> {
+impl<T: Send + Copy + Sync + Debug> Bvh<T> {
     #[tracing::instrument(skip_all, fields(elements_len = elements.len()))]
-    pub fn build<H: Heuristic>(mut elements: Vec<T>) -> Self {
+    pub fn build<H: Heuristic>(mut elements: Vec<T>, get_aabb: &impl GetAabb<T>) -> Self {
         let max_threads = thread_count_pow2();
 
         let len = elements.len();
@@ -139,7 +145,8 @@ impl<T: HasAabb + Send + Copy + Sync + Debug> Bvh<T> {
         )]
         let nodes_slice = &mut nodes[1..];
 
-        let (root, _) = BvhNode::build_in(&bvh, &mut elements, max_threads, 0, nodes_slice);
+        let (root, _) =
+            BvhNode::build_in(&bvh, &mut elements, max_threads, 0, nodes_slice, get_aabb);
 
         Self {
             nodes,
@@ -149,7 +156,7 @@ impl<T: HasAabb + Send + Copy + Sync + Debug> Bvh<T> {
     }
 
     /// Returns the closest element to the target and the distance squared to it.
-    pub fn get_closest(&self, target: Vec3) -> Option<(&T, f32)> {
+    pub fn get_closest(&self, target: Vec3, get_aabb: &impl Fn(&T) -> Aabb) -> Option<(&T, f32)> {
         struct NodeOrd<'a> {
             node: &'a BvhNode,
             dist2: f32,
@@ -185,7 +192,7 @@ impl<T: HasAabb + Send + Copy + Sync + Debug> Bvh<T> {
                 return leaf
                     .iter()
                     .map(|elem| {
-                        let aabb = elem.aabb();
+                        let aabb = get_aabb(elem);
                         let mid = aabb.mid();
                         let dist2 = (mid - target).length_squared();
 
@@ -220,7 +227,7 @@ impl<T: HasAabb + Send + Copy + Sync + Debug> Bvh<T> {
                         let (elem, dist2) = leaf
                             .iter()
                             .map(|elem| {
-                                let aabb = elem.aabb();
+                                let aabb = get_aabb(elem);
                                 let mid = aabb.mid();
                                 let dist = (mid - target).length_squared();
 
@@ -241,8 +248,12 @@ impl<T: HasAabb + Send + Copy + Sync + Debug> Bvh<T> {
         min_node.map(|elem| (elem, min_dist2))
     }
 
-    pub fn get_collisions(&self, target: Aabb, mut process: impl FnMut(&T) -> bool) {
-        BvhIter::consume(self, target, &mut process);
+    pub fn get_collisions<'a>(
+        &'a self,
+        target: Aabb,
+        get_aabb: &'a impl GetAabb<T>,
+    ) -> impl Iterator<Item = &'a T> + 'a {
+        BvhIter::consume(self, target, get_aabb)
     }
 }
 
@@ -260,18 +271,18 @@ impl<T> Bvh<T> {
 pub trait Heuristic {
     /// left are partitioned to the left side,
     /// middle cannot be partitioned to either, right are partitioned to the right side
-    fn heuristic<T: HasAabb>(elements: &[T]) -> usize;
+    fn heuristic<T>(elements: &[T]) -> usize;
 }
 
 pub struct TrivialHeuristic;
 
 impl Heuristic for TrivialHeuristic {
-    fn heuristic<T: HasAabb>(elements: &[T]) -> usize {
+    fn heuristic<T>(elements: &[T]) -> usize {
         elements.len() / 2
     }
 }
 
-fn sort_by_largest_axis<T: HasAabb>(elements: &mut [T], aabb: &Aabb) -> u8 {
+fn sort_by_largest_axis<T>(elements: &mut [T], aabb: &Aabb, get_aabb: &impl Fn(&T) -> Aabb) -> u8 {
     let lens = aabb.lens();
     let largest = lens.x.max(lens.y).max(lens.z);
 
@@ -291,8 +302,8 @@ fn sort_by_largest_axis<T: HasAabb>(elements: &mut [T], aabb: &Aabb) -> u8 {
     };
 
     elements.select_nth_unstable_by(median_idx, |a, b| {
-        let a = a.aabb().min.as_ref()[key as usize];
-        let b = b.aabb().min.as_ref()[key as usize];
+        let a = get_aabb(a).min.as_ref()[key as usize];
+        let b = get_aabb(b).min.as_ref()[key as usize];
 
         unsafe { a.partial_cmp(&b).unwrap_unchecked() }
     });
@@ -323,6 +334,7 @@ impl BvhNode {
         root.nodes.get(left as usize)
     }
 
+    #[allow(unused)]
     fn switch_children<'a, T>(
         &'a self,
         root: &'a Bvh<T>,
@@ -399,11 +411,13 @@ impl BvhNode {
         max_threads: usize,
         nodes_idx: usize,
         nodes: &mut [Self],
+        get_aabb: &impl GetAabb<T>,
     ) -> (i32, usize)
     where
-        T: HasAabb + Send + Copy + Sync + Debug,
+        T: Send + Copy + Sync + Debug,
     {
-        let aabb = Aabb::from(&*elements);
+        // aabb that encompasses all elements
+        let aabb: Aabb = elements.iter().map(get_aabb).collect();
         let volume = aabb.volume();
 
         if elements.len() <= ELEMENTS_TO_ACTIVATE_LEAF || volume <= VOLUME_TO_ACTIVATE_LEAF {
@@ -423,7 +437,7 @@ impl BvhNode {
             return (idx, nodes_idx + 1);
         }
 
-        sort_by_largest_axis(elements, &aabb);
+        sort_by_largest_axis(elements, &aabb, get_aabb);
 
         let element_split_idx = elements.len() / 2;
 
@@ -435,11 +449,17 @@ impl BvhNode {
 
         let (left, right, nodes_idx, to_set) = if max_threads == 1 {
             let start_idx = nodes_idx;
-            let (left, nodes_idx) =
-                Self::build_in(root, left_elems, max_threads, nodes_idx + 1, nodes);
+            let (left, nodes_idx) = Self::build_in(
+                root,
+                left_elems,
+                max_threads,
+                nodes_idx + 1,
+                nodes,
+                get_aabb,
+            );
 
             let (right, nodes_idx) =
-                Self::build_in(root, right_elems, max_threads, nodes_idx, nodes);
+                Self::build_in(root, right_elems, max_threads, nodes_idx, nodes, get_aabb);
             let end_idx = nodes_idx;
 
             debug_assert!(start_idx != end_idx);
@@ -469,8 +489,8 @@ impl BvhNode {
             };
 
             let (left, right) = rayon::join(
-                || Self::build_in(root, left_elems, max_threads, 0, left_nodes),
-                || Self::build_in(root, right_elems, max_threads, 0, right_nodes),
+                || Self::build_in(root, left_elems, max_threads, 0, left_nodes, get_aabb),
+                || Self::build_in(root, right_elems, max_threads, 0, right_nodes, get_aabb),
             );
 
             (left.0, right.0, 0, to_set)
@@ -495,54 +515,65 @@ struct BvhIter<'a, T> {
     target: Aabb,
 }
 
-impl<'a, T> BvhIter<'a, T>
-where
-    T: HasAabb,
-{
-    fn consume(bvh: &'a Bvh<T>, target: Aabb, process: &mut impl FnMut(&T) -> bool) {
+impl<'a, T> BvhIter<'a, T> {
+    fn consume(
+        bvh: &'a Bvh<T>,
+        target: Aabb,
+        get_aabb: &'a impl GetAabb<T>,
+    ) -> Box<dyn Iterator<Item = &'a T> + 'a> {
         let root = bvh.root();
 
         let root = match root {
             Node::Internal(internal) => internal,
             Node::Leaf(leaf) => {
                 for elem in leaf.iter() {
-                    if elem.aabb().collides(&target) && !process(elem) {
-                        return;
+                    let aabb = get_aabb(elem);
+                    if aabb.collides(&target) {
+                        return Box::new(std::iter::once(elem));
                     }
                 }
-                return;
+                return Box::new(std::iter::empty());
             }
         };
 
         if !root.aabb.collides(&target) {
-            return;
+            return Box::new(std::iter::empty());
         }
 
         let iter = Self { target, bvh };
 
-        iter.process(root, process);
+        Box::new(iter.process(root, get_aabb))
     }
 
-    pub fn process(&self, on: &BvhNode, process: &mut impl FnMut(&T) -> bool) {
-        let mut stack: ArrayVec<&BvhNode, 64> = ArrayVec::new();
-        stack.push(on);
+    #[expect(clippy::excessive_nesting, reason = "todo: fix")]
+    pub fn process(
+        self,
+        on: &'a BvhNode,
+        get_aabb: &'a impl GetAabb<T>,
+    ) -> impl Iterator<Item = &'a T> {
+        gen move {
+            let mut stack: ArrayVec<&'a BvhNode, 64> = ArrayVec::new();
+            stack.push(on);
 
-        while let Some(on) = stack.pop() {
-            on.switch_children(
-                self.bvh,
-                |child| {
-                    if child.aabb.collides(&self.target) {
-                        stack.push(child);
-                    }
-                },
-                |elements| {
-                    for elem in elements {
-                        if elem.aabb().collides(&self.target) && !process(elem) {
-                            return;
+            while let Some(on) = stack.pop() {
+                for child in on.children(self.bvh) {
+                    match child {
+                        Node::Internal(child) => {
+                            if child.aabb.collides(&self.target) {
+                                stack.push(child);
+                            }
+                        }
+                        Node::Leaf(elements) => {
+                            for elem in elements {
+                                let aabb = get_aabb(elem);
+                                if aabb.collides(&self.target) {
+                                    yield elem;
+                                }
+                            }
                         }
                     }
-                },
-            );
+                }
+            }
         }
     }
 }
