@@ -2,14 +2,13 @@ use std::iter::zip;
 
 use clap::{Arg as ClapArg, Parser, ValueEnum, ValueHint, error::ErrorKind};
 use flecs_ecs::{
-    core::{Entity, EntityViewGet, World, WorldGet},
+    core::{Entity, EntityView, EntityViewGet, World, WorldGet, WorldProvider},
     prelude::{Component, Module},
 };
 use hyperion::{
     net::{Compose, ConnectionId, DataBundle, agnostic},
     simulation::{IgnMap, command::get_root_command_entity, handlers::PacketSwitchQuery},
     storage::{CommandCompletionRequest, EventFn},
-    system_registry::SystemId,
 };
 pub use hyperion_clap_macros::CommandPermission;
 pub use hyperion_command;
@@ -24,7 +23,7 @@ use valence_protocol::{
 };
 
 pub trait MinecraftCommand: Parser + CommandPermission {
-    fn execute(self, world: &World, caller: Entity);
+    fn execute(self, system: EntityView<'_>, caller: Entity);
 
     fn pre_register(_world: &World) {}
 
@@ -60,8 +59,9 @@ pub trait MinecraftCommand: Parser + CommandPermission {
             on = world.entity().set(node_to_register).child_of_id(on);
         }
 
-        let on_execute = |input: &str, world: &World, caller: Entity| {
+        let on_execute = |input: &str, system: EntityView<'_>, caller: Entity| {
             let input = input.split_whitespace();
+            let world = system.world();
 
             match Self::try_parse_from(input) {
                 Ok(elem) => {
@@ -75,16 +75,16 @@ pub trait MinecraftCommand: Parser + CommandPermission {
                                         "§cYou do not have permission to use this command!",
                                     );
 
-                                    let mut bundle = DataBundle::new(compose);
-                                    bundle.add_packet(&chat, world).unwrap();
-                                    bundle.send(world, *stream, SystemId(8)).unwrap();
+                                    let mut bundle = DataBundle::new(compose, system);
+                                    bundle.add_packet(&chat).unwrap();
+                                    bundle.send(*stream).unwrap();
 
                                     false
                                 }
                             },
                         )
                     }) {
-                        elem.execute(world, caller);
+                        elem.execute(system, caller);
                     }
                 }
                 Err(e) => {
@@ -102,7 +102,7 @@ pub trait MinecraftCommand: Parser + CommandPermission {
                             .entity_view(world)
                             .get::<&hyperion::net::ConnectionId>(|stream| {
                                 let msg = agnostic::chat(msg);
-                                compose.unicast(&msg, *stream, SystemId(8), world).unwrap();
+                                compose.unicast(&msg, *stream, system).unwrap();
                             });
                     });
 
@@ -181,8 +181,7 @@ pub trait MinecraftCommand: Parser + CommandPermission {
                         .unicast(
                             &packet,
                             packet_switch_query.io_ref,
-                            SystemId(0),
-                            packet_switch_query.world,
+                            packet_switch_query.system,
                         )
                         .unwrap();
 
@@ -224,8 +223,7 @@ pub trait MinecraftCommand: Parser + CommandPermission {
                     .unicast(
                         &packet,
                         packet_switch_query.io_ref,
-                        SystemId(0),
-                        packet_switch_query.world,
+                        packet_switch_query.system,
                     )
                     .unwrap();
             },
@@ -297,7 +295,8 @@ pub enum PermissionCommand {
 }
 
 impl MinecraftCommand for PermissionCommand {
-    fn execute(self, world: &World, caller: Entity) {
+    fn execute(self, system: EntityView<'_>, caller: Entity) {
+        let world = system.world();
         world.get::<&IgnMap>(|ign_map| {
             match self {
                 Self::Set(cmd) => {
@@ -307,7 +306,7 @@ impl MinecraftCommand for PermissionCommand {
                             let msg = format!("§c{} not found", cmd.player);
                             let chat = hyperion::net::agnostic::chat(msg);
                             world.get::<&Compose>(|compose| {
-                                compose.unicast(&chat, *stream, SystemId(8), world).unwrap();
+                                compose.unicast(&chat, *stream, system).unwrap();
                             });
                         });
                         return;
@@ -326,7 +325,7 @@ impl MinecraftCommand for PermissionCommand {
                             );
                             let chat = hyperion::net::agnostic::chat(msg);
                             world.get::<&Compose>(|compose| {
-                                compose.unicast(&chat, *stream, SystemId(8), world).unwrap();
+                                compose.unicast(&chat, *stream, system).unwrap();
                             });
                         });
                     });
@@ -337,7 +336,7 @@ impl MinecraftCommand for PermissionCommand {
                             let msg = format!("§c{} not found", cmd.player);
                             let chat = hyperion::net::agnostic::chat(msg);
                             world.get::<&Compose>(|compose| {
-                                compose.unicast(&chat, *stream, SystemId(8), world).unwrap();
+                                compose.unicast(&chat, *stream, system).unwrap();
                             });
                         });
                         return;
@@ -348,7 +347,7 @@ impl MinecraftCommand for PermissionCommand {
                             let msg = format!("§b{}§r's group is §e{:?}", cmd.player, group);
                             let chat = hyperion::net::agnostic::chat(msg);
                             world.get::<&Compose>(|compose| {
-                                compose.unicast(&chat, *stream, SystemId(8), world).unwrap();
+                                compose.unicast(&chat, *stream, system).unwrap();
                             });
                         });
                     });

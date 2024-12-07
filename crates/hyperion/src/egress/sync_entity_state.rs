@@ -5,15 +5,13 @@ use flecs_ecs::prelude::*;
 use glam::Vec3;
 use hyperion_inventory::PlayerInventory;
 use hyperion_utils::EntityExt;
-use tracing::{error, info_span};
+use tracing::error;
 use valence_protocol::{RawBytes, VarInt, packets::play};
 
 use crate::{
     Prev,
     net::{Compose, ConnectionId},
     simulation::{Position, Velocity, Xp, animation::ActiveAnimation, metadata::MetadataChanges},
-    system_registry::{SYNC_ENTITY_POSITION, SystemId},
-    util::TracingExt,
 };
 
 #[derive(Component)]
@@ -43,8 +41,6 @@ fn track_previous<T: ComponentId + Copy>(world: &World) {
 
 impl Module for EntityStateSyncModule {
     fn module(world: &World) {
-        let system_id = SYNC_ENTITY_POSITION;
-
         world
             .system_named::<(
                 &Compose,        // (0)
@@ -57,9 +53,9 @@ impl Module for EntityStateSyncModule {
             .multi_threaded()
             .kind::<flecs::pipeline::OnStore>()
             .run(|mut table| {
+                let system = table.system();
                 while table.next() {
                     let count = table.count();
-                    let world = table.world();
 
                     unsafe {
                         const _: () = assert!(size_of::<Xp>() == size_of::<u16>());
@@ -104,9 +100,7 @@ impl Module for EntityStateSyncModule {
                                 let entity = table.entity(idx);
                                 entity.modified::<Xp>();
 
-                                compose
-                                    .unicast(&packet, *net, SystemId(100), &world)
-                                    .unwrap();
+                                compose.unicast(&packet, *net, system).unwrap();
                             },
                         );
                     }
@@ -116,28 +110,23 @@ impl Module for EntityStateSyncModule {
         system!("entity_metadata_sync", world, &Compose($), &mut MetadataChanges)
             .multi_threaded()
             .kind::<flecs::pipeline::OnStore>()
-            .tracing_each_entity(
-                info_span!("entity_metadata_sync"),
-                move |entity, (compose, metadata_changes)| {
-                    let world = entity.world();
-                    let entity_id = VarInt(entity.minecraft_id());
+            .each_iter(move |it, row, (compose, metadata_changes)| {
+                let system = it.system();
+                let entity = it.entity(row);
+                let entity_id = VarInt(entity.minecraft_id());
 
-                    let metadata = metadata_changes.get_and_clear();
+                let metadata = metadata_changes.get_and_clear();
 
-                    if let Some(view) = metadata {
-                        let pkt = play::EntityTrackerUpdateS2c {
-                            entity_id,
-                            tracked_values: RawBytes(&view),
-                        };
+                if let Some(view) = metadata {
+                    let pkt = play::EntityTrackerUpdateS2c {
+                        entity_id,
+                        tracked_values: RawBytes(&view),
+                    };
 
-                        // todo(perf): do so locally
-                        compose
-                            .broadcast(&pkt, SystemId(9999))
-                            .send(&world)
-                            .unwrap();
-                    }
-                },
-            );
+                    // todo(perf): do so locally
+                    compose.broadcast(&pkt, system).send().unwrap();
+                }
+            });
 
         system!(
             "active_animation_sync",
@@ -149,21 +138,22 @@ impl Module for EntityStateSyncModule {
         )
         .multi_threaded()
         .kind::<flecs::pipeline::OnStore>()
-        .tracing_each_entity(
-            info_span!("active_animation_sync"),
-            move |entity, (position, compose, connection_id, animation)| {
+        .each_iter(
+            move |it, row, (position, compose, connection_id, animation)| {
                 let io = connection_id.copied();
 
-                let world = entity.world();
+                let entity = it.entity(row);
+                let system = it.system();
+
                 let entity_id = VarInt(entity.minecraft_id());
 
                 let chunk_pos = position.to_chunk();
 
                 for pkt in animation.packets(entity_id) {
                     compose
-                        .broadcast_local(&pkt, chunk_pos, system_id)
+                        .broadcast_local(&pkt, chunk_pos, system)
                         .exclude(io)
-                        .send(&world)
+                        .send()
                         .unwrap();
                 }
 
@@ -180,47 +170,44 @@ impl Module for EntityStateSyncModule {
         )
         .multi_threaded()
         .kind::<flecs::pipeline::OnStore>()
-        .tracing_each_entity(
-            info_span!("player_inventory_sync"),
-            move |entity, (compose, inventory, io)| {
-                let mut run = || {
-                    let io = *io;
-                    let world = entity.world();
+        .each_iter(move |it, _, (compose, inventory, io)| {
+            let mut run = || {
+                let io = *io;
+                let system = it.system();
 
-                    for slot in &inventory.updated_since_last_tick {
-                        let Ok(slot) = u16::try_from(slot) else {
-                            error!("failed to convert slot to u16 {slot}");
-                            continue;
-                        };
-                        let item = inventory
-                            .get(slot)
-                            .with_context(|| format!("failed to get item for slot {slot}"))?;
-                        let Ok(slot) = i16::try_from(slot) else {
-                            error!("failed to convert slot to i16 {slot}");
-                            continue;
-                        };
-                        let pkt = play::ScreenHandlerSlotUpdateS2c {
-                            window_id: 0,
-                            state_id: VarInt::default(),
-                            slot_idx: slot,
-                            slot_data: Cow::Borrowed(item),
-                        };
-                        compose
-                            .unicast(&pkt, io, system_id, &world)
-                            .context("failed to send inventory update")?;
-                    }
-
-                    inventory.updated_since_last_tick.clear();
-                    inventory.hand_slot_updated_since_last_tick = false;
-
-                    anyhow::Ok(())
-                };
-
-                if let Err(e) = run() {
-                    error!("Failed to sync player inventory: {}", e);
+                for slot in &inventory.updated_since_last_tick {
+                    let Ok(slot) = u16::try_from(slot) else {
+                        error!("failed to convert slot to u16 {slot}");
+                        continue;
+                    };
+                    let item = inventory
+                        .get(slot)
+                        .with_context(|| format!("failed to get item for slot {slot}"))?;
+                    let Ok(slot) = i16::try_from(slot) else {
+                        error!("failed to convert slot to i16 {slot}");
+                        continue;
+                    };
+                    let pkt = play::ScreenHandlerSlotUpdateS2c {
+                        window_id: 0,
+                        state_id: VarInt::default(),
+                        slot_idx: slot,
+                        slot_data: Cow::Borrowed(item),
+                    };
+                    compose
+                        .unicast(&pkt, io, system)
+                        .context("failed to send inventory update")?;
                 }
-            },
-        );
+
+                inventory.updated_since_last_tick.clear();
+                inventory.hand_slot_updated_since_last_tick = false;
+
+                anyhow::Ok(())
+            };
+
+            if let Err(e) = run() {
+                error!("Failed to sync player inventory: {}", e);
+            }
+        });
 
         // Add a new system specifically for projectiles (arrows)
         system!(
@@ -233,11 +220,12 @@ impl Module for EntityStateSyncModule {
         )
         .multi_threaded()
         .kind::<flecs::pipeline::PreStore>()
-        .tracing_each_entity(
-            info_span!("projectile_sync"),
-            move |entity, (compose, position, previous_position, velocity)| {
+        .each_iter(
+            move |it, row, (compose, position, previous_position, velocity)| {
+                let entity = it.entity(row);
+                let system = it.system();
+
                 let entity_id = VarInt(entity.minecraft_id());
-                let world = entity.world();
                 let chunk_pos = position.to_chunk();
 
                 let position_delta = **position - **previous_position;
@@ -253,8 +241,8 @@ impl Module for EntityStateSyncModule {
                     };
 
                     compose
-                        .broadcast_local(&pkt, chunk_pos, system_id)
-                        .send(&world)
+                        .broadcast_local(&pkt, chunk_pos, system)
+                        .send()
                         .unwrap();
                 }
 
@@ -269,8 +257,7 @@ impl Module for EntityStateSyncModule {
                         }),
                     };
 
-                    compose.broadcast(&pkt, system_id).send(&world).unwrap();
-                    // velocity.velocity = Vec3::ZERO;
+                    compose.broadcast(&pkt, system).send().unwrap();
                 }
             },
         );

@@ -1,8 +1,7 @@
 use clap::Parser;
-use flecs_ecs::core::{Entity, EntityViewGet, World, WorldGet};
+use flecs_ecs::core::{Entity, EntityView, EntityViewGet, WorldGet, WorldProvider};
 use hyperion::{
     net::{Compose, ConnectionId, DataBundle, agnostic},
-    system_registry::SystemId,
     valence_protocol::packets::play::{
         PlayerAbilitiesS2c, player_abilities_s2c::PlayerAbilitiesFlags,
     },
@@ -17,7 +16,8 @@ pub struct SpeedCommand {
 }
 
 impl MinecraftCommand for SpeedCommand {
-    fn execute(self, world: &World, caller: Entity) {
+    fn execute(self, system: EntityView<'_>, caller: Entity) {
+        let world = system.world();
         let msg = format!("Setting speed to {}", self.amount);
         let chat = agnostic::chat(msg);
 
@@ -25,11 +25,11 @@ impl MinecraftCommand for SpeedCommand {
             caller.entity_view(world).get::<&ConnectionId>(|stream| {
                 let packet = speed_packet(self.amount);
 
-                let mut bundle = DataBundle::new(compose);
-                bundle.add_packet(&packet, world).unwrap();
-                bundle.add_packet(&chat, world).unwrap();
+                let mut bundle = DataBundle::new(compose, system);
+                bundle.add_packet(&packet).unwrap();
+                bundle.add_packet(&chat).unwrap();
 
-                bundle.send(world, *stream, SystemId(8)).unwrap();
+                bundle.send(*stream).unwrap();
             });
         });
     }

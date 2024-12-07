@@ -1,5 +1,5 @@
 use flecs_ecs::{
-    core::{Entity, World},
+    core::{Entity, EntityView, World},
     macros::Component,
     prelude::Module,
 };
@@ -7,7 +7,7 @@ use hyperion::storage::{CommandCompletionRequest, EventFn};
 use indexmap::IndexMap;
 
 pub struct CommandHandler {
-    pub on_execute: fn(input: &str, world: &World, caller: Entity),
+    pub on_execute: fn(input: &str, system: EntityView<'_>, caller: Entity),
     pub on_tab_complete: EventFn<CommandCompletionRequest<'static>>,
     pub has_permissions: fn(world: &World, caller: Entity) -> bool,
 }

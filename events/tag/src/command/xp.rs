@@ -1,5 +1,5 @@
 use clap::Parser;
-use flecs_ecs::core::{Entity, EntityViewGet, World};
+use flecs_ecs::core::{Entity, EntityView, EntityViewGet, WorldProvider};
 use hyperion::simulation::Xp;
 use hyperion_clap::{CommandPermission, MinecraftCommand};
 
@@ -11,9 +11,10 @@ pub struct XpCommand {
 }
 
 impl MinecraftCommand for XpCommand {
-    fn execute(self, world: &World, caller: Entity) {
+    fn execute(self, system: EntityView<'_>, caller: Entity) {
         let Self { amount } = self;
 
+        let world = system.world();
         let caller = caller.entity_view(world);
 
         caller.get::<&mut Xp>(|xp| {

@@ -5,7 +5,6 @@ use flecs_ecs::{
 };
 use hyperion::{
     net::Compose,
-    system_registry::SystemId,
     valence_protocol::{packets::play, text::IntoText},
 };
 use tracing::info_span;
@@ -26,6 +25,7 @@ impl Module for StatsModule {
             .each_iter(move |it, _, compose| {
                 let span = info_span!("stats");
                 let _enter = span.enter();
+                let system = it.system();
                 let world = it.world();
                 let player_count = compose
                     .global()
@@ -59,7 +59,7 @@ impl Module for StatsModule {
                     footer: footer.into_cow_text(),
                 };
 
-                compose.broadcast(&pkt, SystemId(99)).send(&world).unwrap();
+                compose.broadcast(&pkt, system).send().unwrap();
             });
     }
 }

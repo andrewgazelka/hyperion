@@ -21,7 +21,6 @@ use sync_entity_state::EntityStateSyncModule;
 use crate::{
     net::ConnectionId,
     simulation::{ChunkPosition, blocks::Blocks},
-    system_registry::SystemId,
 };
 
 #[derive(Component)]
@@ -66,12 +65,13 @@ impl Module for EgressModule {
         .each_iter(move |it: TableIter<'_, false>, _, (compose, mc)| {
             let span = info_span!("broadcast_chunk_deltas");
             let _enter = span.enter();
+            let system = it.system();
 
             let world = it.world();
 
             mc.for_each_to_update_mut(|chunk| {
                 for packet in chunk.delta_drain_packets() {
-                    if let Err(e) = compose.broadcast(packet, SystemId(99)).send(&world) {
+                    if let Err(e) = compose.broadcast(packet, system).send() {
                         error!("failed to send chunk delta packet: {e}");
                         return;
                     }
@@ -87,7 +87,7 @@ impl Module for EgressModule {
                 };
 
                 entity.get::<&ConnectionId>(|stream| {
-                    if let Err(e) = compose.unicast(&pkt, *stream, SystemId(99), &world) {
+                    if let Err(e) = compose.unicast(&pkt, *stream, system) {
                         error!("failed to send player action response: {e}");
                     }
                 });

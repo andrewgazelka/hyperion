@@ -2,10 +2,7 @@ use std::borrow::Cow;
 
 use compact_str::format_compact;
 use flecs_ecs::{
-    core::{
-        EntityViewGet, QueryBuilderImpl, SystemAPI, TableIter, TermBuilderImpl, World,
-        WorldProvider, flecs,
-    },
+    core::{EntityViewGet, QueryBuilderImpl, SystemAPI, TableIter, TermBuilderImpl, World, flecs},
     macros::{Component, system},
     prelude::Module,
 };
@@ -16,8 +13,6 @@ use hyperion::{
     },
     simulation::{PacketState, Player, Position, Velocity, event, metadata::living_entity::Health},
     storage::EventQueue,
-    system_registry::SystemId,
-    util::TracingExt,
     uuid::Uuid,
     valence_protocol::{
         ItemKind, ItemStack, Particle, VarInt, ident,
@@ -94,34 +89,29 @@ impl Module for AttackModule {
         .with_enum(PacketState::Play)
         .multi_threaded()
         .kind::<flecs::pipeline::OnUpdate>()
-        .tracing_each_entity(
-            info_span!("kill_counts"),
-            move |entity, (compose, kill_count, stream)| {
-                const MAX_KILLS: usize = 10;
+        .each_iter(move |it, _, (compose, kill_count, stream)| {
+            const MAX_KILLS: usize = 10;
 
-                let world = entity.world();
+            let system = it.system();
 
-                let kills = kill_count.kill_count;
-                let title = format_compact!("{kills} kills");
-                let title = hyperion_text::Text::new(&title);
-                let health = (kill_count.kill_count as f32 / MAX_KILLS as f32).min(1.0);
+            let kills = kill_count.kill_count;
+            let title = format_compact!("{kills} kills");
+            let title = hyperion_text::Text::new(&title);
+            let health = (kill_count.kill_count as f32 / MAX_KILLS as f32).min(1.0);
 
-                let pkt = BossBarS2c {
-                    id: kill_count_uuid,
-                    action: BossBarAction::Add {
-                        title,
-                        health,
-                        color: BossBarColor::Red,
-                        division: BossBarDivision::NoDivision,
-                        flags: BossBarFlags::default(),
-                    },
-                };
+            let pkt = BossBarS2c {
+                id: kill_count_uuid,
+                action: BossBarAction::Add {
+                    title,
+                    health,
+                    color: BossBarColor::Red,
+                    division: BossBarDivision::NoDivision,
+                    flags: BossBarFlags::default(),
+                },
+            };
 
-                compose
-                    .unicast(&pkt, *stream, SystemId(99), &world)
-                    .unwrap();
-            },
-        );
+            compose.unicast(&pkt, *stream, system).unwrap();
+        });
 
         system!("handle_attacks", world, &mut EventQueue<event::AttackEntity>($), &Compose($))
             .multi_threaded()
@@ -136,6 +126,8 @@ impl Module for AttackModule {
 
                     let span = info_span!("handle_attacks");
                     let _enter = span.enter();
+
+                    let system = it.system();
 
                     let current_tick = compose.global().tick;
 
@@ -181,7 +173,7 @@ impl Module for AttackModule {
                                             .seed(fastrand::i64(..))
                                             .build();
 
-                                        compose.broadcast(&sound, SystemId(999)).send(&world).unwrap();
+                                        compose.broadcast(&sound, system).send().unwrap();
 
                                         // Create particle effect at the attacker's position
                                         let particle_pkt = play::ParticleS2c {
@@ -216,9 +208,9 @@ impl Module for AttackModule {
                                             ],
                                         };
 
-                                        compose.broadcast(&pkt, SystemId(999)).send(&world).unwrap();
-                                        compose.broadcast(&particle_pkt, SystemId(999)).send(&world).unwrap();
-                                        compose.broadcast(&particle_pkt2, SystemId(999)).send(&world).unwrap();
+                                        compose.broadcast(&pkt, system).send().unwrap();
+                                        compose.broadcast(&particle_pkt, system).send().unwrap();
+                                        compose.broadcast(&particle_pkt2, system).send().unwrap();
 
                                         // Create NBT for enchantment protection level 1
                                         let mut protection_nbt = nbt::Compound::new();

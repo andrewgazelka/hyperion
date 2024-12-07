@@ -3,7 +3,7 @@ use std::cmp::Ordering;
 use derive_more::derive::{Deref, DerefMut};
 use flecs_ecs::prelude::*;
 use glam::IVec2;
-use tracing::{error, info_span};
+use tracing::error;
 use valence_protocol::{
     ChunkPos,
     packets::play::{self},
@@ -16,8 +16,6 @@ use crate::{
         ChunkPosition, PacketState, Position,
         blocks::{Blocks, GetChunk},
     },
-    system_registry::{GENERATE_CHUNK_CHANGES, SEND_FULL_LOADED_CHUNKS},
-    util::TracingExt,
 };
 
 #[derive(Component, Deref, DerefMut, Default)]
@@ -35,8 +33,6 @@ impl Module for SyncChunksModule {
         let radius = world.get::<&Config>(|config| config.view_distance);
         let liberal_radius = radius + 2;
 
-        let system_id = GENERATE_CHUNK_CHANGES;
-
         system!(
             "generate_chunk_changes",
             world,
@@ -49,10 +45,9 @@ impl Module for SyncChunksModule {
         .with_enum(PacketState::Play)
         .kind::<flecs::pipeline::OnUpdate>()
         .multi_threaded()
-        .tracing_each_entity(
-            info_span!("generate_chunk_changes"),
-            move |entity, (compose, last_sent, pose, &stream_id, chunk_changes)| {
-                let world = entity.world();
+        .each_iter(
+            move |it, _, (compose, last_sent, pose, &stream_id, chunk_changes)| {
+                let system = it.system();
 
                 let last_sent_chunk = last_sent.position;
 
@@ -68,7 +63,7 @@ impl Module for SyncChunksModule {
                     chunk_z: current_chunk.y.into(),
                 };
 
-                if let Err(e) = compose.unicast(&center_chunk, stream_id, system_id, &world) {
+                if let Err(e) = compose.unicast(&center_chunk, stream_id, system) {
                     error!(
                         "failed to send chunk render distance center packet: {e}. Chunk location: \
                          {current_chunk:?}"
@@ -101,13 +96,13 @@ impl Module for SyncChunksModule {
                         !current_range_x.contains(&pos.x) || !current_range_z.contains(&pos.y)
                     });
 
-                let mut bundle = DataBundle::new(compose);
+                let mut bundle = DataBundle::new(compose, system);
 
                 for chunk in removed_chunks {
                     let pos = ChunkPos::new(chunk.x, chunk.y);
                     let unload_chunk = play::UnloadChunkS2c { pos };
 
-                    bundle.add_packet(&unload_chunk, &world).unwrap();
+                    bundle.add_packet(&unload_chunk).unwrap();
 
                     // if let Err(e) = compose.unicast(&unload_chunk, stream_id, system_id, &world) {
                     //     error!(
@@ -116,7 +111,7 @@ impl Module for SyncChunksModule {
                     // }
                 }
 
-                bundle.send(&world, stream_id, system_id).unwrap();
+                bundle.send(stream_id).unwrap();
 
                 let added_chunks = current_range_x
                     .flat_map(move |x| current_range_z.clone().map(move |z| IVec2::new(x, z)))
@@ -162,24 +157,21 @@ impl Module for SyncChunksModule {
             },
         );
 
-        let system_id = SEND_FULL_LOADED_CHUNKS;
-
         system!("send_full_loaded_chunks", world, &Blocks($), &Compose($), &ConnectionId, &mut ChunkSendQueue)
             .with_enum(PacketState::Play)
             .kind::<flecs::pipeline::OnUpdate>()
             .multi_threaded()
-            .tracing_each_entity(
-                info_span!("send_full_loaded_chunks"),
-                move |entity, (chunks, compose, &stream_id, queue)| {
+            .each_iter(
+                move |it, _, (chunks, compose, &stream_id, queue)| {
                     const MAX_CHUNKS_PER_TICK: usize = 16;
 
-                    let world = entity.world();
+                    let system = it.system();
 
                     let last = None;
 
                     let mut iter_count = 0;
 
-                    let mut bundle = DataBundle::new(compose);
+                    let mut bundle = DataBundle::new(compose, system);
 
                     #[expect(
                         clippy::cast_possible_wrap,
@@ -214,7 +206,7 @@ impl Module for SyncChunksModule {
                                 bundle.add_raw(&chunk.base_packet_bytes);
 
                                 for packet in chunk.original_delta_packets() {
-                                    if let Err(e) = bundle.add_packet(packet, &world) {
+                                    if let Err(e) = bundle.add_packet(packet) {
                                         error!("failed to send chunk delta packet: {e}");
                                         return;
                                     }
@@ -230,7 +222,7 @@ impl Module for SyncChunksModule {
                         idx -= 1;
                     }
 
-                    bundle.send(&world, stream_id, system_id).unwrap();
+                    bundle.send(stream_id).unwrap();
                 },
             );
     }

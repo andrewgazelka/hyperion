@@ -39,10 +39,7 @@ use std::{
 use anyhow::{Context, bail};
 use derive_more::{Deref, DerefMut};
 use egress::EgressModule;
-use flecs_ecs::{
-    prelude::*,
-    sys::{ecs_os_get_api, ecs_os_set_api, ecs_os_set_api_defaults},
-};
+use flecs_ecs::prelude::*;
 pub use glam;
 use glam::IVec2;
 use ingress::IngressModule;
@@ -72,6 +69,7 @@ use crate::{
 mod common;
 pub use common::*;
 use hyperion_crafting::CraftingRegistry;
+use system_order::SystemOrderModule;
 pub use valence_ident;
 
 use crate::{
@@ -82,7 +80,6 @@ use crate::{
     util::mojang::ApiProvider,
 };
 
-pub mod alloc;
 pub mod egress;
 pub mod ingress;
 pub mod net;
@@ -199,20 +196,6 @@ impl Hyperion {
             compression_level: CompressionLvl::new(2)
                 .map_err(|_| anyhow::anyhow!("failed to create compression level"))?,
         });
-
-        unsafe {
-            ecs_os_set_api_defaults();
-            let mut os_api = ecs_os_get_api();
-
-            let (malloc, calloc, realloc, free) = alloc::setup_custom_allocators();
-
-            os_api.malloc_ = malloc;
-            os_api.calloc_ = calloc;
-            os_api.realloc_ = realloc;
-            os_api.free_ = free;
-
-            ecs_os_set_api(&mut os_api);
-        }
 
         let world = World::new();
 
@@ -380,6 +363,9 @@ impl Hyperion {
         world.set(IgnMap::default());
 
         handlers(world);
+
+        // must be init last
+        world.import::<SystemOrderModule>();
 
         app.run();
 

@@ -1,5 +1,5 @@
 use clap::Parser;
-use flecs_ecs::core::{Entity, EntityViewGet, World, WorldGet};
+use flecs_ecs::core::{Entity, EntityView, EntityViewGet, WorldGet, WorldProvider};
 use hyperion::{
     BlockState,
     glam::Vec3,
@@ -41,8 +41,10 @@ pub fn get_direction_from_rotation(yaw: f32, pitch: f32) -> Vec3 {
 }
 
 impl MinecraftCommand for RaycastCommand {
-    fn execute(self, world: &World, caller: Entity) {
+    fn execute(self, system: EntityView<'_>, caller: Entity) {
         const EYE_HEIGHT: f32 = 1.62;
+
+        let world = system.world();
 
         let ray =
             caller

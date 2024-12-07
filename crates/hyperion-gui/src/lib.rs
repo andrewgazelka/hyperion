@@ -2,11 +2,10 @@
 
 use std::{borrow::Cow, cell::Cell, collections::HashMap};
 
-use flecs_ecs::core::{Entity, EntityViewGet, World, WorldGet};
+use flecs_ecs::core::{Entity, EntityView, EntityViewGet, WorldGet, WorldProvider};
 use hyperion::{
     net::{Compose, ConnectionId},
     storage::GlobalEventHandlers,
-    system_registry::SystemId,
     valence_protocol::{
         ItemStack, VarInt,
         packets::play::{
@@ -105,7 +104,7 @@ impl Gui {
         Ok(())
     }
 
-    pub fn draw<'a>(&'a self, world: &World, player: Entity) {
+    pub fn draw<'a>(&'a self, system: EntityView<'_>, player: Entity) {
         let container_items: Cow<'a, [ItemStack]> = (0..self.size)
             .map(|slot| {
                 self.items
@@ -123,37 +122,42 @@ impl Gui {
             carried_item: Cow::Borrowed(&binding),
         };
 
+        let world = system.world();
+
         world.get::<&Compose>(|compose| {
             player.entity_view(world).get::<&ConnectionId>(|stream| {
                 compose
-                    .unicast(&set_content_packet, *stream, SystemId(8), world)
+                    .unicast(&set_content_packet, *stream, system)
                     .unwrap();
             });
         });
     }
 
-    pub fn open(&mut self, world: &World, player: Entity) {
+    pub fn open(&mut self, system: EntityView<'_>, player: Entity) {
         let open_screen_packet = OpenScreenS2c {
             window_id: VarInt(i32::from(self.window_id)),
             window_type: self.get_window_type(),
             window_title: self.title.clone().into_cow_text(),
         };
 
+        let world = system.world();
+
         world.get::<&Compose>(|compose| {
             player.entity_view(world).get::<&ConnectionId>(|stream| {
                 compose
-                    .unicast(&open_screen_packet, *stream, SystemId(8), world)
+                    .unicast(&open_screen_packet, *stream, system)
                     .unwrap();
             });
         });
 
-        self.draw(world, player);
+        self.draw(system, player);
 
         world.get::<&mut GlobalEventHandlers>(|event_handlers| {
             let window_id = self.window_id;
             let items = self.items.clone();
             let gui = self.clone();
             event_handlers.click.register(move |query, event| {
+                let system = query.system;
                 let button = event.mode;
 
                 if event.window_id != window_id {
@@ -166,7 +170,7 @@ impl Gui {
                 };
 
                 (item.on_click)(player, button);
-                gui.draw(query.world, player);
+                gui.draw(query.system, player);
 
                 let inventory = &*query.inventory;
                 let compose = query.compose;
@@ -183,7 +187,7 @@ impl Gui {
                 };
 
                 compose
-                    .unicast(&set_content_packet, stream, SystemId(8), query.world)
+                    .unicast(&set_content_packet, stream, system)
                     .unwrap();
             });
         });

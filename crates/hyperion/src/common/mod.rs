@@ -10,7 +10,6 @@ use valence_protocol::CompressionThreshold;
 
 pub mod config;
 pub mod runtime;
-pub mod system_registry;
 pub mod util;
 
 /// Shared data that is shared between the ECS framework and the IO thread.

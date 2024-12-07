@@ -34,7 +34,6 @@ use crate::{
         skin::PlayerSkin,
     },
     storage::{Events, GlobalEventHandlers, PlayerJoinServer, SkinHandler},
-    system_registry::{RECV_DATA, REMOVE_PLAYER_FROM_VISIBILITY, SystemId},
     util::{SendableRef, TracingExt, mojang::MojangClient},
 };
 
@@ -89,7 +88,7 @@ fn process_login(
     stream_id: ConnectionId,
     compose: &Compose,
     entity: &EntityView<'_>,
-    system_id: SystemId,
+    system: EntityView<'_>,
     ign_map: &IgnMap,
 ) -> anyhow::Result<()> {
     debug_assert!(
@@ -117,7 +116,7 @@ fn process_login(
         threshold: VarInt(global.shared.compression_threshold.0),
     };
 
-    compose.unicast_no_compression(&pkt, stream_id, system_id, world)?;
+    compose.unicast_no_compression(&pkt, stream_id, system)?;
 
     decoder.set_compression(global.shared.compression_threshold);
 
@@ -153,7 +152,7 @@ fn process_login(
     };
 
     compose
-        .unicast(&pkt, stream_id, system_id, world)
+        .unicast(&pkt, stream_id, system)
         .context("failed to send login success packet")?;
 
     *login_state = PacketState::Play;
@@ -193,11 +192,10 @@ fn offline_uuid(username: &str) -> uuid::Uuid {
 
 fn process_status(
     login_state: &mut PacketState,
-    system_id: SystemId,
+    system: EntityView<'_>,
     packet: &BorrowedPacketFrame<'_>,
     packets: ConnectionId,
     compose: &Compose,
-    world: &World,
 ) -> anyhow::Result<()> {
     debug_assert!(
         *login_state == PacketState::Status,
@@ -238,7 +236,7 @@ fn process_status(
             let send = packets::status::QueryResponseS2c { json: &json };
 
             trace!("sent query response: {query_request:?}");
-            compose.unicast_no_compression(&send, packets, system_id, world)?;
+            compose.unicast_no_compression(&send, packets, system)?;
         }
 
         packets::status::QueryPingC2s::ID => {
@@ -248,7 +246,7 @@ fn process_status(
 
             let send = packets::status::QueryPongS2c { payload };
 
-            compose.unicast_no_compression(&send, packets, system_id, world)?;
+            compose.unicast_no_compression(&send, packets, system)?;
 
             trace!("sent query pong: {query_ping:?}");
             *login_state = PacketState::Terminate;
@@ -402,8 +400,6 @@ impl Module for IngressModule {
             });
         });
 
-        let system_id = REMOVE_PLAYER_FROM_VISIBILITY;
-
         system!(
             "remove_player_from_visibility",
             world,
@@ -413,43 +409,40 @@ impl Module for IngressModule {
             &PendingRemove,
         )
         .kind::<flecs::pipeline::PostLoad>()
-        .tracing_each_entity(
-            info_span!("remove_player"),
-            move |entity, (uuid, compose, io, pending_remove)| {
-                let uuids = &[uuid.0];
-                let entity_ids = [VarInt(entity.minecraft_id())];
+        .each_iter(move |it, row, (uuid, compose, io, pending_remove)| {
+            let system = it.system();
+            let entity = it.entity(row);
+            let uuids = &[uuid.0];
+            let entity_ids = [VarInt(entity.minecraft_id())];
 
-                let world = entity.world();
+            // destroy
+            let pkt = play::EntitiesDestroyS2c {
+                entity_ids: Cow::Borrowed(&entity_ids),
+            };
 
-                // destroy
-                let pkt = play::EntitiesDestroyS2c {
-                    entity_ids: Cow::Borrowed(&entity_ids),
+            if let Err(e) = compose.broadcast(&pkt, system).send() {
+                error!("failed to send player remove packet: {e}");
+                return;
+            };
+
+            let pkt = play::PlayerRemoveS2c {
+                uuids: Cow::Borrowed(uuids),
+            };
+
+            if let Err(e) = compose.broadcast(&pkt, system).send() {
+                error!("failed to send player remove packet: {e}");
+            };
+
+            if !pending_remove.reason.is_empty() {
+                let pkt = play::DisconnectS2c {
+                    reason: pending_remove.reason.clone().into_cow_text(),
                 };
 
-                if let Err(e) = compose.broadcast(&pkt, system_id).send(&world) {
-                    error!("failed to send player remove packet: {e}");
-                    return;
-                };
-
-                let pkt = play::PlayerRemoveS2c {
-                    uuids: Cow::Borrowed(uuids),
-                };
-
-                if let Err(e) = compose.broadcast(&pkt, system_id).send(&world) {
-                    error!("failed to send player remove packet: {e}");
-                };
-
-                if !pending_remove.reason.is_empty() {
-                    let pkt = play::DisconnectS2c {
-                        reason: pending_remove.reason.clone().into_cow_text(),
-                    };
-
-                    if let Err(e) = compose.unicast_no_compression(&pkt, *io, system_id, &world) {
-                        error!("failed to send disconnect packet: {e}");
-                    }
+                if let Err(e) = compose.unicast_no_compression(&pkt, *io, system) {
+                    error!("failed to send disconnect packet: {e}");
                 }
-            },
-        );
+            }
+        });
 
         world
             .system_named::<()>("remove_player")
@@ -458,8 +451,6 @@ impl Module for IngressModule {
             .tracing_each_entity(info_span!("remove_player"), |entity, ()| {
                 entity.destruct();
             });
-
-        let system_id = RECV_DATA;
 
         system!(
             "recv_data",
@@ -488,9 +479,9 @@ impl Module for IngressModule {
         )
         .kind::<flecs::pipeline::OnUpdate>()
         .multi_threaded()
-        .tracing_each_entity(
-            info_span!("recv_data"),
-            move |entity,
+        .each_iter(
+            move |it,
+                  row,
                   (
                 compose,
                 blocks,
@@ -514,7 +505,10 @@ impl Module for IngressModule {
                 crafting_registry,
                 ign_map,
             )| {
-                let world = entity.world();
+                let system = it.system();
+                let world = it.world();
+                let entity = it.entity(row);
+
                 let bump = compose.bump.get(&world);
 
                 loop {
@@ -542,14 +536,9 @@ impl Module for IngressModule {
                             }
                         }
                         PacketState::Status => {
-                            if let Err(e) = process_status(
-                                login_state,
-                                system_id,
-                                &frame,
-                                io_ref,
-                                compose,
-                                &world,
-                            ) {
+                            if let Err(e) =
+                                process_status(login_state, system, &frame, io_ref, compose)
+                            {
                                 error!("failed to process status packet: {e}");
                                 entity.destruct();
                                 break;
@@ -568,7 +557,7 @@ impl Module for IngressModule {
                                 io_ref,
                                 compose,
                                 &entity,
-                                system_id,
+                                system,
                                 ign_map,
                             ) {
                                 error!("failed to process login packet");
@@ -586,8 +575,7 @@ impl Module for IngressModule {
                                         reason: msg.into_cow_text(),
                                     },
                                     io_ref,
-                                    system_id,
-                                    &world,
+                                    system,
                                 ) {
                                     error!("failed to send login disconnect packet: {e}");
                                 }
@@ -617,7 +605,7 @@ impl Module for IngressModule {
                                     events: event_queue,
                                     world,
                                     blocks,
-                                    system_id,
+                                    system,
                                     confirm_block_sequences,
                                     inventory,
                                     animation,

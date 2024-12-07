@@ -25,7 +25,6 @@ use crate::{
         metadata::{Metadata, MetadataPrefabs, entity::EntityFlags},
     },
     storage::ThreadLocalVec,
-    system_registry::SystemId,
 };
 
 pub mod animation;
@@ -677,9 +676,10 @@ impl Module for SimModule {
         )
         .with::<flecs::Any>()
         .with_enum_wildcard::<EntityKind>()
-        .each_entity(|entity, (compose, uuid, position, pitch, yaw, velocity)| {
+        .each_iter(|it, row, (compose, uuid, position, pitch, yaw, velocity)| {
+            let system = it.system();
+            let entity = it.entity(row);
             let minecraft_id = entity.minecraft_id();
-            let world = entity.world();
 
             let spawn_entity = move |kind: EntityKind| -> anyhow::Result<()> {
                 let kind = kind as i32;
@@ -699,10 +699,7 @@ impl Module for SimModule {
                     velocity,
                 };
 
-                compose
-                    .broadcast(&packet, SystemId(0))
-                    .send(&world)
-                    .unwrap();
+                compose.broadcast(&packet, system).send().unwrap();
 
                 Ok(())
             };
