@@ -9,7 +9,6 @@ use hyperion::{
     net::agnostic,
     simulation::event,
     storage::{EventQueue, GlobalEventHandlers},
-    system_registry::SystemId,
 };
 
 use crate::component::CommandRegistry;
@@ -26,6 +25,8 @@ impl Module for CommandSystemModule {
             &CommandRegistry($)
         )
         .each_iter(|it, _, (event_queue, registry)| {
+            let system = it.system();
+
             let world = it.world();
             for event::Command { raw, by } in event_queue.drain() {
                 let Some(first_word) = raw.split_whitespace().next() else {
@@ -50,9 +51,7 @@ impl Module for CommandSystemModule {
                     world.get::<&hyperion::net::Compose>(|compose| {
                         by.entity_view(world)
                             .get::<&hyperion::net::ConnectionId>(|stream| {
-                                compose
-                                    .unicast(&chat, *stream, SystemId(8), &world)
-                                    .unwrap();
+                                compose.unicast(&chat, *stream, system).unwrap();
                             });
                     });
 
@@ -62,7 +61,7 @@ impl Module for CommandSystemModule {
                 tracing::debug!("executing command {first_word}");
 
                 let command = command.on_execute;
-                command(raw, &world, by);
+                command(raw, system, by);
             }
         });
 

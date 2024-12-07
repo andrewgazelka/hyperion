@@ -1,12 +1,11 @@
 use clap::Parser;
 use flecs_ecs::{
-    core::{Entity, EntityViewGet, World, WorldGet, flecs},
+    core::{Entity, EntityView, EntityViewGet, World, WorldGet, WorldProvider, flecs},
     macros::Component,
 };
 use hyperion::{
     net::{Compose, ConnectionId, DataBundle, agnostic},
     simulation::Player,
-    system_registry::SystemId,
     valence_protocol::packets::play::{
         PlayerAbilitiesS2c, player_abilities_s2c::PlayerAbilitiesFlags,
     },
@@ -25,7 +24,8 @@ pub struct Flight {
 pub struct FlyCommand;
 
 impl MinecraftCommand for FlyCommand {
-    fn execute(self, world: &World, caller: Entity) {
+    fn execute(self, system: EntityView<'_>, caller: Entity) {
+        let world = system.world();
         world.get::<&Compose>(|compose| {
             caller
                 .entity_view(world)
@@ -42,11 +42,11 @@ impl MinecraftCommand for FlyCommand {
 
                     let packet = fly_packet(allow_flight);
 
-                    let mut bundle = DataBundle::new(compose);
-                    bundle.add_packet(&packet, world).unwrap();
-                    bundle.add_packet(&chat_packet, world).unwrap();
+                    let mut bundle = DataBundle::new(compose, system);
+                    bundle.add_packet(&packet).unwrap();
+                    bundle.add_packet(&chat_packet).unwrap();
 
-                    bundle.send(world, *stream, SystemId(8)).unwrap();
+                    bundle.send(*stream).unwrap();
                 });
         });
     }

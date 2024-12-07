@@ -85,7 +85,7 @@ quote = '1.0.37'
 rand = '0.8.5'
 rayon = '1.10.0'
 rkyv = '0.8.8'
-rustc-hash = '2.0.0'
+rustc-hash = { version = '2.0.0' , features = ["nightly"] }
 serde = '1.0.214'
 serde_json = '1.0.117'
 slotmap = '1.0.7'

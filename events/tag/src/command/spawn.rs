@@ -1,5 +1,8 @@
 use clap::Parser;
-use flecs_ecs::core::{Entity, World};
+use flecs_ecs::{
+    core::{Entity, WorldProvider},
+    prelude::EntityView,
+};
 use hyperion::simulation::{
     Pitch, Position, Spawn, Uuid, Velocity, Yaw,
     entity_kind::EntityKind,
@@ -13,7 +16,9 @@ use hyperion_clap::{CommandPermission, MinecraftCommand};
 pub struct SpawnCommand;
 
 impl MinecraftCommand for SpawnCommand {
-    fn execute(self, world: &World, _caller: Entity) {
+    fn execute(self, system: EntityView<'_>, _caller: Entity) {
+        let world = system.world();
+
         world
             .entity()
             .add_enum(EntityKind::BlockDisplay)

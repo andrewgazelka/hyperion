@@ -1,5 +1,5 @@
 use clap::Parser;
-use flecs_ecs::core::{Entity, World};
+use flecs_ecs::core::{Entity, EntityView};
 use hyperion::valence_protocol::packets::play::click_slot_c2s::ClickMode;
 use hyperion_clap::{CommandPermission, MinecraftCommand};
 use hyperion_gui::{ContainerType, Gui, GuiItem};
@@ -12,7 +12,7 @@ use tracing::debug;
 pub struct GuiCommand;
 
 impl MinecraftCommand for GuiCommand {
-    fn execute(self, world: &World, caller: Entity) {
+    fn execute(self, system: EntityView<'_>, caller: Entity) {
         let mut gui = Gui::new(27, "Test Chest GUI".to_string(), ContainerType::Chest);
 
         let info_item = GuiItem::new(
@@ -32,6 +32,7 @@ impl MinecraftCommand for GuiCommand {
         );
 
         gui.add_item(13, info_item).unwrap();
-        gui.open(world, caller);
+
+        gui.open(system, caller);
     }
 }

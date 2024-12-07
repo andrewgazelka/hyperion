@@ -34,7 +34,6 @@ use crate::{
     storage::{
         ClickSlotEvent, CommandCompletionRequest, Events, GlobalEventHandlers, InteractEvent,
     },
-    system_registry::SystemId,
 };
 
 fn full(query: &mut PacketSwitchQuery<'_>, mut data: &[u8]) -> anyhow::Result<()> {
@@ -71,10 +70,7 @@ fn change_position_or_correct_client(query: &mut PacketSwitchQuery<'_>, proposed
             overlay: false,
         };
 
-        if let Err(e) = query
-            .compose
-            .unicast(&pkt, query.io_ref, query.system_id, query.world)
-        {
+        if let Err(e) = query.compose.unicast(&pkt, query.io_ref, query.system) {
             warn!("Failed to send error message to player: {e}");
         }
 
@@ -87,10 +83,7 @@ fn change_position_or_correct_client(query: &mut PacketSwitchQuery<'_>, proposed
             teleport_id: VarInt(fastrand::i32(..)),
         };
 
-        if let Err(e) = query
-            .compose
-            .unicast(&pkt, query.io_ref, query.system_id, query.world)
-        {
+        if let Err(e) = query.compose.unicast(&pkt, query.io_ref, query.system) {
             warn!("Failed to correct client position: {e}");
         }
     }
@@ -260,7 +253,7 @@ pub struct PacketSwitchQuery<'a> {
     pub blocks: &'a Blocks,
     pub pose: &'a mut Pose,
     pub confirm_block_sequences: &'a mut ConfirmBlockSequences,
-    pub system_id: SystemId,
+    pub system: EntityView<'a>,
     pub inventory: &'a mut hyperion_inventory::PlayerInventory,
     pub animation: &'a mut ActiveAnimation,
     pub crafting_registry: &'a hyperion_crafting::CraftingRegistry,
@@ -338,9 +331,7 @@ pub fn player_interact_item(
     if !cursor.is_empty() && cursor.item == ItemKind::WrittenBook {
         let packet = play::OpenWrittenBookS2c { hand };
 
-        query
-            .compose
-            .unicast(&packet, query.io_ref, SystemId(0), query.world)?;
+        query.compose.unicast(&packet, query.io_ref, query.system)?;
     }
 
     query.handlers.interact.trigger_all(query, &event);
@@ -510,7 +501,7 @@ fn click_slot(mut data: &'static [u8], query: &mut PacketSwitchQuery<'_>) -> any
     // negate click
     query
         .compose
-        .unicast(&to_send_pkt, query.io_ref, query.system_id, query.world)?;
+        .unicast(&to_send_pkt, query.io_ref, query.system)?;
 
     let slot_idx = u16::try_from(pkt.slot_idx).context("slot index is negative")?;
 
@@ -525,7 +516,7 @@ fn click_slot(mut data: &'static [u8], query: &mut PacketSwitchQuery<'_>) -> any
 
     query
         .compose
-        .unicast(&to_send_pkt, query.io_ref, query.system_id, query.world)?;
+        .unicast(&to_send_pkt, query.io_ref, query.system)?;
 
     // info!("click slot\n{pkt:#?}");
 
@@ -547,7 +538,7 @@ fn click_slot(mut data: &'static [u8], query: &mut PacketSwitchQuery<'_>) -> any
 
     query
         .compose
-        .unicast(&set_item_pkt, query.io_ref, query.system_id, query.world)?;
+        .unicast(&set_item_pkt, query.io_ref, query.system)?;
 
     let event = ClickSlotEvent::try_from(pkt)?;
     query.handlers.click.trigger_all(query, &event);

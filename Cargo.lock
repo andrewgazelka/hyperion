@@ -1722,6 +1722,7 @@ dependencies = [
  "serde_json",
  "sha2",
  "simd-utils",
+ "system-order",
  "thiserror 2.0.3",
  "tokio",
  "toml",
@@ -3735,7 +3736,9 @@ dependencies = [
 name = "system-order"
 version = "0.1.0"
 dependencies = [
+ "derive_more",
  "flecs_ecs",
+ "rustc-hash 2.1.0",
 ]
 
 [[package]]

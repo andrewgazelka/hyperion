@@ -7,7 +7,6 @@ use hyperion::{
     net::ConnectionId,
     simulation::{Name, Player, Position, event},
     storage::EventQueue,
-    system_registry::SystemId,
     valence_protocol::{packets::play, text::IntoText},
 };
 use tracing::info_span;
@@ -26,8 +25,6 @@ pub struct ChatModule;
 
 impl Module for ChatModule {
     fn module(world: &World) {
-        let system_id = SystemId(8);
-
         world.component::<ChatCooldown>().meta();
 
         world
@@ -40,6 +37,8 @@ impl Module for ChatModule {
                 let world = it.world();
                 let span = info_span!("handle_chat_messages");
                 let _enter = span.enter();
+
+                let system = it.system();
 
                 let current_tick = compose.global().tick;
 
@@ -66,7 +65,7 @@ impl Module for ChatModule {
                                 overlay: false,
                             };
 
-                            compose.unicast(&packet, *io, system_id, &world).unwrap();
+                            compose.unicast(&packet, *io, system).unwrap();
                             return;
                         }
 
@@ -80,8 +79,8 @@ impl Module for ChatModule {
 
                         let center = position.to_chunk();
 
-                        compose.broadcast_local(&packet, center, system_id)
-                            .send(&world)
+                        compose.broadcast_local(&packet, center, system)
+                            .send()
                             .unwrap();
                     });
                 }

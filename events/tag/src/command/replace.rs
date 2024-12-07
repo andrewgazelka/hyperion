@@ -1,6 +1,6 @@
 use std::collections::{HashSet, VecDeque};
 
-use flecs_ecs::core::{Entity, EntityViewGet, World, WorldGet};
+use flecs_ecs::core::{Entity, EntityView, EntityViewGet, WorldGet, WorldProvider};
 use hyperion::{BlockState, glam::IVec3, simulation::blocks::Blocks};
 use hyperion_clap::CommandPermission;
 use rayon::iter::ParallelIterator;
@@ -106,7 +106,8 @@ fn group(positions: &HashSet<IVec3>) -> Vec<Vec<IVec3>> {
 }
 
 impl hyperion_clap::MinecraftCommand for ReplaceCommand {
-    fn execute(self, world: &World, caller: Entity) {
+    fn execute(self, system: EntityView<'_>, caller: Entity) {
+        let world = system.world();
         world.get::<&mut Blocks>(|blocks| {
             let started_time = std::time::Instant::now();
 
@@ -142,11 +143,9 @@ impl hyperion_clap::MinecraftCommand for ReplaceCommand {
                 caller
                     .entity_view(world)
                     .get::<&hyperion::net::ConnectionId>(|stream| {
-                        let mut bundle = hyperion::net::DataBundle::new(compose);
-                        bundle.add_packet(&msg, world).unwrap();
-                        bundle
-                            .send(world, *stream, hyperion::system_registry::SystemId(8))
-                            .unwrap();
+                        let mut bundle = hyperion::net::DataBundle::new(compose, system);
+                        bundle.add_packet(&msg).unwrap();
+                        bundle.send(*stream).unwrap();
                     });
             });
         });

@@ -17,7 +17,6 @@ use hyperion::{
         event,
     },
     storage::EventQueue,
-    system_registry::SystemId,
     valence_protocol::{
         BlockPos, BlockState, Particle, VarInt,
         block::{PropName, PropValue},
@@ -81,6 +80,8 @@ impl Module for BlockModule {
                       (pending_air, blocks, compose): (&mut PendingDestruction, &mut Blocks, &Compose)| {
                     let span = info_span!("handle_pending_air");
                     let _enter = span.enter();
+
+                    let system = it.system();
                     let now = Instant::now();
                     let world = it.world();
                     for SetLevel { position, sequence, stage } in pending_air.set_level_at.pop_until(&now) {
@@ -89,8 +90,8 @@ impl Module for BlockModule {
                             position: BlockPos::new(position.x, position.y, position.z),
                             destroy_stage: stage,
                         };
-                        compose.broadcast(&packet, SystemId(999))
-                            .send(&world)
+                        compose.broadcast(&packet, system)
+                            .send()
                             .unwrap();
 
                         let center_block = position.as_dvec3() + DVec3::splat(0.5);
@@ -101,8 +102,8 @@ impl Module for BlockModule {
                             .pitch(f32::from(stage).mul_add(0.1, 1.0))
                             .build();
 
-                        compose.broadcast(&sound, SystemId(999))
-                            .send(&world)
+                        compose.broadcast(&sound, system)
+                            .send()
                             .unwrap();
                     }
 
@@ -119,8 +120,8 @@ impl Module for BlockModule {
                             count: 0,
                         };
 
-                        compose.broadcast(&particle_packet, SystemId(999))
-                            .send(&world)
+                        compose.broadcast(&particle_packet, system)
+                            .send()
                             .unwrap();
 
                         let sound = agnostic::sound(
@@ -131,8 +132,8 @@ impl Module for BlockModule {
                             .seed(fastrand::i64(..))
                             .build();
 
-                        compose.broadcast(&sound, SystemId(999))
-                            .send(&world)
+                        compose.broadcast(&sound, system)
+                            .send()
                             .unwrap();
 
                         destroy.from
@@ -152,14 +153,12 @@ impl Module for BlockModule {
                 },
             );
 
-        // todo: this is a hack. We want the system ID to be automatically assigned based on the location of the system.
-        let system_id = SystemId(8);
-
         system!("handle_destroyed_blocks", world, &mut Blocks($), &mut EventQueue<event::DestroyBlock>($), &Compose($), &OreVeins($))
             .multi_threaded()
             .each_iter(move |it: TableIter<'_, false>, _, (blocks, event_queue, compose, ore_veins): (&mut Blocks, &mut EventQueue<event::DestroyBlock>, &Compose, &OreVeins)| {
                 let span = info_span!("handle_blocks");
                 let _enter = span.enter();
+                let system = it.system();
                 let world = it.world();
 
 
@@ -179,7 +178,7 @@ impl Module for BlockModule {
                         };
 
                         event.from.entity_view(world).get::<&ConnectionId>(|stream| {
-                            compose.unicast(&pkt, *stream, SystemId(100), &world).unwrap();
+                            compose.unicast(&pkt, *stream, system).unwrap();
                         });
 
                         continue;
@@ -205,7 +204,7 @@ impl Module for BlockModule {
                         };
 
                         event.from.entity_view(world).get::<&ConnectionId>(|stream| {
-                            compose.unicast(&pkt, *stream, SystemId(100), &world).unwrap();
+                            compose.unicast(&pkt, *stream, system).unwrap();
                         });
 
                         continue;
@@ -232,7 +231,7 @@ impl Module for BlockModule {
                         };
 
                         // Send the message to the player
-                        compose.unicast(&pkt, net, system_id, &world).unwrap();
+                        compose.unicast(&pkt, net, system).unwrap();
 
                         let position = event.position;
 
@@ -243,7 +242,7 @@ impl Module for BlockModule {
                             .pitch(1.0)
                             .build();
 
-                        compose.unicast(&sound, net, system_id, &world).unwrap();
+                        compose.unicast(&sound, net, system).unwrap();
                     });
                 }
             });
@@ -253,6 +252,7 @@ impl Module for BlockModule {
                 let world = it.world();
                 let span = info_span!("handle_placed_blocks");
                 let _enter = span.enter();
+                let system = it.system();
                 for event::PlaceBlock { position, block, from, sequence } in event_queue.drain() {
                     if block.collision_shapes().is_empty() {
                         mc.to_confirm.push(EntityAndSequence::new(from, sequence));
@@ -263,7 +263,7 @@ impl Module for BlockModule {
 
                             let msg = chat!("§cYou can't place this block");
 
-                            compose.unicast(&msg, *stream, SystemId(8), &world).unwrap();
+                            compose.unicast(&msg, *stream, system).unwrap();
                         });
 
                         continue;

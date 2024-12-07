@@ -10,17 +10,20 @@ use byteorder::WriteBytesExt;
 use bytes::{Bytes, BytesMut};
 pub use decoder::PacketDecoder;
 use derive_more::Deref;
-use flecs_ecs::{core::World, macros::Component};
+use flecs_ecs::{
+    core::{EntityView, World, WorldProvider},
+    macros::Component,
+};
 use glam::IVec2;
 use hyperion_proto::{ChunkPosition, ServerToProxyMessage};
 use libdeflater::CompressionLvl;
 use rkyv::util::AlignedVec;
+use system_order::SystemOrder;
 
 use crate::{
     Global, PacketBundle, Scratch, Scratches,
     net::encoder::{PacketEncoder, append_packet_without_compression},
     storage::ThreadLocal,
-    system_registry::SystemId,
 };
 
 pub mod agnostic;
@@ -69,26 +72,22 @@ impl Compressors {
 /// # Example
 /// ```no_run
 /// // Create a new connection ID
-/// # use flecs_ecs::core::World;
+/// # use flecs_ecs::core::{EntityView, World};
 /// use hyperion::net::ConnectionId;
-/// use valence_protocol::packets::play;
 /// # use hyperion::simulation::Compose;
-/// # use hyperion::system_registry::SystemId;
+/// use valence_protocol::packets::play;
 /// # let compose: Compose = todo!();
-/// # let system_id: SystemId = todo!();
+/// # let system: EntityView<'_> = todo!();
 /// # let world: &World = todo!();
 /// let conn_id = ConnectionId::new(12345);
 ///
 /// let packet: play::ChatMessageS2c = todo!();
 ///
 /// // Use it to send a packet to a specific client
-/// compose.unicast(&packet, conn_id, system_id)?;
+/// compose.unicast(&packet, conn_id, system).unwrap();
 ///
 /// // Exclude a client from a broadcast
-/// compose
-///     .broadcast(&packet, system_id)
-///     .exclude(conn_id)
-///     .send(world)?;
+/// compose.broadcast(&packet, system).exclude(conn_id).send()?;
 /// ```
 ///
 /// Note: Connection IDs are managed internally by the networking system and should be obtained
@@ -133,24 +132,27 @@ pub struct Compose {
 }
 
 #[must_use]
-pub struct DataBundle<'a> {
+pub struct DataBundle<'a, 'b> {
     compose: &'a Compose,
+    system: EntityView<'b>,
     data: BytesMut,
 }
 
-impl<'a> DataBundle<'a> {
-    pub fn new(compose: &'a Compose) -> Self {
+impl<'a, 'b> DataBundle<'a, 'b> {
+    pub fn new(compose: &'a Compose, system: EntityView<'b>) -> Self {
         Self {
             compose,
+            system,
             data: BytesMut::new(),
         }
     }
 
-    pub fn add_packet(&mut self, pkt: impl PacketBundle, world: &World) -> anyhow::Result<()> {
+    pub fn add_packet(&mut self, pkt: impl PacketBundle) -> anyhow::Result<()> {
+        let world = self.system.world();
         let data = self
             .compose
             .io_buf
-            .encode_packet(pkt, self.compose, world)?;
+            .encode_packet(pkt, self.compose, &world)?;
         // todo: test to see if this ever actually unsplits
         self.data.unsplit(data);
         Ok(())
@@ -160,19 +162,14 @@ impl<'a> DataBundle<'a> {
         self.data.extend_from_slice(raw);
     }
 
-    pub fn send(
-        self,
-        world: &World,
-        stream: ConnectionId,
-        system_id: SystemId,
-    ) -> anyhow::Result<()> {
+    pub fn send(&self, stream: ConnectionId) -> anyhow::Result<()> {
         if self.data.is_empty() {
             return Ok(());
         }
 
         self.compose
             .io_buf
-            .unicast_raw(&self.data, stream, system_id, world);
+            .unicast_raw(&self.data, stream, self.system);
         Ok(())
     }
 }
@@ -203,7 +200,11 @@ impl Compose {
     /// Broadcast globally to all players
     ///
     /// See <https://github.com/andrewgazelka/hyperion-proto/blob/main/src/server_to_proxy.proto#L17-L22>
-    pub const fn broadcast<P>(&self, packet: P, system_id: SystemId) -> Broadcast<'_, P>
+    pub const fn broadcast<'a, 'b, P>(
+        &'a self,
+        packet: P,
+        system: EntityView<'b>,
+    ) -> Broadcast<'a, 'b, P>
     where
         P: PacketBundle,
     {
@@ -211,7 +212,7 @@ impl Compose {
             packet,
             compose: self,
             exclude: 0,
-            system_id,
+            system,
         }
     }
 
@@ -229,12 +230,12 @@ impl Compose {
     /// Broadcast a packet within a certain region.
     ///
     /// See <https://github.com/andrewgazelka/hyperion-proto/blob/main/src/server_to_proxy.proto#L17-L22>
-    pub fn broadcast_local<P>(
-        &self,
+    pub fn broadcast_local<'a, 'b, P>(
+        &'a self,
         packet: P,
         center: IVec2,
-        system_id: SystemId,
-    ) -> BroadcastLocal<'_, P>
+        system: EntityView<'b>,
+    ) -> BroadcastLocal<'a, 'b, P>
     where
         P: PacketBundle,
     {
@@ -246,7 +247,7 @@ impl Compose {
                 x: i16::try_from(center.x).unwrap(),
                 z: i16::try_from(center.y).unwrap(),
             },
-            system_id,
+            system,
         }
     }
 
@@ -255,8 +256,7 @@ impl Compose {
         &self,
         packet: P,
         stream_id: ConnectionId,
-        system_id: SystemId,
-        world: &World,
+        system: EntityView<'_>,
     ) -> anyhow::Result<()>
     where
         P: PacketBundle,
@@ -265,13 +265,13 @@ impl Compose {
             packet,
             stream_id,
             compose: self,
-            system_id,
+            system,
 
             // todo: Should we have this true by default, or is there a better way?
             // Or a better word for no_compress, or should we just use negative field names?
             compress: true,
         }
-        .send(world)
+        .send()
     }
 
     /// Send a packet to a single player without compression.
@@ -279,8 +279,7 @@ impl Compose {
         &self,
         packet: &P,
         stream_id: ConnectionId,
-        system_id: SystemId,
-        world: &World,
+        system: EntityView<'_>,
     ) -> anyhow::Result<()>
     where
         P: valence_protocol::Packet + valence_protocol::Encode,
@@ -289,10 +288,10 @@ impl Compose {
             packet,
             stream_id,
             compose: self,
-            system_id,
             compress: false,
+            system,
         }
-        .send(world)
+        .send()
     }
 
     #[must_use]
@@ -332,60 +331,61 @@ impl IoBuf {
         result
     }
 
-    pub fn order_id(&self, system_id: SystemId, world: &World) -> u32 {
-        u32::from(system_id.id()) << 16 | u32::from(self.fetch_add_idx(world))
+    pub fn order_id(&self, system_order: SystemOrder, world: &World) -> u32 {
+        u32::from(system_order.value()) << 16 | u32::from(self.fetch_add_idx(world))
     }
 }
 
 /// A broadcast builder
 #[must_use]
-pub struct Broadcast<'a, P> {
+pub struct Broadcast<'a, 'b, P> {
     packet: P,
     compose: &'a Compose,
     exclude: u64,
-    system_id: SystemId,
+    system: EntityView<'b>,
 }
 
 /// A unicast builder
 #[must_use]
-struct Unicast<'a, P> {
+struct Unicast<'a, 'b, P> {
     packet: P,
     stream_id: ConnectionId,
     compose: &'a Compose,
     compress: bool,
-    system_id: SystemId,
+    system: EntityView<'b>,
 }
 
-impl<P> Unicast<'_, P>
+impl<P> Unicast<'_, '_, P>
 where
     P: PacketBundle,
 {
-    fn send(self, world: &World) -> anyhow::Result<()> {
+    fn send(self) -> anyhow::Result<()> {
         self.compose.io_buf.unicast_private(
             self.packet,
             self.stream_id,
             self.compose,
             self.compress,
-            self.system_id,
-            world,
+            self.system,
         )
     }
 }
 
-impl<P> Broadcast<'_, P> {
+impl<P> Broadcast<'_, '_, P> {
     /// Send the packet to all players.
-    pub fn send(self, world: &World) -> anyhow::Result<()>
+    pub fn send(self) -> anyhow::Result<()>
     where
         P: PacketBundle,
     {
+        let world = self.system.world();
+
         let bytes = self
             .compose
             .io_buf
-            .encode_packet(self.packet, self.compose, world)?;
+            .encode_packet(self.packet, self.compose, &world)?;
 
         self.compose
             .io_buf
-            .broadcast_raw(&bytes, self.exclude, self.system_id, world);
+            .broadcast_raw(&bytes, self.exclude, self.system);
 
         Ok(())
     }
@@ -397,40 +397,38 @@ impl<P> Broadcast<'_, P> {
         Broadcast {
             packet: self.packet,
             compose: self.compose,
-            system_id: self.system_id,
             exclude,
+            system: self.system,
         }
     }
 }
 
 #[must_use]
 #[expect(missing_docs)]
-pub struct BroadcastLocal<'a, P> {
+pub struct BroadcastLocal<'a, 'b, P> {
     packet: P,
     compose: &'a Compose,
     center: ChunkPosition,
     exclude: u64,
-    system_id: SystemId,
+    system: EntityView<'b>,
 }
 
-impl<P> BroadcastLocal<'_, P> {
+impl<P> BroadcastLocal<'_, '_, P> {
     /// Send the packet
-    pub fn send(self, world: &World) -> anyhow::Result<()>
+    pub fn send(self) -> anyhow::Result<()>
     where
         P: PacketBundle,
     {
+        let world = self.system.world();
+
         let bytes = self
             .compose
             .io_buf
-            .encode_packet(self.packet, self.compose, world)?;
+            .encode_packet(self.packet, self.compose, &world)?;
 
-        self.compose.io_buf.broadcast_local_raw(
-            &bytes,
-            self.center,
-            self.exclude,
-            self.system_id,
-            world,
-        );
+        self.compose
+            .io_buf
+            .broadcast_local_raw(&bytes, self.center, self.exclude, self.system);
 
         Ok(())
     }
@@ -444,7 +442,7 @@ impl<P> BroadcastLocal<'_, P> {
             compose: self.compose,
             center: self.center,
             exclude,
-            system_id: self.system_id,
+            system: self.system,
         }
     }
 }
@@ -490,11 +488,7 @@ impl IoBuf {
         Ok(result)
     }
 
-    fn encode_packet_no_compression<P>(
-        &self,
-        packet: P,
-        world: &World,
-    ) -> anyhow::Result<bytes::BytesMut>
+    fn encode_packet_no_compression<P>(&self, packet: P, world: &World) -> anyhow::Result<BytesMut>
     where
         P: PacketBundle,
     {
@@ -512,19 +506,20 @@ impl IoBuf {
         id: ConnectionId,
         compose: &Compose,
         compress: bool,
-        system_id: SystemId,
-        world: &World,
+        system: EntityView<'_>,
     ) -> anyhow::Result<()>
     where
         P: PacketBundle,
     {
+        let world = system.world();
+
         let bytes = if compress {
-            self.encode_packet(packet, compose, world)?
+            self.encode_packet(packet, compose, &world)?
         } else {
-            self.encode_packet_no_compression(packet, world)?
+            self.encode_packet_no_compression(packet, &world)?
         };
 
-        self.unicast_raw(&bytes, id, system_id, world);
+        self.unicast_raw(&bytes, id, system);
         Ok(())
     }
 
@@ -533,13 +528,15 @@ impl IoBuf {
         data: &[u8],
         center: ChunkPosition,
         exclude: u64,
-        system_id: SystemId,
-        world: &World,
+        system: EntityView<'_>,
     ) {
-        let buffer = self.buffer.get(world);
+        let world = system.world();
+        let system_order = SystemOrder::of(system);
+
+        let buffer = self.buffer.get(&world);
         let buffer = &mut *buffer.borrow_mut();
 
-        let order = u32::from(system_id.id()) << 16;
+        let order = u32::from(system_order.value()) << 16;
 
         let to_send = hyperion_proto::BroadcastLocal {
             data,
@@ -560,17 +557,14 @@ impl IoBuf {
         buffer[len..(len + 8)].copy_from_slice(&packet_len.to_be_bytes());
     }
 
-    pub(crate) fn broadcast_raw(
-        &self,
-        data: &[u8],
-        exclude: u64,
-        system_id: SystemId,
-        world: &World,
-    ) {
-        let buffer = self.buffer.get(world);
+    pub(crate) fn broadcast_raw(&self, data: &[u8], exclude: u64, system: EntityView<'_>) {
+        let world = system.world();
+        let buffer = self.buffer.get(&world);
         let buffer = &mut *buffer.borrow_mut();
 
-        let order = u32::from(system_id.id()) << 16;
+        let system_order = SystemOrder::of(system);
+
+        let order = u32::from(system_order.value()) << 16;
 
         let to_send = hyperion_proto::BroadcastGlobal {
             data,
@@ -593,17 +587,14 @@ impl IoBuf {
         buffer[len..(len + 8)].copy_from_slice(&packet_len.to_be_bytes());
     }
 
-    pub(crate) fn unicast_raw(
-        &self,
-        data: &[u8],
-        stream: ConnectionId,
-        system_id: SystemId,
-        world: &World,
-    ) {
-        let buffer = self.buffer.get(world);
+    pub(crate) fn unicast_raw(&self, data: &[u8], stream: ConnectionId, system: EntityView<'_>) {
+        let world = system.world();
+        let system_order = SystemOrder::of(system);
+
+        let buffer = self.buffer.get(&world);
         let buffer = &mut *buffer.borrow_mut();
 
-        let order = self.order_id(system_id, world);
+        let order = self.order_id(system_order, &world);
 
         let to_send = hyperion_proto::Unicast {
             data,

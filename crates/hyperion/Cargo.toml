@@ -7,32 +7,23 @@ harness = false
 name = "atomic"
 
 [dependencies]
-colored = "2.1.0"
-flate2 = {workspace = true, features = ["zlib-ng"]}
-glam = {workspace = true, features = ["serde"]}
-rkyv = {workspace = true}
-roaring = {workspace = true, features = ["simd"]}
-serde = {workspace = true, features = ["derive"]}
-tokio = {workspace = true, features = ["full", "tracing"]}
-tracing = {workspace = true}
-tracing-tracy = {workspace = true}
-uuid = {workspace = true}
 anyhow = {workspace = true}
 base64 = {workspace = true}
-geometry = {workspace = true}
 bitfield-struct = {workspace = true}
-simd-utils = {workspace = true}
 bitvec = {workspace = true}
-papaya = {workspace = true}
 bumpalo = {workspace = true}
 bvh-region = {workspace = true}
 bytemuck = {workspace = true}
 byteorder = {workspace = true}
 bytes = {workspace = true}
+colored = "2.1.0"
 derive_more = {workspace = true}
 enumset = {workspace = true}
 fastrand = {workspace = true}
-flecs_ecs = {workspace = true}
+flate2 = {workspace = true, features = ["zlib-ng"]}
+flecs_ecs = {workspace = true }
+geometry = {workspace = true}
+glam = {workspace = true, features = ["serde"]}
 heapless = {workspace = true}
 heed = {workspace = true}
 hyperion-crafting = {workspace = true}
@@ -54,14 +45,24 @@ ndarray = {workspace = true}
 no_denormals = {workspace = true}
 once_cell = {workspace = true}
 ouroboros = {workspace = true}
+papaya = {workspace = true}
 parking_lot = {workspace = true}
 rayon = {workspace = true}
 reqwest = {workspace = true}
+rkyv = {workspace = true}
+roaring = {workspace = true, features = ["simd"]}
 rustc-hash = {workspace = true}
+serde = {workspace = true, features = ["derive"]}
 serde_json = {workspace = true}
 sha2 = {workspace = true}
+simd-utils = {workspace = true}
+system-order = {workspace = true}
 thiserror = {workspace = true}
+tokio = {workspace = true, features = ["full", "tracing"]}
 toml = {workspace = true}
+tracing = {workspace = true}
+tracing-tracy = {workspace = true}
+uuid = {workspace = true}
 valence_anvil = {workspace = true}
 valence_generated = {workspace = true}
 valence_ident = {workspace = true}

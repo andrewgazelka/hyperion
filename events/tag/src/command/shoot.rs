@@ -1,5 +1,5 @@
 use clap::Parser;
-use flecs_ecs::core::{Entity, EntityViewGet, World};
+use flecs_ecs::core::{Entity, EntityView, EntityViewGet, WorldProvider};
 use hyperion::{
     glam::Vec3,
     simulation::{Pitch, Position, Spawn, Uuid, Velocity, Yaw, entity_kind::EntityKind},
@@ -16,9 +16,11 @@ pub struct ShootCommand {
 }
 
 impl MinecraftCommand for ShootCommand {
-    fn execute(self, world: &World, caller: Entity) {
+    fn execute(self, system: EntityView<'_>, caller: Entity) {
         const EYE_HEIGHT: f32 = 1.62;
         const BASE_VELOCITY: f32 = 3.0; // Base velocity multiplier for arrows
+
+        let world = system.world();
 
         caller
             .entity_view(world)

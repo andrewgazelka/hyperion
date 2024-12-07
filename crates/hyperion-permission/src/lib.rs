@@ -1,8 +1,6 @@
 use clap::ValueEnum;
 use flecs_ecs::{
-    core::{
-        EntityViewGet, QueryBuilderImpl, SystemAPI, TermBuilderImpl, World, WorldGet, WorldProvider,
-    },
+    core::{EntityViewGet, QueryBuilderImpl, SystemAPI, TermBuilderImpl, World, WorldGet},
     macros::{Component, observer},
     prelude::{Module, flecs},
 };
@@ -10,7 +8,6 @@ use hyperion::{
     net::{Compose, ConnectionId},
     simulation::{Player, Uuid, command::get_command_packet},
     storage::LocalDb,
-    system_registry::SystemId,
 };
 use num_derive::{FromPrimitive, ToPrimitive};
 
@@ -65,8 +62,10 @@ impl Module for PermissionModule {
                 permissions.set(**uuid, *group).unwrap();
             });
 
-        observer!(world, flecs::OnSet, &Group).each_entity(|entity, _group| {
-            let world = entity.world();
+        observer!(world, flecs::OnSet, &Group).each_iter(|it, row, _group| {
+            let system = it.system();
+            let world = it.world();
+            let entity = it.entity(row);
 
             let root_command = hyperion::simulation::command::get_root_command_entity();
 
@@ -74,9 +73,7 @@ impl Module for PermissionModule {
 
             entity.get::<&ConnectionId>(|stream| {
                 world.get::<&Compose>(|compose| {
-                    compose
-                        .unicast(&cmd_pkt, *stream, SystemId(999), &world)
-                        .unwrap();
+                    compose.unicast(&cmd_pkt, *stream, system).unwrap();
                 });
             });
         });
