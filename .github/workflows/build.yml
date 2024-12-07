@@ -54,7 +54,7 @@ jobs:
       - name: Install Taplo
         uses: taiki-e/install-action@v2
         with:
-          tool: taplo
+          tool: taplo-cli
 
       - name: Lint TOML files
         run: taplo lint .
