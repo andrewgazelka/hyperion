@@ -171,7 +171,6 @@ fn process_login(
             .add::<ChunkSendQueue>()
             .add::<Velocity>()
             .set(ChunkPosition::null())
-            .set(Velocity::default());
     });
 
     compose.io_buf().set_receive_broadcasts(stream_id, world);

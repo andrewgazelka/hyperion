@@ -2,13 +2,13 @@
 harness = false
 name = "sort"
 
-[[bench]]
-harness = false
-name = "bvh"
-
-[[bench]]
-harness = false
-name = "side_by_side"
+#[[bench]]
+#harness = false
+#name = "bvh"
+#
+#[[bench]]
+#harness = false
+#name = "side_by_side"
 
 [dependencies]
 geometry = {workspace = true}
@@ -20,17 +20,15 @@ plotters = {workspace = true, features = [
 plotters-bitmap = {workspace = true, optional = true}
 arrayvec = {workspace = true}
 fastrand = {workspace = true}
-itertools = {workspace = true}
 ordered-float = {workspace = true}
 rayon = {workspace = true}
 tracing = {workspace = true}
 
 [dev-dependencies]
 criterion = {workspace = true}
-divan = {workspace = true}
+#divan = {workspace = true}
 rand = {workspace = true}
-tango-bench = {workspace = true}
-tracing-subscriber = {workspace = true}
+#tango-bench = {workspace = true}
 
 [features]
 default = []

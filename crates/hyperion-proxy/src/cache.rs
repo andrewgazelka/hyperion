@@ -261,8 +261,6 @@ impl BufferedEgress {
                     .extend_from_slice(&packet.data);
                 let after_len = self.raw_local_broadcast_data.len();
 
-                // println!("broadcast local with {player_id_to_exclude} to {center_x} {center_z}");
-
                 self.local_broadcast_buffer.push(LocalBroadcastData {
                     // todo: checked
                     position,

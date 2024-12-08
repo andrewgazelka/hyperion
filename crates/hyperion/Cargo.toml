@@ -12,7 +12,6 @@ base64 = {workspace = true}
 bitfield-struct = {workspace = true}
 bitvec = {workspace = true}
 bumpalo = {workspace = true}
-bvh-region = {workspace = true}
 bytemuck = {workspace = true}
 byteorder = {workspace = true}
 bytes = {workspace = true}

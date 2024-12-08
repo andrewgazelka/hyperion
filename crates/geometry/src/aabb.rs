@@ -21,6 +21,20 @@ pub struct Aabb {
     pub max: Vec3,
 }
 
+impl FromIterator<Self> for Aabb {
+    fn from_iter<T: IntoIterator<Item = Self>>(iter: T) -> Self {
+        let mut min = Vec3::new(f32::INFINITY, f32::INFINITY, f32::INFINITY);
+        let mut max = Vec3::new(f32::NEG_INFINITY, f32::NEG_INFINITY, f32::NEG_INFINITY);
+
+        for aabb in iter {
+            min = min.min(aabb.min);
+            max = max.max(aabb.max);
+        }
+
+        Self { min, max }
+    }
+}
+
 impl Display for Aabb {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         // write [0.00, 0.00, 0.00] -> [1.00, 1.00, 1.00]

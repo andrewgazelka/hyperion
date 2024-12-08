@@ -10,6 +10,8 @@ use hyperion::simulation::{
 };
 use hyperion_clap::{CommandPermission, MinecraftCommand};
 
+use crate::FollowClosestPlayer;
+
 #[derive(Parser, CommandPermission, Debug)]
 #[command(name = "spawn")]
 #[command_permission(group = "Normal")]
@@ -32,6 +34,7 @@ impl MinecraftCommand for SpawnCommand {
             .set(Pitch::new(0.0))
             .set(Yaw::new(0.0))
             .set(Velocity::ZERO)
+            .add::<FollowClosestPlayer>()
             // .set(DisplayedBlockState::new(BlockState::DIRT))
             // .is_a_id(prefabs.block_display_base)
             .enqueue(Spawn);

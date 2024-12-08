@@ -607,7 +607,6 @@ impl IoBuf {
         let len = buffer.len();
         buffer.write_u64::<byteorder::BigEndian>(0x00).unwrap();
 
-        // println!("sending unicast");
         rkyv::api::high::to_bytes_in::<_, rkyv::rancor::Error>(&to_send, &mut *buffer).unwrap();
 
         let new_len = buffer.len();

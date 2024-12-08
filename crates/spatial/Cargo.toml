@@ -1,0 +1,17 @@
+[package]
+name = "spatial"
+version = "0.1.0"
+edition = "2021"
+authors = ["Andrew Gazelka <andrew.gazelka@gmail.com>"]
+readme = "README.md"
+publish = false
+
+[dependencies]
+bvh-region.workspace = true
+flecs_ecs.workspace = true
+hyperion.workspace = true
+geometry.workspace = true
+rayon.workspace = true
+
+[lints]
+workspace = true
