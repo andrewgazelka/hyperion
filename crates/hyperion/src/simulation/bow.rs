@@ -1,4 +1,5 @@
 use std::time::{Duration, SystemTime};
+
 use flecs_ecs::prelude::*;
 
 #[derive(Component, Debug)]
@@ -6,13 +7,19 @@ pub struct BowCharging {
     pub start_time: SystemTime,
 }
 
+impl Default for BowCharging {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl BowCharging {
+    #[must_use]
     pub fn new() -> Self {
-        Self {
-            start_time: SystemTime::now(),
-        }
+        Self::default()
     }
 
+    #[must_use]
     pub fn get_charge(&self) -> f32 {
         let elapsed = self.start_time.elapsed().unwrap_or(Duration::ZERO);
         let secs = elapsed.as_secs_f32();
