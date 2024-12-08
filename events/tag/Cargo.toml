@@ -2,28 +2,29 @@
 anyhow = { workspace = true }
 clap = { workspace = true }
 compact_str = { workspace = true }
+derive_more = { workspace = true }
 dotenvy = { workspace = true }
 fastrand = { workspace = true }
 flecs_ecs = { workspace = true }
+geometry = { workspace = true }
+hyperion = { workspace = true }
 hyperion-clap = { workspace = true }
 hyperion-gui = { path = "../../crates/hyperion-gui" }
 hyperion-inventory = { workspace = true }
+hyperion-item = { workspace = true }
 hyperion-permission = { workspace = true }
+hyperion-rank-tree = { workspace = true }
 hyperion-scheduled = { workspace = true }
 hyperion-text = { workspace = true }
 hyperion-utils = { workspace = true }
-hyperion-rank-tree = { workspace = true }
-hyperion = { workspace = true }
+rayon = { workspace = true }
 roaring = { workspace = true }
 rustc-hash = { workspace = true }
+spatial = { workspace = true }
+tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 tracing-tracy = { workspace = true }
-tracing = { workspace = true }
-rayon = { workspace = true }
-derive_more = { workspace = true }
-geometry = { workspace = true }
 uuid = { version = "1.11.0", features = ["v4"] }
-hyperion-item = { workspace = true }
 
 
 [dev-dependencies]

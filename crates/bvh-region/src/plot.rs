@@ -11,10 +11,14 @@ use plotters::{
 use plotters_bitmap::BitMapBackend;
 use tracing::debug;
 
-use crate::{Bvh, HasAabb, Node};
+use crate::{Bvh, Node};
 
-impl<T: HasAabb + Copy> Bvh<T> {
-    pub fn plot(&self, filename: &str) -> Result<(), Box<dyn std::error::Error>> {
+impl<T> Bvh<T> {
+    pub fn plot(
+        &self,
+        filename: &str,
+        get_aabb: &impl Fn(&T) -> Aabb,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let root_area = BitMapBackend::new(filename, (1000, 1000)).into_drawing_area();
         root_area.fill(&BLACK)?;
 
@@ -35,13 +39,14 @@ impl<T: HasAabb + Copy> Bvh<T> {
             .build_cartesian_2d(aabb.min.x..aabb.max.x, aabb.min.y..aabb.max.y)?;
 
         // chart.configure_mesh().gr.draw()?;
-        self.draw_node(&mut chart, Some(node))?;
+        self.draw_node(get_aabb, &mut chart, Some(node))?;
 
         Ok(())
     }
 
     fn draw_node(
         &self,
+        get_aabb: &impl Fn(&T) -> Aabb,
         chart: &mut ChartContext<
             '_,
             BitMapBackend<'_>,
@@ -56,14 +61,14 @@ impl<T: HasAabb + Copy> Bvh<T> {
                     self.draw_aabb(style, chart, &internal.aabb)?;
 
                     for elem in internal.children(self) {
-                        self.draw_node(chart, Some(elem))?;
+                        self.draw_node(get_aabb, chart, Some(elem))?;
                     }
                 }
                 Node::Leaf(leaf) => {
                     let color = random_color();
                     let style = color.mix(0.35).filled().stroke_width(1);
                     for elem in leaf.iter() {
-                        self.draw_aabb(style, chart, &elem.aabb())?;
+                        self.draw_aabb(style, chart, &get_aabb(elem))?;
                     }
                 }
             }

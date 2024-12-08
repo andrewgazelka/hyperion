@@ -6,7 +6,7 @@ use bow::BowCharging;
 use bytemuck::{Pod, Zeroable};
 use derive_more::{Constructor, Deref, DerefMut, Display, From};
 use flecs_ecs::prelude::*;
-use geometry::aabb::{Aabb, HasAabb};
+use geometry::aabb::Aabb;
 use glam::{IVec2, IVec3, Quat, Vec3};
 use hyperion_utils::EntityExt;
 use rustc_hash::FxHashMap;
@@ -49,36 +49,6 @@ pub struct StreamLookup {
 pub struct PlayerUuidLookup {
     /// The UUID of all players
     inner: HashMap<Uuid, Entity>,
-}
-
-/// The data associated with a player
-#[derive(Debug, Copy, Clone)]
-pub struct LookupData {
-    /// The entity id of the player
-    pub id: usize,
-    /// The bounding box of the player
-    pub aabb: Aabb,
-}
-
-impl HasAabb for LookupData {
-    fn aabb(&self) -> Aabb {
-        self.aabb
-    }
-}
-
-#[derive(Component, Debug, Default)]
-pub struct PlayerBoundingBoxes {
-    /// The bounding boxes of all players
-    pub query: bvh_region::Bvh<LookupData>,
-}
-
-impl PlayerBoundingBoxes {
-    /// Get the closest player to the given position.
-    #[must_use]
-    pub fn closest_to(&self, point: Vec3) -> Option<&LookupData> {
-        let (target, _) = self.query.get_closest(point)?;
-        Some(target)
-    }
 }
 
 /// Communicates with the proxy server.

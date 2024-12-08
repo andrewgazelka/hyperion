@@ -19,10 +19,11 @@ mod module;
 use derive_more::{Deref, DerefMut};
 use hyperion::{
     glam::IVec3,
-    simulation::{Uuid, entity_kind::EntityKind},
+    simulation::{Position, Uuid, entity_kind::EntityKind},
 };
 use hyperion_rank_tree::Team;
 use module::{attack::AttackModule, level::LevelModule, regeneration::RegenerationModule};
+use spatial::SpatialIndex;
 use tracing::debug;
 
 use crate::{
@@ -31,7 +32,7 @@ use crate::{
 };
 
 #[derive(Component)]
-pub struct ProofOfConceptModule;
+pub struct TagModule;
 
 mod command;
 mod skin;
@@ -50,9 +51,14 @@ impl Default for MainBlockCount {
     }
 }
 
-impl Module for ProofOfConceptModule {
+#[derive(Component)]
+struct FollowClosestPlayer;
+
+impl Module for TagModule {
     fn module(world: &World) {
         // on entity kind set UUID
+
+        world.component::<FollowClosestPlayer>();
 
         world
             .observer::<flecs::OnAdd, ()>()
@@ -102,6 +108,12 @@ impl Module for ProofOfConceptModule {
             application: "hyperion-poc".to_string(),
         });
 
+        // import spatial module and index all players
+        world.import::<spatial::SpatialModule>();
+        world
+            .component::<Player>()
+            .add_trait::<(flecs::With, spatial::Spatial)>();
+
         world.get::<&AsyncRuntime>(|runtime| {
             let f = hyperion_utils::cached_save(
                 world,
@@ -113,12 +125,40 @@ impl Module for ProofOfConceptModule {
                 world.set(Blocks::new(world, &save).unwrap());
             });
         });
+
+        system!(
+            "follow_closest_player",
+            world,
+            &SpatialIndex($),
+            &mut Position,
+        )
+        .with::<FollowClosestPlayer>()
+        .each_entity(|entity, (index, position)| {
+            let world = entity.world();
+
+            let Some(closest) = index.closest_to(**position, &world) else {
+                return;
+            };
+
+            closest.get::<&Position>(|target_position| {
+                let delta = **target_position - **position;
+
+                if delta.length_squared() < 0.01 {
+                    // we are already at the target position
+                    return;
+                }
+
+                let delta = delta.normalize() * 0.1;
+
+                **position += delta;
+            });
+        });
     }
 }
 
 pub fn init_game(address: impl ToSocketAddrs + Send + Sync + 'static) -> anyhow::Result<()> {
     Hyperion::init_with(address, |world| {
-        world.import::<ProofOfConceptModule>();
+        world.import::<TagModule>();
     })?;
 
     Ok(())
