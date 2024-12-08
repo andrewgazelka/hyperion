@@ -461,7 +461,6 @@ dependencies = [
  "fastrand 2.2.0",
  "geometry",
  "glam",
- "itertools 0.13.0",
  "ordered-float",
  "plotters",
  "plotters-bitmap",
@@ -469,7 +468,6 @@ dependencies = [
  "rayon",
  "tango-bench",
  "tracing",
- "tracing-subscriber",
 ]
 
 [[package]]

@@ -20,7 +20,6 @@ plotters = {workspace = true, features = [
 plotters-bitmap = {workspace = true, optional = true}
 arrayvec = {workspace = true}
 fastrand = {workspace = true}
-itertools = {workspace = true}
 ordered-float = {workspace = true}
 rayon = {workspace = true}
 tracing = {workspace = true}
@@ -30,7 +29,6 @@ criterion = {workspace = true}
 divan = {workspace = true}
 rand = {workspace = true}
 tango-bench = {workspace = true}
-tracing-subscriber = {workspace = true}
 
 [features]
 default = []
