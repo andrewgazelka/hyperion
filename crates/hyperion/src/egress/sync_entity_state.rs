@@ -237,7 +237,7 @@ impl Module for EntityStateSyncModule {
                         entity_id,
                         #[allow(clippy::cast_possible_truncation)]
                         delta: (position_delta * 4096.0).to_array().map(|x| x as i16),
-                        on_ground: false,
+                        on_ground: velocity.velocity == Vec3::ZERO,
                     };
 
                     compose

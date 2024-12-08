@@ -2,11 +2,12 @@ use flecs_ecs::core::World;
 use hyperion_clap::{MinecraftCommand, hyperion_command::CommandRegistry};
 
 use crate::command::{
-    class::ClassCommand, fly::FlyCommand, gui::GuiCommand, raycast::RaycastCommand,
+    bow::BowCommand, class::ClassCommand, fly::FlyCommand, gui::GuiCommand, raycast::RaycastCommand,
     replace::ReplaceCommand, shoot::ShootCommand, spawn::SpawnCommand, speed::SpeedCommand,
     xp::XpCommand,
 };
 
+mod bow;
 mod class;
 mod fly;
 mod gui;
@@ -18,6 +19,7 @@ mod speed;
 mod xp;
 
 pub fn register(registry: &mut CommandRegistry, world: &World) {
+    BowCommand::register(registry, world);
     ClassCommand::register(registry, world);
     FlyCommand::register(registry, world);
     RaycastCommand::register(registry, world);

@@ -3,11 +3,12 @@
 use std::borrow::Cow;
 
 use anyhow::{Context, bail};
-use flecs_ecs::core::{Entity, EntityView, World};
+use flecs_ecs::core::{Entity, EntityView, EntityViewGet, World, WorldProvider};
 use geometry::aabb::Aabb;
 use glam::{IVec3, Vec3};
+use hyperion_inventory::PlayerInventory;
 use hyperion_utils::EntityExt;
-use tracing::{info, instrument, trace, warn};
+use tracing::{debug, info, instrument, trace, warn};
 use valence_generated::{
     block::{BlockKind, BlockState, PropName},
     item::ItemKind,
@@ -23,10 +24,13 @@ use valence_protocol::{
 use valence_text::IntoText;
 
 use super::{
-    ConfirmBlockSequences, EntitySize, Position,
+    ConfirmBlockSequences, EntitySize, Position, Spawn, Uuid, Velocity,
     animation::{self, ActiveAnimation},
     block_bounds,
     blocks::Blocks,
+    bow::BowCharging,
+    entity_kind::EntityKind,
+    get_direction_from_rotation,
 };
 use crate::{
     net::{Compose, ConnectionId, decoder::BorrowedPacketFrame},
@@ -260,7 +264,7 @@ pub struct PacketSwitchQuery<'a> {
 }
 
 // i.e., shooting a bow, digging a block, etc
-fn player_action(mut data: &[u8], query: &PacketSwitchQuery<'_>) -> anyhow::Result<()> {
+fn player_action(mut data: &[u8], query: &mut PacketSwitchQuery<'_>) -> anyhow::Result<()> {
     let packet = play::PlayerActionC2s::decode(&mut data)?;
 
     let sequence = packet.sequence.0;
@@ -272,6 +276,14 @@ fn player_action(mut data: &[u8], query: &PacketSwitchQuery<'_>) -> anyhow::Resu
                 position,
                 from: query.id,
                 sequence,
+            };
+
+            query.events.push(event, query.world);
+        }
+        PlayerAction::ReleaseUseItem => {
+            let event = event::ReleaseUseItem {
+                from: query.id,
+                item: query.inventory.get_cursor().item,
             };
 
             query.events.push(event, query.world);
@@ -328,10 +340,20 @@ pub fn player_interact_item(
 
     let cursor = query.inventory.get_cursor();
 
-    if !cursor.is_empty() && cursor.item == ItemKind::WrittenBook {
-        let packet = play::OpenWrittenBookS2c { hand };
-
-        query.compose.unicast(&packet, query.io_ref, query.system)?;
+    if !cursor.is_empty() {
+        if cursor.item == ItemKind::WrittenBook {
+            let packet = play::OpenWrittenBookS2c { hand };
+            query.compose.unicast(&packet, query.io_ref, query.system)?;
+        } else if cursor.item == ItemKind::Bow {
+            // Start charging bow
+            let entity = query.world.entity_from_id(query.id);
+            entity.get::<Option<&BowCharging>>(|charging| {
+                if charging.is_some() {
+                    return;
+                }
+                entity.set(BowCharging::new());
+            });
+        }
     }
 
     query.handlers.interact.trigger_all(query, &event);
@@ -576,6 +598,82 @@ pub fn request_command_completions(
     };
 
     query.handlers.completion.trigger_all(query, &completion);
+
+    Ok(())
+}
+
+fn release_use_item(mut _data: &[u8], query: &mut PacketSwitchQuery<'_>) -> anyhow::Result<()> {
+    // let _packet = play::PlayerActionC2s::decode(&mut data)?;
+
+    let world = query.system.world();
+    let caller = query.id;
+
+    caller
+        .entity_view(world)
+        .get::<(&Yaw, &Pitch, &Position)>(|(yaw, pitch, position)| {
+            // Get the item in the specified hand
+            let item = query.inventory.get_cursor();
+
+            if item.is_empty() {
+                return;
+            }
+
+            debug!("item: {item:?}");
+
+            // Check if it's a bow
+            if item.item == ItemKind::Bow {
+                // Get how charged the bow is
+                let charge = 3.0;
+                // item
+                // .nbt
+                // .as_ref()
+                // .and_then(|nbt| nbt.get("Charge"))
+                // .and_then(|nbt| nbt.as_f64())
+                // .unwrap_or(3.0);
+                debug!("charge: {charge}");
+                // Calculate the direction vector from the player's rotation
+                let direction = get_direction_from_rotation(**yaw, **pitch);
+                // Calculate the velocity of the arrow based on the charge
+                let velocity = direction * charge;
+
+                let spawn_pos =
+                    Vec3::new(position.x, position.y + 1.62, position.z) + direction * 0.5;
+
+                debug!(
+                    "Arrow velocity: ({}, {}, {})",
+                    velocity.x, velocity.y, velocity.z
+                );
+
+                // Spawn arrow
+                world
+                    .entity()
+                    .add_enum(EntityKind::Arrow)
+                    .set(Uuid::new_v4())
+                    .set(Position::new(spawn_pos.x, spawn_pos.y, spawn_pos.z))
+                    .set(Velocity::new(velocity.x, velocity.y, velocity.z))
+                    .set(Pitch::new(**pitch))
+                    .set(Yaw::new(**yaw))
+                    .enqueue(Spawn);
+
+                // Remove one arrow from inventory if not in creative mode
+                // if !query.is_creative {
+                // for slot in 0..46 {
+                // if let Some(item) = inventory.get(slot) {
+                // if item.item == ItemKind::Arrow {
+                // let mut new_item = item.clone();
+                // new_item.count -= 1;
+                // if new_item.count == 0 {
+                // inventory.set(slot, ItemStack::EMPTY);
+                // } else {
+                // inventory.set(slot, new_item);
+                // }
+                // break;
+                // }
+                // }
+                // }
+                // }
+            }
+        });
 
     Ok(())
 }

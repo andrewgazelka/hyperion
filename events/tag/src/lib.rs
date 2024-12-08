@@ -26,8 +26,9 @@ use module::{attack::AttackModule, level::LevelModule, regeneration::Regeneratio
 use tracing::debug;
 
 use crate::{
-    module::{chat::ChatModule, spawn::SpawnModule, stats::StatsModule},
+    module::{chat::ChatModule, spawn::SpawnModule, stats::StatsModule, bow::BowModule},
     skin::SkinModule,
+    
 };
 
 #[derive(Component)]
@@ -85,6 +86,7 @@ impl Module for ProofOfConceptModule {
         world.import::<BlockModule>();
         world.import::<AttackModule>();
         world.import::<LevelModule>();
+        world.import::<BowModule>();
         world.import::<RegenerationModule>();
         world.import::<hyperion_permission::PermissionModule>();
         world.import::<hyperion_utils::HyperionUtilsModule>();
