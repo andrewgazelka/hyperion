@@ -9,7 +9,9 @@ pub struct BowCharging {
 
 impl Default for BowCharging {
     fn default() -> Self {
-        Self::new()
+        Self {
+            start_time: SystemTime::now(),
+        }
     }
 }
 
