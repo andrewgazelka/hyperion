@@ -71,9 +71,7 @@ impl Module for BowModule {
                         .entity_view(world)
                         .try_get::<&BowCharging>(|charging| {
                             let charge = charging.get_charge();
-                            event.from
-                                .entity_view(world)
-                                .remove::<BowCharging>();
+                            event.from.entity_view(world).remove::<BowCharging>();
                             charge
                         })
                         .unwrap_or(0.0);

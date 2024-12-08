@@ -26,9 +26,8 @@ use module::{attack::AttackModule, level::LevelModule, regeneration::Regeneratio
 use tracing::debug;
 
 use crate::{
-    module::{chat::ChatModule, spawn::SpawnModule, stats::StatsModule, bow::BowModule},
+    module::{bow::BowModule, chat::ChatModule, spawn::SpawnModule, stats::StatsModule},
     skin::SkinModule,
-    
 };
 
 #[derive(Component)]

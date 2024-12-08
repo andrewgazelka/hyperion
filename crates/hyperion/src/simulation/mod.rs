@@ -30,6 +30,7 @@ use crate::{
 
 pub mod animation;
 pub mod blocks;
+pub mod bow;
 pub mod command;
 pub mod entity_kind;
 pub mod event;
@@ -37,7 +38,6 @@ pub mod handlers;
 pub mod metadata;
 pub mod skin;
 pub mod util;
-pub mod bow;
 
 #[derive(Component, Default, Debug, Deref, DerefMut)]
 pub struct StreamLookup {

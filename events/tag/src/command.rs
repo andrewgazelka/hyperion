@@ -2,9 +2,9 @@ use flecs_ecs::core::World;
 use hyperion_clap::{MinecraftCommand, hyperion_command::CommandRegistry};
 
 use crate::command::{
-    bow::BowCommand, class::ClassCommand, fly::FlyCommand, gui::GuiCommand, raycast::RaycastCommand,
-    replace::ReplaceCommand, shoot::ShootCommand, spawn::SpawnCommand, speed::SpeedCommand,
-    xp::XpCommand,
+    bow::BowCommand, class::ClassCommand, fly::FlyCommand, gui::GuiCommand,
+    raycast::RaycastCommand, replace::ReplaceCommand, shoot::ShootCommand, spawn::SpawnCommand,
+    speed::SpeedCommand, xp::XpCommand,
 };
 
 mod bow;
