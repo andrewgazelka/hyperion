@@ -1,5 +1,5 @@
 use flecs_ecs::{
-    core::{Entity, EntityView, EntityViewGet, World, WorldProvider},
+    core::{EntityViewGet, World},
     prelude::*,
 };
 use hyperion::{
