@@ -2,13 +2,13 @@
 harness = false
 name = "sort"
 
-[[bench]]
-harness = false
-name = "bvh"
-
-[[bench]]
-harness = false
-name = "side_by_side"
+#[[bench]]
+#harness = false
+#name = "bvh"
+#
+#[[bench]]
+#harness = false
+#name = "side_by_side"
 
 [dependencies]
 geometry = {workspace = true}
@@ -26,9 +26,9 @@ tracing = {workspace = true}
 
 [dev-dependencies]
 criterion = {workspace = true}
-divan = {workspace = true}
+#divan = {workspace = true}
 rand = {workspace = true}
-tango-bench = {workspace = true}
+#tango-bench = {workspace = true}
 
 [features]
 default = []
