@@ -743,8 +743,8 @@ impl Module for SimModule {
         .kind::<flecs::pipeline::OnStore>()
         .with_enum_wildcard::<EntityKind>()
         .each_entity(|entity, (position, yaw, pitch, velocity)| {
-            entity.get::<&EntityKind>(|kind| match kind {
-                EntityKind::Arrow => {
+            entity.get::<&EntityKind>(|kind| {
+                if kind == &EntityKind::Arrow {
                     if velocity.velocity != Vec3::ZERO {
                         // Update position based on velocity with delta time
                         position.x += velocity.velocity.x;
@@ -792,7 +792,6 @@ impl Module for SimModule {
                         });
                     }
                 }
-                _ => (),
             });
         });
     }
