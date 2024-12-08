@@ -792,7 +792,7 @@ impl Module for SimModule {
                         });
                     }
                 }
-                _ => return,
+                _ => (),
             });
         });
     }
