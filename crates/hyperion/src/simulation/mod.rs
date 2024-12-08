@@ -2,6 +2,7 @@ use std::{borrow::Borrow, collections::HashMap, hash::Hash, num::TryFromIntError
 
 use anyhow::Context;
 use blocks::Blocks;
+use bow::BowCharging;
 use bytemuck::{Pod, Zeroable};
 use derive_more::{Constructor, Deref, DerefMut, Display, From};
 use flecs_ecs::prelude::*;
@@ -29,6 +30,7 @@ use crate::{
 
 pub mod animation;
 pub mod blocks;
+pub mod bow;
 pub mod command;
 pub mod entity_kind;
 pub mod event;
@@ -634,6 +636,8 @@ impl Module for SimModule {
 
         world.component::<hyperion_inventory::PlayerInventory>();
 
+        world.component::<BowCharging>();
+
         observer!(
             world,
             Spawn,
@@ -709,49 +713,53 @@ impl Module for SimModule {
         .kind::<flecs::pipeline::OnStore>()
         .with_enum_wildcard::<EntityKind>()
         .each_entity(|entity, (position, yaw, pitch, velocity)| {
-            if velocity.velocity != Vec3::ZERO {
-                // Update position based on velocity with delta time
-                position.x += velocity.velocity.x;
-                position.y += velocity.velocity.y;
-                position.z += velocity.velocity.z;
+            entity.get::<&EntityKind>(|kind| {
+                if kind == &EntityKind::Arrow && velocity.velocity != Vec3::ZERO {
+                    // Update position based on velocity with delta time
+                    position.x += velocity.velocity.x;
+                    position.y += velocity.velocity.y;
+                    position.z += velocity.velocity.z;
 
-                // re calculate yaw and pitch based on velocity
-                let (new_yaw, new_pitch) = get_rotation_from_velocity(velocity.velocity);
-                *yaw = Yaw::new(new_yaw);
-                *pitch = Pitch::new(new_pitch);
+                    // re calculate yaw and pitch based on velocity
+                    let (new_yaw, new_pitch) = get_rotation_from_velocity(velocity.velocity);
+                    *yaw = Yaw::new(new_yaw);
+                    *pitch = Pitch::new(new_pitch);
 
-                let ray = entity.get::<(&Position, &Yaw, &Pitch)>(|(position, yaw, pitch)| {
-                    let center = **position;
+                    let ray = entity.get::<(&Position, &Yaw, &Pitch)>(|(position, yaw, pitch)| {
+                        let center = **position;
 
-                    let direction = get_direction_from_rotation(**yaw, **pitch);
+                        let direction = get_direction_from_rotation(**yaw, **pitch);
 
-                    geometry::ray::Ray::new(center, direction)
-                });
+                        geometry::ray::Ray::new(center, direction)
+                    });
 
-                entity.world().get::<&mut Blocks>(|blocks| {
-                    // calculate distance limit based on velocity
-                    let distance_limit = velocity.velocity.length();
-                    let Some(collision) = blocks.first_collision(ray, distance_limit) else {
-                        velocity.velocity.x *= 0.99;
-                        velocity.velocity.z *= 0.99;
+                    #[allow(clippy::excessive_nesting)]
+                    entity.world().get::<&mut Blocks>(|blocks| {
+                        // calculate distance limit based on velocity
+                        let distance_limit = velocity.velocity.length();
+                        let Some(collision) = blocks.first_collision(ray, distance_limit) else {
+                            // i think this velocity calculations are all wrong someone redo please
+                            velocity.velocity.x *= 0.99;
+                            velocity.velocity.z *= 0.99;
 
-                        velocity.velocity.y -= 0.005;
-                        return;
-                    };
-                    debug!("distance_limit = {}", distance_limit);
+                            velocity.velocity.y -= 0.05;
+                            return;
+                        };
+                        debug!("distance_limit = {}", distance_limit);
 
-                    debug!("collision = {collision:?}");
+                        debug!("collision = {collision:?}");
 
-                    velocity.velocity = Vec3::ZERO;
+                        velocity.velocity = Vec3::ZERO;
 
-                    // Set arrow position to the collision location
-                    **position = collision.normal;
+                        // Set arrow position to the collision location
+                        **position = collision.normal;
 
-                    blocks
-                        .set_block(collision.location, BlockState::DIRT)
-                        .unwrap();
-                });
-            }
+                        blocks
+                            .set_block(collision.location, BlockState::DIRT)
+                            .unwrap();
+                    });
+                }
+            });
         });
     }
 }
