@@ -77,7 +77,7 @@ pub trait MinecraftCommand: Parser + CommandPermission {
 
                                     let mut bundle = DataBundle::new(compose, system);
                                     bundle.add_packet(&chat).unwrap();
-                                    bundle.send(*stream).unwrap();
+                                    bundle.unicast(*stream).unwrap();
 
                                     false
                                 }

@@ -145,7 +145,7 @@ impl hyperion_clap::MinecraftCommand for ReplaceCommand {
                     .get::<&hyperion::net::ConnectionId>(|stream| {
                         let mut bundle = hyperion::net::DataBundle::new(compose, system);
                         bundle.add_packet(&msg).unwrap();
-                        bundle.send(*stream).unwrap();
+                        bundle.unicast(*stream).unwrap();
                     });
             });
         });

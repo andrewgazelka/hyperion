@@ -7,7 +7,7 @@ use bytemuck::{Pod, Zeroable};
 use derive_more::{Constructor, Deref, DerefMut, Display, From};
 use flecs_ecs::prelude::*;
 use geometry::aabb::Aabb;
-use glam::{IVec2, IVec3, Quat, Vec3};
+use glam::{I16Vec2, IVec3, Quat, Vec3};
 use hyperion_utils::EntityExt;
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
@@ -373,7 +373,8 @@ pub struct AiTargetable;
     Deserialize,
     Deref,
     DerefMut,
-    From
+    From,
+    PartialEq
 )]
 #[meta]
 pub struct Position {
@@ -392,7 +393,17 @@ impl Position {
     }
 }
 
-#[derive(Component, Copy, Clone, Debug, Deref, DerefMut, Default, Constructor)]
+#[derive(
+    Component,
+    Copy,
+    Clone,
+    Debug,
+    Deref,
+    DerefMut,
+    Default,
+    Constructor,
+    PartialEq
+)]
 #[meta]
 pub struct Yaw {
     yaw: f32,
@@ -412,7 +423,17 @@ impl Display for Pitch {
     }
 }
 
-#[derive(Component, Copy, Clone, Debug, Deref, DerefMut, Default, Constructor)]
+#[derive(
+    Component,
+    Copy,
+    Clone,
+    Debug,
+    Deref,
+    DerefMut,
+    Default,
+    Constructor,
+    PartialEq
+)]
 #[meta]
 pub struct Pitch {
     pitch: f32,
@@ -456,10 +477,10 @@ impl Position {
 #[derive(Component, Debug, Copy, Clone)]
 #[meta]
 pub struct ChunkPosition {
-    pub position: IVec2,
+    pub position: I16Vec2,
 }
 
-const SANE_MAX_RADIUS: i32 = 128;
+const SANE_MAX_RADIUS: i16 = 128;
 
 impl ChunkPosition {
     #[must_use]
@@ -467,7 +488,7 @@ impl ChunkPosition {
     pub const fn null() -> Self {
         // todo: huh
         Self {
-            position: IVec2::new(SANE_MAX_RADIUS, SANE_MAX_RADIUS),
+            position: I16Vec2::new(SANE_MAX_RADIUS, SANE_MAX_RADIUS),
         }
     }
 }
@@ -498,12 +519,16 @@ impl Position {
     /// Get the chunk position of the center of the player's bounding box.
     #[must_use]
     #[expect(clippy::cast_possible_truncation)]
-    pub fn to_chunk(&self) -> IVec2 {
+    pub fn to_chunk(&self) -> I16Vec2 {
         let x = self.x as i32;
         let z = self.z as i32;
         let x = x >> 4;
         let z = z >> 4;
-        IVec2::new(x, z)
+
+        let x = i16::try_from(x).unwrap();
+        let z = i16::try_from(z).unwrap();
+
+        I16Vec2::new(x, z)
     }
 }
 

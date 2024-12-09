@@ -55,7 +55,7 @@ impl MinecraftCommand for ClassCommand {
                     let mut bundle = DataBundle::new(compose, system);
 
                     bundle.add_packet(&chat_pkt).unwrap();
-                    bundle.send(*stream).unwrap();
+                    bundle.unicast(*stream).unwrap();
 
                     return;
                 }
@@ -180,7 +180,7 @@ impl MinecraftCommand for ClassCommand {
 
                 bundle.add_packet(&play::BundleSplitterS2c).unwrap();
 
-                bundle.send(*stream).unwrap();
+                bundle.unicast(*stream).unwrap();
             });
         });
     }

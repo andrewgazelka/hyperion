@@ -1,20 +1,19 @@
 #![allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
-use glam::{IVec2, IVec3};
+use glam::{I16Vec2, IVec3};
 use ndarray::ArrayView3;
 use valence_generated::block::BlockState;
 
-use crate::simulation::blocks::{Blocks, chunk::START_Y};
+use crate::simulation::{
+    Position,
+    blocks::{Blocks, chunk::START_Y},
+};
 
 impl Blocks {
     #[deprecated = "this is called automatically"]
-    pub fn mark_should_update(&mut self, position: IVec3) {
-        let x = position.x;
-        let z = position.z;
+    pub fn mark_should_update(&mut self, position: Position) {
+        let chunk_pos = position.to_chunk();
 
-        let chunk_x = x >> 4;
-        let chunk_z = z >> 4;
-
-        let Some((index, ..)) = self.chunk_cache.get_full(&IVec2::new(chunk_x, chunk_z)) else {
+        let Some((index, ..)) = self.chunk_cache.get_full(&chunk_pos) else {
             return;
         };
 
@@ -32,13 +31,18 @@ impl Blocks {
             );
 
         // Get all unique chunk positions
+
         let start_chunk = IVec3::new(start.x >> 4, start.y >> 4, start.z >> 4);
         let end_chunk = IVec3::new(end.x >> 4, end.y >> 4, end.z >> 4);
+
+        let start_chunk = start_chunk.as_i16vec3();
+        let end_chunk = end_chunk.as_i16vec3();
+
         for section_x in start_chunk.x..=end_chunk.x {
             for section_z in start_chunk.z..=end_chunk.z {
                 let Some((idx, _, loaded_chunk)) = self
                     .chunk_cache
-                    .get_full_mut(&IVec2::new(section_x, section_z))
+                    .get_full_mut(&I16Vec2::new(section_x, section_z))
                 else {
                     continue;
                 };
@@ -48,7 +52,6 @@ impl Blocks {
                 let chunk = &mut loaded_chunk.data;
 
                 for section_y in start_chunk.y..=end_chunk.y {
-                    let section_y = section_y as i16;
                     let section_idx = (section_y - (START_Y / 16)) as usize;
 
                     let section = &mut chunk.sections[section_idx];
@@ -56,8 +59,12 @@ impl Blocks {
                     // idx is yzx
                     // todo: section.set_delta(idx, block)
                     // Calculate the bounds for this section
-                    let section_start =
-                        IVec3::new(section_x * 16, i32::from(section_y * 16), section_z * 16);
+
+                    let section_x = i32::from(section_x);
+                    let section_y = i32::from(section_y);
+                    let section_z = i32::from(section_z);
+
+                    let section_start = IVec3::new(section_x * 16, section_y * 16, section_z * 16);
                     let section_end = section_start + IVec3::new(15, 15, 15);
 
                     // Iterate over the intersection of the frame and this section

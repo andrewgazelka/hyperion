@@ -47,9 +47,12 @@ impl RegionManager {
 
     pub async fn get_region_from_chunk(
         &self,
-        pos_x: i32,
-        pos_z: i32,
+        pos_x: i16,
+        pos_z: i16,
     ) -> std::io::Result<Arc<Region>> {
+        let pos_x = i32::from(pos_x);
+        let pos_z = i32::from(pos_z);
+
         let region_x = pos_x.div_euclid(32);
         let region_z = pos_z.div_euclid(32);
         let coord = IVec2::new(region_x, region_z);

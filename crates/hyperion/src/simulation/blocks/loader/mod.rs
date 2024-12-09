@@ -2,7 +2,7 @@ use std::{borrow::Cow, cell::RefCell, io::Write, sync::Arc};
 
 use anyhow::{Context, bail};
 use bytes::BytesMut;
-use glam::IVec2;
+use glam::{I16Vec2, IVec2};
 use hyperion_nerd_font::NERD_ROCKET;
 use itertools::Itertools;
 use libdeflater::{CompressionLvl, Compressor};
@@ -47,13 +47,13 @@ thread_local! {
 }
 
 struct Message {
-    position: IVec2,
+    position: I16Vec2,
     tx: tokio::sync::mpsc::UnboundedSender<Column>,
 }
 
 struct ChunkLoader {
     rx_load_chunk_requests: tokio::sync::mpsc::UnboundedReceiver<Message>,
-    received_request: FxHashSet<IVec2>,
+    received_request: FxHashSet<I16Vec2>,
     shared: Arc<WorldShared>,
     runtime: AsyncRuntime,
 }
@@ -63,7 +63,7 @@ pub struct ChunkLoaderHandle {
 }
 
 impl ChunkLoaderHandle {
-    pub fn send(&self, position: IVec2, tx: tokio::sync::mpsc::UnboundedSender<Column>) {
+    pub fn send(&self, position: I16Vec2, tx: tokio::sync::mpsc::UnboundedSender<Column>) {
         self.tx_load_chunk_requests
             .send(Message { position, tx })
             .unwrap();
@@ -149,9 +149,10 @@ impl ChunkLoader {
     }
 }
 
-fn empty_chunk(position: IVec2) -> Column {
+fn empty_chunk(position: I16Vec2) -> Column {
     // height: 24
     let unloaded = ColumnData::new_with(CHUNK_HEIGHT_SPAN, Section::empty_sky);
+    let position = position.as_ivec2();
 
     let bytes = STATE.with_borrow_mut(|state| {
         encode_chunk_packet(&unloaded, position, state)
@@ -164,7 +165,7 @@ fn empty_chunk(position: IVec2) -> Column {
     Column::new(bytes.freeze(), unloaded, position)
 }
 
-async fn load_chunk(position: IVec2, shared: &WorldShared) -> anyhow::Result<Column> {
+async fn load_chunk(position: I16Vec2, shared: &WorldShared) -> anyhow::Result<Column> {
     let x = position.x;
     let y = position.y;
 
@@ -180,6 +181,8 @@ async fn load_chunk(position: IVec2, shared: &WorldShared) -> anyhow::Result<Col
 
     let raw_chunk = {
         // todo: note that this is likely blocking to tokio
+        let x = i32::from(x);
+        let y = i32::from(y);
         region
             .get_chunk(x, y, &mut decompress_buf, shared.regions.root())?
             .context("no chunk found")?
@@ -193,6 +196,7 @@ async fn load_chunk(position: IVec2, shared: &WorldShared) -> anyhow::Result<Col
     };
 
     STATE.with_borrow_mut(|state| {
+        let position = position.as_ivec2();
         let Ok(Some(bytes)) = encode_chunk_packet(&chunk, position, state) else {
             bail!("failed to encode chunk {position:?}");
         };

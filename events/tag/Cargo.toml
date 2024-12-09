@@ -7,9 +7,10 @@ dotenvy = { workspace = true }
 fastrand = { workspace = true }
 flecs_ecs = { workspace = true }
 geometry = { workspace = true }
+glam = { workspace = true }
 hyperion = { workspace = true }
 hyperion-clap = { workspace = true }
-hyperion-gui = { path = "../../crates/hyperion-gui" }
+hyperion-gui = { workspace = true }
 hyperion-inventory = { workspace = true }
 hyperion-item = { workspace = true }
 hyperion-permission = { workspace = true }
@@ -24,7 +25,7 @@ spatial = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 tracing-tracy = { workspace = true }
-uuid = { version = "1.11.0", features = ["v4"] }
+uuid = { workspace = true }
 valence_protocol = { workspace = true }
 valence_server = { workspace = true }
 

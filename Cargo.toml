@@ -15,29 +15,30 @@ incremental = true
 [workspace]
 members = [
   'crates/bvh-region',
+  'crates/geometry',
   'crates/hyperion',
+  'crates/hyperion-clap',
+  'crates/hyperion-command',
   'crates/hyperion-crafting',
   'crates/hyperion-event-macros',
+  'crates/hyperion-gui',
   'crates/hyperion-inventory',
+  'crates/hyperion-item',
   'crates/hyperion-minecraft-proto',
   'crates/hyperion-nerd-font',
   'crates/hyperion-palette',
+  'crates/hyperion-permission',
   'crates/hyperion-proto',
   'crates/hyperion-proxy',
+  'crates/hyperion-rank-tree',
   'crates/hyperion-scheduled',
   'crates/hyperion-stats',
   'crates/hyperion-text',
   'crates/hyperion-utils',
-  'events/tag',
-  'crates/hyperion-permission',
-  'crates/hyperion-clap',
-  'crates/hyperion-command',
-  'crates/hyperion-rank-tree',
-  'crates/hyperion-item',
-  'crates/geometry',
   'crates/simd-utils',
-  'crates/system-order',
   'crates/spatial',
+  'crates/system-order',
+  'events/tag',
 ]
 resolver = '2'
 
@@ -120,6 +121,9 @@ version = '1.0.0-beta.7'
 
 [workspace.dependencies.divan]
 git = 'https://github.com/nvzqz/divan'
+
+[workspace.dependencies.hyperion-gui]
+path = 'crates/hyperion-gui'
 
 [workspace.dependencies.flate2]
 default-features = false

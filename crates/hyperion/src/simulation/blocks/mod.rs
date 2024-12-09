@@ -11,7 +11,7 @@ use flecs_ecs::{
     macros::Component,
 };
 use geometry::ray::Ray;
-use glam::{IVec2, IVec3, Vec3};
+use glam::{I16Vec2, IVec2, IVec3, Vec3};
 use indexmap::IndexMap;
 use loader::{ChunkLoaderHandle, launch_manager};
 use rayon::iter::ParallelIterator;
@@ -66,7 +66,7 @@ pub struct RayCollision {
 #[derive(Component)]
 pub struct Blocks {
     /// Map to a Chunk by Entity ID
-    chunk_cache: IndexMap<IVec2, Column, FxBuildHasher>,
+    chunk_cache: IndexMap<I16Vec2, Column, FxBuildHasher>,
     should_update: RoaringBitmap,
 
     loader_handle: ChunkLoaderHandle,
@@ -202,18 +202,18 @@ impl Blocks {
         self.should_update.clear();
     }
 
-    pub fn cache_mut(&mut self) -> &mut IndexMap<IVec2, Column, FxBuildHasher> {
+    pub fn cache_mut(&mut self) -> &mut IndexMap<I16Vec2, Column, FxBuildHasher> {
         &mut self.chunk_cache
     }
 
-    pub fn block_and_load(&mut self, column_location: IVec2, tasks: &AsyncRuntime) {
+    pub fn block_and_load(&mut self, column_location: I16Vec2, tasks: &AsyncRuntime) {
         tasks.block_on(async { self.get_and_wait(column_location).await });
 
         self.load_pending();
     }
 
     #[must_use]
-    pub fn get_and_wait(&self, position: IVec2) -> Pin<Box<dyn Future<Output = Bytes> + Send>> {
+    pub fn get_and_wait(&self, position: I16Vec2) -> Pin<Box<dyn Future<Output = Bytes> + Send>> {
         if let Some(cached) = self.get_cached(position) {
             return Box::pin(core::future::ready(cached));
         }
@@ -246,6 +246,7 @@ impl Blocks {
     pub fn load_pending(&mut self) {
         while let Ok(chunk) = self.rx_loaded_chunks.try_recv() {
             let position = chunk.position;
+            let position = position.as_i16vec2();
 
             self.chunk_cache.insert(position, chunk);
         }
@@ -257,11 +258,11 @@ impl Blocks {
     // I wonder if we can just implement something, where we can return an `impl Deref`
     // and see if this would make more sense or not.
     #[must_use]
-    pub fn get_loaded_chunk(&self, chunk_position: IVec2) -> Option<&Column> {
+    pub fn get_loaded_chunk(&self, chunk_position: I16Vec2) -> Option<&Column> {
         self.chunk_cache.get(&chunk_position)
     }
 
-    pub fn get_loaded_chunk_mut(&mut self, chunk_position: IVec2) -> Option<&mut Column> {
+    pub fn get_loaded_chunk_mut(&mut self, chunk_position: I16Vec2) -> Option<&mut Column> {
         self.chunk_cache.get_mut(&chunk_position)
     }
 
@@ -280,8 +281,8 @@ impl Blocks {
         let start_chunk_pos: IVec2 = start_xz >> 4;
         let end_chunk_pos: IVec2 = end_xz >> 4;
 
-        // let start_chunk_pos = start_chunk_pos.as_i16vec2();
-        // let end_chunk_pos = end_chunk_pos.as_i16vec2();
+        let start_chunk_pos = start_chunk_pos.as_i16vec2();
+        let end_chunk_pos = end_chunk_pos.as_i16vec2();
 
         #[expect(clippy::cast_sign_loss)]
         let y_start = (start.y - START_Y).max(0) as u32;
@@ -291,7 +292,7 @@ impl Blocks {
 
         for cx in start_chunk_pos.x..=end_chunk_pos.x {
             for cz in start_chunk_pos.y..=end_chunk_pos.y {
-                let chunk_start = IVec2::new(cx, cz) << 4;
+                let chunk_start = IVec2::new(i32::from(cx), i32::from(cz)) << 4;
                 let chunk_end = chunk_start + IVec2::splat(15);
 
                 let start = start_xz.clamp(chunk_start, chunk_end);
@@ -321,7 +322,7 @@ impl Blocks {
                 let start = start.as_uvec2();
                 let end = end.as_uvec2();
 
-                let chunk_pos = IVec2::new(cx, cz);
+                let chunk_pos = I16Vec2::new(cx, cz);
 
                 let Some(chunk) = self.get_loaded_chunk(chunk_pos) else {
                     continue;
@@ -370,6 +371,7 @@ impl Blocks {
         let chunk_pos: IVec2 = IVec2::new(position.x, position.z) >> 4;
         let chunk_start_block: IVec2 = chunk_pos << 4;
 
+        let chunk_pos = chunk_pos.as_i16vec2();
         let chunk = self.get_loaded_chunk(chunk_pos)?;
 
         let chunk = &chunk.data;
@@ -400,6 +402,8 @@ impl Blocks {
         let chunk_pos: IVec2 = IVec2::new(position.x, position.z) >> 4;
         let chunk_start_block: IVec2 = chunk_pos << 4;
 
+        let chunk_pos = chunk_pos.as_i16vec2();
+
         let Some((chunk_idx, _, chunk)) = self.chunk_cache.get_full_mut(&chunk_pos) else {
             return Err(TrySetBlockDeltaError::ChunkNotLoaded);
         };
@@ -425,7 +429,7 @@ impl Blocks {
     // That should be done in a couple of days, probably.
 
     #[must_use]
-    pub fn get_cached(&self, position: IVec2) -> Option<Bytes> {
+    pub fn get_cached(&self, position: I16Vec2) -> Option<Bytes> {
         if let Some(result) = self.chunk_cache.get(&position) {
             return Some(result.bytes());
         }
@@ -435,7 +439,7 @@ impl Blocks {
 
     /// get the cached chunk for the given position or load it if it is not cached.
     #[must_use]
-    pub fn get_cached_or_load(&self, position: IVec2) -> GetChunk<'_> {
+    pub fn get_cached_or_load(&self, position: I16Vec2) -> GetChunk<'_> {
         if let Some(result) = self.chunk_cache.get(&position) {
             return GetChunk::Loaded(result);
         };

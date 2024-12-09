@@ -113,5 +113,5 @@ fn on_set_skin(
         })
         .unwrap();
 
-    bundle.send(io).unwrap();
+    bundle.unicast(io).unwrap();
 }

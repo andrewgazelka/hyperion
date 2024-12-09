@@ -11,7 +11,7 @@ use tracing::{info, instrument, warn};
 pub struct Config {
     pub border_diameter: Option<f64>,
     pub max_players: i32,
-    pub view_distance: i32,
+    pub view_distance: i16,
     pub simulation_distance: i32,
     pub server_desc: String,
     pub spawn: Spawn,
