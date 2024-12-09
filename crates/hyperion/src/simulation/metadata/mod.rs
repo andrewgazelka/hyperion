@@ -233,16 +233,6 @@ impl MetadataChanges {
         let r#type = metadata.to_type();
         r#type.encode(&mut self.0).unwrap();
     }
-
-    pub fn get_and_clear(&mut self) -> Option<MetadataView<'_>> {
-        if self.is_empty() {
-            return None;
-        }
-        // denote end of metadata
-        self.0.push(0xff);
-
-        Some(MetadataView(self))
-    }
 }
 
 #[derive(Debug)]
@@ -260,4 +250,15 @@ impl Drop for MetadataView<'_> {
     fn drop(&mut self) {
         self.0.0.clear();
     }
+}
+
+/// This is only meant to be called from egress systems
+pub(crate) fn get_and_clear_metadata(metadata: &mut MetadataChanges) -> Option<MetadataView<'_>> {
+    if metadata.is_empty() {
+        return None;
+    }
+    // denote end of metadata
+    metadata.0.push(0xff);
+
+    Some(MetadataView(metadata))
 }

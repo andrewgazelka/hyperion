@@ -258,17 +258,6 @@ pub fn player_join_world(
 
                     metadata.encode(*flags);
 
-                    if let Some(view) = metadata.get_and_clear() {
-                        let pkt = play::EntityTrackerUpdateS2c {
-                            entity_id: VarInt(query_entity.minecraft_id()),
-                            tracked_values: RawBytes(&view),
-                        };
-
-                        bundle
-                            .add_packet(&pkt)
-                            .context("failed to send player spawn packet")?;
-                    }
-
                     Ok(())
                 };
 

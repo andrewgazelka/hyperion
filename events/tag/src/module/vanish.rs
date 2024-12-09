@@ -1,16 +1,9 @@
 use flecs_ecs::{core::World, prelude::*};
 use hyperion::{
     net::{Compose, ConnectionId},
-    simulation::{
-        Uuid,
-        metadata::{MetadataChanges, entity::EntityFlags},
-    },
+    simulation::{Uuid, metadata::entity::EntityFlags},
 };
-use hyperion_utils::EntityExt;
-use valence_protocol::{
-    RawBytes, VarInt,
-    packets::play::{self, player_list_s2c::PlayerListActions},
-};
+use valence_protocol::packets::play::{self, player_list_s2c::PlayerListActions};
 use valence_server::GameMode;
 
 #[derive(Component)]
@@ -68,17 +61,6 @@ impl Module for VanishModule {
 
                 // Set entity flags to make them invisible
                 let flags = EntityFlags::INVISIBLE;
-                let mut metadata = MetadataChanges::default();
-                metadata.encode(flags);
-                let metadata = metadata.get_and_clear().unwrap();
-
-                let entity_id = VarInt(entity.minecraft_id());
-                let metadata_packet = play::EntityTrackerUpdateS2c {
-                    entity_id,
-                    tracked_values: RawBytes(&metadata),
-                };
-                compose.broadcast(&metadata_packet, system).send().unwrap();
-
                 entity.entity_view(world).set(flags);
             } else {
                 // Add back to player list and make them visible
@@ -98,17 +80,6 @@ impl Module for VanishModule {
 
                 // Clear invisible flag
                 let flags = EntityFlags::default();
-                let mut metadata = MetadataChanges::default();
-                metadata.encode(flags);
-                let metadata = metadata.get_and_clear().unwrap();
-
-                let entity_id = VarInt(entity.minecraft_id());
-                let metadata_packet = play::EntityTrackerUpdateS2c {
-                    entity_id,
-                    tracked_values: RawBytes(&metadata),
-                };
-                compose.broadcast(&metadata_packet, system).send().unwrap();
-
                 entity.entity_view(world).set(flags);
             }
         });
