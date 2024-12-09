@@ -113,7 +113,7 @@ version = '1.19.0'
 
 [workspace.dependencies.clap]
 features = ['derive']
-version = '4.5.7'
+version = '4.5.23'
 
 [workspace.dependencies.derive_more]
 features = ['display', 'from', 'deref', 'deref_mut', 'debug', 'constructor']
