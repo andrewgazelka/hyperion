@@ -367,8 +367,6 @@ impl Module for EntityStateSyncModule {
                     }
                 }
 
-                bundle.broadcast_local(chunk_pos).unwrap();
-
                 // Sync velocity if non-zero
                 if velocity.velocity != Vec3::ZERO {
                     let pkt = play::EntityVelocityUpdateS2c {
@@ -380,8 +378,10 @@ impl Module for EntityStateSyncModule {
                         }),
                     };
 
-                    compose.broadcast(&pkt, system).send().unwrap();
+                    bundle.add_packet(&pkt).unwrap();
                 }
+
+                bundle.broadcast_local(chunk_pos).unwrap();
             },
         );
 
