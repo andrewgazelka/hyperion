@@ -571,6 +571,8 @@ impl Module for SimModule {
     fn module(world: &World) {
         component!(world, VarInt).member::<i32>("x");
 
+        component!(world, EntitySize).opaque_func(meta_ser_stringify_type_display::<EntitySize>);
+
         component!(world, IVec3 {
             x: i32,
             y: i32,
@@ -589,8 +591,6 @@ impl Module for SimModule {
             .member::<f32>("w");
 
         component!(world, BlockState).member::<u16>("id");
-
-        component!(world, EntitySize).opaque_func(meta_ser_stringify_type_display::<EntitySize>);
 
         world.component::<Velocity>().meta();
         world.component::<Player>();
@@ -637,6 +637,7 @@ impl Module for SimModule {
         world.component::<hyperion_inventory::PlayerInventory>();
 
         world.component::<BowCharging>();
+        component!(world, BowCharging).opaque_func(meta_ser_stringify_type_display::<BowCharging>);
 
         observer!(
             world,
