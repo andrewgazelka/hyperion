@@ -25,6 +25,7 @@ geometry = {workspace = true}
 glam = {workspace = true, features = ["serde"]}
 heapless = {workspace = true}
 heed = {workspace = true}
+humantime = {workspace = true}
 hyperion-crafting = {workspace = true}
 hyperion-event-macros = {workspace = true}
 hyperion-inventory = {workspace = true}

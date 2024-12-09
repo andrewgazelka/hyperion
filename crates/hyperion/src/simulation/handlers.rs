@@ -348,7 +348,7 @@ pub fn player_interact_item(
                 if charging.is_some() {
                     return;
                 }
-                entity.set(BowCharging::new());
+                entity.set(BowCharging::now());
             });
         }
     }

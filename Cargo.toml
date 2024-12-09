@@ -65,6 +65,7 @@ glam = '0.29.0'
 heapless = '0.8.0'
 heed = '0.20.5'
 hex = '0.4.3'
+humantime = "2.1.0"
 itertools = '0.13.0'
 kanal = '0.1.0-pre8'
 libc = '0.2.155'
