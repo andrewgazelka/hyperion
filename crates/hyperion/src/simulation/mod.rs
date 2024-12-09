@@ -678,6 +678,7 @@ impl Module for SimModule {
         .with_enum_wildcard::<EntityKind>()
         .each_iter(|it, row, (compose, uuid, position, pitch, yaw, velocity)| {
             let system = it.system();
+
             let entity = it.entity(row);
             let minecraft_id = entity.minecraft_id();
 
@@ -736,7 +737,7 @@ impl Module for SimModule {
             &mut Pitch,
             &mut Velocity,
         )
-        .kind::<flecs::pipeline::OnStore>()
+        .kind::<flecs::pipeline::OnUpdate>()
         .with_enum_wildcard::<EntityKind>()
         .each_entity(|entity, (position, yaw, pitch, velocity)| {
             entity.get::<&EntityKind>(|kind| {
