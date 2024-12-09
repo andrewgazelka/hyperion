@@ -25,7 +25,8 @@ tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 tracing-tracy = { workspace = true }
 uuid = { version = "1.11.0", features = ["v4"] }
-
+valence_protocol = { workspace = true }
+valence_server = { workspace = true }
 
 [dev-dependencies]
 tracing = {workspace = true, features = ["release_max_level_info"]}

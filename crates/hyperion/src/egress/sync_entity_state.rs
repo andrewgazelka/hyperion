@@ -6,12 +6,19 @@ use glam::Vec3;
 use hyperion_inventory::PlayerInventory;
 use hyperion_utils::EntityExt;
 use tracing::error;
-use valence_protocol::{RawBytes, VarInt, packets::play};
+use valence_protocol::{
+    RawBytes, VarInt,
+    packets::play::{self},
+};
 
 use crate::{
     Prev,
     net::{Compose, ConnectionId},
-    simulation::{Position, Velocity, Xp, animation::ActiveAnimation, metadata::MetadataChanges},
+    simulation::{
+        Position, Velocity, Xp,
+        animation::ActiveAnimation,
+        metadata::{MetadataChanges, get_and_clear_metadata},
+    },
 };
 
 #[derive(Component)]
@@ -115,7 +122,7 @@ impl Module for EntityStateSyncModule {
                 let entity = it.entity(row);
                 let entity_id = VarInt(entity.minecraft_id());
 
-                let metadata = metadata_changes.get_and_clear();
+                let metadata = get_and_clear_metadata(metadata_changes);
 
                 if let Some(view) = metadata {
                     let pkt = play::EntityTrackerUpdateS2c {
