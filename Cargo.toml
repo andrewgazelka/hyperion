@@ -97,7 +97,7 @@ tango-bench = '0.6.0'
 tar = '0.4.41'
 thiserror = '2.0.1'
 tikv-jemallocator = '0.6.0'
-tokio = '1.40.0'
+tokio = '1.42.0'
 toml = '0.8.14'
 uuid = '1.8.0'
 
