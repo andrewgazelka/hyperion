@@ -218,7 +218,7 @@ path = 'crates/spatial'
 
 [workspace.dependencies.tokio-util]
 features = ['full']
-version = '0.7.12'
+version = '0.7.13'
 
 [workspace.dependencies.tracing]
 features = ['release_max_level_info']
