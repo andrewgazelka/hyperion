@@ -14,7 +14,7 @@ use flecs_ecs::{
     core::{EntityView, World, WorldProvider},
     macros::Component,
 };
-use glam::IVec2;
+use glam::I16Vec2;
 use hyperion_proto::{ChunkPosition, ServerToProxyMessage};
 use libdeflater::CompressionLvl;
 use rkyv::util::AlignedVec;
@@ -162,7 +162,7 @@ impl<'a, 'b> DataBundle<'a, 'b> {
         self.data.extend_from_slice(raw);
     }
 
-    pub fn send(&self, stream: ConnectionId) -> anyhow::Result<()> {
+    pub fn unicast(&self, stream: ConnectionId) -> anyhow::Result<()> {
         if self.data.is_empty() {
             return Ok(());
         }
@@ -170,6 +170,18 @@ impl<'a, 'b> DataBundle<'a, 'b> {
         self.compose
             .io_buf
             .unicast_raw(&self.data, stream, self.system);
+        Ok(())
+    }
+
+    // todo: use builder pattern for excluding
+    pub fn broadcast_local(&self, center: I16Vec2) -> anyhow::Result<()> {
+        if self.data.is_empty() {
+            return Ok(());
+        }
+
+        self.compose
+            .io_buf
+            .broadcast_local_raw(&self.data, center, 0, self.system);
         Ok(())
     }
 }
@@ -230,10 +242,10 @@ impl Compose {
     /// Broadcast a packet within a certain region.
     ///
     /// See <https://github.com/andrewgazelka/hyperion-proto/blob/main/src/server_to_proxy.proto#L17-L22>
-    pub fn broadcast_local<'a, 'b, P>(
+    pub const fn broadcast_local<'a, 'b, P>(
         &'a self,
         packet: P,
-        center: IVec2,
+        center: I16Vec2,
         system: EntityView<'b>,
     ) -> BroadcastLocal<'a, 'b, P>
     where
@@ -244,8 +256,8 @@ impl Compose {
             compose: self,
             exclude: 0,
             center: ChunkPosition {
-                x: i16::try_from(center.x).unwrap(),
-                z: i16::try_from(center.y).unwrap(),
+                x: center.x,
+                z: center.y,
             },
             system,
         }
@@ -526,10 +538,11 @@ impl IoBuf {
     fn broadcast_local_raw(
         &self,
         data: &[u8],
-        center: ChunkPosition,
+        center: impl Into<ChunkPosition>,
         exclude: u64,
         system: EntityView<'_>,
     ) {
+        let center = center.into();
         let world = system.world();
         let system_order = SystemOrder::of(system);
 

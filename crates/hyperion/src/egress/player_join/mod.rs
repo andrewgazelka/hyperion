@@ -94,7 +94,7 @@ pub fn player_join_world(
         dimension_names: Cow::Owned(dimension_names),
         registry_codec: Cow::Borrowed(registry_codec),
         max_players: config.max_players.into(),
-        view_distance: config.view_distance.into(), // max view distance
+        view_distance: VarInt(i32::from(config.view_distance)),
         simulation_distance: config.simulation_distance.into(),
         reduced_debug_info: false,
         enable_respawn_screen: false,
@@ -116,8 +116,8 @@ pub fn player_join_world(
     let center_chunk = position.to_chunk();
 
     let pkt = play::ChunkRenderDistanceCenterS2c {
-        chunk_x: center_chunk.x.into(),
-        chunk_z: center_chunk.y.into(),
+        chunk_x: VarInt(i32::from(center_chunk.x)),
+        chunk_z: VarInt(i32::from(center_chunk.y)),
     };
 
     bundle.add_packet(&pkt)?;
@@ -362,7 +362,7 @@ pub fn player_join_world(
 
     bundle.add_packet(&command_packet)?;
 
-    bundle.send(io)?;
+    bundle.unicast(io)?;
 
     info!("{name} joined the world");
 

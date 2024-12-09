@@ -46,7 +46,7 @@ impl MinecraftCommand for FlyCommand {
                     bundle.add_packet(&packet).unwrap();
                     bundle.add_packet(&chat_packet).unwrap();
 
-                    bundle.send(*stream).unwrap();
+                    bundle.unicast(*stream).unwrap();
                 });
         });
     }

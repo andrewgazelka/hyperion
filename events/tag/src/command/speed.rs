@@ -29,7 +29,7 @@ impl MinecraftCommand for SpeedCommand {
                 bundle.add_packet(&packet).unwrap();
                 bundle.add_packet(&chat).unwrap();
 
-                bundle.send(*stream).unwrap();
+                bundle.unicast(*stream).unwrap();
             });
         });
     }

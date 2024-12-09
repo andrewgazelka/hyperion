@@ -7,15 +7,15 @@ use hyperion_inventory::PlayerInventory;
 use hyperion_utils::EntityExt;
 use tracing::error;
 use valence_protocol::{
-    RawBytes, VarInt,
+    ByteAngle, RawBytes, VarInt,
     packets::play::{self},
 };
 
 use crate::{
     Prev,
-    net::{Compose, ConnectionId},
+    net::{Compose, ConnectionId, DataBundle},
     simulation::{
-        Position, Velocity, Xp,
+        Pitch, Position, Velocity, Xp, Yaw,
         animation::ActiveAnimation,
         metadata::{MetadataChanges, get_and_clear_metadata},
     },
@@ -221,14 +221,36 @@ impl Module for EntityStateSyncModule {
             "projectile_sync",
             world,
             &Compose($),
-            &Position,
             &(Prev, Position),
+            &(Prev, Yaw),
+            &(Prev, Pitch),
+            &Position,
+            &Yaw,
+            &Pitch,
             &mut Velocity,
         )
         .multi_threaded()
         .kind::<flecs::pipeline::PreStore>()
         .each_iter(
-            move |it, row, (compose, position, previous_position, velocity)| {
+            move |it,
+                  row,
+                  (
+                compose,
+                previous_position,
+                previous_yaw,
+                previous_pitch,
+                position,
+                yaw,
+                pitch,
+                velocity,
+            )| {
+                #[derive(Debug)]
+                struct Change {
+                    position: bool,
+                    angle: bool,
+                    needs_teleport: bool,
+                }
+
                 let entity = it.entity(row);
                 let system = it.system();
 
@@ -237,21 +259,102 @@ impl Module for EntityStateSyncModule {
 
                 let position_delta = **position - **previous_position;
                 let needs_teleport = position_delta.abs().max_element() >= 8.0;
-                let changed_position = **position != **previous_position;
+                let changed_position = position != previous_position;
+                let changed_some_angle = yaw != previous_yaw || pitch != previous_pitch;
 
-                if changed_position && !needs_teleport {
-                    let pkt = play::MoveRelativeS2c {
-                        entity_id,
-                        #[allow(clippy::cast_possible_truncation)]
-                        delta: (position_delta * 4096.0).to_array().map(|x| x as i16),
-                        on_ground: velocity.velocity == Vec3::ZERO,
-                    };
+                let on_ground = velocity.velocity == Vec3::ZERO;
 
-                    compose
-                        .broadcast_local(&pkt, chunk_pos, system)
-                        .send()
-                        .unwrap();
+                #[expect(clippy::cast_possible_truncation)]
+                let get_delta = || (position_delta * 4096.0).to_array().map(|x| x as i16);
+
+                let mut bundle = DataBundle::new(compose, system);
+
+                let change = Change {
+                    position: changed_position,
+                    angle: changed_some_angle,
+                    needs_teleport,
+                };
+
+                let yaw = ByteAngle::from_degrees(**yaw);
+                let pitch = ByteAngle::from_degrees(**pitch);
+
+                match change {
+                    Change {
+                        position: false,
+                        angle: false,
+                        needs_teleport: false,
+                    } => {
+                        // nothing changed; we can skip sending the packet
+                    }
+                    Change {
+                        position: false,
+                        needs_teleport: true,
+                        ..
+                    } => {
+                        unreachable!(
+                            "we should never need to teleport when the position didn't change"
+                        )
+                    }
+                    Change {
+                        position: false,
+                        angle: true,
+                        needs_teleport: false,
+                    } => {
+                        let pkt = play::RotateS2c {
+                            entity_id,
+                            yaw,
+                            pitch,
+                            on_ground,
+                        };
+                        bundle.add_packet(&pkt).unwrap();
+                    }
+                    Change {
+                        position: true,
+                        angle: false,
+                        needs_teleport: false,
+                    } => {
+                        let pkt = play::MoveRelativeS2c {
+                            entity_id,
+                            delta: get_delta(),
+                            on_ground,
+                        };
+
+                        bundle.add_packet(&pkt).unwrap();
+                    }
+                    Change {
+                        position: true,
+                        angle: true,
+                        needs_teleport: false,
+                    } => {
+                        let pkt = play::RotateAndMoveRelativeS2c {
+                            entity_id,
+                            delta: get_delta(),
+                            yaw,
+                            pitch,
+                            on_ground,
+                        };
+
+                        bundle.add_packet(&pkt).unwrap();
+                    }
+                    Change {
+                        position: true,
+                        needs_teleport: true,
+                        ..
+                    } => {
+                        // regardless of change angle (afaik) we send angle difference
+                        let pkt = play::EntityPositionS2c {
+                            entity_id,
+                            position: position.as_dvec3(),
+                            yaw,
+                            pitch,
+                            on_ground,
+                        };
+
+                        bundle.add_packet(&pkt).unwrap();
+                    }
                 }
+
+                bundle.broadcast_local(chunk_pos).unwrap();
 
                 // Sync velocity if non-zero
                 if velocity.velocity != Vec3::ZERO {
@@ -270,5 +373,7 @@ impl Module for EntityStateSyncModule {
         );
 
         track_previous::<Position>(world);
+        track_previous::<Yaw>(world);
+        track_previous::<Pitch>(world);
     }
 }

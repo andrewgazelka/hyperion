@@ -2,10 +2,11 @@ use std::cmp::Ordering;
 
 use derive_more::derive::{Deref, DerefMut};
 use flecs_ecs::prelude::*;
-use glam::IVec2;
+use glam::I16Vec2;
+use itertools::Itertools;
 use tracing::error;
 use valence_protocol::{
-    ChunkPos,
+    ChunkPos, VarInt,
     packets::play::{self},
 };
 
@@ -20,7 +21,7 @@ use crate::{
 
 #[derive(Component, Deref, DerefMut, Default)]
 pub struct ChunkSendQueue {
-    changes: Vec<IVec2>,
+    changes: Vec<I16Vec2>,
 }
 
 #[derive(Component)]
@@ -59,8 +60,8 @@ impl Module for SyncChunksModule {
 
                 // center chunk
                 let center_chunk = play::ChunkRenderDistanceCenterS2c {
-                    chunk_x: current_chunk.x.into(),
-                    chunk_z: current_chunk.y.into(),
+                    chunk_x: VarInt(i32::from(current_chunk.x)),
+                    chunk_z: VarInt(i32::from(current_chunk.y)),
                 };
 
                 if let Err(e) = compose.unicast(&center_chunk, stream_id, system) {
@@ -91,15 +92,14 @@ impl Module for SyncChunksModule {
 
                 let removed_chunks = last_sent_range_x
                     .clone()
-                    .flat_map(|x| last_sent_range_z.clone().map(move |z| IVec2::new(x, z)))
-                    .filter(|pos| {
-                        !current_range_x.contains(&pos.x) || !current_range_z.contains(&pos.y)
-                    });
+                    .cartesian_product(last_sent_range_z.clone())
+                    .filter(|(x, y)| !current_range_x.contains(x) || !current_range_z.contains(y))
+                    .map(|(x, y)| I16Vec2::new(x, y));
 
                 let mut bundle = DataBundle::new(compose, system);
 
                 for chunk in removed_chunks {
-                    let pos = ChunkPos::new(chunk.x, chunk.y);
+                    let pos = ChunkPos::new(i32::from(chunk.x), i32::from(chunk.y));
                     let unload_chunk = play::UnloadChunkS2c { pos };
 
                     bundle.add_packet(&unload_chunk).unwrap();
@@ -111,13 +111,14 @@ impl Module for SyncChunksModule {
                     // }
                 }
 
-                bundle.send(stream_id).unwrap();
+                bundle.unicast(stream_id).unwrap();
 
                 let added_chunks = current_range_x
-                    .flat_map(move |x| current_range_z.clone().map(move |z| IVec2::new(x, z)))
-                    .filter(|pos| {
-                        !last_sent_range_x.contains(&pos.x) || !last_sent_range_z.contains(&pos.y)
-                    });
+                    .cartesian_product(current_range_z)
+                    .filter(|(x, y)| {
+                        !last_sent_range_x.contains(x) || !last_sent_range_z.contains(y)
+                    })
+                    .map(|(x, y)| I16Vec2::new(x, y));
 
                 let mut num_chunks_added = 0;
 
@@ -222,7 +223,7 @@ impl Module for SyncChunksModule {
                         idx -= 1;
                     }
 
-                    bundle.send(stream_id).unwrap();
+                    bundle.unicast(stream_id).unwrap();
                 },
             );
     }

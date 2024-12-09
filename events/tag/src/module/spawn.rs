@@ -29,11 +29,12 @@ fn position_in_radius() -> IVec2 {
     IVec2::new(x, z)
 }
 
-fn random_chunk_in_radius() -> IVec2 {
-    position_in_radius() >> 4
+fn random_chunk_in_radius() -> I16Vec2 {
+    let pos: IVec2 = position_in_radius() >> 4;
+    pos.as_i16vec2()
 }
 
-use hyperion::valence_protocol::BlockState;
+use hyperion::{glam::I16Vec2, valence_protocol::BlockState};
 use roaring::RoaringBitmap;
 use tracing::info;
 
@@ -100,7 +101,7 @@ fn find_spawn_position(
 }
 
 fn try_chunk_for_spawn(
-    chunk: IVec2,
+    chunk: I16Vec2,
     blocks: &mut Blocks,
     runtime: &AsyncRuntime,
     avoid_blocks: &RoaringBitmap,
