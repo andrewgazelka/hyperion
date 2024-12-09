@@ -24,14 +24,15 @@ impl MinecraftCommand for VanishCommand {
                 &hyperion::simulation::Name,
             )>(|(vanished, stream, name)| {
                 let is_vanished = vanished.is_some_and(Vanished::is_vanished);
+                let caller = caller.entity_view(world);
                 if is_vanished {
-                    caller.entity_view(world).set(Vanished::new(false));
+                    caller.set(Vanished::new(false));
                     let packet = hyperion::net::agnostic::chat(format!(
                         "§7[Admin] §f{name} §7is now visible",
                     ));
                     compose.unicast(&packet, *stream, system).unwrap();
                 } else {
-                    caller.entity_view(world).set(Vanished::new(true));
+                    caller.set(Vanished::new(true));
                     let packet = hyperion::net::agnostic::chat(format!(
                         "§7[Admin] §f{name} §7is now vanished",
                     ));

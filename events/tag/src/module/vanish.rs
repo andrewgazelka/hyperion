@@ -21,8 +21,8 @@ pub struct Vanished(pub bool);
 
 impl Vanished {
     #[must_use]
-    pub const fn new(isvanished: bool) -> Self {
-        Self(isvanished)
+    pub const fn new(is_vanished: bool) -> Self {
+        Self(is_vanished)
     }
 
     #[must_use]
