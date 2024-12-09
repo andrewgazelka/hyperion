@@ -244,6 +244,7 @@ impl Module for EntityStateSyncModule {
                 pitch,
                 velocity,
             )| {
+                #[derive(Debug)]
                 struct Change {
                     position: bool,
                     angle: bool,
@@ -372,5 +373,7 @@ impl Module for EntityStateSyncModule {
         );
 
         track_previous::<Position>(world);
+        track_previous::<Yaw>(world);
+        track_previous::<Pitch>(world);
     }
 }
