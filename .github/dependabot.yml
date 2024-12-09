@@ -8,6 +8,10 @@ updates:
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 15
+    groups:
+      all-cargo-dependencies:
+        patterns:
+          - "*"
   - package-ecosystem: "gradle"
     directory: "/extractor/"
     schedule:
