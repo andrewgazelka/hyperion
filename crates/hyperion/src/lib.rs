@@ -356,9 +356,24 @@ impl Hyperion {
 
         world
             .component::<Player>()
-            .add_trait::<(flecs::With, EntitySize)>()
-            .add_trait::<(flecs::With, Yaw)>()
-            .add_trait::<(flecs::With, Pitch)>();
+            .add_trait::<(flecs::With, EntitySize)>();
+
+        // add yaw and pitch
+        world
+            .observer::<flecs::OnAdd, ()>()
+            .with::<Player>()
+            .without::<Yaw>()
+            .each_entity(|entity, ()| {
+                entity.set(Yaw::default());
+            });
+
+        world
+            .observer::<flecs::OnAdd, ()>()
+            .with::<Player>()
+            .without::<Pitch>()
+            .each_entity(|entity, ()| {
+                entity.set(Pitch::default());
+            });
 
         world.set(IgnMap::default());
 
