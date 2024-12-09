@@ -6,7 +6,10 @@ use glam::Vec3;
 use hyperion_inventory::PlayerInventory;
 use hyperion_utils::EntityExt;
 use tracing::error;
-use valence_protocol::{RawBytes, VarInt, packets::play};
+use valence_protocol::{
+    RawBytes, VarInt,
+    packets::play::{self},
+};
 
 use crate::{
     Prev,

@@ -3709,6 +3709,8 @@ dependencies = [
  "tracing-subscriber",
  "tracing-tracy",
  "uuid",
+ "valence_protocol",
+ "valence_server",
 ]
 
 [[package]]
