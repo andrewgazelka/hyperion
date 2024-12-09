@@ -10,7 +10,7 @@ use crate::module::vanish::Vanished;
 
 #[derive(Parser, CommandPermission, Debug)]
 #[command(name = "vanish")]
-#[command_permission(group = "Normal")]
+#[command_permission(group = "Admin")]
 pub struct VanishCommand;
 
 impl MinecraftCommand for VanishCommand {
