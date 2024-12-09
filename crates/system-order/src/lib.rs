@@ -1,4 +1,4 @@
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeSet, HashMap, HashSet};
 
 use derive_more::Constructor;
 use flecs_ecs::{
@@ -39,6 +39,14 @@ impl DepthCalculator {
         self.depths.insert(view.id(), entity_depth);
 
         entity_depth
+    }
+
+    fn on_update_depth(&mut self, world: &World) -> usize {
+        let view = world
+            .component_id::<flecs::pipeline::PostUpdate>()
+            .entity_view(world);
+
+        self.calculate_depth(view)
     }
 }
 
@@ -89,21 +97,25 @@ fn calculate(world: &World) {
             });
         });
 
-    let mut observer_ids = Vec::new();
-
-    // handle all observers as having order u16::MAX (so they are executed last)
+    // handle all observers
     world
         .query::<()>()
         .with::<flecs::Observer>()
         .build()
         .each_entity(|entity, ()| {
-            observer_ids.push(entity.id());
+            let depth = depth_calculator.on_update_depth(world);
+
+            map.insert(OrderKey {
+                depth,
+                id: entity.id(),
+            });
         });
 
-    for id in observer_ids {
-        let entity = id.entity_view(world);
-        entity.set(SystemOrder::new(u16::MAX));
-    }
+    // assert all entities are unique
+    assert_eq!(
+        map.len(),
+        map.iter().map(|x| x.id).collect::<HashSet<_>>().len()
+    );
 
     for (idx, value) in map.into_iter().enumerate() {
         let idx = u16::try_from(idx).expect("number of systems exceeds u16 (65536)");

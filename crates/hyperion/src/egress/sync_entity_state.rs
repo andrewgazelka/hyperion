@@ -1,11 +1,11 @@
-use std::borrow::Cow;
+use std::{borrow::Cow, fmt::Debug};
 
 use anyhow::Context;
 use flecs_ecs::prelude::*;
 use glam::Vec3;
 use hyperion_inventory::PlayerInventory;
 use hyperion_utils::EntityExt;
-use tracing::error;
+use tracing::{debug, error};
 use valence_protocol::{
     ByteAngle, RawBytes, VarInt,
     packets::play::{self},
@@ -24,9 +24,19 @@ use crate::{
 #[derive(Component)]
 pub struct EntityStateSyncModule;
 
-fn track_previous<T: ComponentId + Copy>(world: &World) {
+fn track_previous<T: ComponentId + Copy + Debug + PartialEq>(world: &World) {
+    let post_store = world
+        .entity_named("post_store")
+        .add::<flecs::pipeline::Phase>()
+        .depends_on::<flecs::pipeline::OnStore>();
+
     // we include names so that if we call this multiple times, we don't get multiple observers/systems
     let component_name = std::any::type_name::<T>();
+
+    // get the last stuff after ::
+    let component_name = component_name.split("::").last().unwrap();
+    let component_name = component_name.to_lowercase();
+
     let observer_name = format!("init_prev_{component_name}");
     let system_name = format!("track_prev_{component_name}");
 
@@ -40,8 +50,11 @@ fn track_previous<T: ComponentId + Copy>(world: &World) {
     world
         .system_named::<(&mut (Prev, T), &T)>(system_name.as_str())
         .multi_threaded()
-        .kind::<flecs::pipeline::OnStore>()
+        .kind_id(post_store)
         .each(|(prev, value)| {
+            if *prev != *value {
+                debug!("...  {prev:?} => {value:?}");
+            }
             *prev = *value;
         });
 }
