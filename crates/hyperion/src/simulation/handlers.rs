@@ -3,7 +3,7 @@
 use std::borrow::Cow;
 
 use anyhow::{Context, bail};
-use flecs_ecs::core::{Entity, EntityView, World};
+use flecs_ecs::core::{Entity, EntityView, EntityViewGet, World};
 use geometry::aabb::Aabb;
 use glam::{IVec3, Vec3};
 use hyperion_utils::EntityExt;
@@ -27,6 +27,7 @@ use super::{
     animation::{self, ActiveAnimation},
     block_bounds,
     blocks::Blocks,
+    bow::BowCharging,
 };
 use crate::{
     net::{Compose, ConnectionId, decoder::BorrowedPacketFrame},
@@ -276,6 +277,14 @@ fn player_action(mut data: &[u8], query: &PacketSwitchQuery<'_>) -> anyhow::Resu
 
             query.events.push(event, query.world);
         }
+        PlayerAction::ReleaseUseItem => {
+            let event = event::ReleaseUseItem {
+                from: query.id,
+                item: query.inventory.get_cursor().item,
+            };
+
+            query.events.push(event, query.world);
+        }
         action => bail!("unimplemented {action:?}"),
     }
 
@@ -328,10 +337,20 @@ pub fn player_interact_item(
 
     let cursor = query.inventory.get_cursor();
 
-    if !cursor.is_empty() && cursor.item == ItemKind::WrittenBook {
-        let packet = play::OpenWrittenBookS2c { hand };
-
-        query.compose.unicast(&packet, query.io_ref, query.system)?;
+    if !cursor.is_empty() {
+        if cursor.item == ItemKind::WrittenBook {
+            let packet = play::OpenWrittenBookS2c { hand };
+            query.compose.unicast(&packet, query.io_ref, query.system)?;
+        } else if cursor.item == ItemKind::Bow {
+            // Start charging bow
+            let entity = query.world.entity_from_id(query.id);
+            entity.get::<Option<&BowCharging>>(|charging| {
+                if charging.is_some() {
+                    return;
+                }
+                entity.set(BowCharging::new());
+            });
+        }
     }
 
     query.handlers.interact.trigger_all(query, &event);

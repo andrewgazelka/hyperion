@@ -27,7 +27,7 @@ use spatial::SpatialIndex;
 use tracing::debug;
 
 use crate::{
-    module::{chat::ChatModule, spawn::SpawnModule, stats::StatsModule},
+    module::{bow::BowModule, chat::ChatModule, spawn::SpawnModule, stats::StatsModule},
     skin::SkinModule,
 };
 
@@ -91,6 +91,7 @@ impl Module for TagModule {
         world.import::<BlockModule>();
         world.import::<AttackModule>();
         world.import::<LevelModule>();
+        world.import::<BowModule>();
         world.import::<RegenerationModule>();
         world.import::<hyperion_permission::PermissionModule>();
         world.import::<hyperion_utils::HyperionUtilsModule>();

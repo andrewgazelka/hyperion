@@ -5,7 +5,7 @@ use flecs_ecs::{core::Entity, macros::Component};
 use glam::{IVec3, Vec3};
 use valence_generated::block::BlockState;
 use valence_protocol::Hand;
-use valence_server::entity::item_frame::ItemStack;
+use valence_server::{ItemKind, entity::item_frame::ItemStack};
 
 use crate::simulation::skin::PlayerSkin;
 
@@ -75,6 +75,12 @@ pub struct ToggleDoor {
 #[derive(Copy, Clone, Debug)]
 pub struct SwingArm {
     pub hand: Hand,
+}
+
+#[derive(Copy, Clone, Debug)]
+pub struct ReleaseUseItem {
+    pub from: Entity,
+    pub item: ItemKind,
 }
 
 pub struct PluginMessage<'a> {
