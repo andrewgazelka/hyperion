@@ -566,7 +566,7 @@ impl TryFrom<&Velocity> for valence_protocol::Velocity {
     type Error = TryFromIntError;
 
     fn try_from(value: &Velocity) -> Result<Self, Self::Error> {
-        let max_velocity = 75.0;
+        let max_velocity = 4.09;
         let clamped_velocity = value
             .velocity
             .clamp(Vec3::splat(-max_velocity), Vec3::splat(max_velocity));

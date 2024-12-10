@@ -46,22 +46,27 @@ struct CheckCol {
 }
 
 // Function to check for collision between two hitboxes using AABB in 3D
-pub fn check_collision(hitbox_a: &CheckCol, hitbox_b: &CheckCol) -> bool {
+/* pub fn check_collision(hitbox_a: &CheckCol, hitbox_b: &CheckCol) -> bool {
     hitbox_a.pos.x < hitbox_b.pos.x + hitbox_b.hitbox.width
         && hitbox_a.pos.x + hitbox_a.hitbox.width > hitbox_b.pos.x
         && hitbox_a.pos.y < hitbox_b.pos.y + hitbox_b.hitbox.height
         && hitbox_a.pos.y + hitbox_a.hitbox.height > hitbox_b.pos.y
         && hitbox_a.pos.z < hitbox_b.pos.z + hitbox_b.hitbox.depth
         && hitbox_a.pos.z + hitbox_a.hitbox.depth > hitbox_b.pos.z
-}
+} */
 
 // Function to determine if a hitbox is grounded based on raycasting against blocks
-pub fn is_grounded(hitbox: &Hitbox, blocks: &Blocks) -> bool {
+pub fn is_grounded(hitbox: &Hitbox, position: &Position, blocks: &Blocks) -> bool {
     // Create a ray from the hitbox's position downwards
-    let ray = Ray::new(
-        Vec3::new(hitbox.width / 2.0, hitbox.height, hitbox.depth / 2.0),
-        Vec3::new(0.0, -1.0, 0.0), // Direction pointing downward
+    let eye = Vec3::new(
+        position.x,
+        position.y,
+        position.z,
     );
+
+    let direction = Vec3::new(0.0, -0.1, 0.0); // Direction pointing straight down
+
+    let ray = Ray::new(eye, direction);
 
     // Check for collision with blocks using the first_collision method
     if let Some(_collision) = blocks.first_collision(ray, hitbox.height) {
@@ -77,26 +82,27 @@ pub fn update_velocity(
     _entity: &Entity,
     hitbox: &Hitbox,
     velocity: &mut Velocity,
+    position: &Position,
     blocks: &Blocks,
 ) {
-    let grounded = is_grounded(hitbox, blocks);
+    let grounded = is_grounded(hitbox, position, blocks);
 
     // Apply damping to velocity
     velocity.velocity.x *= 0.99;
     velocity.velocity.y *= 0.99;
     velocity.velocity.z *= 0.99;
 
-    debug!(
-        "Entity Grounded: {}, Velocity: ({}, {}, {})",
-        grounded, velocity.velocity.x, velocity.velocity.y, velocity.velocity.z
-    );
+    // debug!(
+    // "Entity Grounded: {}, Velocity: ({}, {}, {})",
+    // grounded, velocity.velocity.x, velocity.velocity.y, velocity.velocity.z
+    // );
 
     // Apply gravity if not grounded
     if !grounded {
-        velocity.velocity.y -= 0.08; // Gravity effect
+        velocity.velocity.y -= 0.05; // Gravity effect
         // Cap terminal velocity
-        if velocity.velocity.y < -4.0 {
-            velocity.velocity.y = -4.0;
+        if velocity.velocity.y < -3.0 {
+            velocity.velocity.y = -3.0;
         }
     } else {
         // Reset downward velocity if grounded
@@ -113,7 +119,7 @@ pub fn update_entity_state(
     blocks: &Blocks,
 ) {
     // Update velocity based on grounded state
-    update_velocity(entity, hitbox, velocity, blocks);
+    update_velocity(entity, hitbox, velocity, position, blocks);
 
     // Update position based on velocity
     position.x += velocity.velocity.x;
@@ -192,14 +198,12 @@ impl Module for PhysicsModule {
             .multi_threaded()
             .with_enum_wildcard::<EntityKind>()
             .kind::<flecs::pipeline::PreStore>()
-            .each_iter(|it, row, (velocity, position)| {
+            .each_iter(|it, row, (velocity, position,)| {
                 let entity = it.entity(row);
-                debug!("Physics module running for entity: {:?}", entity);
 
                 let world = it.system().world();
 
                 entity.entity_view(world).try_get::<&EntityKind>(|kind| {
-                    debug!("EntityKind: {kind:?}");
                     world.get::<&Blocks>(|blocks| {
                         // pain and agony
                         let hitbox = match kind {
@@ -365,4 +369,15 @@ impl Module for PhysicsModule {
                 });
         });
     }
+}
+
+fn get_direction_from_rotation(yaw: f32, pitch: f32) -> Vec3 {
+    let yaw_rad = yaw.to_radians();
+    let pitch_rad = pitch.to_radians();
+
+    let x = -yaw_rad.cos() * pitch_rad.cos();
+    let y = -pitch_rad.sin();
+    let z = yaw_rad.sin() * pitch_rad.cos();
+
+    Vec3::new(x, y, z)
 }
