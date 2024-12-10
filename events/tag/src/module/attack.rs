@@ -8,13 +8,25 @@ use flecs_ecs::{
 };
 use hyperion::{
     net::{
-        agnostic, packets::{BossBarAction, BossBarS2c}, Compose, ConnectionId
+        Compose, ConnectionId, agnostic,
+        packets::{BossBarAction, BossBarS2c},
     },
-    simulation::{event, metadata::{entity::Pose, living_entity::Health}, PacketState, Player, Position, Velocity},
+    simulation::{
+        PacketState, Player, Position, Velocity, event,
+        metadata::{entity::Pose, living_entity::Health},
+    },
     storage::EventQueue,
     uuid::Uuid,
     valence_protocol::{
-        ident, math::{DVec3, Vec3}, nbt, packets::play::{self, boss_bar_s2c::{BossBarColor, BossBarDivision, BossBarFlags}, entity_attributes_s2c::AttributeProperty}, text::IntoText, ItemKind, ItemStack, Particle, VarInt
+        ItemKind, ItemStack, Particle, VarInt, ident,
+        math::{DVec3, Vec3},
+        nbt,
+        packets::play::{
+            self,
+            boss_bar_s2c::{BossBarColor, BossBarDivision, BossBarFlags},
+            entity_attributes_s2c::AttributeProperty,
+        },
+        text::IntoText,
     },
 };
 use hyperion_inventory::PlayerInventory;
