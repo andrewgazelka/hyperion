@@ -404,12 +404,12 @@ impl Module for AttackModule {
                                         let dist_xz = delta_x.hypot(delta_z);
                                         let multiplier = 0.4;
 
-                                        reaction.velocity /= 2.0;
-                                        reaction.velocity.x -= delta_x / dist_xz * multiplier;
-                                        reaction.velocity.y += multiplier;
-                                        reaction.velocity.z -= delta_z / dist_xz * multiplier;
+                                        reaction.0 /= 2.0;
+                                        reaction.0.x -= delta_x / dist_xz * multiplier;
+                                        reaction.0.y += multiplier;
+                                        reaction.0.z -= delta_z / dist_xz * multiplier;
 
-                                        reaction.velocity.y = reaction.velocity.y.min(0.4);
+                                        reaction.0.y = reaction.0.y.min(0.4);
                                     }
                                 },
                             );

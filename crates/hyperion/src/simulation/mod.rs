@@ -544,48 +544,16 @@ impl Position {
 /// - Later we can apply the reaction to the entity's [`Position`] to move the entity.
 #[derive(Component, Default, Debug, Copy, Clone)]
 #[meta]
-pub struct Velocity {
-    /// The velocity of the entity.
-    pub velocity: Vec3,
-}
+pub struct Velocity(pub Vec3); 
 
 impl Velocity {
-    pub const ZERO: Self = Self {
-        velocity: Vec3::ZERO,
-    };
-
     #[must_use]
     pub const fn new(x: f32, y: f32, z: f32) -> Self {
-        Self {
-            velocity: Vec3::new(x, y, z),
-        }
+        Self(Vec3::new(x, y, z))
     }
-}
-
-impl TryFrom<&Velocity> for valence_protocol::Velocity {
-    type Error = TryFromIntError;
-
-    fn try_from(value: &Velocity) -> Result<Self, Self::Error> {
-        let max_velocity = 4.09;
-        let clamped_velocity = value
-            .velocity
-            .clamp(Vec3::splat(-max_velocity), Vec3::splat(max_velocity));
-
-        let nums = clamped_velocity.to_array().try_map(|a| {
-            #[allow(clippy::cast_possible_truncation)]
-            let num = (a * 8000.0) as i32;
-            i16::try_from(num)
-        })?;
-
-        Ok(Self(nums))
-    }
-}
-
-impl TryFrom<Velocity> for valence_protocol::Velocity {
-    type Error = TryFromIntError;
-
-    fn try_from(value: Velocity) -> Result<Self, Self::Error> {
-        (&value).try_into()
+    #[must_use]
+    pub fn to_packet_units(self) -> valence_protocol::Velocity {
+        valence_protocol::Velocity::from_ms_f32(self.0.into())
     }
 }
 
@@ -685,8 +653,7 @@ impl Module for SimModule {
             let spawn_entity = move |kind: EntityKind| -> anyhow::Result<()> {
                 let kind = kind as i32;
 
-                let velocity = valence_protocol::Velocity::try_from(velocity)
-                    .context("failed to convert velocity")?;
+                let velocity = velocity.to_packet_units();
 
                 let packet = play::EntitySpawnS2c {
                     entity_id: VarInt(minecraft_id),
@@ -741,14 +708,14 @@ impl Module for SimModule {
         .with_enum_wildcard::<EntityKind>()
         .each_entity(|entity, (position, yaw, pitch, velocity)| {
             entity.get::<&EntityKind>(|kind| {
-                if kind == &EntityKind::Arrow && velocity.velocity != Vec3::ZERO {
+                if kind == &EntityKind::Arrow && velocity.0 != Vec3::ZERO {
                     // Update position based on velocity with delta time
-                    position.x += velocity.velocity.x;
-                    position.y += velocity.velocity.y;
-                    position.z += velocity.velocity.z;
+                    position.x += velocity.0.x;
+                    position.y += velocity.0.y;
+                    position.z += velocity.0.z;
 
                     // re calculate yaw and pitch based on velocity
-                    let (new_yaw, new_pitch) = get_rotation_from_velocity(velocity.velocity);
+                    let (new_yaw, new_pitch) = get_rotation_from_velocity(velocity.0);
                     *yaw = Yaw::new(new_yaw);
                     *pitch = Pitch::new(new_pitch);
 
@@ -763,20 +730,20 @@ impl Module for SimModule {
                     #[allow(clippy::excessive_nesting)]
                     entity.world().get::<&mut Blocks>(|blocks| {
                         // calculate distance limit based on velocity
-                        let distance_limit = velocity.velocity.length();
+                        let distance_limit = velocity.0.length();
                         let Some(collision) = blocks.first_collision(ray, distance_limit) else {
                             // i think this velocity calculations are all wrong someone redo please
-                            velocity.velocity.x *= 0.99;
-                            velocity.velocity.z *= 0.99;
+                            velocity.0.x *= 0.99;
+                            velocity.0.z *= 0.99;
 
-                            velocity.velocity.y -= 0.05;
+                            velocity.0.y -= 0.05;
                             return;
                         };
                         debug!("distance_limit = {}", distance_limit);
 
                         debug!("collision = {collision:?}");
 
-                        velocity.velocity = Vec3::ZERO;
+                        velocity.0 = Vec3::ZERO;
 
                         // Set arrow position to the collision location
                         **position = collision.normal;
