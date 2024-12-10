@@ -52,9 +52,9 @@ fn track_previous<T: ComponentId + Copy + Debug + PartialEq>(world: &World) {
         .multi_threaded()
         .kind_id(post_store)
         .each(|(prev, value)| {
-            if *prev != *value {
+            /* if *prev != *value {
                 debug!("...  {prev:?} => {value:?}");
-            }
+            } */
             *prev = *value;
         });
 }
@@ -230,7 +230,7 @@ impl Module for EntityStateSyncModule {
         });
 
         // Add a new system specifically for projectiles (arrows)
-        system!(
+        /* system!(
             "projectile_sync",
             world,
             &Compose($),
@@ -383,7 +383,7 @@ impl Module for EntityStateSyncModule {
 
                 bundle.broadcast_local(chunk_pos).unwrap();
             },
-        );
+        ); */
 
         track_previous::<Position>(world);
         track_previous::<Yaw>(world);
