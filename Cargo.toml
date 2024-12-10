@@ -39,8 +39,16 @@ members = [
   'crates/spatial',
   'crates/system-order',
   'events/tag',
+  'tools/packet-inspector',
 ]
 resolver = '2'
+
+[workspace.package]
+edition = '2024'
+version = '0.1.0'
+documentation = "https://andrewgazelka.github.io/hyperion"
+repository = "https://github.com/andrewgazelka/hyperion"
+license = 'Apache-2.0'
 
 [workspace.dependencies]
 anyhow = '1.0.86'
@@ -59,8 +67,12 @@ criterion = '0.5.1'
 derive-build = '0.1.1'
 directories = '5.0.1'
 dotenvy = '0.15.7'
+eframe = "0.29.1"
+egui = "0.29.1"
+egui_dock = "0.14.0"
 enumset = '1.1.5'
 fastrand = '2.1.0'
+flume = "0.11.1"
 futures-util = '0.3.31'
 glam = '0.29.0'
 heapless = '0.8.0'
@@ -93,10 +105,11 @@ serde_json = '1.0.117'
 slotmap = '1.0.7'
 snafu = '0.8.5'
 syn = '2.0.87'
-tango-bench = '0.6.0'
+syntect = { version = "5.2.0", default-features = false }
 tar = '0.4.41'
 thiserror = '2.0.1'
 tikv-jemallocator = '0.6.0'
+time = "0.3.37"
 tokio = '1.40.0'
 toml = '0.8.14'
 uuid = '1.8.0'
@@ -128,6 +141,10 @@ path = 'crates/hyperion-gui'
 [workspace.dependencies.flate2]
 default-features = false
 version = '1.0.30'
+
+[workspace.dependencies.valence_build_utils]
+branch = 'feat-open'
+git = 'https://github.com/andrewgazelka/valence'
 
 [workspace.dependencies.flecs_ecs]
 features = ['flecs_manual_registration']
