@@ -34,7 +34,7 @@ jobs:
 
       - name: Run cargo machete
         run: |
-          cargo machete --with-metadata --fix
+          cargo machete --fix
 
       - name: Run cargo machete and fix
         run: |
