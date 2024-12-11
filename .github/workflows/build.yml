@@ -15,6 +15,8 @@ env:
 jobs:
   machete:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout repository
@@ -25,31 +27,29 @@ jobs:
         with:
           tool: cargo-machete
 
+      - name: Configure Git
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+
       - name: Run cargo machete
         run: |
-          cargo machete
+          cargo machete --with-metadata --fix
 
-  #  test:
-  #    runs-on: ubuntu-latest
-  #
-  #    steps:
-  #      - name: Checkout repository
-  #        uses: actions/checkout@v4
-  #
-  #      - uses: actions-rust-lang/setup-rust-toolchain@v1
-  #        with:
-  #          toolchain: ${{ env.RUST_TOOLCHAIN }}
-  #
-  #      - uses: Swatinem/rust-cache@v2
-  #        with:
-  #          cache-on-failure: true
-  #
-  #      - name: Run cargo test
-  #        run: |
-  #          cargo test --workspace --all-features
+      - name: Run cargo machete and fix
+        run: |
+          if cargo machete-full fix; then
+            if [[ -n $(git status --porcelain) ]]; then
+              git add .
+                git commit -m "chore: remove unused dependencies (cargo-machete)"
+              git push
+            fi
+          fi
 
   fmt:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout repository
@@ -60,29 +60,19 @@ jobs:
           components: rustfmt
           toolchain: ${{ env.RUST_TOOLCHAIN }}
 
-      - name: Run rustfmt
+      - name: Configure Git
         run: |
-          cargo fmt --all -- --check
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
 
-  #  docs:
-  #    runs-on: ubuntu-latest
-  #
-  #    steps:
-  #      - name: Checkout repository
-  #        uses: actions/checkout@v4
-  #
-  #      - uses: actions-rust-lang/setup-rust-toolchain@v1
-  #        with:
-  #          toolchain: ${{ env.RUST_TOOLCHAIN }}
-  #
-  #      - uses: Swatinem/rust-cache@v2
-  #        with:
-  #          cache-on-failure: true
-  #      - name: Run cargo doc
-  #        run: |
-  #          cargo doc --workspace --no-deps --all-features
-  #        env:
-  #          RUSTDOCFLAGS: -D warnings
+      - name: Run rustfmt and fix
+        run: |
+          cargo fmt --all
+          if [[ -n $(git status --porcelain) ]]; then
+            git add .
+            git commit -m "chore: apply rustfmt changes"
+            git push
+          fi
 
   clippy:
     runs-on: ubuntu-latest
