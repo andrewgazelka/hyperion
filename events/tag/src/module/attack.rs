@@ -12,7 +12,7 @@ use hyperion::{
         packets::{BossBarAction, BossBarS2c},
     },
     simulation::{
-        PacketState, Player, Position, Velocity, event,
+        PacketState, Player, Position, Velocity, Yaw, event,
         metadata::{entity::Pose, living_entity::Health},
     },
     storage::EventQueue,
@@ -145,10 +145,11 @@ impl Module for AttackModule {
                                 &mut Health,
                                 &mut Position,
                                 &mut Velocity,
+                                &Yaw,
                                 &CombatStats,
                                 &PlayerInventory
                             )>(
-                                |(immune_until, health, target_position, reaction, stats, target_inventory)| {
+                                |(immune_until, health, target_position, reaction, target_yaw, stats, target_inventory)| {
                                     if let Some(immune_until) = immune_until {
                                         if immune_until.tick > current_tick {
                                             return;
@@ -172,9 +173,16 @@ impl Module for AttackModule {
                                         food: VarInt(20),
                                         food_saturation: 5.0
                                     };
+
+                                    let delta_x = target_position.x - target_position.x;
+                                    let delta_z = origin_pos.z - origin_pos.z;
+
+                                    // Seems that MC generates a random delta if the damage source is too close to the target
+                                    // let's ignore that for now
+                                    let damage_direction = 0;
                                     let pkt_hurt = play::DamageTiltS2c {
                                         entity_id: VarInt(target.minecraft_id()),
-                                        yaw: 0. // Todo look at how this is calculated
+                                        yaw: delta_z.atan2(delta_x) * 57.2957763671875 - target_yaw
                                     };
                                     // EntityDamageS2c: display red outline when taking damage (play arrow hit sound?)
                                     let pkt_damage_event = play::EntityDamageS2c {
@@ -440,12 +448,6 @@ impl Module for AttackModule {
                                     }
 
                                     // Calculate velocity change based on attack direction
-                                    let this = **target_position;
-                                    let other = **origin_pos;
-
-                                    let delta_x = other.x - this.x;
-                                    let delta_z = other.z - this.z;
-
                                     if delta_x.abs() >= 0.01 || delta_z.abs() >= 0.01 {
                                         let dist_xz = delta_x.hypot(delta_z);
                                         let multiplier = 0.4;
