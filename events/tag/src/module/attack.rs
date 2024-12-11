@@ -450,7 +450,7 @@ impl Module for AttackModule {
                                     // Calculate velocity change based on attack direction
                                     if delta_x.abs() >= 0.01 || delta_z.abs() >= 0.01 {
                                         let dist_xz = delta_x.hypot(delta_z);
-                                        let multiplier = 0.4;
+                                        let multiplier = 0.4000000059604645;
 
                                         reaction.velocity /= 2.0;
                                         reaction.velocity.x -= delta_x / dist_xz * multiplier;
