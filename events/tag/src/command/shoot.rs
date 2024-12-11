@@ -39,6 +39,11 @@ impl MinecraftCommand for ShootCommand {
                     velocity.x, velocity.y, velocity.z
                 );
 
+                debug!(
+                    "Arrow spawn position: ({}, {}, {})",
+                    spawn_pos.x, spawn_pos.y, spawn_pos.z
+                );
+
                 // Create arrow entity with velocity
                 world
                     .entity()
