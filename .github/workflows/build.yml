@@ -21,6 +21,9 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.head_ref || github.ref_name }}
 
       - name: Install cargo-machete
         uses: taiki-e/install-action@v2
@@ -32,17 +35,13 @@ jobs:
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
 
-      - name: Run cargo machete
-        run: |
-          cargo machete --fix
-
       - name: Run cargo machete and fix
         run: |
-          if cargo machete-full fix; then
+          if cargo machete --fix; then
             if [[ -n $(git status --porcelain) ]]; then
               git add .
-                git commit -m "chore: remove unused dependencies (cargo-machete)"
-              git push
+              git commit -m "chore: remove unused dependencies (cargo-machete)"
+              git push origin HEAD:${{ github.head_ref || github.ref_name }}
             fi
           fi
 
@@ -54,6 +53,9 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.head_ref || github.ref_name }}
 
       - uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
@@ -71,7 +73,7 @@ jobs:
           if [[ -n $(git status --porcelain) ]]; then
             git add .
             git commit -m "chore: apply rustfmt changes"
-            git push
+            git push origin HEAD:${{ github.head_ref || github.ref_name }}
           fi
 
   clippy:
