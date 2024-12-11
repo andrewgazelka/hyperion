@@ -32,7 +32,6 @@ fn track_previous<T: ComponentId + Copy + Debug + PartialEq>(world: &World) {
 
     // we include names so that if we call this multiple times, we don't get multiple observers/systems
     let component_name = std::any::type_name::<T>();
-    
 
     // get the last stuff after ::
     let component_name = component_name.split("::").last().unwrap();
