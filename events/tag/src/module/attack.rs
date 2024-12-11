@@ -12,7 +12,7 @@ use hyperion::{
         packets::{BossBarAction, BossBarS2c},
     },
     simulation::{
-        PacketState, Player, Position, Velocity, event,
+        PacketState, Player, Position, Velocity, Yaw, event,
         metadata::{entity::Pose, living_entity::Health},
     },
     storage::EventQueue,
@@ -64,6 +64,7 @@ pub struct KillCount {
     pub kill_count: u32,
 }
 
+#[allow(clippy::cast_possible_truncation)]
 impl Module for AttackModule {
     #[allow(clippy::excessive_nesting)]
     fn module(world: &World) {
@@ -145,10 +146,11 @@ impl Module for AttackModule {
                                 &mut Health,
                                 &mut Position,
                                 &mut Velocity,
+                                &Yaw,
                                 &CombatStats,
                                 &PlayerInventory
                             )>(
-                                |(immune_until, health, target_position, reaction, stats, target_inventory)| {
+                                |(immune_until, health, target_position, reaction, target_yaw, stats, target_inventory)| {
                                     if let Some(immune_until) = immune_until {
                                         if immune_until.tick > current_tick {
                                             return;
@@ -172,9 +174,15 @@ impl Module for AttackModule {
                                         food: VarInt(20),
                                         food_saturation: 5.0
                                     };
+
+                                    let delta_x: f64 = f64::from(target_position.x - origin_pos.x);
+                                    let delta_z: f64 = f64::from(target_position.z - origin_pos.z);
+
+                                    // Seems that MC generates a random delta if the damage source is too close to the target
+                                    // let's ignore that for now
                                     let pkt_hurt = play::DamageTiltS2c {
                                         entity_id: VarInt(target.minecraft_id()),
-                                        yaw: 0. // Todo look at how this is calculated
+                                        yaw: delta_z.atan2(delta_x).mul_add(57.295_776_367_187_5_f64, -f64::from(**target_yaw)) as f32
                                     };
                                     // EntityDamageS2c: display red outline when taking damage (play arrow hit sound?)
                                     let pkt_damage_event = play::EntityDamageS2c {
@@ -440,20 +448,14 @@ impl Module for AttackModule {
                                     }
 
                                     // Calculate velocity change based on attack direction
-                                    let this = **target_position;
-                                    let other = **origin_pos;
-
-                                    let delta_x = other.x - this.x;
-                                    let delta_z = other.z - this.z;
-
                                     if delta_x.abs() >= 0.01 || delta_z.abs() >= 0.01 {
                                         let dist_xz = delta_x.hypot(delta_z);
-                                        let multiplier = 0.4;
+                                        let multiplier: f64 = 0.400_000_005_960_464_5;
 
                                         reaction.velocity /= 2.0;
-                                        reaction.velocity.x -= delta_x / dist_xz * multiplier;
-                                        reaction.velocity.y += multiplier;
-                                        reaction.velocity.z -= delta_z / dist_xz * multiplier;
+                                        reaction.velocity.x -= (delta_x / dist_xz * multiplier) as f32;
+                                        reaction.velocity.y += multiplier as f32;
+                                        reaction.velocity.z -= (delta_z / dist_xz * multiplier) as f32;
 
                                         reaction.velocity.y = reaction.velocity.y.min(0.4);
                                     }
