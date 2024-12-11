@@ -96,6 +96,7 @@ pub fn register_prefabs(world: &World) -> MetadataPrefabs {
     let living_entity_base = living_entity::register_prefab(world, Some(entity_base)).id();
     let player_base = player::register_prefab(world, Some(living_entity_base))
         // .add::<Player>()
+        .add_enum(EntityKind::Player)
         .id();
 
     MetadataPrefabs {
@@ -108,6 +109,8 @@ pub fn register_prefabs(world: &World) -> MetadataPrefabs {
 }
 
 use crate::simulation::metadata::r#type::MetadataType;
+
+use super::entity_kind::EntityKind;
 
 #[derive(Debug, Default, Component, Clone)]
 // index (u8), type (varint), value (varies)

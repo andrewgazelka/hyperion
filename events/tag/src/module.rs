@@ -7,3 +7,4 @@ pub mod regeneration;
 pub mod spawn;
 pub mod stats;
 pub mod vanish;
+pub mod physics;
