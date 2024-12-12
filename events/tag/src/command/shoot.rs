@@ -46,6 +46,8 @@ impl MinecraftCommand for ShootCommand {
                     spawn_pos.x, spawn_pos.y, spawn_pos.z
                 );
 
+                debug!("Kump (spawn): {yaw} {pitch}");
+
                 let entity_id = Uuid::new_v4();
 
                 // Create arrow entity with velocity

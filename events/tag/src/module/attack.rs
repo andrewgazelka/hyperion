@@ -403,9 +403,9 @@ impl Module for AttackModule {
                                     let knockback_y = 6.432;
 
                                     let new_vel = Velocity::new(
-                                        dir.x * knockback_xz,
-                                        knockback_y,
-                                        dir.z * knockback_xz
+                                        dir.x * knockback_xz / 20.0,
+                                        knockback_y / 20.0,
+                                        dir.z * knockback_xz / 20.0
                                     );
 
                                     // https://github.com/valence-rs/valence/blob/8f3f84d557dacddd7faddb2ad724185ecee2e482/examples/ctf.rs#L987-L989

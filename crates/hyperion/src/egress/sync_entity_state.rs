@@ -282,8 +282,6 @@ impl Module for EntityStateSyncModule {
                     let grounded = is_grounded(position, blocks);
 
                     if changed_position && !needs_teleport && look_changed {
-                        debug!("Kump: {yaw} {pitch}");
-
                         let packet = play::RotateAndMoveRelativeS2c {
                             entity_id,
                             delta: (position_delta * 4096.0).to_array().map(|x| x as i16),
@@ -401,11 +399,11 @@ impl Module for EntityStateSyncModule {
 
                 // re calculate yaw and pitch based on velocity
 
-                let direction = get_direction_from_rotation(**yaw, **pitch);
-
                 let (new_yaw, new_pitch) = get_rotation_from_velocity(velocity.0);
                 *yaw = Yaw::new(new_yaw);
                 *pitch = Pitch::new(new_pitch);
+
+                let direction = get_direction_from_rotation(new_yaw, new_pitch);
 
                 let center = **position;
 
