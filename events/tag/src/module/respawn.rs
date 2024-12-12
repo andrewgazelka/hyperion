@@ -26,10 +26,12 @@ impl Module for RespawnModule {
                 let system = it.system();
                 for event in event_queue.drain() {
                     let client = event.client.entity_view(world);
-                    client
-                        .get::<(&ConnectionId, &mut Health)>(|(connection, health)| {
+                    client.get::<(&ConnectionId, &mut Health, &mut Pose)>(
+                        |(connection, health, pose)| {
                             health.heal(20.);
-                            client.set::<Pose>(Pose::Standing);
+
+                            *pose = Pose::Standing;
+                            client.modified::<Pose>(); // this is so observers detect the change
 
                             let pkt_health = play::HealthUpdateS2c {
                                 health: health.abs(),
@@ -52,7 +54,8 @@ impl Module for RespawnModule {
 
                             compose.unicast(&pkt_health, *connection, system).unwrap();
                             compose.unicast(&pkt_respawn, *connection, system).unwrap();
-                        });
+                        },
+                    );
                 }
             });
     }
