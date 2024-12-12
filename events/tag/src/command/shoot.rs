@@ -1,11 +1,13 @@
 use clap::Parser;
-use flecs_ecs::core::{Entity, EntityView, EntityViewGet, WorldProvider};
+use flecs_ecs::core::{Entity, EntityView, EntityViewGet, WorldGet, WorldProvider};
 use hyperion::{
     glam::Vec3,
+    net::Compose,
     simulation::{Pitch, Position, Spawn, Uuid, Velocity, Yaw, entity_kind::EntityKind},
 };
 use hyperion_clap::{CommandPermission, MinecraftCommand};
 use tracing::debug;
+use valence_protocol::{VarInt, packets::play};
 
 #[derive(Parser, CommandPermission, Debug)]
 #[command(name = "shoot")]
@@ -44,11 +46,13 @@ impl MinecraftCommand for ShootCommand {
                     spawn_pos.x, spawn_pos.y, spawn_pos.z
                 );
 
+                let entity_id = Uuid::new_v4();
+
                 // Create arrow entity with velocity
                 world
                     .entity()
                     .add_enum(EntityKind::Arrow)
-                    .set(Uuid::new_v4())
+                    .set(entity_id)
                     .set(Position::new(spawn_pos.x, spawn_pos.y, spawn_pos.z))
                     .set(Velocity::new(velocity.x, velocity.y, velocity.z))
                     .set(Yaw::new(**yaw))

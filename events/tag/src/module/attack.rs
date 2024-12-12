@@ -29,7 +29,7 @@ use hyperion::{
 };
 use hyperion_inventory::PlayerInventory;
 use hyperion_utils::EntityExt;
-use tracing::info_span;
+use tracing::{debug, info_span};
 
 #[derive(Component)]
 pub struct AttackModule;
@@ -397,20 +397,24 @@ impl Module for AttackModule {
                                     let this = **target_position;
                                     let other = **origin_pos;
 
-                                    let delta_x = other.x - this.x;
-                                    let delta_z = other.z - this.z;
+                                    let dir = (this - other).normalize();
 
-                                    if delta_x.abs() >= 0.01 || delta_z.abs() >= 0.01 {
-                                        let dist_xz = delta_x.hypot(delta_z);
-                                        let multiplier = 0.4;
+                                    let knockback_xz = 8.0;
+                                    let knockback_y = 6.432;
 
-                                        reaction.0 /= 2.0;
-                                        reaction.0.x -= delta_x / dist_xz * multiplier;
-                                        reaction.0.y += multiplier;
-                                        reaction.0.z -= delta_z / dist_xz * multiplier;
+                                    let new_vel = Velocity::new(
+                                        dir.x * knockback_xz,
+                                        knockback_y,
+                                        dir.z * knockback_xz
+                                    );
 
-                                        reaction.0.y = reaction.0.y.min(0.4);
-                                    }
+                                    // https://github.com/valence-rs/valence/blob/8f3f84d557dacddd7faddb2ad724185ecee2e482/examples/ctf.rs#L987-L989
+                                    let packet = play::EntityVelocityUpdateS2c {
+                                        entity_id: VarInt(target.minecraft_id()),
+                                        velocity: new_vel.to_packet_units(),
+                                    };
+
+                                    compose.broadcast_local(&packet, target_position.to_chunk(), system).send().unwrap();
                                 },
                             );
                         });

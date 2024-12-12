@@ -33,8 +33,6 @@ impl Module for BowModule {
         .kind::<flecs::pipeline::PostUpdate>()
         .each_iter(
             move |it, _, (event_queue, inventory, position, yaw, pitch)| {
-                let span = info_span!("handle_bow_release");
-                let _enter = span.enter();
                 let _system = it.system();
                 let world = it.world();
 
