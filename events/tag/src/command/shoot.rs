@@ -20,7 +20,7 @@ pub struct ShootCommand {
 impl MinecraftCommand for ShootCommand {
     fn execute(self, system: EntityView<'_>, caller: Entity) {
         const EYE_HEIGHT: f32 = 1.62;
-        const BASE_VELOCITY: f32 = 20.0; // Base velocity multiplier for arrows
+        const BASE_VELOCITY: f32 = 3.0; // Base velocity multiplier for arrows
 
         let world = system.world();
 

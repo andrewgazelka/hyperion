@@ -272,10 +272,18 @@ impl Module for EntityStateSyncModule {
 
                 let look_changed = **yaw != **prev_yaw || **pitch != **prev_pitch;
 
+                debug!("Velocity?: {}", velocity.0 != Vec3::ZERO);
+
+                debug!("{prev_yaw} {prev_pitch} -- {:?} -> {yaw} {pitch}", velocity.0);
+
+                debug!("Pos Delta: {}", position_delta);
+
                 world.get::<&mut Blocks>(|blocks| {
                     let grounded = is_grounded(position, blocks);
 
                     if changed_position && !needs_teleport && look_changed {
+                        debug!("Kump: {yaw} {pitch}");
+
                         let packet = play::RotateAndMoveRelativeS2c {
                             entity_id,
                             delta: (position_delta * 4096.0).to_array().map(|x| x as i16),
@@ -344,7 +352,6 @@ impl Module for EntityStateSyncModule {
                 });
 
                 if velocity.0 != Vec3::ZERO {
-                    debug!("{prev_yaw} {prev_pitch} -- {:?} -> {yaw} {pitch}", velocity.0);
 
                     let packet = play::EntityVelocityUpdateS2c {
                         entity_id,
@@ -390,7 +397,7 @@ impl Module for EntityStateSyncModule {
                     velocity.0.x, velocity.0.y, velocity.0.z
                 );
 
-                debug!("{pitch}, {yaw}");
+                debug!("yaw / pitch: {yaw}, {pitch}");
 
                 // re calculate yaw and pitch based on velocity
 
@@ -411,10 +418,14 @@ impl Module for EntityStateSyncModule {
                     // calculate distance limit based on velocity
                     let distance_limit = velocity.0.length();
                     let Some(collision) = blocks.first_collision(ray, distance_limit) else {
-                        //drag
-                        velocity.0 *= 0.99 - 0.05;
+                        // Drag (0.99 / 20.0)
+                        velocity.0 *= 1.0 - (0.99 / 20.0) * 0.05;
 
+                        // Gravity (20 MPSS)
                         velocity.0.y -= 0.05;
+
+                        // Terminal Velocity (100.0)
+                        velocity.0 = velocity.0.clamp_length(0.0, 100.0);
                         return;
                     };
                     debug!("distance_limit = {}", distance_limit);
