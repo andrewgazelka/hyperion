@@ -39,6 +39,7 @@ use std::{
 use anyhow::{Context, bail};
 use derive_more::{Deref, DerefMut};
 use egress::EgressModule;
+pub use flecs_ecs;
 use flecs_ecs::prelude::*;
 pub use glam;
 use glam::IVec2;
@@ -51,6 +52,7 @@ use storage::{Events, GlobalEventHandlers, LocalDb, SkinHandler, ThreadLocal};
 use tracing::{info, info_span, warn};
 use util::mojang::MojangClient;
 pub use uuid;
+pub use valence_protocol as protocol;
 // todo: slowly move more and more things to arbitrary module
 // and then eventually do not re-export valence_protocol
 pub use valence_protocol;
@@ -59,6 +61,7 @@ pub use valence_protocol::{
     ItemKind, ItemStack, Particle,
     block::{BlockKind, BlockState},
 };
+pub use valence_server as server;
 
 use crate::{
     net::{Compose, Compressors, IoBuf, MAX_PACKET_SIZE, proxy::init_proxy_comms},
