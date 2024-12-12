@@ -670,6 +670,13 @@ impl Module for SimModule {
 
                 compose.broadcast(&packet, system).send().unwrap();
 
+                let packet = play::EntityVelocityUpdateS2c {
+                    entity_id: VarInt(minecraft_id),
+                    velocity: velocity,
+                };
+
+                compose.broadcast(&packet, system).send().unwrap();
+
                 Ok(())
             };
 

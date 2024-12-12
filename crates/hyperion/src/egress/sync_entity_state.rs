@@ -272,12 +272,6 @@ impl Module for EntityStateSyncModule {
 
                 let look_changed = **yaw != **prev_yaw || **pitch != **prev_pitch;
 
-                debug!("Velocity?: {}", velocity.0 != Vec3::ZERO);
-
-                debug!("{prev_yaw} {prev_pitch} -- {:?} -> {yaw} {pitch}", velocity.0);
-
-                debug!("Pos Delta: {}", position_delta);
-
                 world.get::<&mut Blocks>(|blocks| {
                     let grounded = is_grounded(position, blocks);
 
@@ -394,8 +388,6 @@ impl Module for EntityStateSyncModule {
                     "entity velocity: ({}, {}, {})",
                     velocity.0.x, velocity.0.y, velocity.0.z
                 );
-
-                debug!("yaw / pitch: {yaw}, {pitch}");
 
                 // re calculate yaw and pitch based on velocity
 
