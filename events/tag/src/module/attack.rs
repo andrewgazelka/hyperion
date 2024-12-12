@@ -162,7 +162,7 @@ impl Module for AttackModule {
                                     }
 
                                     if target_team == origin_team {
-                                        let msg = format!("§cCannot attack teammates");
+                                        let msg = "§cCannot attack teammates";
                                         let pkt_msg = play::GameMessageS2c {
                                             chat: msg.into_cow_text(),
                                             overlay: false,
@@ -452,7 +452,7 @@ impl Module for AttackModule {
                                         // player died, increment kill count
                                         kill_count.kill_count += 1;
 
-                                        target.set::<Team>(origin_team.clone());
+                                        target.set::<Team>(*origin_team);
 
                                         return;
                                     }
