@@ -1,18 +1,19 @@
-use flecs_ecs::{
-    core::{EntityViewGet, QueryBuilderImpl, SystemAPI, TermBuilderImpl, World},
-    macros::{Component, system},
-    prelude::Module,
-};
 use hyperion::{
+    flecs_ecs::{
+        self,
+        core::{EntityViewGet, QueryBuilderImpl, SystemAPI, TermBuilderImpl, World},
+        macros::{system, Component},
+        prelude::Module,
+    },
     net::{Compose, ConnectionId},
+    protocol::{game_mode::OptGameMode, packets::play, VarInt},
+    server::{ident, GameMode},
     simulation::{
         event::ClientStatusEvent,
         metadata::{entity::Pose, living_entity::Health},
     },
     storage::EventQueue,
 };
-use valence_protocol::{VarInt, game_mode::OptGameMode, packets::play};
-use valence_server::{GameMode, ident};
 
 #[derive(Component)]
 pub struct RespawnModule;
