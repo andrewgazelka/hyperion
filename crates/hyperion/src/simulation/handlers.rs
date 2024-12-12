@@ -645,6 +645,7 @@ pub fn packet_switch(
         play::ChatMessageC2s::ID => chat_message(data, query)?,
         play::ClickSlotC2s::ID => click_slot(data, query)?,
         play::ClientCommandC2s::ID => client_command(data, query)?,
+        play::ClientStatusC2s::ID => client_status(data, query)?,
         play::CommandExecutionC2s::ID => chat_command(data, query)?,
         play::CreativeInventoryActionC2s::ID => creative_inventory_action(data, query)?,
         play::CustomPayloadC2s::ID => custom_payload(data, query)?,

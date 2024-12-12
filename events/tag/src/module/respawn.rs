@@ -11,7 +11,8 @@ use hyperion::{
     },
     storage::EventQueue,
 };
-use valence_protocol::{VarInt, packets::play};
+use valence_protocol::{VarInt, game_mode::OptGameMode, packets::play};
+use valence_server::{GameMode, ident};
 
 #[derive(Component)]
 pub struct RespawnModule;
@@ -38,7 +39,21 @@ impl Module for RespawnModule {
                                 food_saturation: 5.0,
                             };
 
+                            let pkt_respawn = play::PlayerRespawnS2c {
+                                dimension_type_name: ident!("minecraft:overworld").into(),
+                                dimension_name: ident!("minecraft:overworld").into(),
+                                hashed_seed: 0,
+                                game_mode: GameMode::Survival,
+                                previous_game_mode: OptGameMode::default(),
+                                is_debug: false,
+                                is_flat: false,
+                                copy_metadata: false,
+                                last_death_location: None,
+                                portal_cooldown: VarInt::default(),
+                            };
+
                             compose.unicast(&pkt_health, *connection, system).unwrap();
+                            compose.unicast(&pkt_respawn, *connection, system).unwrap();
                         });
                 }
             });
