@@ -496,6 +496,7 @@ const fn calculate_damage(item: &ItemStack) -> f32 {
         ItemKind::IronSword => 6.0,
         ItemKind::DiamondSword => 7.0,
         ItemKind::NetheriteSword => 8.0,
+        ItemKind::WoodenPickaxe => 2.0,
         _ => 1.0,
     }
 }
@@ -541,7 +542,7 @@ const fn calculate_toughness(item: &ItemStack) -> f32 {
 }
 
 fn calculate_stats(inventory: &PlayerInventory) -> CombatStats {
-    let hand = inventory.get_hand_slot(0).unwrap();
+    let hand = inventory.get_cursor();
     let damage = calculate_damage(hand);
     let armor = calculate_armor(inventory.get_helmet())
         + calculate_armor(inventory.get_chestplate())
