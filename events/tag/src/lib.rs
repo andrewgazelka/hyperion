@@ -12,7 +12,7 @@ use hyperion::{
     simulation::{Player, blocks::Blocks},
 };
 use hyperion_clap::hyperion_command::CommandRegistry;
-use module::{block::BlockModule, vanish::VanishModule};
+use module::{block::BlockModule, respawn::RespawnModule, vanish::VanishModule};
 
 mod module;
 
@@ -98,6 +98,7 @@ impl Module for TagModule {
         world.import::<hyperion_clap::ClapCommandModule>();
         world.import::<SkinModule>();
         world.import::<VanishModule>();
+        world.import::<RespawnModule>();
 
         world.get::<&mut CommandRegistry>(|registry| {
             command::register(registry, world);
