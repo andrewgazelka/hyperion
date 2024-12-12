@@ -441,8 +441,6 @@ impl Module for AttackModule {
                                         // player died, increment kill count
                                         kill_count.kill_count += 1;
 
-                                        // Respawning player TODO : Restore target's health
-                                        // send respawn and teleport packets
                                         return;
                                     }
 
