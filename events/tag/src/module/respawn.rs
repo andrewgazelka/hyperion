@@ -25,13 +25,11 @@ impl Module for RespawnModule {
                 let world = it.world();
                 let system = it.system();
                 for event in event_queue.drain() {
-                    event
-                        .client
-                        .entity_view(world)
+                    let client = event.client.entity_view(world);
+                    client
                         .get::<(&ConnectionId, &mut Health)>(|(connection, health)| {
-                            let player = event.client.entity_view(world);
                             health.heal(20.);
-                            player.set::<Pose>(Pose::Standing);
+                            client.set::<Pose>(Pose::Standing);
 
                             let pkt_health = play::HealthUpdateS2c {
                                 health: health.abs(),
