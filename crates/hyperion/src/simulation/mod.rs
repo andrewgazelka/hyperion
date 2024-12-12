@@ -554,7 +554,7 @@ impl Velocity {
 
     #[must_use]
     pub fn to_packet_units(self) -> valence_protocol::Velocity {
-        valence_protocol::Velocity::from_ms_f32(self.0.into())
+        valence_protocol::Velocity::from_ms_f32((self.0 * 20.0).into())
     }
 }
 

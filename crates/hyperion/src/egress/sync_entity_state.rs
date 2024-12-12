@@ -344,6 +344,8 @@ impl Module for EntityStateSyncModule {
                 });
 
                 if velocity.0 != Vec3::ZERO {
+                    debug!("{prev_yaw} {prev_pitch} -- {:?} -> {yaw} {pitch}", velocity.0);
+
                     let packet = play::EntityVelocityUpdateS2c {
                         entity_id,
                         velocity: velocity.to_packet_units(),
@@ -388,14 +390,17 @@ impl Module for EntityStateSyncModule {
                     velocity.0.x, velocity.0.y, velocity.0.z
                 );
 
+                debug!("{pitch}, {yaw}");
+
                 // re calculate yaw and pitch based on velocity
+
+                let direction = get_direction_from_rotation(**yaw, **pitch);
+
                 let (new_yaw, new_pitch) = get_rotation_from_velocity(velocity.0);
-                /* *yaw = Yaw::new(new_yaw);
-                *pitch = Pitch::new(new_pitch); */
+                *yaw = Yaw::new(new_yaw);
+                *pitch = Pitch::new(new_pitch);
 
                 let center = **position;
-
-                let direction = get_direction_from_rotation(new_yaw, new_pitch);
 
 
                 let ray = geometry::ray::Ray::new(center, direction);
