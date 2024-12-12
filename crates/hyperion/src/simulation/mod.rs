@@ -542,7 +542,7 @@ impl Position {
 ///   [`std::sync::Arc`] or [`std::sync::RwLock`], but this is not efficient).
 /// - Therefore, we have an [`Velocity`] component which is used to store the reaction of an entity to collisions.
 /// - Later we can apply the reaction to the entity's [`Position`] to move the entity.
-#[derive(Component, Default, Debug, Copy, Clone)]
+#[derive(Component, Default, Debug, Copy, Clone, PartialEq)]
 #[meta]
 pub struct Velocity(pub Vec3);
 
@@ -707,7 +707,7 @@ impl Module for SimModule {
             ?&ConnectionId
         )
         .multi_threaded()
-        .kind::<flecs::pipeline::PreUpdate>()
+        .kind::<flecs::pipeline::PreStore>()
         .with_enum_wildcard::<EntityKind>()
         .each_iter(|it, row, (position, yaw, pitch, velocity, connection_id)| {
             if let Some(_connection_id) = connection_id {
@@ -715,7 +715,7 @@ impl Module for SimModule {
             }
 
             let world = it.system().world();
-            let entity = it.entity(row);
+            let _entity = it.entity(row);
 
 
             if velocity.0 != Vec3::ZERO {
@@ -723,18 +723,23 @@ impl Module for SimModule {
                 position.y += velocity.0.y;
                 position.z += velocity.0.z;
 
+                debug!(
+                    "entity velocity: ({}, {}, {})",
+                    velocity.0.x, velocity.0.y, velocity.0.z
+                );
+
                 // re calculate yaw and pitch based on velocity
                 let (new_yaw, new_pitch) = get_rotation_from_velocity(velocity.0);
                 *yaw = Yaw::new(new_yaw);
                 *pitch = Pitch::new(new_pitch);
 
-                let ray = entity.get::<(&Position, &Yaw, &Pitch)>(|(position, yaw, pitch)| {
-                    let center = **position;
+                let center = **position;
 
-                    let direction = get_direction_from_rotation(**yaw, **pitch);
+                let direction = get_direction_from_rotation(new_yaw, new_pitch);
 
-                    geometry::ray::Ray::new(center, direction)
-                });
+
+                let ray = geometry::ray::Ray::new(center, direction);
+
 
                 #[allow(clippy::excessive_nesting)]
                 world.get::<&mut Blocks>(|blocks| {

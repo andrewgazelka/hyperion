@@ -17,6 +17,9 @@ use crate::{
     simulation::{
         Pitch, Position, Velocity, Xp, Yaw,
         animation::ActiveAnimation,
+        blocks::Blocks,
+        entity_kind::EntityKind,
+        handlers::is_grounded,
         metadata::{MetadataChanges, get_and_clear_metadata},
     },
 };
@@ -229,127 +232,187 @@ impl Module for EntityStateSyncModule {
             }
         });
 
-
-        /* 
-        What ever you do DO NOT!!! I REPEAT DO NOT SET VELOCITY ANYWHERE
-        IF YOU WANT TO APPLY VELOCITY SEND 1 VELOCITY PAKCET WHEN NEEDED LOOK in events/tag/src/module/attack.rs
-        */
+        // What ever you do DO NOT!!! I REPEAT DO NOT SET VELOCITY ANYWHERE
+        // IF YOU WANT TO APPLY VELOCITY SEND 1 VELOCITY PAKCET WHEN NEEDED LOOK in events/tag/src/module/attack.rs
         system!(
             "sync_player_entity",
             world,
             &Compose($),
             &mut (Prev, Position),
+            &mut (Prev, Yaw),
+            &mut (Prev, Pitch),
             &mut Position,
+            &Velocity,
             &Yaw,
             &Pitch,
-            ?&mut ActiveAnimation,
-            ?&ConnectionId
         )
         .multi_threaded()
         .kind::<flecs::pipeline::PreStore>()
         .each_iter(
-            |it, row, (compose, prev_position, position, yaw, pitch, animation, io)| {
-                match io {
-                    None => {
-                        return;
-                    }
-                    _ => {}
-                }
+            |it,
+             row,
+             (
+                compose,
+                prev_position,
+                prev_yaw,
+                prev_pitch,
+                position,
+                velocity,
+                yaw,
+                pitch,
+            )| {
+                // if io.is_none() {
+                // return;
+                // }
 
-                let _world = it.system().world();
+                let world = it.system().world();
                 let system = it.system();
                 let entity = it.entity(row);
                 let entity_id = VarInt(entity.minecraft_id());
 
                 let chunk_pos = position.to_chunk();
 
-                // Send entity Position
-                let pos_packet = play::EntityPositionS2c {
-                    entity_id,
-                    position: position.as_dvec3(),
-                    yaw: ByteAngle::from_degrees(**yaw),
-                    pitch: ByteAngle::from_degrees(**pitch),
-                    on_ground: prev_position.y == position.y,
-                };
+                let position_delta = **position - **prev_position;
+                let needs_teleport = position_delta.abs().max_element() >= 8.0;
+                let changed_position = **position != **prev_position;
 
-                compose
-                    .broadcast_local(&pos_packet, chunk_pos, system)
-                    .send()
-                    .unwrap();
+                let look_changed = **yaw != **prev_yaw || **pitch != **prev_pitch;
 
-                // Send entity Head
-                let head_packet = play::EntitySetHeadYawS2c {
-                    entity_id,
-                    head_yaw: ByteAngle::from_degrees(**yaw),
-                };
-                
-                compose
-                    .broadcast_local(&head_packet, chunk_pos, system)
-                    .send()
-                    .unwrap();
+                world.get::<&mut Blocks>(|blocks| {
+                    let grounded = is_grounded(position, blocks);
 
-                // Send entity Animation
-                if let Some(animation) = animation {
-                    for anim_packet in animation.packets(entity_id) {
+                    if changed_position && !needs_teleport && look_changed {
+                        let packet = play::RotateAndMoveRelativeS2c {
+                            entity_id,
+                            delta: (position_delta * 4096.0).to_array().map(|x| x as i16),
+                            yaw: ByteAngle::from_degrees(**yaw),
+                            pitch: ByteAngle::from_degrees(**pitch),
+                            on_ground: grounded,
+                        };
+
                         compose
-                            .broadcast_local(&anim_packet, chunk_pos, system)
+                            .broadcast_local(&packet, chunk_pos, system)
+                            .send()
+                            .unwrap();
+                    } else {
+                        if changed_position && !needs_teleport {
+                            let packet = play::MoveRelativeS2c {
+                                entity_id,
+                                delta: (position_delta * 4096.0).to_array().map(|x| x as i16),
+                                on_ground: grounded,
+                            };
+
+                            compose
+                                .broadcast_local(&packet, chunk_pos, system)
+                                .send()
+                                .unwrap();
+                        }
+
+                        if look_changed {
+                            let packet = play::RotateS2c {
+                                entity_id,
+                                yaw: ByteAngle::from_degrees(**yaw),
+                                pitch: ByteAngle::from_degrees(**pitch),
+                                on_ground: grounded,
+                            };
+
+                            compose
+                                .broadcast_local(&packet, chunk_pos, system)
+                                .send()
+                                .unwrap();
+
+                            let packet = play::EntitySetHeadYawS2c {
+                                entity_id,
+                                head_yaw: ByteAngle::from_degrees(**yaw),
+                            };
+
+                            compose
+                                .broadcast_local(&packet, chunk_pos, system)
+                                .send()
+                                .unwrap();
+                        }
+                    }
+
+                    if needs_teleport {
+                        let packet = play::EntityPositionS2c {
+                            entity_id,
+                            position: position.as_dvec3(),
+                            yaw: ByteAngle::from_degrees(**yaw),
+                            pitch: ByteAngle::from_degrees(**pitch),
+                            on_ground: grounded,
+                        };
+
+                        compose
+                            .broadcast_local(&packet, chunk_pos, system)
                             .send()
                             .unwrap();
                     }
-                    animation.clear();
-                }
-            },
-        );
+                });
 
-        system!(
-            "sync_none_player_entity",
-            world,
-            &Compose($),
-            &mut (Prev, Position),
-            &Position,
-            &mut Velocity,
-            ?&ConnectionId,
-        )
-        .multi_threaded()
-        .kind::<flecs::pipeline::OnUpdate>()
-        .each_iter(
-            |it, row, (compose, prev_position, position, velocity, connection_id)| {
-                if let Some(_connection_id) = connection_id {
-                    return;
-                }
-
-                let system = it.system();
-
-                let entity = it.entity(row);
-                let entity_id = VarInt(entity.minecraft_id());
-                
-                let packet = play::EntityVelocityUpdateS2c {
-                    entity_id,
-                    velocity: velocity.to_packet_units()
-                };
-
-                compose
-                    .broadcast_local(&packet, position.to_chunk(), system)
-                    .send()
-                    .unwrap();
-
-                let position_delta = **position - **prev_position;
-                let changed_position = **position != **prev_position;
-
-                if changed_position {
-                    let packet = play::MoveRelativeS2c {
+                if velocity.0 != Vec3::ZERO {
+                    let packet = play::EntityVelocityUpdateS2c {
                         entity_id,
-                        delta: (position_delta * 4096.0).to_array().map(|x| x as i16),
-                        on_ground: prev_position.y == position.y,
+                        velocity: velocity.to_packet_units(),
                     };
 
                     compose
-                        .broadcast_local(&packet, position.to_chunk(), system)
+                        .broadcast_local(&packet, chunk_pos, system)
                         .send()
                         .unwrap();
                 }
 
-            });
+            },
+        );
+
+        // system!(
+        // "sync_none_player_entity",
+        // world,
+        // &Compose($),
+        // &mut (Prev, Position),
+        // &Position,
+        // &mut Velocity,
+        // ?&ConnectionId,
+        // )
+        // .multi_threaded()
+        // .kind::<flecs::pipeline::OnUpdate>()
+        // .each_iter(
+        // |it, row, (compose, prev_position, position, velocity, connection_id)| {
+        // if connection_id.is_some() {
+        // return;
+        // }
+        //
+        // let system = it.system();
+        //
+        // let entity = it.entity(row);
+        // let entity_id = VarInt(entity.minecraft_id());
+        //
+        // let packet = play::EntityVelocityUpdateS2c {
+        // entity_id,
+        // velocity: velocity.to_packet_units()
+        // };
+        //
+        // compose
+        // .broadcast_local(&packet, position.to_chunk(), system)
+        // .send()
+        // .unwrap(); */
+        //
+        // let position_delta = **position - **prev_position;
+        // let changed_position = **position != **prev_position;
+        //
+        // if changed_position {
+        // let packet = play::MoveRelativeS2c {
+        // entity_id,
+        // delta: (position_delta * 4096.0).to_array().map(|x| x as i16),
+        // on_ground: false,
+        // };
+        //
+        // compose
+        // .broadcast_local(&packet, position.to_chunk(), system)
+        // .send()
+        // .unwrap();
+        // }
+        //
+        // });
 
         track_previous::<Position>(world);
         track_previous::<Yaw>(world);
