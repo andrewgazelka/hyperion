@@ -392,8 +392,8 @@ impl Module for EntityStateSyncModule {
                 // re calculate yaw and pitch based on velocity
 
                 let (new_yaw, new_pitch) = get_rotation_from_velocity(velocity.0);
-                *yaw = Yaw::new(new_yaw);
-                *pitch = Pitch::new(new_pitch);
+                /* *yaw = Yaw::new(new_yaw);
+                *pitch = Pitch::new(new_pitch); */
 
                 let direction = get_direction_from_rotation(new_yaw, new_pitch);
 

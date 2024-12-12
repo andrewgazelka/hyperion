@@ -18,14 +18,11 @@ use valence_generated::block::BlockState;
 use valence_protocol::{ByteAngle, VarInt, packets::play};
 
 use crate::{
-    Global,
-    net::{Compose, ConnectionId},
-    simulation::{
+    net::{Compose, ConnectionId, DataBundle}, simulation::{
         command::Command,
         entity_kind::EntityKind,
-        metadata::{Metadata, MetadataPrefabs, entity::EntityFlags},
-    },
-    storage::ThreadLocalVec,
+        metadata::{entity::EntityFlags, Metadata, MetadataPrefabs},
+    }, storage::ThreadLocalVec, Global
 };
 
 pub mod animation;
@@ -651,7 +648,9 @@ impl Module for SimModule {
             let entity = it.entity(row);
             let minecraft_id = entity.minecraft_id();
 
-            let spawn_entity = move |kind: EntityKind| -> anyhow::Result<()> {
+            let mut bundle = DataBundle::new(compose, system);
+
+            let mut spawn_entity = move |kind: EntityKind| -> anyhow::Result<()> {
                 let kind = kind as i32;
 
                 let velocity = velocity.to_packet_units();
@@ -668,14 +667,16 @@ impl Module for SimModule {
                     velocity,
                 };
 
-                compose.broadcast(&packet, system).send().unwrap();
+                bundle.add_packet(&packet).unwrap();
 
                 let packet = play::EntityVelocityUpdateS2c {
                     entity_id: VarInt(minecraft_id),
                     velocity: velocity,
                 };
 
-                compose.broadcast(&packet, system).send().unwrap();
+                bundle.add_packet(&packet).unwrap();
+
+                bundle.broadcast_local(position.to_chunk()).unwrap();
 
                 Ok(())
             };
