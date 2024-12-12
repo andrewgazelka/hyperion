@@ -272,6 +272,8 @@ impl Module for EntityStateSyncModule {
 
                 let look_changed = **yaw != **prev_yaw || **pitch != **prev_pitch;
 
+                let mut bundle = DataBundle::new(compose, system);
+
                 world.get::<&mut Blocks>(|blocks| {
                     let grounded = is_grounded(position, blocks);
 
@@ -284,10 +286,7 @@ impl Module for EntityStateSyncModule {
                             on_ground: grounded,
                         };
 
-                        compose
-                            .broadcast_local(&packet, chunk_pos, system)
-                            .send()
-                            .unwrap();
+                        bundle.add_packet(&packet).unwrap();
                     } else {
                         if changed_position && !needs_teleport {
                             let packet = play::MoveRelativeS2c {
@@ -296,10 +295,7 @@ impl Module for EntityStateSyncModule {
                                 on_ground: grounded,
                             };
 
-                            compose
-                                .broadcast_local(&packet, chunk_pos, system)
-                                .send()
-                                .unwrap();
+                            bundle.add_packet(&packet).unwrap();
                         }
 
                         if look_changed {
@@ -310,21 +306,14 @@ impl Module for EntityStateSyncModule {
                                 on_ground: grounded,
                             };
 
-                            compose
-                                .broadcast_local(&packet, chunk_pos, system)
-                                .send()
-                                .unwrap();
-
-                            let packet = play::EntitySetHeadYawS2c {
-                                entity_id,
-                                head_yaw: ByteAngle::from_degrees(**yaw),
-                            };
-
-                            compose
-                                .broadcast_local(&packet, chunk_pos, system)
-                                .send()
-                                .unwrap();
+                            bundle.add_packet(&packet).unwrap();
                         }
+                        let packet = play::EntitySetHeadYawS2c {
+                            entity_id,
+                            head_yaw: ByteAngle::from_degrees(**yaw),
+                        };
+
+                        bundle.add_packet(&packet).unwrap();
                     }
 
                     if needs_teleport {
@@ -336,10 +325,7 @@ impl Module for EntityStateSyncModule {
                             on_ground: grounded,
                         };
 
-                        compose
-                            .broadcast_local(&packet, chunk_pos, system)
-                            .send()
-                            .unwrap();
+                        bundle.add_packet(&packet).unwrap();
                     }
                 });
 
@@ -350,11 +336,10 @@ impl Module for EntityStateSyncModule {
                         velocity: velocity.to_packet_units(),
                     };
 
-                    compose
-                        .broadcast_local(&packet, chunk_pos, system)
-                        .send()
-                        .unwrap();
+                    bundle.add_packet(&packet).unwrap();
                 }
+
+                bundle.broadcast_local(chunk_pos).unwrap();
             },
         );
 
@@ -362,15 +347,13 @@ impl Module for EntityStateSyncModule {
             "update_projectile_positions",
             world,
             &mut Position,
-            &mut Yaw,
-            &mut Pitch,
             &mut Velocity,
             ?&ConnectionId
         )
         .multi_threaded()
         .kind::<flecs::pipeline::OnUpdate>()
         .with_enum_wildcard::<EntityKind>()
-        .each_iter(|it, row, (position, yaw, pitch, velocity, connection_id)| {
+        .each_iter(|it, row, (position, velocity, connection_id)| {
             if let Some(_connection_id) = connection_id {
                 return;
             }
@@ -391,16 +374,12 @@ impl Module for EntityStateSyncModule {
 
                 // re calculate yaw and pitch based on velocity
 
-                let (new_yaw, new_pitch) = get_rotation_from_velocity(velocity.0);
-                /* *yaw = Yaw::new(new_yaw);
-                *pitch = Pitch::new(new_pitch); */
-
-                let direction = get_direction_from_rotation(new_yaw, new_pitch);
+                //let (new_yaw, new_pitch) = get_rotation_from_velocity(velocity.0);
 
                 let center = **position;
 
 
-                let ray = geometry::ray::Ray::new(center, direction);
+                let ray = geometry::ray::Ray::new(center, velocity.0);
 
 
                 #[allow(clippy::excessive_nesting)]
