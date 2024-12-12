@@ -10,18 +10,12 @@ use valence_protocol::{
     ByteAngle, RawBytes, VarInt,
     packets::play::{self},
 };
+use valence_server::BlockState;
 
 use crate::{
-    Prev,
-    net::{Compose, ConnectionId, DataBundle},
-    simulation::{
-        Pitch, Position, Velocity, Xp, Yaw,
-        animation::ActiveAnimation,
-        blocks::Blocks,
-        entity_kind::EntityKind,
-        handlers::is_grounded,
-        metadata::{MetadataChanges, get_and_clear_metadata},
-    },
+    net::{Compose, ConnectionId, DataBundle}, simulation::{
+        animation::ActiveAnimation, blocks::Blocks, entity_kind::EntityKind, get_direction_from_rotation, get_rotation_from_velocity, handlers::is_grounded, metadata::{get_and_clear_metadata, MetadataChanges}, Pitch, Position, Velocity, Xp, Yaw
+    }, Prev
 };
 
 #[derive(Component)]
@@ -363,6 +357,77 @@ impl Module for EntityStateSyncModule {
 
             },
         );
+
+        system!(
+            "update_projectile_positions",
+            world,
+            &mut Position,
+            &mut Yaw,
+            &mut Pitch,
+            &mut Velocity,
+            ?&ConnectionId
+        )
+        .multi_threaded()
+        .kind::<flecs::pipeline::PreStore>()
+        .with_enum_wildcard::<EntityKind>()
+        .each_iter(|it, row, (position, yaw, pitch, velocity, connection_id)| {
+            if let Some(_connection_id) = connection_id {
+                return;
+            }
+
+            let world = it.system().world();
+            let _entity = it.entity(row);
+
+
+            if velocity.0 != Vec3::ZERO {
+                position.x += velocity.0.x;
+                position.y += velocity.0.y;
+                position.z += velocity.0.z;
+
+                debug!(
+                    "entity velocity: ({}, {}, {})",
+                    velocity.0.x, velocity.0.y, velocity.0.z
+                );
+
+                // re calculate yaw and pitch based on velocity
+                let (new_yaw, new_pitch) = get_rotation_from_velocity(velocity.0);
+                *yaw = Yaw::new(new_yaw);
+                *pitch = Pitch::new(new_pitch);
+
+                let center = **position;
+
+                let direction = get_direction_from_rotation(new_yaw, new_pitch);
+
+
+                let ray = geometry::ray::Ray::new(center, direction);
+
+
+                #[allow(clippy::excessive_nesting)]
+                world.get::<&mut Blocks>(|blocks| {
+                    // calculate distance limit based on velocity
+                    let distance_limit = velocity.0.length();
+                    let Some(collision) = blocks.first_collision(ray, distance_limit) else {
+                        //drag
+                        velocity.0 *= 0.99 - 0.05;
+
+                        velocity.0.y -= 0.05;
+                        return;
+                    };
+                    debug!("distance_limit = {}", distance_limit);
+
+                    debug!("collision = {collision:?}");
+
+                    velocity.0 = Vec3::ZERO;
+
+                    // Set arrow position to the collision location
+                    **position = collision.normal;
+
+                    blocks
+                        .set_block(collision.location, BlockState::DIRT)
+                        .unwrap();
+                });
+            }
+        });
 
         // system!(
         // "sync_none_player_entity",

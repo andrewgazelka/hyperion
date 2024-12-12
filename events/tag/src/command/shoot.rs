@@ -20,7 +20,7 @@ pub struct ShootCommand {
 impl MinecraftCommand for ShootCommand {
     fn execute(self, system: EntityView<'_>, caller: Entity) {
         const EYE_HEIGHT: f32 = 1.62;
-        const BASE_VELOCITY: f32 = 20.0; // Base velocity multiplier for arrows
+        const BASE_VELOCITY: f32 = 3.0; // Base velocity multiplier for arrows
 
         let world = system.world();
 
@@ -31,7 +31,7 @@ impl MinecraftCommand for ShootCommand {
                 let direction = super::raycast::get_direction_from_rotation(**yaw, **pitch);
 
                 // Spawn arrow slightly in front of player to avoid self-collision
-                let spawn_pos = Vec3::new(pos.x, pos.y + EYE_HEIGHT, pos.z) + direction * 0.5;
+                let spawn_pos = Vec3::new(pos.x, pos.y + EYE_HEIGHT, pos.z) + direction * 1.0;
 
                 // Calculate velocity with base multiplier
                 let velocity = direction * (self.velocity * BASE_VELOCITY);
