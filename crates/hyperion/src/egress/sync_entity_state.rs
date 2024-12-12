@@ -8,14 +8,22 @@ use hyperion_utils::EntityExt;
 use tracing::{debug, error};
 use valence_protocol::{
     ByteAngle, RawBytes, VarInt,
-    packets::play::{self},
+    packets::play::{self, entity_equipment_update_s2c::EquipmentEntry},
 };
 use valence_server::BlockState;
 
 use crate::{
-    net::{Compose, ConnectionId, DataBundle}, simulation::{
-        animation::ActiveAnimation, blocks::Blocks, entity_kind::EntityKind, get_direction_from_rotation, get_rotation_from_velocity, handlers::is_grounded, metadata::{get_and_clear_metadata, MetadataChanges}, Pitch, Position, Velocity, Xp, Yaw
-    }, Prev
+    Prev,
+    net::{Compose, ConnectionId, DataBundle},
+    simulation::{
+        Pitch, Position, Velocity, Xp, Yaw,
+        animation::ActiveAnimation,
+        blocks::Blocks,
+        entity_kind::EntityKind,
+        get_direction_from_rotation, get_rotation_from_velocity,
+        handlers::is_grounded,
+        metadata::{MetadataChanges, get_and_clear_metadata},
+    },
 };
 
 #[derive(Component)]
@@ -226,6 +234,52 @@ impl Module for EntityStateSyncModule {
             }
         });
 
+        system!(
+            "sync_equipped_items",
+            world,
+            &Compose($),
+            &Position,
+            &PlayerInventory,
+        )
+        .multi_threaded()
+        .kind::<flecs::pipeline::OnStore>()
+        .each_iter(move |it, row, (compose, position, inventory)| {
+            //let entity = it.entity(row);
+            let system = it.system();
+            // get armor and hand
+            let hand = EquipmentEntry {
+                slot: 0,
+                item: inventory.get_cursor().clone(),
+            };
+            let helmet = EquipmentEntry {
+                slot: 5,
+                item: inventory.get_helmet().clone(),
+            };
+            let chestplate = EquipmentEntry {
+                slot: 4,
+                item: inventory.get_chestplate().clone(),
+            };
+            let leggings = EquipmentEntry {
+                slot: 3,
+                item: inventory.get_leggings().clone(),
+            };
+            let boots = EquipmentEntry {
+                slot: 2,
+                item: inventory.get_boots().clone(),
+            };
+            let off_hand = EquipmentEntry {
+                slot: 1,
+                item: inventory.get_offhand().clone(),
+            };
+
+            let packet = play::EntityEquipmentUpdateS2c {
+                entity_id: VarInt(it.entity(row).minecraft_id()),
+                equipment: vec![hand, helmet, chestplate, leggings, boots, off_hand],
+            };
+
+            compose.broadcast_local(&packet, position.to_chunk(), system).send().unwrap();
+        });
+
         // What ever you do DO NOT!!! I REPEAT DO NOT SET VELOCITY ANYWHERE
         // IF YOU WANT TO APPLY VELOCITY SEND 1 VELOCITY PAKCET WHEN NEEDED LOOK in events/tag/src/module/attack.rs
         system!(
@@ -361,7 +415,6 @@ impl Module for EntityStateSyncModule {
             let world = it.system().world();
             let _entity = it.entity(row);
 
-
             if velocity.0 != Vec3::ZERO {
                 position.x += velocity.0.x;
                 position.y += velocity.0.y;
@@ -374,13 +427,11 @@ impl Module for EntityStateSyncModule {
 
                 // re calculate yaw and pitch based on velocity
 
-                //let (new_yaw, new_pitch) = get_rotation_from_velocity(velocity.0);
+                // let (new_yaw, new_pitch) = get_rotation_from_velocity(velocity.0);
 
                 let center = **position;
 
-
                 let ray = geometry::ray::Ray::new(center, velocity.0);
-
 
                 #[allow(clippy::excessive_nesting)]
                 world.get::<&mut Blocks>(|blocks| {
