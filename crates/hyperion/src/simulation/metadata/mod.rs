@@ -30,7 +30,7 @@ pub struct MetadataPrefabs {
     pub player_base: Entity,
 }
 
-fn component_and_prev<T>(world: &World) -> fn(&mut EntityView<'_>)
+fn component_and_track<T>(world: &World) -> fn(&mut EntityView<'_>)
 where
     T: ComponentId + Copy + PartialEq + Metadata + Default + flecs_ecs::core::DataComponent + Debug,
     <T as ComponentId>::UnderlyingType: Meta<<T as ComponentId>::UnderlyingType>,
@@ -49,7 +49,7 @@ where
 }
 
 trait EntityViewExt {
-    fn component_and_prev<T>(self) -> Self
+    fn component_and_track<T>(self) -> Self
     where
         T: ComponentId
             + Copy
@@ -62,7 +62,7 @@ trait EntityViewExt {
 }
 
 impl EntityViewExt for EntityView<'_> {
-    fn component_and_prev<T>(mut self) -> Self
+    fn component_and_track<T>(mut self) -> Self
     where
         T: ComponentId
             + Copy
@@ -75,7 +75,7 @@ impl EntityViewExt for EntityView<'_> {
     {
         let world = self.world();
         // todo: how this possible exclusive mut
-        component_and_prev::<T>(&world)(&mut self);
+        component_and_track::<T>(&world)(&mut self);
         self
     }
 }
@@ -86,8 +86,8 @@ pub fn register_prefabs(world: &World) -> MetadataPrefabs {
 
     let entity_base = entity::register_prefab(world, None)
         .add::<MetadataChanges>()
-        .component_and_prev::<EntityFlags>()
-        .component_and_prev::<Pose>()
+        .component_and_track::<EntityFlags>()
+        .component_and_track::<Pose>()
         .id();
 
     let display_base = display::register_prefab(world, Some(entity_base)).id();
@@ -177,7 +177,7 @@ macro_rules! register_component_ids {
     ($world:expr, $entity:ident, $($name:ident),* $(,)?) => {
         {
             $(
-                let reg = $crate::simulation::metadata::component_and_prev::<$name>($world);
+                let reg = $crate::simulation::metadata::component_and_track::<$name>($world);
                 reg(&mut $entity);
             )*
 

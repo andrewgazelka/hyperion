@@ -98,6 +98,7 @@ impl Module for TagModule {
         world.import::<hyperion_clap::ClapCommandModule>();
         world.import::<SkinModule>();
         world.import::<VanishModule>();
+        world.import::<respawn::RespawnModule>();
 
         world.get::<&mut CommandRegistry>(|registry| {
             command::register(registry, world);

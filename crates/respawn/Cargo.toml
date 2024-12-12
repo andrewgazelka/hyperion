@@ -1,0 +1,13 @@
+[package]
+name = "respawn"
+version = "0.1.0"
+edition = "2021"
+authors = ["Andrew Gazelka <andrew.gazelka@gmail.com>"]
+readme = "README.md"
+publish = false
+
+[dependencies]
+hyperion = {workspace = true}
+
+[lints]
+workspace = true
