@@ -236,7 +236,7 @@ impl Module for EntityStateSyncModule {
             &mut (Prev, Yaw),
             &mut (Prev, Pitch),
             &mut Position,
-            &Velocity,
+            &mut Velocity,
             &Yaw,
             &Pitch,
         )
@@ -354,7 +354,6 @@ impl Module for EntityStateSyncModule {
                         .send()
                         .unwrap();
                 }
-
             },
         );
 
@@ -368,7 +367,7 @@ impl Module for EntityStateSyncModule {
             ?&ConnectionId
         )
         .multi_threaded()
-        .kind::<flecs::pipeline::PreStore>()
+        .kind::<flecs::pipeline::OnUpdate>()
         .with_enum_wildcard::<EntityKind>()
         .each_iter(|it, row, (position, yaw, pitch, velocity, connection_id)| {
             if let Some(_connection_id) = connection_id {
@@ -391,8 +390,8 @@ impl Module for EntityStateSyncModule {
 
                 // re calculate yaw and pitch based on velocity
                 let (new_yaw, new_pitch) = get_rotation_from_velocity(velocity.0);
-                *yaw = Yaw::new(new_yaw);
-                *pitch = Pitch::new(new_pitch);
+                /* *yaw = Yaw::new(new_yaw);
+                *pitch = Pitch::new(new_pitch); */
 
                 let center = **position;
 
