@@ -28,6 +28,7 @@ use super::{
     block_bounds,
     blocks::Blocks,
     bow::BowCharging,
+    event::ClientStatusEvent,
 };
 use crate::{
     net::{Compose, ConnectionId, decoder::BorrowedPacketFrame},
@@ -609,6 +610,22 @@ pub fn request_command_completions(
     };
 
     query.handlers.completion.trigger_all(query, &completion);
+
+    Ok(())
+}
+
+pub fn client_status(mut data: &'static [u8], query: &PacketSwitchQuery<'_>) -> anyhow::Result<()> {
+    let pkt = play::ClientStatusC2s::decode(&mut data)?;
+
+    let command = ClientStatusEvent {
+        client: query.id,
+        status: match pkt {
+            play::ClientStatusC2s::PerformRespawn => event::ClientStatusCommand::PerformRespawn,
+            play::ClientStatusC2s::RequestStats => event::ClientStatusCommand::RequestStats,
+        },
+    };
+
+    query.events.push(command, query.world);
 
     Ok(())
 }
