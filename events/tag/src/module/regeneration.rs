@@ -51,6 +51,10 @@ impl Module for RegenerationModule {
 
                 let ticks_since_damage = current_tick - last_damaged.tick;
 
+                if health.is_dead() {
+                    return;
+                }
+
                 // Calculate regeneration rate based on time since last damage
                 let base_regen = 0.01; // Base regeneration per tick
                 let ramp_factor = 0.0001_f32; // Increase in regeneration per tick
