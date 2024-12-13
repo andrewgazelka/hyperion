@@ -3,9 +3,17 @@ use flecs_ecs::{
     core::{Entity, WorldProvider},
     prelude::EntityView,
 };
-use hyperion::{simulation::{
-    entity_kind::EntityKind, metadata::{block_display::DisplayedBlockState, display::{Height, Width}}, Pitch, Position, Spawn, Uuid, Velocity, Yaw
-}, BlockState};
+use hyperion::{
+    BlockState,
+    simulation::{
+        Pitch, Position, Spawn, Uuid, Velocity, Yaw,
+        entity_kind::EntityKind,
+        metadata::{
+            block_display::DisplayedBlockState,
+            display::{Height, Width},
+        },
+    },
+};
 use hyperion_clap::{CommandPermission, MinecraftCommand};
 
 use crate::FollowClosestPlayer;

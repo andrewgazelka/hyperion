@@ -3,15 +3,15 @@ use std::fmt::Debug;
 use derive_more::Deref;
 use flecs_ecs::{
     addons::Meta,
-    core::{
-        flecs, ComponentId, Entity, EntityView, IdOperations, QueryBuilderImpl, SystemAPI, TermBuilderImpl, World, WorldProvider
-    },
-    macros::{observer, system, Component},
+    core::{ComponentId, Entity, EntityView, IdOperations, SystemAPI, World, WorldProvider, flecs},
+    macros::Component,
 };
-use itertools::Itertools;
 use valence_protocol::{Encode, VarInt};
 
-use crate::{simulation::metadata::entity::{EntityFlags, Pose}, Prev};
+use crate::{
+    Prev,
+    simulation::metadata::entity::{EntityFlags, Pose},
+};
 
 pub mod block_display;
 pub mod display;
@@ -37,9 +37,9 @@ where
 {
     world.component::<T>().meta();
 
-    /* observer!(world, flecs::OnSet, &T, [filter] &mut MetadataChanges,).each(|(value, changes)| {
-        changes.encode(*value);
-    }); */
+    // observer!(world, flecs::OnSet, &T, [filter] &mut MetadataChanges,).each(|(value, changes)| {
+    // changes.encode(*value);
+    // });
     let type_name = core::any::type_name::<T>();
 
     let system_name = format!("exchange_{type_name}").leak();
@@ -149,9 +149,8 @@ pub fn register_prefabs(world: &World) -> MetadataPrefabs {
     }
 }
 
-use crate::simulation::metadata::r#type::MetadataType;
-
 use super::entity_kind::EntityKind;
+use crate::simulation::metadata::r#type::MetadataType;
 
 #[derive(Debug, Default, Component, Clone)]
 // index (u8), type (varint), value (varies)

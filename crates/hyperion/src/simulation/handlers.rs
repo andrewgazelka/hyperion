@@ -7,7 +7,7 @@ use flecs_ecs::core::{Entity, EntityView, EntityViewGet, World};
 use geometry::aabb::Aabb;
 use glam::{IVec3, Vec3};
 use hyperion_utils::EntityExt;
-use tracing::{debug, info, instrument, trace, warn};
+use tracing::{info, instrument, trace, warn};
 use valence_generated::{
     block::{BlockKind, BlockState, PropName},
     item::ItemKind,
@@ -126,6 +126,8 @@ pub fn try_change_position(
     Ok(())
 }
 
+#[must_use]
+#[allow(clippy::cast_possible_truncation)]
 pub fn is_grounded(position: &Vec3, blocks: &Blocks) -> bool {
     // Calculate the block position by flooring the x and z coordinates
     let block_x = position.x as i32;
@@ -133,7 +135,10 @@ pub fn is_grounded(position: &Vec3, blocks: &Blocks) -> bool {
     let block_z = position.z as i32;
 
     // Check if the block at the calculated position is not air
-    !blocks.get_block(IVec3::new(block_x, block_y, block_z)).unwrap().is_air()
+    !blocks
+        .get_block(IVec3::new(block_x, block_y, block_z))
+        .unwrap()
+        .is_air()
 }
 fn is_within_speed_limits(current: Vec3, proposed: Vec3) -> anyhow::Result<()> {
     let delta = proposed - current;

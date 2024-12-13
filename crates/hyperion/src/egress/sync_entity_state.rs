@@ -20,13 +20,8 @@ use crate::{
         animation::ActiveAnimation,
         blocks::Blocks,
         entity_kind::EntityKind,
-        get_direction_from_rotation, get_rotation_from_velocity,
         handlers::is_grounded,
-        metadata::{
-            MetadataChanges,
-            entity::{EntityFlags, Pose},
-            get_and_clear_metadata,
-        },
+        metadata::{MetadataChanges, get_and_clear_metadata},
     },
 };
 
@@ -331,7 +326,7 @@ impl Module for EntityStateSyncModule {
                 let needs_teleport = position_delta.abs().max_element() >= 8.0;
                 let changed_position = **position != **prev_position;
 
-                let look_changed = **yaw != **prev_yaw || **pitch != **prev_pitch;
+                let look_changed = (**yaw - **prev_yaw).abs() >= 0.01 || (**pitch - **prev_pitch).abs() >= 0.01;
 
                 let mut bundle = DataBundle::new(compose, system);
 
@@ -341,6 +336,7 @@ impl Module for EntityStateSyncModule {
                     if changed_position && !needs_teleport && look_changed {
                         let packet = play::RotateAndMoveRelativeS2c {
                             entity_id,
+                            #[allow(clippy::cast_possible_truncation)]
                             delta: (position_delta * 4096.0).to_array().map(|x| x as i16),
                             yaw: ByteAngle::from_degrees(**yaw),
                             pitch: ByteAngle::from_degrees(**pitch),
@@ -352,6 +348,7 @@ impl Module for EntityStateSyncModule {
                         if changed_position && !needs_teleport {
                             let packet = play::MoveRelativeS2c {
                                 entity_id,
+                                #[allow(clippy::cast_possible_truncation)]
                                 delta: (position_delta * 4096.0).to_array().map(|x| x as i16),
                                 on_ground: grounded,
                             };
@@ -438,7 +435,8 @@ impl Module for EntityStateSyncModule {
                     let distance_limit = velocity.0.length();
                     let Some(collision) = blocks.first_collision(ray, distance_limit) else {
                         // Drag (0.99 / 20.0)
-                        velocity.0 *= 1.0 - (0.99 / 20.0) * 0.05;
+                        // 1.0 - (0.99 / 20.0) * 0.05
+                        velocity.0 *= 0.997_525;
 
                         // Gravity (20 MPSS)
                         velocity.0.y -= 0.05;

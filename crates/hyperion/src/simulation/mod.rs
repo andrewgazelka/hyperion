@@ -1,7 +1,5 @@
-use std::{borrow::Borrow, collections::HashMap, hash::Hash, num::TryFromIntError, sync::Arc};
+use std::{borrow::Borrow, collections::HashMap, hash::Hash, sync::Arc};
 
-use anyhow::Context;
-use blocks::Blocks;
 use bow::BowCharging;
 use bytemuck::{Pod, Zeroable};
 use derive_more::{Constructor, Deref, DerefMut, Display, From};
@@ -18,11 +16,14 @@ use valence_generated::block::BlockState;
 use valence_protocol::{ByteAngle, VarInt, packets::play};
 
 use crate::{
-    net::{Compose, ConnectionId, DataBundle}, simulation::{
+    Global,
+    net::{Compose, DataBundle},
+    simulation::{
         command::Command,
         entity_kind::EntityKind,
-        metadata::{entity::EntityFlags, Metadata, MetadataPrefabs},
-    }, storage::ThreadLocalVec, Global
+        metadata::{Metadata, MetadataPrefabs, entity::EntityFlags},
+    },
+    storage::ThreadLocalVec,
 };
 
 pub mod animation;
@@ -671,7 +672,7 @@ impl Module for SimModule {
 
                 let packet = play::EntityVelocityUpdateS2c {
                     entity_id: VarInt(minecraft_id),
-                    velocity: velocity,
+                    velocity,
                 };
 
                 bundle.add_packet(&packet).unwrap();
@@ -704,7 +705,6 @@ impl Module for SimModule {
                     _ => {}
                 });
             });
-
     }
 }
 

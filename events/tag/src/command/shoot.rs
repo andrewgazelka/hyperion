@@ -1,13 +1,11 @@
 use clap::Parser;
-use flecs_ecs::core::{Entity, EntityView, EntityViewGet, WorldGet, WorldProvider};
+use flecs_ecs::core::{Entity, EntityView, EntityViewGet, WorldProvider};
 use hyperion::{
     glam::Vec3,
-    net::Compose,
     simulation::{Pitch, Position, Spawn, Uuid, Velocity, Yaw, entity_kind::EntityKind},
 };
 use hyperion_clap::{CommandPermission, MinecraftCommand};
 use tracing::debug;
-use valence_protocol::{VarInt, packets::play};
 
 #[derive(Parser, CommandPermission, Debug)]
 #[command(name = "shoot")]

@@ -12,7 +12,7 @@ use hyperion::{
     storage::EventQueue,
 };
 use hyperion_inventory::PlayerInventory;
-use tracing::{debug, info_span};
+use tracing::debug;
 
 #[derive(Component)]
 pub struct BowModule;
@@ -27,26 +27,20 @@ impl Module for BowModule {
         .term_at(0u32)
         .singleton()
         .kind::<flecs::pipeline::PostUpdate>()
-        .each_iter(
-            move |it, _, event_queue| {
-                let _system = it.system();
-                let world = it.world();
+        .each_iter(move |it, _, event_queue| {
+            let _system = it.system();
+            let world = it.world();
 
-                for event in event_queue.drain() {
-                    if event.item != ItemKind::Bow {
-                        continue;
-                    }
+            for event in event_queue.drain() {
+                if event.item != ItemKind::Bow {
+                    continue;
+                }
 
-                    let player = world.entity_from_id(event.from);
+                let player = world.entity_from_id(event.from);
 
-                    player.get::<(
-                        &mut PlayerInventory,
-                        &Position,
-                        &Yaw,
-                        &Pitch,
-                    )>(
-                        |(inventory, position, yaw, pitch)| {
-
+                #[allow(clippy::excessive_nesting)]
+                player.get::<(&mut PlayerInventory, &Position, &Yaw, &Pitch)>(
+                    |(inventory, position, yaw, pitch)| {
                         // check if the player has enough arrows in their inventory
                         let items: Vec<(u16, &ItemStack)> = inventory.items().collect();
                         let mut has_arrow = false;
@@ -57,7 +51,10 @@ impl Module for BowModule {
                                     inventory.set(slot, ItemStack::EMPTY).unwrap();
                                 } else {
                                     inventory
-                                        .set(slot, ItemStack::new(item.item, count, item.nbt.clone()))
+                                        .set(
+                                            slot,
+                                            ItemStack::new(item.item, count, item.nbt.clone()),
+                                        )
                                         .unwrap();
                                 }
                                 has_arrow = true;
@@ -107,10 +104,9 @@ impl Module for BowModule {
                             .set(Pitch::new(**pitch))
                             .set(Yaw::new(**yaw))
                             .enqueue(Spawn);
-                            }
-                        );
-                }
-            },
-        );
+                    },
+                );
+            }
+        });
     }
 }

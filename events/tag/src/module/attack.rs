@@ -31,7 +31,7 @@ use hyperion::{
 };
 use hyperion_inventory::PlayerInventory;
 use hyperion_utils::EntityExt;
-use tracing::{debug, info_span};
+use tracing::info_span;
 
 #[derive(Component)]
 pub struct AttackModule;
@@ -150,7 +150,7 @@ impl Module for AttackModule {
                                 &CombatStats,
                                 &PlayerInventory
                             )>(
-                                |(immune_until, health, target_position, reaction, target_yaw, stats, target_inventory)| {
+                                |(immune_until, health, target_position, _reaction, target_yaw, stats, target_inventory)| {
                                     if let Some(immune_until) = immune_until {
                                         if immune_until.tick > current_tick {
                                             return;

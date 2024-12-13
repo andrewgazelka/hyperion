@@ -304,6 +304,7 @@ impl PlayerInventory {
         self.get(Self::BOOTS_SLOT).unwrap()
     }
 
+    #[must_use]
     pub fn get_offhand(&self) -> &ItemStack {
         self.get(Self::OFFHAND_SLOT).unwrap()
     }
