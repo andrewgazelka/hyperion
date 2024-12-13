@@ -47,17 +47,6 @@ RUN --mount=type=cache,target=${CARGO_HOME}/registry \
     --mount=type=cache,target=/app/target \
     cargo fetch
 
-# Debug builder
-FROM builder-base AS build-debug
-ARG CARGO_HOME
-RUN --mount=type=cache,target=${CARGO_HOME}/registry \
-    --mount=type=cache,target=${CARGO_HOME}/git \
-    --mount=type=cache,target=/app/target \
-    cargo build --frozen && \
-    mkdir -p /app/build && \
-    cp target/debug/hyperion-proxy /app/build/ && \
-    cp target/debug/tag /app/build/
-
 # Release builder
 FROM builder-base AS build-release
 ARG CARGO_HOME
@@ -79,40 +68,20 @@ RUN apt-get update && \
 ENV RUST_BACKTRACE=1 \
     RUST_LOG=info
 
-# Hyperion Proxy Debug
-FROM runtime-base AS hyperion-proxy-debug
-COPY --from=build-debug /app/build/hyperion-proxy /
-LABEL org.opencontainers.image.source="https://github.com/yourusername/hyperion-proxy" \
-      org.opencontainers.image.description="Debug Build - Hyperion Proxy Server" \
-      org.opencontainers.image.version="1.0.0"
-EXPOSE 8080
-ENTRYPOINT ["/hyperion-proxy"]
-CMD ["0.0.0.0:8080"]
-
 # Hyperion Proxy Release
-FROM runtime-base AS hyperion-proxy-release
+FROM runtime-base AS hyperion-proxy
 COPY --from=build-release /app/build/hyperion-proxy /
-LABEL org.opencontainers.image.source="https://github.com/yourusername/hyperion-proxy" \
-      org.opencontainers.image.description="Release Build - Hyperion Proxy Server" \
-      org.opencontainers.image.version="1.0.0"
+LABEL org.opencontainers.image.source="https://github.com/andrewgazelka/hyperion" \
+      org.opencontainers.image.description="Hyperion Proxy Server" \
+      org.opencontainers.image.version="0.1.0"
 EXPOSE 8080
 ENTRYPOINT ["/hyperion-proxy"]
 CMD ["0.0.0.0:8080"]
-
-# NYC Debug
-FROM runtime-base AS tag-debug
-COPY --from=build-debug /app/build/tag /
-LABEL org.opencontainers.image.source="https://github.com/yourusername/tag" \
-      org.opencontainers.image.description="Debug Build - NYC Server" \
-      org.opencontainers.image.version="1.0.0"
-ENTRYPOINT ["/tag"]
-CMD ["--ip", "0.0.0.0", "--port", "35565"]
-
 # NYC Release
-FROM runtime-base AS tag-release
+FROM runtime-base AS tag
 COPY --from=build-release /app/build/tag /
-LABEL org.opencontainers.image.source="https://github.com/yourusername/tag" \
-      org.opencontainers.image.description="Release Build - NYC Server" \
-      org.opencontainers.image.version="1.0.0"
+LABEL org.opencontainers.image.source="https://github.com/andrewgazelka/hyperion" \
+      org.opencontainers.image.description="Hyperion Tag Event" \
+      org.opencontainers.image.version="0.1.0"
 ENTRYPOINT ["/tag"]
 CMD ["--ip", "0.0.0.0", "--port", "35565"]

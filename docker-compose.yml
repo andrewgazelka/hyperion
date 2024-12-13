@@ -1,13 +1,9 @@
-version: '3.8'
 services:
   hyperion-proxy:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      target: hyperion-proxy-debug
+    image: ghcr.io/andrewgazelka/hyperion/hyperion-proxy:latest
     ports:
       - "25565:25565"
-    command: [ "--server", "tag:35565", "0.0.0.0:25565" ] # Fixed argument order and format
+    command: [ "--server", "tag:35565", "0.0.0.0:25565" ]
     restart: unless-stopped
     environment:
       - RUST_LOG=info
@@ -15,17 +11,13 @@ services:
       - proxy-network
     depends_on:
       - tag
-
   tag:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      target: tag-debug
+    image: ghcr.io/andrewgazelka/hyperion/tag:latest
     ports:
       - "27750:27750"
     expose:
       - "35565"
-    command: [] # ["--ip", "0.0.0.0", "--port", "35565"]
+    command: [ ]
     restart: unless-stopped
     environment:
       - RUST_LOG=info
