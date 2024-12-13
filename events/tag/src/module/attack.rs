@@ -150,9 +150,10 @@ impl Module for AttackModule {
                                 &Yaw,
                                 &CombatStats,
                                 &PlayerInventory,
-                                &Team
+                                &Team,
+                                &mut Pose
                             )>(
-                                |(target_connection, immune_until, health, target_position, target_yaw, stats, target_inventory, target_team)| {
+                                |(target_connection, immune_until, health, target_position, target_yaw, stats, target_inventory, target_team, target_pose)| {
                                     if let Some(immune_until) = immune_until {
                                         if immune_until.tick > current_tick {
                                             return;
@@ -270,7 +271,8 @@ impl Module for AttackModule {
                                         compose.broadcast(&particle_pkt, system).send().unwrap();
                                         compose.broadcast(&particle_pkt2, system).send().unwrap();
                                         compose.broadcast(&pkt_entity_status, system).send().unwrap();
-                                        target.set::<Pose>(Pose::Dying);
+                                        *target_pose = Pose::Dying;
+                                        target.modified::<Pose>();
 
                                         // Create NBT for enchantment protection level 1
                                         let mut protection_nbt = nbt::Compound::new();
