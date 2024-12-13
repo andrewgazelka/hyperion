@@ -29,7 +29,7 @@ impl MinecraftCommand for ShootCommand {
                 let direction = super::raycast::get_direction_from_rotation(**yaw, **pitch);
 
                 // Spawn arrow slightly in front of player to avoid self-collision
-                let spawn_pos = Vec3::new(pos.x, pos.y + EYE_HEIGHT, pos.z) + direction * 0.5;
+                let spawn_pos = Vec3::new(pos.x, pos.y + EYE_HEIGHT, pos.z) + direction * 1.0;
 
                 // Calculate velocity with base multiplier
                 let velocity = direction * (self.velocity * BASE_VELOCITY);
@@ -39,11 +39,18 @@ impl MinecraftCommand for ShootCommand {
                     velocity.x, velocity.y, velocity.z
                 );
 
+                debug!(
+                    "Arrow spawn position: ({}, {}, {})",
+                    spawn_pos.x, spawn_pos.y, spawn_pos.z
+                );
+
+                let entity_id = Uuid::new_v4();
+
                 // Create arrow entity with velocity
                 world
                     .entity()
                     .add_enum(EntityKind::Arrow)
-                    .set(Uuid::new_v4())
+                    .set(entity_id)
                     .set(Position::new(spawn_pos.x, spawn_pos.y, spawn_pos.z))
                     .set(Velocity::new(velocity.x, velocity.y, velocity.z))
                     .set(Yaw::new(**yaw))

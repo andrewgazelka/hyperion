@@ -8,8 +8,9 @@ use hyperion_utils::EntityExt;
 use tracing::{debug, error};
 use valence_protocol::{
     ByteAngle, RawBytes, VarInt,
-    packets::play::{self},
+    packets::play::{self, entity_equipment_update_s2c::EquipmentEntry},
 };
+use valence_server::BlockState;
 
 use crate::{
     Prev,
@@ -17,6 +18,9 @@ use crate::{
     simulation::{
         Pitch, Position, Velocity, Xp, Yaw,
         animation::ActiveAnimation,
+        blocks::Blocks,
+        entity_kind::EntityKind,
+        handlers::is_grounded,
         metadata::{MetadataChanges, get_and_clear_metadata},
     },
 };
@@ -52,9 +56,6 @@ fn track_previous<T: ComponentId + Copy + Debug + PartialEq>(world: &World) {
         .multi_threaded()
         .kind_id(post_store)
         .each(|(prev, value)| {
-            if *prev != *value {
-                debug!("...  {prev:?} => {value:?}");
-            }
             *prev = *value;
         });
 }
@@ -149,12 +150,12 @@ impl Module for EntityStateSyncModule {
             });
 
         system!(
-            "active_animation_sync",
-            world,
-            &Position,
-            &Compose($),
-            ?&ConnectionId,
-            &mut ActiveAnimation,
+        "active_animation_sync",
+        world,
+        &Position,
+        &Compose($),
+        ?&ConnectionId,
+        &mut ActiveAnimation,
         )
         .multi_threaded()
         .kind::<flecs::pipeline::OnStore>()
@@ -229,161 +230,233 @@ impl Module for EntityStateSyncModule {
             }
         });
 
-        // Add a new system specifically for projectiles (arrows)
         system!(
-            "projectile_sync",
+            "sync_equipped_items",
             world,
             &Compose($),
-            &(Prev, Position),
-            &(Prev, Yaw),
-            &(Prev, Pitch),
             &Position,
+            &PlayerInventory,
+        )
+        .multi_threaded()
+        .kind::<flecs::pipeline::OnStore>()
+        .each_iter(move |it, row, (compose, position, inventory)| {
+            // let entity = it.entity(row);
+            let system = it.system();
+            // get armor and hand
+            let hand = EquipmentEntry {
+                slot: 0,
+                item: inventory.get_cursor().clone(),
+            };
+            let helmet = EquipmentEntry {
+                slot: 5,
+                item: inventory.get_helmet().clone(),
+            };
+            let chestplate = EquipmentEntry {
+                slot: 4,
+                item: inventory.get_chestplate().clone(),
+            };
+            let leggings = EquipmentEntry {
+                slot: 3,
+                item: inventory.get_leggings().clone(),
+            };
+            let boots = EquipmentEntry {
+                slot: 2,
+                item: inventory.get_boots().clone(),
+            };
+            let off_hand = EquipmentEntry {
+                slot: 1,
+                item: inventory.get_offhand().clone(),
+            };
+
+            let packet = play::EntityEquipmentUpdateS2c {
+                entity_id: VarInt(it.entity(row).minecraft_id()),
+                equipment: vec![hand, helmet, chestplate, leggings, boots, off_hand],
+            };
+
+            compose
+                .broadcast_local(&packet, position.to_chunk(), system)
+                .send()
+                .unwrap();
+        });
+
+        // What ever you do DO NOT!!! I REPEAT DO NOT SET VELOCITY ANYWHERE
+        // IF YOU WANT TO APPLY VELOCITY SEND 1 VELOCITY PAKCET WHEN NEEDED LOOK in events/tag/src/module/attack.rs
+        system!(
+            "sync_player_entity",
+            world,
+            &Compose($),
+            &mut (Prev, Position),
+            &mut (Prev, Yaw),
+            &mut (Prev, Pitch),
+            &mut Position,
+            &mut Velocity,
             &Yaw,
             &Pitch,
-            &mut Velocity,
         )
         .multi_threaded()
         .kind::<flecs::pipeline::PreStore>()
         .each_iter(
-            move |it,
-                  row,
-                  (
+            |it,
+             row,
+             (
                 compose,
-                previous_position,
-                previous_yaw,
-                previous_pitch,
+                prev_position,
+                prev_yaw,
+                prev_pitch,
                 position,
+                velocity,
                 yaw,
                 pitch,
-                velocity,
             )| {
-                #[derive(Debug)]
-                struct Change {
-                    position: bool,
-                    angle: bool,
-                    needs_teleport: bool,
-                }
+                // if io.is_none() {
+                // return;
+                // }
 
-                let entity = it.entity(row);
+                let world = it.system().world();
                 let system = it.system();
-
+                let entity = it.entity(row);
                 let entity_id = VarInt(entity.minecraft_id());
+
                 let chunk_pos = position.to_chunk();
 
-                let position_delta = **position - **previous_position;
+                let position_delta = **position - **prev_position;
                 let needs_teleport = position_delta.abs().max_element() >= 8.0;
-                let changed_position = position != previous_position;
-                let changed_some_angle = yaw != previous_yaw || pitch != previous_pitch;
+                let changed_position = **position != **prev_position;
 
-                let on_ground = velocity.velocity == Vec3::ZERO;
-
-                #[expect(clippy::cast_possible_truncation)]
-                let get_delta = || (position_delta * 4096.0).to_array().map(|x| x as i16);
+                let look_changed = (**yaw - **prev_yaw).abs() >= 0.01 || (**pitch - **prev_pitch).abs() >= 0.01;
 
                 let mut bundle = DataBundle::new(compose, system);
 
-                let change = Change {
-                    position: changed_position,
-                    angle: changed_some_angle,
-                    needs_teleport,
-                };
+                world.get::<&mut Blocks>(|blocks| {
+                    let grounded = is_grounded(position, blocks);
 
-                let yaw = ByteAngle::from_degrees(**yaw);
-                let pitch = ByteAngle::from_degrees(**pitch);
-
-                match change {
-                    Change {
-                        position: false,
-                        angle: false,
-                        needs_teleport: false,
-                    } => {
-                        // nothing changed; we can skip sending the packet
-                    }
-                    Change {
-                        position: false,
-                        needs_teleport: true,
-                        ..
-                    } => {
-                        unreachable!(
-                            "we should never need to teleport when the position didn't change"
-                        )
-                    }
-                    Change {
-                        position: false,
-                        angle: true,
-                        needs_teleport: false,
-                    } => {
-                        let pkt = play::RotateS2c {
+                    if changed_position && !needs_teleport && look_changed {
+                        let packet = play::RotateAndMoveRelativeS2c {
                             entity_id,
-                            yaw,
-                            pitch,
-                            on_ground,
-                        };
-                        bundle.add_packet(&pkt).unwrap();
-                    }
-                    Change {
-                        position: true,
-                        angle: false,
-                        needs_teleport: false,
-                    } => {
-                        let pkt = play::MoveRelativeS2c {
-                            entity_id,
-                            delta: get_delta(),
-                            on_ground,
+                            #[allow(clippy::cast_possible_truncation)]
+                            delta: (position_delta * 4096.0).to_array().map(|x| x as i16),
+                            yaw: ByteAngle::from_degrees(**yaw),
+                            pitch: ByteAngle::from_degrees(**pitch),
+                            on_ground: grounded,
                         };
 
-                        bundle.add_packet(&pkt).unwrap();
-                    }
-                    Change {
-                        position: true,
-                        angle: true,
-                        needs_teleport: false,
-                    } => {
-                        let pkt = play::RotateAndMoveRelativeS2c {
+                        bundle.add_packet(&packet).unwrap();
+                    } else {
+                        if changed_position && !needs_teleport {
+                            let packet = play::MoveRelativeS2c {
+                                entity_id,
+                                #[allow(clippy::cast_possible_truncation)]
+                                delta: (position_delta * 4096.0).to_array().map(|x| x as i16),
+                                on_ground: grounded,
+                            };
+
+                            bundle.add_packet(&packet).unwrap();
+                        }
+
+                        if look_changed {
+                            let packet = play::RotateS2c {
+                                entity_id,
+                                yaw: ByteAngle::from_degrees(**yaw),
+                                pitch: ByteAngle::from_degrees(**pitch),
+                                on_ground: grounded,
+                            };
+
+                            bundle.add_packet(&packet).unwrap();
+                        }
+                        let packet = play::EntitySetHeadYawS2c {
                             entity_id,
-                            delta: get_delta(),
-                            yaw,
-                            pitch,
-                            on_ground,
+                            head_yaw: ByteAngle::from_degrees(**yaw),
                         };
 
-                        bundle.add_packet(&pkt).unwrap();
+                        bundle.add_packet(&packet).unwrap();
                     }
-                    Change {
-                        position: true,
-                        needs_teleport: true,
-                        ..
-                    } => {
-                        // regardless of change angle (afaik) we send angle difference
-                        let pkt = play::EntityPositionS2c {
+
+                    if needs_teleport {
+                        let packet = play::EntityPositionS2c {
                             entity_id,
                             position: position.as_dvec3(),
-                            yaw,
-                            pitch,
-                            on_ground,
+                            yaw: ByteAngle::from_degrees(**yaw),
+                            pitch: ByteAngle::from_degrees(**pitch),
+                            on_ground: grounded,
                         };
 
-                        bundle.add_packet(&pkt).unwrap();
+                        bundle.add_packet(&packet).unwrap();
                     }
-                }
+                });
 
-                // Sync velocity if non-zero
-                if velocity.velocity != Vec3::ZERO {
-                    let pkt = play::EntityVelocityUpdateS2c {
+                if velocity.0 != Vec3::ZERO {
+
+                    let packet = play::EntityVelocityUpdateS2c {
                         entity_id,
-                        velocity: (*velocity).try_into().unwrap_or_else(|_| {
-                            Velocity::ZERO
-                                .try_into()
-                                .expect("failed to convert velocity to i16")
-                        }),
+                        velocity: velocity.to_packet_units(),
                     };
 
-                    bundle.add_packet(&pkt).unwrap();
+                    bundle.add_packet(&packet).unwrap();
                 }
 
                 bundle.broadcast_local(chunk_pos).unwrap();
             },
         );
+
+        system!(
+            "update_projectile_positions",
+            world,
+            &mut Position,
+            &mut Velocity,
+            ?&ConnectionId
+        )
+        .multi_threaded()
+        .kind::<flecs::pipeline::OnUpdate>()
+        .with_enum_wildcard::<EntityKind>()
+        .each_iter(|it, row, (position, velocity, connection_id)| {
+            if let Some(_connection_id) = connection_id {
+                return;
+            }
+
+            let world = it.system().world();
+            let _entity = it.entity(row);
+
+            if velocity.0 != Vec3::ZERO {
+                position.x += velocity.0.x;
+                position.y += velocity.0.y;
+                position.z += velocity.0.z;
+                // let (new_yaw, new_pitch) = get_rotation_from_velocity(velocity.0);
+
+                let center = **position;
+
+                let ray = geometry::ray::Ray::new(center, velocity.0);
+
+                #[allow(clippy::excessive_nesting)]
+                world.get::<&mut Blocks>(|blocks| {
+                    // calculate distance limit based on velocity
+                    let distance_limit = velocity.0.length();
+                    let Some(collision) = blocks.first_collision(ray, distance_limit) else {
+                        // Drag (0.99 / 20.0)
+                        // 1.0 - (0.99 / 20.0) * 0.05
+                        velocity.0 *= 0.997_525;
+
+                        // Gravity (20 MPSS)
+                        velocity.0.y -= 0.05;
+
+                        // Terminal Velocity (100.0)
+                        velocity.0 = velocity.0.clamp_length(0.0, 100.0);
+                        return;
+                    };
+                    debug!("distance_limit = {}", distance_limit);
+
+                    debug!("collision = {collision:?}");
+
+                    velocity.0 = Vec3::ZERO;
+
+                    // Set arrow position to the collision location
+                    **position = collision.normal;
+
+                    blocks
+                        .set_block(collision.location, BlockState::DIRT)
+                        .unwrap();
+                });
+            }
+        });
 
         track_previous::<Position>(world);
         track_previous::<Yaw>(world);

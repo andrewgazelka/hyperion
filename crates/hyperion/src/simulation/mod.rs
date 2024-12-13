@@ -1,7 +1,5 @@
-use std::{borrow::Borrow, collections::HashMap, hash::Hash, num::TryFromIntError, sync::Arc};
+use std::{borrow::Borrow, collections::HashMap, hash::Hash, sync::Arc};
 
-use anyhow::Context;
-use blocks::Blocks;
 use bow::BowCharging;
 use bytemuck::{Pod, Zeroable};
 use derive_more::{Constructor, Deref, DerefMut, Display, From};
@@ -19,7 +17,7 @@ use valence_protocol::{ByteAngle, VarInt, packets::play};
 
 use crate::{
     Global,
-    net::Compose,
+    net::{Compose, DataBundle},
     simulation::{
         command::Command,
         entity_kind::EntityKind,
@@ -542,50 +540,19 @@ impl Position {
 ///   [`std::sync::Arc`] or [`std::sync::RwLock`], but this is not efficient).
 /// - Therefore, we have an [`Velocity`] component which is used to store the reaction of an entity to collisions.
 /// - Later we can apply the reaction to the entity's [`Position`] to move the entity.
-#[derive(Component, Default, Debug, Copy, Clone)]
+#[derive(Component, Default, Debug, Copy, Clone, PartialEq)]
 #[meta]
-pub struct Velocity {
-    /// The velocity of the entity.
-    pub velocity: Vec3,
-}
+pub struct Velocity(pub Vec3);
 
 impl Velocity {
-    pub const ZERO: Self = Self {
-        velocity: Vec3::ZERO,
-    };
-
     #[must_use]
     pub const fn new(x: f32, y: f32, z: f32) -> Self {
-        Self {
-            velocity: Vec3::new(x, y, z),
-        }
+        Self(Vec3::new(x, y, z))
     }
-}
 
-impl TryFrom<&Velocity> for valence_protocol::Velocity {
-    type Error = TryFromIntError;
-
-    fn try_from(value: &Velocity) -> Result<Self, Self::Error> {
-        let max_velocity = 75.0;
-        let clamped_velocity = value
-            .velocity
-            .clamp(Vec3::splat(-max_velocity), Vec3::splat(max_velocity));
-
-        let nums = clamped_velocity.to_array().try_map(|a| {
-            #[allow(clippy::cast_possible_truncation)]
-            let num = (a * 8000.0) as i32;
-            i16::try_from(num)
-        })?;
-
-        Ok(Self(nums))
-    }
-}
-
-impl TryFrom<Velocity> for valence_protocol::Velocity {
-    type Error = TryFromIntError;
-
-    fn try_from(value: Velocity) -> Result<Self, Self::Error> {
-        (&value).try_into()
+    #[must_use]
+    pub fn to_packet_units(self) -> valence_protocol::Velocity {
+        valence_protocol::Velocity::from_ms_f32((self.0 * 20.0).into())
     }
 }
 
@@ -682,11 +649,12 @@ impl Module for SimModule {
             let entity = it.entity(row);
             let minecraft_id = entity.minecraft_id();
 
-            let spawn_entity = move |kind: EntityKind| -> anyhow::Result<()> {
+            let mut bundle = DataBundle::new(compose, system);
+
+            let mut spawn_entity = move |kind: EntityKind| -> anyhow::Result<()> {
                 let kind = kind as i32;
 
-                let velocity = valence_protocol::Velocity::try_from(velocity)
-                    .context("failed to convert velocity")?;
+                let velocity = velocity.to_packet_units();
 
                 let packet = play::EntitySpawnS2c {
                     entity_id: VarInt(minecraft_id),
@@ -700,7 +668,16 @@ impl Module for SimModule {
                     velocity,
                 };
 
-                compose.broadcast(&packet, system).send().unwrap();
+                bundle.add_packet(&packet).unwrap();
+
+                let packet = play::EntityVelocityUpdateS2c {
+                    entity_id: VarInt(minecraft_id),
+                    velocity,
+                };
+
+                bundle.add_packet(&packet).unwrap();
+
+                bundle.broadcast_local(position.to_chunk()).unwrap();
 
                 Ok(())
             };
@@ -728,66 +705,6 @@ impl Module for SimModule {
                     _ => {}
                 });
             });
-
-        system!(
-            "update_projectile_positions",
-            world,
-            &mut Position,
-            &mut Yaw,
-            &mut Pitch,
-            &mut Velocity,
-        )
-        .kind::<flecs::pipeline::OnUpdate>()
-        .with_enum_wildcard::<EntityKind>()
-        .each_entity(|entity, (position, yaw, pitch, velocity)| {
-            entity.get::<&EntityKind>(|kind| {
-                if kind == &EntityKind::Arrow && velocity.velocity != Vec3::ZERO {
-                    // Update position based on velocity with delta time
-                    position.x += velocity.velocity.x;
-                    position.y += velocity.velocity.y;
-                    position.z += velocity.velocity.z;
-
-                    // re calculate yaw and pitch based on velocity
-                    let (new_yaw, new_pitch) = get_rotation_from_velocity(velocity.velocity);
-                    *yaw = Yaw::new(new_yaw);
-                    *pitch = Pitch::new(new_pitch);
-
-                    let ray = entity.get::<(&Position, &Yaw, &Pitch)>(|(position, yaw, pitch)| {
-                        let center = **position;
-
-                        let direction = get_direction_from_rotation(**yaw, **pitch);
-
-                        geometry::ray::Ray::new(center, direction)
-                    });
-
-                    #[allow(clippy::excessive_nesting)]
-                    entity.world().get::<&mut Blocks>(|blocks| {
-                        // calculate distance limit based on velocity
-                        let distance_limit = velocity.velocity.length();
-                        let Some(collision) = blocks.first_collision(ray, distance_limit) else {
-                            // i think this velocity calculations are all wrong someone redo please
-                            velocity.velocity.x *= 0.99;
-                            velocity.velocity.z *= 0.99;
-
-                            velocity.velocity.y -= 0.05;
-                            return;
-                        };
-                        debug!("distance_limit = {}", distance_limit);
-
-                        debug!("collision = {collision:?}");
-
-                        velocity.velocity = Vec3::ZERO;
-
-                        // Set arrow position to the collision location
-                        **position = collision.normal;
-
-                        blocks
-                            .set_block(collision.location, BlockState::DIRT)
-                            .unwrap();
-                    });
-                }
-            });
-        });
     }
 }
 
@@ -799,7 +716,7 @@ pub struct Visible;
 
 #[must_use]
 pub fn get_rotation_from_velocity(velocity: Vec3) -> (f32, f32) {
-    let yaw = (-velocity.x).atan2(velocity.z).to_degrees(); // Correct yaw calculation
+    let yaw = (-velocity.x).atan2(velocity.z).to_degrees().abs(); // Correct yaw calculation
     let pitch = (-velocity.y).atan2(velocity.length()).to_degrees(); // Correct pitch calculation
     (yaw, pitch)
 }

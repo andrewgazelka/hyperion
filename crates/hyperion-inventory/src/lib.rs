@@ -10,7 +10,7 @@ pub mod parser;
 pub type PlayerInventory = Inventory<46>;
 
 /// Placeholder; this will be added later.
-#[derive(Component, Debug)]
+#[derive(Component, Debug, PartialEq)]
 pub struct Inventory<const T: usize> {
     slots: [ItemStack; T],
     hand_slot: u16,
@@ -302,6 +302,11 @@ impl PlayerInventory {
     #[must_use]
     pub fn get_boots(&self) -> &ItemStack {
         self.get(Self::BOOTS_SLOT).unwrap()
+    }
+
+    #[must_use]
+    pub fn get_offhand(&self) -> &ItemStack {
+        self.get(Self::OFFHAND_SLOT).unwrap()
     }
 
     pub fn try_add_item(&mut self, mut item: ItemStack) -> AddItemResult {

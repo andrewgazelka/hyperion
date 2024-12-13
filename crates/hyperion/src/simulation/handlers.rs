@@ -126,6 +126,20 @@ fn try_change_position(
     Ok(())
 }
 
+#[must_use]
+#[allow(clippy::cast_possible_truncation)]
+pub fn is_grounded(position: &Vec3, blocks: &Blocks) -> bool {
+    // Calculate the block position by flooring the x and z coordinates
+    let block_x = position.x as i32;
+    let block_y = (position.y.ceil() - 1.0) as i32; // Check the block directly below
+    let block_z = position.z as i32;
+
+    // Check if the block at the calculated position is not air
+    !blocks
+        .get_block(IVec3::new(block_x, block_y, block_z))
+        .unwrap()
+        .is_air()
+}
 fn is_within_speed_limits(current: Vec3, proposed: Vec3) -> anyhow::Result<()> {
     let delta = proposed - current;
     if delta.length_squared() > MAX_BLOCKS_PER_TICK.powi(2) {

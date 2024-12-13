@@ -3,15 +3,15 @@ use std::fmt::Debug;
 use derive_more::Deref;
 use flecs_ecs::{
     addons::Meta,
-    core::{
-        ComponentId, Entity, EntityView, IdOperations, QueryBuilderImpl, SystemAPI,
-        TermBuilderImpl, World, WorldProvider, flecs,
-    },
-    macros::{Component, observer},
+    core::{ComponentId, Entity, EntityView, IdOperations, SystemAPI, World, WorldProvider, flecs},
+    macros::Component,
 };
 use valence_protocol::{Encode, VarInt};
 
-use crate::simulation::metadata::entity::{EntityFlags, Pose};
+use crate::{
+    Prev,
+    simulation::metadata::entity::{EntityFlags, Pose},
+};
 
 pub mod block_display;
 pub mod display;
@@ -36,13 +36,50 @@ where
     <T as ComponentId>::UnderlyingType: Meta<<T as ComponentId>::UnderlyingType>,
 {
     world.component::<T>().meta();
+    let type_name = core::any::type_name::<T>();
 
-    observer!(world, flecs::OnSet, &T, [filter] &mut MetadataChanges,).each(|(value, changes)| {
-        changes.encode(*value);
-    });
+    let system_name = format!("exchange_{type_name}").leak();
+
+    world
+        .system_named::<(
+            &mut (Prev, T),       //            (0)
+            &mut T,               //                  (1)
+            &mut MetadataChanges, //     (2)
+        )>(system_name)
+        .multi_threaded()
+        .kind::<flecs::pipeline::OnUpdate>()
+        .run(move |mut table| {
+            while table.next() {
+                unsafe {
+                    let mut prev = table.field_unchecked::<T>(0);
+                    let prev = prev.get_mut(..).unwrap();
+
+                    let current = table.field_unchecked::<T>(1);
+                    let current = current.get(..).unwrap();
+
+                    let mut metadata_changes = table.field_unchecked::<MetadataChanges>(2);
+                    let metadata_changes = metadata_changes.get_mut(..).unwrap();
+
+                    // todo(perf): big optimization treating as raw bytes and SIMD
+                    // or code that can easily be compiled to SIMD
+                    // also can do copy_from_slice in one pass but want SIMD-optimized
+                    // first
+                    // todo(learn): reborrowing in-depth
+                    for (idx, (prev, current)) in itertools::zip_eq(&mut *prev, current).enumerate()
+                    {
+                        if prev != current {
+                            let metadata_changes = metadata_changes.get_unchecked_mut(idx);
+                            metadata_changes.encode(*current);
+                        }
+                    }
+
+                    prev.copy_from_slice(current);
+                }
+            }
+        });
 
     let register = |view: &mut EntityView<'_>| {
-        view.set(T::default());
+        view.set_pair::<Prev, _>(T::default()).set(T::default());
     };
 
     register
@@ -96,6 +133,7 @@ pub fn register_prefabs(world: &World) -> MetadataPrefabs {
     let living_entity_base = living_entity::register_prefab(world, Some(entity_base)).id();
     let player_base = player::register_prefab(world, Some(living_entity_base))
         // .add::<Player>()
+        .add_enum(EntityKind::Player)
         .id();
 
     MetadataPrefabs {
@@ -107,6 +145,7 @@ pub fn register_prefabs(world: &World) -> MetadataPrefabs {
     }
 }
 
+use super::entity_kind::EntityKind;
 use crate::simulation::metadata::r#type::MetadataType;
 
 #[derive(Debug, Default, Component, Clone)]

@@ -145,12 +145,11 @@ impl Module for AttackModule {
                                 Option<&mut ImmuneUntil>,
                                 &mut Health,
                                 &mut Position,
-                                &mut Velocity,
                                 &Yaw,
                                 &CombatStats,
                                 &PlayerInventory
                             )>(
-                                |(immune_until, health, target_position, reaction, target_yaw, stats, target_inventory)| {
+                                |(immune_until, health, target_position, target_yaw, stats, target_inventory)| {
                                     if let Some(immune_until) = immune_until {
                                         if immune_until.tick > current_tick {
                                             return;
@@ -448,17 +447,27 @@ impl Module for AttackModule {
                                     }
 
                                     // Calculate velocity change based on attack direction
-                                    if delta_x.abs() >= 0.01 || delta_z.abs() >= 0.01 {
-                                        let dist_xz = delta_x.hypot(delta_z);
-                                        let multiplier: f64 = 0.400_000_005_960_464_5;
+                                    let this = **target_position;
+                                    let other = **origin_pos;
 
-                                        reaction.velocity /= 2.0;
-                                        reaction.velocity.x -= (delta_x / dist_xz * multiplier) as f32;
-                                        reaction.velocity.y += multiplier as f32;
-                                        reaction.velocity.z -= (delta_z / dist_xz * multiplier) as f32;
+                                    let dir = (this - other).normalize();
 
-                                        reaction.velocity.y = reaction.velocity.y.min(0.4);
-                                    }
+                                    let knockback_xz = 8.0;
+                                    let knockback_y = 6.432;
+
+                                    let new_vel = Velocity::new(
+                                        dir.x * knockback_xz / 20.0,
+                                        knockback_y / 20.0,
+                                        dir.z * knockback_xz / 20.0
+                                    );
+
+                                    // https://github.com/valence-rs/valence/blob/8f3f84d557dacddd7faddb2ad724185ecee2e482/examples/ctf.rs#L987-L989
+                                    let packet = play::EntityVelocityUpdateS2c {
+                                        entity_id: VarInt(target.minecraft_id()),
+                                        velocity: new_vel.to_packet_units(),
+                                    };
+
+                                    compose.broadcast_local(&packet, target_position.to_chunk(), system).send().unwrap();
                                 },
                             );
                         });
