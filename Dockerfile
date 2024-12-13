@@ -11,6 +11,8 @@ FROM ubuntu:22.04 AS packages
 ENV DEBIAN_FRONTEND=noninteractive
 
 # Install essential build packages
+FROM ubuntu:22.04 AS packages
+ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && \
     apt-get install -y \
         curl \
@@ -21,6 +23,9 @@ RUN apt-get update && \
         perl \
         gcc \
         linux-headers-generic \
+        libclang1 \
+        llvm-dev \
+        libclang-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Base builder stage with Rust installation
@@ -35,9 +40,7 @@ RUN curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain ${RUST_NIGH
     $CARGO_HOME/bin/rustc --version
 ENV PATH="${CARGO_HOME}/bin:${PATH}"
 WORKDIR /app
-COPY Cargo.toml Cargo.lock ./
-COPY crates/ ./crates
-COPY events ./events
+COPY . .
 
 RUN --mount=type=cache,target=${CARGO_HOME}/registry \
     --mount=type=cache,target=${CARGO_HOME}/git \
