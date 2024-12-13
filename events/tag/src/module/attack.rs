@@ -11,20 +11,22 @@ use hyperion::{
         Compose, ConnectionId, agnostic,
         packets::{BossBarAction, BossBarS2c},
     },
-    simulation::{PacketState, Player, Position, Velocity, event, metadata::living_entity::Health},
+    simulation::{
+        PacketState, Player, Position, Velocity, Yaw, event,
+        metadata::{entity::Pose, living_entity::Health},
+    },
     storage::EventQueue,
     uuid::Uuid,
     valence_protocol::{
         ItemKind, ItemStack, Particle, VarInt, ident,
         math::{DVec3, Vec3},
         nbt,
-        packets::{
-            play,
-            play::{
-                boss_bar_s2c::{BossBarColor, BossBarDivision, BossBarFlags},
-                entity_attributes_s2c::AttributeProperty,
-            },
+        packets::play::{
+            self,
+            boss_bar_s2c::{BossBarColor, BossBarDivision, BossBarFlags},
+            entity_attributes_s2c::AttributeProperty,
         },
+        text::IntoText,
     },
 };
 use hyperion_inventory::PlayerInventory;
@@ -62,6 +64,7 @@ pub struct KillCount {
     pub kill_count: u32,
 }
 
+#[allow(clippy::cast_possible_truncation)]
 impl Module for AttackModule {
     #[allow(clippy::excessive_nesting)]
     fn module(world: &World) {
@@ -143,10 +146,11 @@ impl Module for AttackModule {
                                 &mut Health,
                                 &mut Position,
                                 &mut Velocity,
+                                &Yaw,
                                 &CombatStats,
                                 &PlayerInventory
                             )>(
-                                |(immune_until, health, target_position, reaction, stats, target_inventory)| {
+                                |(immune_until, health, target_position, reaction, target_yaw, stats, target_inventory)| {
                                     if let Some(immune_until) = immune_until {
                                         if immune_until.tick > current_tick {
                                             return;
@@ -164,17 +168,57 @@ impl Module for AttackModule {
                                     let damage_after_protection = get_inflicted_damage(damage_after_armor, protection);
 
                                     health.damage(damage_after_protection);
+
+                                    let pkt_health = play::HealthUpdateS2c {
+                                        health: health.abs(),
+                                        food: VarInt(20),
+                                        food_saturation: 5.0
+                                    };
+
+                                    let delta_x: f64 = f64::from(target_position.x - origin_pos.x);
+                                    let delta_z: f64 = f64::from(target_position.z - origin_pos.z);
+
+                                    // Seems that MC generates a random delta if the damage source is too close to the target
+                                    // let's ignore that for now
+                                    let pkt_hurt = play::DamageTiltS2c {
+                                        entity_id: VarInt(target.minecraft_id()),
+                                        yaw: delta_z.atan2(delta_x).mul_add(57.295_776_367_187_5_f64, -f64::from(**target_yaw)) as f32
+                                    };
+                                    // EntityDamageS2c: display red outline when taking damage (play arrow hit sound?)
+                                    let pkt_damage_event = play::EntityDamageS2c {
+                                        entity_id: VarInt(target.minecraft_id()),
+                                        source_cause_id: VarInt(origin.minecraft_id() + 1), // this is an OptVarint
+                                        source_direct_id: VarInt(origin.minecraft_id() + 1), // if hit by a projectile, it should be the projectile's entity id
+                                        source_type_id: VarInt(31), // 31 = player_attack
+                                        source_pos: Option::None
+                                    };
+                                    let sound = agnostic::sound(
+                                        ident!("minecraft:entity.player.attack.knockback"),
+                                        **target_position,
+                                    ).volume(1.)
+                                    .pitch(1.)
+                                    .seed(fastrand::i64(..))
+                                    .build();
+
+                                    target.entity_view(world)
+                                    .get::<&ConnectionId>(|stream| {
+                                        compose.unicast(&pkt_hurt, *stream, system).unwrap();
+                                        compose.unicast(&pkt_health, *stream, system).unwrap();
+
+                                        if health.is_dead() {
+                                            let attacker_name = origin.name();
+                                            // Even if enable_respawn_screen is false, the client needs this to send ClientCommandC2s and initiate its respawn
+                                            let pkt_death_screen = play::DeathMessageS2c {
+                                                player_id: VarInt(target.minecraft_id()),
+                                                message: format!("You were killed by {attacker_name}").into_cow_text()
+                                            };
+                                            compose.unicast(&pkt_death_screen, *stream, system).unwrap();
+                                        }
+                                    });
+                                    compose.broadcast(&sound, system).send().unwrap();
+                                    compose.broadcast(&pkt_damage_event, system).send().unwrap();
+
                                     if health.is_dead() {
-                                        let sound = agnostic::sound(
-                                            ident!("minecraft:entity.player.attack.knockback"),
-                                            **target_position,
-                                        ).volume(1.5)
-                                            .pitch(0.8)
-                                            .seed(fastrand::i64(..))
-                                            .build();
-
-                                        compose.broadcast(&sound, system).send().unwrap();
-
                                         // Create particle effect at the attacker's position
                                         let particle_pkt = play::ParticleS2c {
                                             particle: Cow::Owned(Particle::Explosion),
@@ -194,6 +238,11 @@ impl Module for AttackModule {
                                             count: 75,
                                             offset: Vec3::new(0.3, 0.3, 0.3),
                                         };
+                                        let pkt_entity_status = play::EntityStatusS2c {
+                                            entity_id: target.minecraft_id(),
+                                            entity_status: 3
+                                        };
+
                                         let origin_entity_id = origin.minecraft_id();
 
                                         origin_armor.armor += 1.0;
@@ -211,6 +260,8 @@ impl Module for AttackModule {
                                         compose.broadcast(&pkt, system).send().unwrap();
                                         compose.broadcast(&particle_pkt, system).send().unwrap();
                                         compose.broadcast(&particle_pkt2, system).send().unwrap();
+                                        compose.broadcast(&pkt_entity_status, system).send().unwrap();
+                                        target.set::<Pose>(Pose::Dying);
 
                                         // Create NBT for enchantment protection level 1
                                         let mut protection_nbt = nbt::Compound::new();
@@ -390,6 +441,9 @@ impl Module for AttackModule {
                                         }
                                         // player died, increment kill count
                                         kill_count.kill_count += 1;
+
+                                        // Respawning player TODO : Restore target's health
+                                        // send respawn and teleport packets
                                         return;
                                     }
 

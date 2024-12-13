@@ -75,12 +75,6 @@ impl Default for Health {
     }
 }
 
-// impl Default for Health {
-//     fn default() -> Self {
-//         Self(20.0)
-//     }
-// }
-
 impl Health {
     #[must_use]
     pub fn is_dead(&self) -> bool {
@@ -92,10 +86,6 @@ impl Health {
     }
 
     fn update(&mut self, value: f32) {
-        if self.is_dead() {
-            return;
-        }
-
         self.value = value.clamp(0.0, 20.0);
     }
 
