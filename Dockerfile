@@ -35,9 +35,7 @@ RUN curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain ${RUST_NIGH
     $CARGO_HOME/bin/rustc --version
 ENV PATH="${CARGO_HOME}/bin:${PATH}"
 WORKDIR /app
-COPY Cargo.toml Cargo.lock ./
-COPY crates/ ./crates
-COPY events ./events
+COPY . .
 
 RUN --mount=type=cache,target=${CARGO_HOME}/registry \
     --mount=type=cache,target=${CARGO_HOME}/git \

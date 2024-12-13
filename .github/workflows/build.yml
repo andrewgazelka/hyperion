@@ -13,6 +13,25 @@ env:
   RUST_TOOLCHAIN: nightly-2024-11-29
 
 jobs:
+  docker:
+    runs-on: ubuntu-latest
+#    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: false
+          load: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
   machete:
     runs-on: ubuntu-latest
 
@@ -28,25 +47,6 @@ jobs:
       - name: Run cargo machete
         run: |
           cargo machete
-
-  #  test:
-  #    runs-on: ubuntu-latest
-  #
-  #    steps:
-  #      - name: Checkout repository
-  #        uses: actions/checkout@v4
-  #
-  #      - uses: actions-rust-lang/setup-rust-toolchain@v1
-  #        with:
-  #          toolchain: ${{ env.RUST_TOOLCHAIN }}
-  #
-  #      - uses: Swatinem/rust-cache@v2
-  #        with:
-  #          cache-on-failure: true
-  #
-  #      - name: Run cargo test
-  #        run: |
-  #          cargo test --workspace --all-features
 
   fmt:
     runs-on: ubuntu-latest
@@ -64,25 +64,6 @@ jobs:
         run: |
           cargo fmt --all -- --check
 
-  #  docs:
-  #    runs-on: ubuntu-latest
-  #
-  #    steps:
-  #      - name: Checkout repository
-  #        uses: actions/checkout@v4
-  #
-  #      - uses: actions-rust-lang/setup-rust-toolchain@v1
-  #        with:
-  #          toolchain: ${{ env.RUST_TOOLCHAIN }}
-  #
-  #      - uses: Swatinem/rust-cache@v2
-  #        with:
-  #          cache-on-failure: true
-  #      - name: Run cargo doc
-  #        run: |
-  #          cargo doc --workspace --no-deps --all-features
-  #        env:
-  #          RUSTDOCFLAGS: -D warnings
 
   clippy:
     runs-on: ubuntu-latest
@@ -100,24 +81,3 @@ jobs:
 
       - name: Clippy check
         run: cargo clippy --workspace --benches --tests --examples --all-features -- -D warnings
-
-#  check:
-#    strategy:
-#      matrix:
-#        os: [ubuntu-latest, windows-latest, macos-latest]
-#    runs-on: ${{ matrix.os }}
-#    steps:
-#      - name: Checkout repository
-#        uses: actions/checkout@v4
-#
-#      - name: Setup Rust toolchain
-#        uses: actions-rust-lang/setup-rust-toolchain@v1
-#        with:
-#          toolchain: ${{ env.RUST_TOOLCHAIN }}
-#
-#      - uses: Swatinem/rust-cache@v2
-#        with:
-#          cache-on-failure: true
-#
-#      - name: Cargo check
-#        run: cargo check --workspace --all-features
