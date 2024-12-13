@@ -22,7 +22,11 @@ use crate::{
         entity_kind::EntityKind,
         get_direction_from_rotation, get_rotation_from_velocity,
         handlers::is_grounded,
-        metadata::{MetadataChanges, get_and_clear_metadata},
+        metadata::{
+            MetadataChanges,
+            entity::{EntityFlags, Pose},
+            get_and_clear_metadata,
+        },
     },
 };
 
@@ -154,12 +158,12 @@ impl Module for EntityStateSyncModule {
             });
 
         system!(
-            "active_animation_sync",
-            world,
-            &Position,
-            &Compose($),
-            ?&ConnectionId,
-            &mut ActiveAnimation,
+        "active_animation_sync",
+        world,
+        &Position,
+        &Compose($),
+        ?&ConnectionId,
+        &mut ActiveAnimation,
         )
         .multi_threaded()
         .kind::<flecs::pipeline::OnStore>()
@@ -244,7 +248,7 @@ impl Module for EntityStateSyncModule {
         .multi_threaded()
         .kind::<flecs::pipeline::OnStore>()
         .each_iter(move |it, row, (compose, position, inventory)| {
-            //let entity = it.entity(row);
+            // let entity = it.entity(row);
             let system = it.system();
             // get armor and hand
             let hand = EquipmentEntry {
@@ -277,7 +281,10 @@ impl Module for EntityStateSyncModule {
                 equipment: vec![hand, helmet, chestplate, leggings, boots, off_hand],
             };
 
-            compose.broadcast_local(&packet, position.to_chunk(), system).send().unwrap();
+            compose
+                .broadcast_local(&packet, position.to_chunk(), system)
+                .send()
+                .unwrap();
         });
 
         // What ever you do DO NOT!!! I REPEAT DO NOT SET VELOCITY ANYWHERE
@@ -419,14 +426,6 @@ impl Module for EntityStateSyncModule {
                 position.x += velocity.0.x;
                 position.y += velocity.0.y;
                 position.z += velocity.0.z;
-
-                debug!(
-                    "entity velocity: ({}, {}, {})",
-                    velocity.0.x, velocity.0.y, velocity.0.z
-                );
-
-                // re calculate yaw and pitch based on velocity
-
                 // let (new_yaw, new_pitch) = get_rotation_from_velocity(velocity.0);
 
                 let center = **position;
