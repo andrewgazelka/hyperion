@@ -36,10 +36,6 @@ where
     <T as ComponentId>::UnderlyingType: Meta<<T as ComponentId>::UnderlyingType>,
 {
     world.component::<T>().meta();
-
-    // observer!(world, flecs::OnSet, &T, [filter] &mut MetadataChanges,).each(|(value, changes)| {
-    // changes.encode(*value);
-    // });
     let type_name = core::any::type_name::<T>();
 
     let system_name = format!("exchange_{type_name}").leak();

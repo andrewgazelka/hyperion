@@ -56,9 +56,6 @@ fn track_previous<T: ComponentId + Copy + Debug + PartialEq>(world: &World) {
         .multi_threaded()
         .kind_id(post_store)
         .each(|(prev, value)| {
-            // if *prev != *value {
-            // debug!("...  {prev:?} => {value:?}");
-            // }
             *prev = *value;
         });
 }
@@ -460,56 +457,6 @@ impl Module for EntityStateSyncModule {
                 });
             }
         });
-
-        // system!(
-        // "sync_none_player_entity",
-        // world,
-        // &Compose($),
-        // &mut (Prev, Position),
-        // &Position,
-        // &mut Velocity,
-        // ?&ConnectionId,
-        // )
-        // .multi_threaded()
-        // .kind::<flecs::pipeline::OnUpdate>()
-        // .each_iter(
-        // |it, row, (compose, prev_position, position, velocity, connection_id)| {
-        // if connection_id.is_some() {
-        // return;
-        // }
-        //
-        // let system = it.system();
-        //
-        // let entity = it.entity(row);
-        // let entity_id = VarInt(entity.minecraft_id());
-        //
-        // let packet = play::EntityVelocityUpdateS2c {
-        // entity_id,
-        // velocity: velocity.to_packet_units()
-        // };
-        //
-        // compose
-        // .broadcast_local(&packet, position.to_chunk(), system)
-        // .send()
-        // .unwrap(); */
-        //
-        // let position_delta = **position - **prev_position;
-        // let changed_position = **position != **prev_position;
-        //
-        // if changed_position {
-        // let packet = play::MoveRelativeS2c {
-        // entity_id,
-        // delta: (position_delta * 4096.0).to_array().map(|x| x as i16),
-        // on_ground: false,
-        // };
-        //
-        // compose
-        // .broadcast_local(&packet, position.to_chunk(), system)
-        // .send()
-        // .unwrap();
-        // }
-        //
-        // });
 
         track_previous::<Position>(world);
         track_previous::<Yaw>(world);

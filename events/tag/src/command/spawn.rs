@@ -39,7 +39,7 @@ impl MinecraftCommand for SpawnCommand {
             .set(Position::new(0.0, 22.0, 0.0))
             .set(Pitch::new(0.0))
             .set(Yaw::new(0.0))
-            .set(Velocity::ZERO)
+            .set(Velocity::new(0.0, 0.0, 0.0))
             .add::<FollowClosestPlayer>()
             .set(DisplayedBlockState::new(BlockState::DIRT))
             // .is_a_id(prefabs.block_display_base)

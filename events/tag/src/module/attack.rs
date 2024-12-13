@@ -145,12 +145,11 @@ impl Module for AttackModule {
                                 Option<&mut ImmuneUntil>,
                                 &mut Health,
                                 &mut Position,
-                                &mut Velocity,
                                 &Yaw,
                                 &CombatStats,
                                 &PlayerInventory
                             )>(
-                                |(immune_until, health, target_position, _reaction, target_yaw, stats, target_inventory)| {
+                                |(immune_until, health, target_position, target_yaw, stats, target_inventory)| {
                                     if let Some(immune_until) = immune_until {
                                         if immune_until.tick > current_tick {
                                             return;

@@ -108,7 +108,7 @@ const MAX_BLOCKS_PER_TICK: f32 = 30.0;
 /// ```
 /// Only denies movement if starting outside a block and moving into a block.
 /// This prevents players from glitching into blocks while allowing them to move out.
-pub fn try_change_position(
+fn try_change_position(
     proposed: Vec3,
     position: &mut Position,
     size: EntitySize,
