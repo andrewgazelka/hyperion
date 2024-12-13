@@ -51,7 +51,7 @@ where
             &mut MetadataChanges, //     (2)
         )>(system_name)
         .multi_threaded()
-        .kind::<flecs::pipeline::OnStore>()
+        .kind::<flecs::pipeline::OnUpdate>()
         .run(move |mut table| {
             while table.next() {
                 unsafe {

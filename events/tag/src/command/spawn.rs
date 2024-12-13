@@ -3,11 +3,9 @@ use flecs_ecs::{
     core::{Entity, WorldProvider},
     prelude::EntityView,
 };
-use hyperion::simulation::{
-    Pitch, Position, Spawn, Uuid, Velocity, Yaw,
-    entity_kind::EntityKind,
-    metadata::display::{Height, Width},
-};
+use hyperion::{simulation::{
+    entity_kind::EntityKind, metadata::{block_display::DisplayedBlockState, display::{Height, Width}}, Pitch, Position, Spawn, Uuid, Velocity, Yaw
+}, BlockState};
 use hyperion_clap::{CommandPermission, MinecraftCommand};
 
 use crate::FollowClosestPlayer;
@@ -35,7 +33,7 @@ impl MinecraftCommand for SpawnCommand {
             .set(Yaw::new(0.0))
             .set(Velocity::new(0.0, 0.0, 0.0))
             .add::<FollowClosestPlayer>()
-            // .set(DisplayedBlockState::new(BlockState::DIRT))
+            .set(DisplayedBlockState::new(BlockState::DIRT))
             // .is_a_id(prefabs.block_display_base)
             .enqueue(Spawn);
     }
