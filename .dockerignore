@@ -3,3 +3,4 @@ Dockerfile
 .git/
 .gitignore
 .env
+.cargo/config.toml
