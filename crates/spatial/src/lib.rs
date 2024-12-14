@@ -46,14 +46,14 @@ impl SpatialIndex {
         self.query = bvh_region::Bvh::build::<TrivialHeuristic>(all_entities, &get_aabb);
     }
 
-    // pub fn get_collisions<'a>(
-    //     &'a self,
-    //     target: Aabb,
-    //     world: &'a World,
-    // ) -> impl Iterator<Item = Entity> + 'a {
-    //     let get_aabb = get_aabb_func(world);
-    //     self.query.get_collisions(target, get_aabb).copied()
-    // }
+    pub fn get_collisions<'a>(
+        &'a self,
+        target: Aabb,
+        world: &'a World,
+    ) -> impl Iterator<Item = Entity> + 'a {
+        let get_aabb = get_aabb_func(world);
+        self.query.get_collisions(target, get_aabb).copied()
+    }
 
     /// Get the closest player to the given position.
     #[must_use]
@@ -63,7 +63,7 @@ impl SpatialIndex {
         Some(world.entity_from_id(*target))
     }
 }
-//
+
 /// If we want the entity to be spatially indexed, we need to add this component.
 #[derive(Component)]
 pub struct Spatial;

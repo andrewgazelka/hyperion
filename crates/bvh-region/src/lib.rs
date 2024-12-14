@@ -18,9 +18,9 @@ use glam::Vec3;
 const ELEMENTS_TO_ACTIVATE_LEAF: usize = 16;
 const VOLUME_TO_ACTIVATE_LEAF: f32 = 5.0;
 
-pub trait GetAabb<T>: Sync + Fn(&T) -> Aabb {}
+pub trait GetAabb<T>: Fn(&T) -> Aabb {}
 
-impl<T, F> GetAabb<T> for F where F: Fn(&T) -> Aabb + Sync {}
+impl<T, F> GetAabb<T> for F where F: Fn(&T) -> Aabb {}
 
 #[cfg(feature = "plot")]
 pub mod plot;
@@ -121,7 +121,7 @@ fn thread_count_pow2() -> usize {
 
 impl<T: Send + Copy + Sync + Debug> Bvh<T> {
     #[tracing::instrument(skip_all, fields(elements_len = elements.len()))]
-    pub fn build<H: Heuristic>(mut elements: Vec<T>, get_aabb: &impl GetAabb<T>) -> Self {
+    pub fn build<H: Heuristic>(mut elements: Vec<T>, get_aabb: &(impl GetAabb<T> + Sync)) -> Self {
         let max_threads = thread_count_pow2();
 
         let len = elements.len();
@@ -251,7 +251,7 @@ impl<T: Send + Copy + Sync + Debug> Bvh<T> {
     pub fn get_collisions<'a>(
         &'a self,
         target: Aabb,
-        get_aabb: &'a impl GetAabb<T>,
+        get_aabb: impl GetAabb<T> + 'a,
     ) -> impl Iterator<Item = &'a T> + 'a {
         BvhIter::consume(self, target, get_aabb)
     }
@@ -411,7 +411,7 @@ impl BvhNode {
         max_threads: usize,
         nodes_idx: usize,
         nodes: &mut [Self],
-        get_aabb: &impl GetAabb<T>,
+        get_aabb: &(impl GetAabb<T> + Sync),
     ) -> (i32, usize)
     where
         T: Send + Copy + Sync + Debug,
@@ -519,7 +519,7 @@ impl<'a, T> BvhIter<'a, T> {
     fn consume(
         bvh: &'a Bvh<T>,
         target: Aabb,
-        get_aabb: &'a impl GetAabb<T>,
+        get_aabb: impl GetAabb<T> + 'a,
     ) -> Box<dyn Iterator<Item = &'a T> + 'a> {
         let root = bvh.root();
 
@@ -549,7 +549,7 @@ impl<'a, T> BvhIter<'a, T> {
     pub fn process(
         self,
         on: &'a BvhNode,
-        get_aabb: &'a impl GetAabb<T>,
+        get_aabb: impl GetAabb<T>,
     ) -> impl Iterator<Item = &'a T> {
         gen move {
             let mut stack: ArrayVec<&'a BvhNode, 64> = ArrayVec::new();
