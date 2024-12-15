@@ -60,7 +60,7 @@ bitvec = '1.0.1'
 bumpalo = '3.16'
 byteorder = '1.5.0'
 bytes = '1.8.0'
-colored = '2.1.0'
+colored = '2.2.0'
 compact_str = '0.8.0'
 convert_case = '0.6.0'
 criterion = '0.5.1'
@@ -100,14 +100,14 @@ rand = '0.8.5'
 rayon = '1.10.0'
 rkyv = '0.8.8'
 rustc-hash = { version = '2.0.0' , features = ["nightly"] }
-serde = '1.0.214'
+serde = '1.0.216'
 serde_json = '1.0.117'
 slotmap = '1.0.7'
 snafu = '0.8.5'
 syn = '2.0.87'
 syntect = { version = "5.2.0", default-features = false }
 tar = '0.4.41'
-thiserror = '2.0.1'
+thiserror = '2.0.7'
 tikv-jemallocator = '0.6.0'
 time = "0.3.37"
 tokio = '1.40.0'
@@ -219,7 +219,7 @@ version = '0.12.9'
 
 [workspace.dependencies.roaring]
 features = ['simd']
-version = '0.10.6'
+version = '0.10.9'
 
 [workspace.dependencies.sha2]
 version = '0.10.8'
