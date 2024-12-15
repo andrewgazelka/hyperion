@@ -28,7 +28,7 @@ pub struct SpatialIndex {
     query: bvh_region::Bvh<Entity>,
 }
 
-// we want a function to get the first collision whether it's an entity or a block
+#[must_use]
 pub fn get_first_collision(
     ray: Ray,
     distance: f32,
@@ -42,37 +42,35 @@ pub fn get_first_collision(
     let block = world.get::<&Blocks>(|blocks| blocks.first_collision(ray, distance));
 
     // check which one is closest to the Ray dont forget to account for entity size
-
-    match entity {
-        Some(entity) => {
+    entity.map_or(
+        match block {
+            Some(block_collision) => Some(Either::Right(block_collision)),
+            _ => None,
+        },
+        |entity| {
             let entity_data =
                 entity
                     .entity_view(world)
                     .get::<(&Position, &EntitySize)>(|(position, size)| {
                         let entity_aabb = aabb(**position, *size);
 
-                        let distance_to_entity = match entity_aabb.intersect_ray(&ray) {
-                            Some(distance) => distance.into_inner(),
-                            None => f32::MAX,
-                        };
+                        let distance_to_entity = entity_aabb
+                            .intersect_ray(&ray)
+                            .map_or(f32::MAX, |distance| distance.into_inner());
 
                         (entity, distance_to_entity)
                     });
 
             let (entity, distance_to_entity) = entity_data;
-            match block {
-                Some(block_collision) => match distance_to_entity < block_collision.distance {
-                    true => Some(Either::Left(entity)),
-                    false => Some(Either::Right(block_collision)),
-                },
-                None => Some(Either::Left(entity)),
-            }
-        }
-        _ => match block {
-            Some(block_collision) => Some(Either::Right(block_collision)),
-            _ => None,
+            block.map_or(Some(Either::Left(entity)), |block_collision| {
+                if distance_to_entity < block_collision.distance {
+                    Some(Either::Left(entity))
+                } else {
+                    Some(Either::Right(block_collision))
+                }
+            })
         },
-    }
+    )
 }
 
 fn get_aabb_func<'a>(world: &'a World) -> impl Fn(&Entity) -> Aabb + Send + Sync + use<'a> {
@@ -132,18 +130,13 @@ impl SpatialIndex {
                 .get::<(&Position, &EntitySize)>(|(position, size)| {
                     let entity_aabb = aabb(**position, *size);
 
-                    let distance_to_entity = match entity_aabb
+                    let distance_to_entity = entity_aabb
                         .intersect_ray(&Ray::new(ray.origin(), ray.direction() * distance))
-                    {
-                        Some(distance) => distance.into_inner(),
-                        None => f32::MAX,
-                    };
+                        .map_or(f32::MAX, |distance| distance.into_inner());
 
-                    if distance_to_entity < closest_distance {
-                        if entity != caller {
-                            closest_entity = Some(entity);
-                            closest_distance = distance_to_entity;
-                        }
+                    if distance_to_entity < closest_distance && entity != caller {
+                        closest_entity = Some(entity);
+                        closest_distance = distance_to_entity;
                     }
                 });
         }

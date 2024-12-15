@@ -54,7 +54,7 @@ pub enum TrySetBlockDeltaError {
     ChunkNotLoaded,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub struct RayCollision {
     pub distance: f32,
     pub location: IVec3,
