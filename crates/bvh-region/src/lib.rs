@@ -57,7 +57,7 @@ impl BvhNode {
 #[derive(Clone)]
 pub struct Bvh<T> {
     nodes: Vec<BvhNode>,
-    pub elements: Vec<T>,
+    elements: Vec<T>,
     root: i32,
 }
 
