@@ -6,7 +6,7 @@
 use core::simd;
 use std::{
     iter::zip,
-    simd::{cmp::SimdPartialEq, LaneCount, Mask, MaskElement, Simd, SupportedLaneCount},
+    simd::{LaneCount, Mask, MaskElement, Simd, SupportedLaneCount, cmp::SimdPartialEq},
 };
 
 use crate::one_bit_positions::OneBitPositionsExt;

@@ -1,11 +1,11 @@
 use clap::ValueEnum;
 use flecs_ecs::{
-    core::{flecs, Entity, IdOperations, World},
+    core::{Entity, IdOperations, World, flecs},
     macros::Component,
     prelude::Module,
 };
 use hyperion::{
-    simulation::{handlers::PacketSwitchQuery, Player},
+    simulation::{Player, handlers::PacketSwitchQuery},
     storage::{EventFn, InteractEvent},
 };
 
