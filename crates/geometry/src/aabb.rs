@@ -18,6 +18,31 @@ impl HasAabb for Aabb {
     }
 }
 
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Ord, PartialOrd, Hash)]
+pub struct OrderedAabb {
+    min_x: ordered_float::NotNan<f32>,
+    min_y: ordered_float::NotNan<f32>,
+    min_z: ordered_float::NotNan<f32>,
+    max_x: ordered_float::NotNan<f32>,
+    max_y: ordered_float::NotNan<f32>,
+    max_z: ordered_float::NotNan<f32>,
+}
+
+impl TryFrom<Aabb> for OrderedAabb {
+    type Error = ordered_float::FloatIsNan;
+
+    fn try_from(value: Aabb) -> Result<Self, Self::Error> {
+        Ok(Self {
+            min_x: value.min.x.try_into()?,
+            min_y: value.min.y.try_into()?,
+            min_z: value.min.z.try_into()?,
+            max_x: value.max.x.try_into()?,
+            max_y: value.max.y.try_into()?,
+            max_z: value.max.z.try_into()?,
+        })
+    }
+}
+
 #[derive(Copy, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Aabb {
     pub min: Vec3,

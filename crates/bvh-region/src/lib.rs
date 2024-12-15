@@ -9,15 +9,12 @@ use std::fmt::Debug;
 
 use arrayvec::ArrayVec;
 use geometry::aabb::Aabb;
-use glam::Vec3;
 
 const ELEMENTS_TO_ACTIVATE_LEAF: usize = 16;
 const VOLUME_TO_ACTIVATE_LEAF: f32 = 5.0;
 
 mod node;
 use node::BvhNode;
-
-use crate::utils::GetAabb;
 
 mod build;
 mod query;
@@ -195,92 +192,6 @@ impl BvhNode {
 
         &root.nodes[right as usize]
     }
-}
-
-struct BvhIter<'a, T> {
-    bvh: &'a Bvh<T>,
-    target: Aabb,
-}
-
-impl<'a, T> BvhIter<'a, T> {
-    fn consume(
-        bvh: &'a Bvh<T>,
-        target: Aabb,
-        get_aabb: impl GetAabb<T> + 'a,
-    ) -> Box<dyn Iterator<Item = &'a T> + 'a> {
-        let root = bvh.root();
-
-        let root = match root {
-            Node::Internal(internal) => internal,
-            Node::Leaf(leaf) => {
-                for elem in leaf.iter() {
-                    let aabb = get_aabb(elem);
-                    if aabb.collides(&target) {
-                        return Box::new(std::iter::once(elem));
-                    }
-                }
-                return Box::new(std::iter::empty());
-            }
-        };
-
-        if !root.aabb.collides(&target) {
-            return Box::new(std::iter::empty());
-        }
-
-        let iter = Self { target, bvh };
-
-        Box::new(iter.process(root, get_aabb))
-    }
-
-    #[expect(clippy::excessive_nesting, reason = "todo: fix")]
-    pub fn process(
-        self,
-        on: &'a BvhNode,
-        get_aabb: impl GetAabb<T>,
-    ) -> impl Iterator<Item = &'a T> {
-        gen move {
-            let mut stack: ArrayVec<&'a BvhNode, 64> = ArrayVec::new();
-            stack.push(on);
-
-            while let Some(on) = stack.pop() {
-                for child in on.children(self.bvh) {
-                    match child {
-                        Node::Internal(child) => {
-                            if child.aabb.collides(&self.target) {
-                                stack.push(child);
-                            }
-                        }
-                        Node::Leaf(elements) => {
-                            for elem in elements {
-                                let aabb = get_aabb(elem);
-                                if aabb.collides(&self.target) {
-                                    yield elem;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-pub fn random_aabb(width: f32) -> Aabb {
-    let min = std::array::from_fn(|_| fastrand::f32() * width);
-    let min = Vec3::from_array(min);
-    let max = min + Vec3::splat(1.0);
-
-    Aabb::new(min, max)
-}
-
-pub fn create_random_elements_1(count: usize, width: f32) -> Vec<Aabb> {
-    let mut elements = Vec::new();
-
-    for _ in 0..count {
-        elements.push(random_aabb(width));
-    }
-
-    elements
 }
 
 #[cfg(test)]

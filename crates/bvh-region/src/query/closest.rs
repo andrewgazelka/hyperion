@@ -3,10 +3,7 @@ use std::{cmp::Reverse, collections::BinaryHeap, fmt::Debug};
 use geometry::aabb::Aabb;
 use glam::Vec3;
 
-use crate::{
-    Bvh, BvhIter, Node,
-    utils::{GetAabb, NodeOrd},
-};
+use crate::{Bvh, Node, utils::NodeOrd};
 
 impl<T: Debug> Bvh<T> {
     /// Returns the closest element to the target and the distance squared to it.
@@ -72,13 +69,5 @@ impl<T: Debug> Bvh<T> {
         }
 
         min_node.map(|elem| (elem, min_dist2))
-    }
-
-    pub fn get_collisions<'a>(
-        &'a self,
-        target: Aabb,
-        get_aabb: impl GetAabb<T> + 'a,
-    ) -> impl Iterator<Item = &'a T> + 'a {
-        BvhIter::consume(self, target, get_aabb)
     }
 }
