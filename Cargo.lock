@@ -5373,7 +5373,6 @@ dependencies = [
  "geometry",
  "hyperion",
  "rayon",
- "tracing",
 ]
 
 [[package]]

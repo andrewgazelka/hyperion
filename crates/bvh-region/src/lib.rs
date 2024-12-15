@@ -12,7 +12,7 @@ use std::{
 };
 
 use arrayvec::ArrayVec;
-use geometry::{aabb::Aabb, ray::Ray};
+use geometry::aabb::Aabb;
 use glam::Vec3;
 
 const ELEMENTS_TO_ACTIVATE_LEAF: usize = 16;
