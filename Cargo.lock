@@ -853,14 +853,17 @@ dependencies = [
 name = "bvh-region"
 version = "0.1.0"
 dependencies = [
+ "approx",
  "arrayvec",
  "criterion",
+ "derive_more",
  "fastrand 2.3.0",
  "geometry",
  "glam",
  "ordered-float",
  "plotters",
  "plotters-bitmap",
+ "proptest",
  "rand",
  "rayon",
  "tracing",
