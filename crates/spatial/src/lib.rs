@@ -42,33 +42,30 @@ pub fn get_first_collision(
     let block = world.get::<&Blocks>(|blocks| blocks.first_collision(ray, distance));
 
     // check which one is closest to the Ray dont forget to account for entity size
-    entity.map_or(
-        block.map(Either::Right),
-        |entity| {
-            let entity_data =
-                entity
-                    .entity_view(world)
-                    .get::<(&Position, &EntitySize)>(|(position, size)| {
-                        let entity_aabb = aabb(**position, *size);
+    entity.map_or(block.map(Either::Right), |entity| {
+        let entity_data =
+            entity
+                .entity_view(world)
+                .get::<(&Position, &EntitySize)>(|(position, size)| {
+                    let entity_aabb = aabb(**position, *size);
 
-                        #[allow(clippy::redundant_closure_for_method_calls)]
-                        let distance_to_entity = entity_aabb
-                            .intersect_ray(&ray)
-                            .map_or(f32::MAX, |distance| distance.into_inner());
+                    #[allow(clippy::redundant_closure_for_method_calls)]
+                    let distance_to_entity = entity_aabb
+                        .intersect_ray(&ray)
+                        .map_or(f32::MAX, |distance| distance.into_inner());
 
-                        (entity, distance_to_entity)
-                    });
+                    (entity, distance_to_entity)
+                });
 
-            let (entity, distance_to_entity) = entity_data;
-            block.map_or(Some(Either::Left(entity)), |block_collision| {
-                if distance_to_entity < block_collision.distance {
-                    Some(Either::Left(entity))
-                } else {
-                    Some(Either::Right(block_collision))
-                }
-            })
-        },
-    )
+        let (entity, distance_to_entity) = entity_data;
+        block.map_or(Some(Either::Left(entity)), |block_collision| {
+            if distance_to_entity < block_collision.distance {
+                Some(Either::Left(entity))
+            } else {
+                Some(Either::Right(block_collision))
+            }
+        })
+    })
 }
 
 fn get_aabb_func<'a>(world: &'a World) -> impl Fn(&Entity) -> Aabb + Send + Sync + use<'a> {
