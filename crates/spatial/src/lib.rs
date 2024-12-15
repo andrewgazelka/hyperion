@@ -7,12 +7,19 @@ use flecs_ecs::{
     macros::{system, Component},
     prelude::Module,
 };
-use geometry::aabb::Aabb;
+use geometry::{aabb::Aabb, ray::Ray};
 use hyperion::{
     egress::player_join::RayonWorldStages,
     glam::Vec3,
-    simulation::{aabb, EntitySize, Position},
+    simulation::{
+        aabb,
+        blocks::{Blocks, RayCollision},
+        entity_kind::EntityKind,
+        EntitySize, Position,
+    },
 };
+use rayon::iter::Either;
+use tracing::debug;
 
 #[derive(Component)]
 pub struct SpatialModule;
@@ -21,6 +28,53 @@ pub struct SpatialModule;
 pub struct SpatialIndex {
     /// The bounding boxes of all players
     query: bvh_region::Bvh<Entity>,
+}
+
+// we want a function to get the first collision whether it's an entity or a block
+pub fn get_first_collision(
+    ray: Ray,
+    distance: f32,
+    world: &World,
+    caller: Entity,
+) -> Option<Either<Entity, RayCollision>> {
+    // Check for collisions with entities
+    let entity =
+        world.get::<&SpatialIndex>(|index| index.closest_to_ray(ray, distance, world, caller));
+
+    let block = world.get::<&Blocks>(|blocks| blocks.first_collision(ray, distance));
+
+    // check which one is closest to the Ray dont forget to account for entity size
+
+    match entity {
+        Some(entity) => {
+            let entity_data =
+                entity
+                    .entity_view(world)
+                    .get::<(&Position, &EntitySize)>(|(position, size)| {
+                        let entity_aabb = aabb(**position, *size);
+
+                        let distance_to_entity = match entity_aabb.intersect_ray(&ray) {
+                            Some(distance) => distance.into_inner(),
+                            None => f32::MAX,
+                        };
+
+                        (entity, distance_to_entity)
+                    });
+
+            let (entity, distance_to_entity) = entity_data;
+            match block {
+                Some(block_collision) => match distance_to_entity < block_collision.distance {
+                    true => Some(Either::Left(entity)),
+                    false => Some(Either::Right(block_collision)),
+                },
+                None => Some(Either::Left(entity)),
+            }
+        }
+        _ => match block {
+            Some(block_collision) => Some(Either::Right(block_collision)),
+            _ => None,
+        },
+    }
 }
 
 fn get_aabb_func<'a>(world: &'a World) -> impl Fn(&Entity) -> Aabb + Send + Sync + use<'a> {
@@ -61,6 +115,42 @@ impl SpatialIndex {
         let get_aabb = get_aabb_func(world);
         let (target, _) = self.query.get_closest(point, &get_aabb)?;
         Some(world.entity_from_id(*target))
+    }
+
+    #[must_use]
+    pub fn closest_to_ray(
+        &self,
+        ray: Ray,
+        distance: f32,
+        world: &World,
+        caller: Entity,
+    ) -> Option<Entity> {
+        let mut closest_entity: Option<Entity> = None;
+        let mut closest_distance = f32::MAX;
+
+        for entity in self.query.elements.clone() {
+            entity
+                .entity_view(world)
+                .get::<(&Position, &EntitySize)>(|(position, size)| {
+                    let entity_aabb = aabb(**position, *size);
+
+                    let distance_to_entity = match entity_aabb
+                        .intersect_ray(&Ray::new(ray.origin(), ray.direction() * distance))
+                    {
+                        Some(distance) => distance.into_inner(),
+                        None => f32::MAX,
+                    };
+
+                    if distance_to_entity < closest_distance {
+                        if entity != caller {
+                            closest_entity = Some(entity);
+                            closest_distance = distance_to_entity;
+                        }
+                    }
+                });
+        }
+
+        closest_entity
     }
 }
 

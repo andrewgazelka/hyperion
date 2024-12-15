@@ -12,6 +12,7 @@ flecs_ecs.workspace = true
 hyperion.workspace = true
 geometry.workspace = true
 rayon.workspace = true
+tracing.workspace = true
 
 [lints]
 workspace = true

@@ -1,11 +1,11 @@
 use clap::Parser;
 use flecs_ecs::core::{Entity, EntityView, EntityViewGet, WorldGet, WorldProvider};
 use hyperion::{
-    BlockState,
-    glam::Vec3,
-    simulation::{Pitch, Position, Yaw, blocks::Blocks},
+    glam::Vec3, simulation::{blocks::Blocks, entity_kind::EntityKind, Pitch, Position, Yaw}, BlockState
 };
 use hyperion_clap::{CommandPermission, MinecraftCommand};
+use rayon::iter::Either;
+use spatial::get_first_collision;
 use tracing::debug;
 
 #[derive(Parser, CommandPermission, Debug)]
@@ -60,16 +60,20 @@ impl MinecraftCommand for RaycastCommand {
 
         debug!("ray = {ray:?}");
 
-        world.get::<&mut Blocks>(|blocks| {
-            let Some(collision) = blocks.first_collision(ray, 10.0) else {
-                return;
-            };
+        let result =get_first_collision(ray, 10.0, &world, caller);
 
-            debug!("collision = {collision:?}");
-
-            blocks
-                .set_block(collision.location, BlockState::DIRT)
-                .unwrap();
-        });
+        match result {
+            Some(Either::Left(entity)) => {
+                entity
+                    .entity_view(world)
+                    .get::<(&Position, &EntityKind)>(|(position, kind)| {
+                        let position = **position;
+                        debug!("kind: {kind:?}");
+                        debug!("position: {position:?}");
+                    });
+            },
+            Some(Either::Right(ray_collision)) => debug!("ray_collision: {ray_collision:?}"),
+            None => debug!("no collision found"),
+        }
     }
 }

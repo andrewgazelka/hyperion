@@ -12,7 +12,7 @@ use std::{
 };
 
 use arrayvec::ArrayVec;
-use geometry::aabb::Aabb;
+use geometry::{aabb::Aabb, ray::Ray};
 use glam::Vec3;
 
 const ELEMENTS_TO_ACTIVATE_LEAF: usize = 16;
@@ -57,7 +57,7 @@ impl BvhNode {
 #[derive(Clone)]
 pub struct Bvh<T> {
     nodes: Vec<BvhNode>,
-    elements: Vec<T>,
+    pub elements: Vec<T>,
     root: i32,
 }
 
