@@ -51,7 +51,7 @@ impl SpatialIndex {
         world: &'a World,
     ) -> impl Iterator<Item = Entity> + 'a {
         let get_aabb = get_aabb_func(world);
-        self.query.get_collisions(target, get_aabb).copied()
+        self.query.range(target, get_aabb).copied()
     }
 
     /// Get the closest player to the given position.

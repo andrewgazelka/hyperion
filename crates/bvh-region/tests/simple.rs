@@ -1,6 +1,8 @@
+use std::collections::HashSet;
+
 use approx::assert_relative_eq;
 use bvh_region::Bvh;
-use geometry::aabb::Aabb;
+use geometry::aabb::{Aabb, OrderedAabb};
 use glam::Vec3;
 use proptest::prelude::*;
 
@@ -100,5 +102,57 @@ proptest! {
                 prop_assert!(false, "Mismatch between BVH closest and brute force closest; BVH: {x:?}, brute force: {y:?}");
             }
         }
+    }
+}
+
+proptest! {
+    #[test]
+    fn test_range_correctness(
+        elements in prop::collection::vec(
+            (any::<f32>(), any::<f32>(), any::<f32>(), any::<f32>(), any::<f32>(), any::<f32>())
+                .prop_map(|(x1, y1, z1, x2, y2, z2)| {
+                    let min_x = x1.min(x2);
+                    let max_x = x1.max(x2);
+                    let min_y = y1.min(y2);
+                    let max_y = y1.max(y2);
+                    let min_z = z1.min(z2);
+                    let max_z = z1.max(z2);
+                    Aabb::from([min_x, min_y, min_z, max_x, max_y, max_z])
+                }),
+            1..50
+        ),
+        target in (any::<f32>(), any::<f32>(), any::<f32>(), any::<f32>(), any::<f32>(), any::<f32>())
+            .prop_map(|(x1, y1, z1, x2, y2, z2)| {
+                let min_x = x1.min(x2);
+                let max_x = x1.max(x2);
+                let min_y = y1.min(y2);
+                let max_y = y1.max(y2);
+                let min_z = z1.min(z2);
+                let max_z = z1.max(z2);
+                Aabb::from([min_x, min_y, min_z, max_x, max_y, max_z])
+            })
+    ) {
+        let bvh = Bvh::build(elements.clone(), copied);
+
+        // Compute brute force collisions
+        let mut brute_force_set = HashSet::new();
+        for aabb in &elements {
+            if aabb.collides(&target) {
+                let aabb = OrderedAabb::try_from(*aabb).unwrap();
+                brute_force_set.insert(aabb);
+            }
+        }
+
+        // Compute BVH collisions
+        let mut bvh_set = HashSet::new();
+
+        for candidate in bvh.range(target, copied) {
+            // Find index of candidate in `elements`:
+            let candidate = OrderedAabb::try_from(*candidate).unwrap();
+            bvh_set.insert(candidate);
+        }
+
+        // Compare sets
+        prop_assert_eq!(&bvh_set, &brute_force_set, "Mismatch between BVH range and brute force collision sets: {:?} != {:?}", bvh_set, brute_force_set);
     }
 }
