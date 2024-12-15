@@ -43,10 +43,7 @@ pub fn get_first_collision(
 
     // check which one is closest to the Ray dont forget to account for entity size
     entity.map_or(
-        match block {
-            Some(block_collision) => Some(Either::Right(block_collision)),
-            _ => None,
-        },
+        block.map(Either::Right),
         |entity| {
             let entity_data =
                 entity
@@ -54,6 +51,7 @@ pub fn get_first_collision(
                     .get::<(&Position, &EntitySize)>(|(position, size)| {
                         let entity_aabb = aabb(**position, *size);
 
+                        #[allow(clippy::redundant_closure_for_method_calls)]
                         let distance_to_entity = entity_aabb
                             .intersect_ray(&ray)
                             .map_or(f32::MAX, |distance| distance.into_inner());
@@ -130,6 +128,7 @@ impl SpatialIndex {
                 .get::<(&Position, &EntitySize)>(|(position, size)| {
                     let entity_aabb = aabb(**position, *size);
 
+                    #[allow(clippy::redundant_closure_for_method_calls)]
                     let distance_to_entity = entity_aabb
                         .intersect_ray(&Ray::new(ray.origin(), ray.direction() * distance))
                         .map_or(f32::MAX, |distance| distance.into_inner());
