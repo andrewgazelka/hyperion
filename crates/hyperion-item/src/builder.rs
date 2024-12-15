@@ -1,5 +1,5 @@
 use flecs_ecs::core::Entity;
-use valence_protocol::{nbt, nbt::Value, ItemKind, ItemStack};
+use valence_protocol::{ItemKind, ItemStack, nbt, nbt::Value};
 
 mod book;
 pub use book::BookBuilder;

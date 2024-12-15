@@ -1,17 +1,17 @@
 use bvh_region::TrivialHeuristic;
 use flecs_ecs::{
     core::{
-        flecs, Builder, Entity, EntityView, EntityViewGet, IdOperations, QueryAPI,
-        QueryBuilderImpl, SystemAPI, TermBuilderImpl, World, WorldGet,
+        Builder, Entity, EntityView, EntityViewGet, IdOperations, QueryAPI, QueryBuilderImpl,
+        SystemAPI, TermBuilderImpl, World, WorldGet, flecs,
     },
-    macros::{system, Component},
+    macros::{Component, system},
     prelude::Module,
 };
 use geometry::aabb::Aabb;
 use hyperion::{
     egress::player_join::RayonWorldStages,
     glam::Vec3,
-    simulation::{aabb, EntitySize, Position},
+    simulation::{EntitySize, Position, aabb},
 };
 
 #[derive(Component)]
@@ -23,7 +23,7 @@ pub struct SpatialIndex {
     query: bvh_region::Bvh<Entity>,
 }
 
-fn get_aabb_func<'a>(world: &'a World) -> impl Fn(&Entity) -> Aabb + Send + Sync + use<'a> {
+fn get_aabb_func<'a>(world: &'a World) -> impl Fn(&Entity) -> Aabb + Send + Sync {
     let stages: &'a RayonWorldStages = world.get::<&RayonWorldStages>(|stages| {
         // we can properly extend lifetimes here
         unsafe { core::mem::transmute(stages) }
