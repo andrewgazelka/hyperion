@@ -1,4 +1,7 @@
-use std::{fmt::Display, ops::Add};
+use std::{
+    fmt::{Debug, Display},
+    ops::Add,
+};
 
 use glam::Vec3;
 use serde::{Deserialize, Serialize};
@@ -15,10 +18,20 @@ impl HasAabb for Aabb {
     }
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Copy, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Aabb {
     pub min: Vec3,
     pub max: Vec3,
+}
+
+impl From<[f32; 6]> for Aabb {
+    fn from(value: [f32; 6]) -> Self {
+        let [min_x, min_y, min_z, max_x, max_y, max_z] = value;
+        let min = Vec3::new(min_x, min_y, min_z);
+        let max = Vec3::new(max_x, max_y, max_z);
+
+        Self { min, max }
+    }
 }
 
 impl FromIterator<Self> for Aabb {
@@ -32,6 +45,12 @@ impl FromIterator<Self> for Aabb {
         }
 
         Self { min, max }
+    }
+}
+
+impl Debug for Aabb {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{self}")
     }
 }
 
@@ -181,20 +200,16 @@ impl Aabb {
     }
 
     #[must_use]
-    pub fn dist2(&self, point: Vec3) -> f32 {
-        let point = point.as_ref();
-        let self_min = self.min.as_ref();
-        let self_max = self.max.as_ref();
+    pub fn dist2(&self, point: Vec3) -> f64 {
+        let point = point.as_dvec3();
+        // Clamp the point into the box volume.
+        let clamped = point.clamp(self.min.as_dvec3(), self.max.as_dvec3());
 
-        let mut dist2 = 0.0;
+        // Distance vector from point to the clamped point inside the box.
+        let diff = point - clamped;
 
-        #[expect(clippy::indexing_slicing, reason = "all of these have length of 3")]
-        for i in 0..3 {
-            dist2 += (self_min[i] - point[i]).max(0.0).powi(2);
-            dist2 += (self_max[i] - point[i]).min(0.0).powi(2);
-        }
-
-        dist2
+        // The squared distance.
+        diff.length_squared()
     }
 
     pub fn overlaps<'a, T>(

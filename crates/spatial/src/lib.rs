@@ -1,4 +1,3 @@
-use bvh_region::TrivialHeuristic;
 use flecs_ecs::{
     core::{
         Builder, Entity, EntityView, EntityViewGet, IdOperations, QueryAPI, QueryBuilderImpl,
@@ -43,7 +42,7 @@ impl SpatialIndex {
         let all_entities = all_indexed_entities(world);
         let get_aabb = get_aabb_func(world);
 
-        self.query = bvh_region::Bvh::build::<TrivialHeuristic>(all_entities, &get_aabb);
+        self.query = bvh_region::Bvh::build(all_entities, &get_aabb);
     }
 
     pub fn get_collisions<'a>(
