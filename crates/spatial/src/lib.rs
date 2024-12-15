@@ -1,10 +1,10 @@
 use bvh_region::TrivialHeuristic;
 use flecs_ecs::{
     core::{
-        flecs, Builder, Entity, EntityView, EntityViewGet, IdOperations, QueryAPI,
-        QueryBuilderImpl, SystemAPI, TermBuilderImpl, World, WorldGet,
+        Builder, Entity, EntityView, EntityViewGet, IdOperations, QueryAPI, QueryBuilderImpl,
+        SystemAPI, TermBuilderImpl, World, WorldGet, flecs,
     },
-    macros::{system, Component},
+    macros::{Component, system},
     prelude::Module,
 };
 use geometry::{aabb::Aabb, ray::Ray};
@@ -12,9 +12,8 @@ use hyperion::{
     egress::player_join::RayonWorldStages,
     glam::Vec3,
     simulation::{
-        aabb,
+        EntitySize, Position, aabb,
         blocks::{Blocks, RayCollision},
-        EntitySize, Position,
     },
 };
 use rayon::iter::Either;
@@ -41,7 +40,7 @@ pub fn get_first_collision(
 
     let block = world.get::<&Blocks>(|blocks| blocks.first_collision(ray, distance));
 
-    // check which one is closest to the Ray dont forget to account for entity size
+    // check which one is closest to the Ray don't forget to account for entity size
     entity.map_or(block.map(Either::Right), |entity| {
         let entity_data =
             entity
@@ -68,7 +67,7 @@ pub fn get_first_collision(
     })
 }
 
-fn get_aabb_func<'a>(world: &'a World) -> impl Fn(&Entity) -> Aabb + Send + Sync + use<'a> {
+fn get_aabb_func<'a>(world: &'a World) -> impl Fn(&Entity) -> Aabb + Send + Sync {
     let stages: &'a RayonWorldStages = world.get::<&RayonWorldStages>(|stages| {
         // we can properly extend lifetimes here
         unsafe { core::mem::transmute(stages) }

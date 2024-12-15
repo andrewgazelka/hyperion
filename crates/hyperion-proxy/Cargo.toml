@@ -23,11 +23,11 @@ workspace = true
 
 [package]
 authors = ["Andrew Gazelka <andrew.gazelka@gmail.com>"]
-edition = "2024"
+edition.workspace = true
 name = "hyperion-proxy"
 publish = false
 readme = "README.md"
-version = "0.1.0"
+version.workspace = true
 
 [target.'cfg(not(target_os = "windows"))'.dependencies]
 tikv-jemallocator.workspace = true

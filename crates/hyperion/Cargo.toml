@@ -15,7 +15,7 @@ bumpalo = {workspace = true}
 bytemuck = {workspace = true}
 byteorder = {workspace = true}
 bytes = {workspace = true}
-colored = "2.1.0"
+colored = "2.2.0"
 derive_more = {workspace = true}
 enumset = {workspace = true}
 fastrand = {workspace = true}
@@ -81,8 +81,8 @@ workspace = true
 
 [package]
 authors = ["Andrew Gazelka <andrew.gazelka@gmail.com>"]
-edition = "2024"
+edition.workspace = true
 name = "hyperion"
 publish = false
 readme = "README.md"
-version = "0.1.0"
+version.workspace = true
