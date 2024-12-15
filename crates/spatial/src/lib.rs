@@ -14,12 +14,10 @@ use hyperion::{
     simulation::{
         aabb,
         blocks::{Blocks, RayCollision},
-        entity_kind::EntityKind,
         EntitySize, Position,
     },
 };
 use rayon::iter::Either;
-use tracing::debug;
 
 #[derive(Component)]
 pub struct SpatialModule;

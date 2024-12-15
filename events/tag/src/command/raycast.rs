@@ -1,7 +1,8 @@
 use clap::Parser;
-use flecs_ecs::core::{Entity, EntityView, EntityViewGet, WorldGet, WorldProvider};
+use flecs_ecs::core::{Entity, EntityView, EntityViewGet, WorldProvider};
 use hyperion::{
-    glam::Vec3, simulation::{blocks::Blocks, entity_kind::EntityKind, Pitch, Position, Yaw}, BlockState
+    glam::Vec3,
+    simulation::{Pitch, Position, Yaw, entity_kind::EntityKind},
 };
 use hyperion_clap::{CommandPermission, MinecraftCommand};
 use rayon::iter::Either;
@@ -60,7 +61,7 @@ impl MinecraftCommand for RaycastCommand {
 
         debug!("ray = {ray:?}");
 
-        let result =get_first_collision(ray, 10.0, &world, caller);
+        let result = get_first_collision(ray, 10.0, &world, caller);
 
         match result {
             Some(Either::Left(entity)) => {
@@ -71,7 +72,7 @@ impl MinecraftCommand for RaycastCommand {
                         debug!("kind: {kind:?}");
                         debug!("position: {position:?}");
                     });
-            },
+            }
             Some(Either::Right(ray_collision)) => debug!("ray_collision: {ray_collision:?}"),
             None => debug!("no collision found"),
         }
