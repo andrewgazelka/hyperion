@@ -16,6 +16,7 @@ derive_more = { workspace = true }
 fastrand = { workspace = true }
 geometry = { workspace = true }
 glam = { workspace = true, features = ["serde"] }
+num-traits = { workspace = true }
 ordered-float = { workspace = true }
 plotters = { workspace = true, features = ["plotters-bitmap", "image"], optional = true }
 plotters-bitmap = { workspace = true, optional = true }

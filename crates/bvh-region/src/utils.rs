@@ -22,27 +22,27 @@ pub trait GetAabb<T>: Fn(&T) -> Aabb {}
 
 impl<T, F> GetAabb<T> for F where F: Fn(&T) -> Aabb {}
 
-#[derive(Constructor)]
-pub struct NodeOrd<'a> {
+#[derive(Constructor, Copy, Clone, Debug)]
+pub struct NodeOrd<'a, T> {
     pub node: &'a BvhNode,
-    pub dist2: f64,
+    pub by: T,
 }
 
-impl PartialEq<Self> for NodeOrd<'_> {
+impl<T: PartialEq> PartialEq<Self> for NodeOrd<'_, T> {
     fn eq(&self, other: &Self) -> bool {
-        self.dist2 == other.dist2
+        self.by == other.by
     }
 }
-impl PartialOrd for NodeOrd<'_> {
+impl<T: PartialOrd> PartialOrd for NodeOrd<'_, T> {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.cmp(other))
+        self.by.partial_cmp(&other.by)
     }
 }
 
-impl Eq for NodeOrd<'_> {}
+impl<T: Eq> Eq for NodeOrd<'_, T> {}
 
-impl Ord for NodeOrd<'_> {
+impl<T: Ord> Ord for NodeOrd<'_, T> {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.dist2.partial_cmp(&other.dist2).unwrap()
+        self.by.cmp(&other.by)
     }
 }

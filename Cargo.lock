@@ -860,6 +860,7 @@ dependencies = [
  "fastrand 2.3.0",
  "geometry",
  "glam",
+ "num-traits",
  "ordered-float",
  "plotters",
  "plotters-bitmap",
@@ -2217,6 +2218,7 @@ dependencies = [
 name = "geometry"
 version = "0.1.0"
 dependencies = [
+ "approx",
  "glam",
  "ordered-float",
  "serde",
