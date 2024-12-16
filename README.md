@@ -163,6 +163,12 @@ sequenceDiagram
 
 ## Running
 
+### Without cloning
+
+```bash
+curl -L https://raw.githubusercontent.com/hyperion-mc/hyperion/main/docker-compose.yml | docker compose -f - up --pull always
+```
+
 ### `main` branch
 
 ```bash
