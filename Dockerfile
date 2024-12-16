@@ -52,8 +52,8 @@ RUN --mount=type=cache,target=${CARGO_HOME}/registry \
     --mount=type=cache,target=/app/target \
     cargo machete && \
     cargo fmt --all -- --check && \
-    cargo clippy --workspace --benches --tests --examples --all-features -- -D warnings && \
-    cargo nextest run --all-features --workspace --locked
+    cargo clippy --workspace --benches --tests --examples --all-features --frozen -- -D warnings && \
+    cargo nextest run --all-features --workspace --frozen
 
 # Release builder
 FROM builder-base AS build-release
