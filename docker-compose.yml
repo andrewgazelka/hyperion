@@ -1,6 +1,10 @@
 services:
   hyperion-proxy:
     image: ghcr.io/hyperion-mc/hyperion/hyperion-proxy:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: hyperion-proxy
     ports:
       - "25565:25565"
     command: [ "--server", "tag:35565", "0.0.0.0:25565" ]
@@ -13,6 +17,10 @@ services:
       - tag
   tag:
     image: ghcr.io/hyperion-mc/hyperion/tag:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: tag
     ports:
       - "27750:27750"
     expose:
