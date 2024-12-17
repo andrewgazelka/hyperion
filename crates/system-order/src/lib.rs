@@ -4,7 +4,7 @@ use derive_more::Constructor;
 use flecs_ecs::{
     core::{
         Builder, Entity, EntityView, EntityViewGet, IdOperations, QueryAPI, QueryBuilderImpl,
-        flecs, flecs::DependsOn,
+        SystemAPI, flecs, flecs::DependsOn,
     },
     macros::Component,
     prelude::{Module, World},
@@ -133,6 +133,14 @@ impl Module for SystemOrderModule {
     fn module(world: &World) {
         world.component::<SystemOrder>().meta();
 
-        calculate(world);
+        world
+            .observer::<flecs::OnAdd, ()>()
+            .with::<flecs::system::System>()
+            .run(|it| calculate(&it.world()));
+
+        world
+            .observer::<flecs::OnAdd, ()>()
+            .with::<flecs::Observer>()
+            .run(|it| calculate(&it.world()));
     }
 }

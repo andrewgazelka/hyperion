@@ -24,7 +24,6 @@ use hyperion::{
 use hyperion_rank_tree::Team;
 use module::{attack::AttackModule, level::LevelModule, regeneration::RegenerationModule};
 use spatial::SpatialIndex;
-use system_order::SystemOrderModule;
 use tracing::debug;
 
 use crate::{
@@ -165,9 +164,6 @@ pub fn init_game(address: SocketAddr) -> anyhow::Result<()> {
     world.import::<TagModule>();
 
     world.set(Address::new(address));
-
-    // must be init last
-    world.import::<SystemOrderModule>();
 
     let mut app = world.app();
 

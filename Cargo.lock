@@ -5559,7 +5559,6 @@ dependencies = [
  "roaring",
  "rustc-hash 2.1.0",
  "spatial",
- "system-order",
  "tikv-jemallocator",
  "tracing",
  "tracing-subscriber",
