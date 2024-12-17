@@ -32,16 +32,16 @@ use std::{
     cell::RefCell,
     fmt::Debug,
     io::Write,
-    net::ToSocketAddrs,
+    net::{SocketAddr, ToSocketAddrs},
     sync::{Arc, atomic::AtomicBool},
 };
 
-use anyhow::{Context, bail};
-use derive_more::{Deref, DerefMut};
+use anyhow::Context;
+use derive_more::{Constructor, Deref, DerefMut};
 use egress::EgressModule;
 use flecs_ecs::prelude::*;
 pub use glam;
-use glam::IVec2;
+use glam::{I16Vec2, IVec2};
 use ingress::IngressModule;
 #[cfg(unix)]
 use libc::{RLIMIT_NOFILE, getrlimit, setrlimit};
@@ -69,7 +69,6 @@ use crate::{
 mod common;
 pub use common::*;
 use hyperion_crafting::CraftingRegistry;
-use system_order::SystemOrderModule;
 pub use valence_ident;
 
 use crate::{
@@ -142,27 +141,55 @@ pub fn adjust_file_descriptor_limits(recommended_min: u64) -> std::io::Result<()
     Ok(())
 }
 
-/// The central [`Hyperion`] struct which owns and manages the entire server.
-pub struct Hyperion;
+#[derive(Component, Debug, Clone, PartialEq, Eq, Hash, Constructor)]
+pub struct Address(SocketAddr);
+
+#[derive(Component)]
+pub struct AddressModule;
+
+impl Module for AddressModule {
+    fn module(world: &World) {
+        world.component::<Address>();
+    }
+}
+
+/// The central [`HyperionCore`] struct which owns and manages the entire server.
+#[derive(Component)]
+pub struct HyperionCore;
 
 #[derive(Component)]
 struct Shutdown {
     value: Arc<AtomicBool>,
 }
 
-impl Hyperion {
-    /// Initializes the server.
-    pub fn init(address: impl ToSocketAddrs + Send + Sync + 'static) -> anyhow::Result<()> {
-        Self::init_with(address, |_| {})
+impl Module for HyperionCore {
+    fn module(world: &World) {
+        let address = world.get::<&Address>(|address| address.0);
+        Self::init_with(world, address).unwrap();
     }
+}
 
+impl HyperionCore {
     /// Initializes the server with a custom handler.
-    pub fn init_with(
+    fn init_with(
+        world: &World,
         address: impl ToSocketAddrs + Send + Sync + 'static,
-        handlers: impl FnOnce(&World) + Send + Sync + 'static,
     ) -> anyhow::Result<()> {
         // Denormals (numbers very close to 0) are flushed to zero because doing computations on them
         // is slow.
+
+        no_denormals::no_denormals(|| Self::init_with_helper(world, address))
+    }
+
+    /// Initialize the server.
+    fn init_with_helper(
+        world: &World,
+        address: impl ToSocketAddrs + Send + Sync + 'static,
+    ) -> anyhow::Result<()> {
+        // 10k players * 2 file handles / player  = 20,000. We can probably get away with 16,384 file handles
+        #[cfg(unix)]
+        adjust_file_descriptor_limits(32_768).context("failed to set file limits")?;
+
         rayon::ThreadPoolBuilder::new()
             .num_threads(NUM_THREADS)
             .spawn_handler(|thread| {
@@ -179,37 +206,11 @@ impl Hyperion {
             .build_global()
             .context("failed to build thread pool")?;
 
-        no_denormals::no_denormals(|| Self::init_with_helper(address, handlers))
-    }
-
-    /// Initialize the server.
-    fn init_with_helper(
-        address: impl ToSocketAddrs + Send + Sync + 'static,
-        handlers: impl FnOnce(&World) + Send + Sync + 'static,
-    ) -> anyhow::Result<()> {
-        // 10k players * 2 file handles / player  = 20,000. We can probably get away with 16,384 file handles
-        #[cfg(unix)]
-        adjust_file_descriptor_limits(32_768).context("failed to set file limits")?;
-
         let shared = Arc::new(Shared {
             compression_threshold: CompressionThreshold(256),
             compression_level: CompressionLvl::new(2)
                 .map_err(|_| anyhow::anyhow!("failed to create compression level"))?,
         });
-
-        let world = World::new();
-
-        let world = Box::new(world);
-        let world: &World = Box::leak(world);
-
-        let mut app = world.app();
-
-        app.enable_rest(0)
-            .enable_stats(true)
-            .set_threads(i32::try_from(rayon::current_num_threads())?)
-            .set_target_fps(20.0);
-
-        world.set_threads(i32::try_from(rayon::current_num_threads())?);
 
         let address = address
             .to_socket_addrs()?
@@ -233,6 +234,8 @@ impl Hyperion {
         // .bit("invisible", *EntityFlags::INVISIBLE)
         // .bit("glowing", *EntityFlags::GLOWING)
         // .bit("flying_with_elytra", *EntityFlags::FLYING_WITH_ELYTRA);
+
+        component!(world, I16Vec2 { x: i16, y: i16 });
 
         component!(world, IVec2 { x: i32, y: i32 });
         world.component::<PendingRemove>();
@@ -350,6 +353,15 @@ impl Hyperion {
         world.set(runtime);
         world.set(StreamLookup::default());
 
+        world.set_threads(i32::try_from(rayon::current_num_threads())?);
+
+        let mut app = world.app();
+
+        app.enable_rest(0)
+            .enable_stats(true)
+            .set_threads(i32::try_from(rayon::current_num_threads())?)
+            .set_target_fps(20.0);
+
         world.import::<SimModule>();
         world.import::<EgressModule>();
         world.import::<IngressModule>();
@@ -377,14 +389,7 @@ impl Hyperion {
 
         world.set(IgnMap::default());
 
-        handlers(world);
-
-        // must be init last
-        world.import::<SystemOrderModule>();
-
-        app.run();
-
-        bail!("app exited");
+        Ok(())
     }
 }
 
