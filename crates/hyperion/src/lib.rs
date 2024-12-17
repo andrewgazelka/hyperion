@@ -207,6 +207,9 @@ impl HyperionCore {
 
         world.component::<Prev>();
 
+        // Minecraft tick rate is 20 ticks per second
+        world.set_target_fps(20.0);
+
         // todo: sadly this requires u32
         // .bit("on_fire", *EntityFlags::ON_FIRE)
         // .bit("crouching", *EntityFlags::CROUCHING)
@@ -342,14 +345,6 @@ impl HyperionCore {
         world.set(StreamLookup::default());
 
         world.set_threads(i32::try_from(rayon::current_num_threads())?);
-
-        let mut app = world.app();
-
-        app.enable_rest(0)
-            .enable_stats(true)
-            .set_threads(i32::try_from(rayon::current_num_threads())?)
-            .set_target_fps(20.0);
-
         world.import::<SimModule>();
         world.import::<EgressModule>();
         world.import::<IngressModule>();

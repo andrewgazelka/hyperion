@@ -173,8 +173,7 @@ pub fn init_game(address: SocketAddr) -> anyhow::Result<()> {
 
     app.enable_rest(0)
         .enable_stats(true)
-        .set_threads(i32::try_from(rayon::current_num_threads())?)
-        .set_target_fps(20.0);
+        .set_threads(i32::try_from(rayon::current_num_threads())?);
 
     world.app().run();
 
