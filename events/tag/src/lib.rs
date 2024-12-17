@@ -7,7 +7,7 @@ use std::{collections::HashSet, net::SocketAddr};
 
 use flecs_ecs::prelude::*;
 use hyperion::{
-    Address, AddressModule, HyperionCore,
+    Address, HyperionCore,
     runtime::AsyncRuntime,
     simulation::{Player, blocks::Blocks},
 };
@@ -161,14 +161,20 @@ impl Module for TagModule {
 pub fn init_game(address: SocketAddr) -> anyhow::Result<()> {
     let world = World::new();
 
-    world.import::<AddressModule>();
-    world.set(Address::new(address));
-
     world.import::<HyperionCore>();
     world.import::<TagModule>();
 
+    world.set(Address::new(address));
+
     // must be init last
     world.import::<SystemOrderModule>();
+
+    let mut app = world.app();
+
+    app.enable_rest(0)
+        .enable_stats(true)
+        .set_threads(i32::try_from(rayon::current_num_threads())?)
+        .set_target_fps(20.0);
 
     world.app().run();
 

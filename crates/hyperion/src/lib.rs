@@ -32,7 +32,7 @@ use std::{
     cell::RefCell,
     fmt::Debug,
     io::Write,
-    net::{SocketAddr, ToSocketAddrs},
+    net::SocketAddr,
     sync::{Arc, atomic::AtomicBool},
 };
 
@@ -144,15 +144,6 @@ pub fn adjust_file_descriptor_limits(recommended_min: u64) -> std::io::Result<()
 #[derive(Component, Debug, Clone, PartialEq, Eq, Hash, Constructor)]
 pub struct Address(SocketAddr);
 
-#[derive(Component)]
-pub struct AddressModule;
-
-impl Module for AddressModule {
-    fn module(world: &World) {
-        world.component::<Address>();
-    }
-}
-
 /// The central [`HyperionCore`] struct which owns and manages the entire server.
 #[derive(Component)]
 pub struct HyperionCore;
@@ -164,28 +155,21 @@ struct Shutdown {
 
 impl Module for HyperionCore {
     fn module(world: &World) {
-        let address = world.get::<&Address>(|address| address.0);
-        Self::init_with(world, address).unwrap();
+        Self::init_with(world).unwrap();
     }
 }
 
 impl HyperionCore {
     /// Initializes the server with a custom handler.
-    fn init_with(
-        world: &World,
-        address: impl ToSocketAddrs + Send + Sync + 'static,
-    ) -> anyhow::Result<()> {
+    fn init_with(world: &World) -> anyhow::Result<()> {
         // Denormals (numbers very close to 0) are flushed to zero because doing computations on them
         // is slow.
 
-        no_denormals::no_denormals(|| Self::init_with_helper(world, address))
+        no_denormals::no_denormals(|| Self::init_with_helper(world))
     }
 
     /// Initialize the server.
-    fn init_with_helper(
-        world: &World,
-        address: impl ToSocketAddrs + Send + Sync + 'static,
-    ) -> anyhow::Result<()> {
+    fn init_with_helper(world: &World) -> anyhow::Result<()> {
         // 10k players * 2 file handles / player  = 20,000. We can probably get away with 16,384 file handles
         #[cfg(unix)]
         adjust_file_descriptor_limits(32_768).context("failed to set file limits")?;
@@ -212,10 +196,7 @@ impl HyperionCore {
                 .map_err(|_| anyhow::anyhow!("failed to create compression level"))?,
         });
 
-        let address = address
-            .to_socket_addrs()?
-            .next()
-            .context("could not get first address")?;
+        world.component::<Address>();
 
         world.component::<Shutdown>();
         let shutdown = Arc::new(AtomicBool::new(false));
@@ -328,9 +309,18 @@ impl HyperionCore {
 
         world.set(MojangClient::new(&runtime, ApiProvider::MAT_DOES_DEV));
 
-        let (receive_state, egress_comm) = init_proxy_comms(&runtime, address);
-
-        world.set(receive_state);
+        #[rustfmt::skip]
+        world
+            .observer::<flecs::OnSet, (&Address, &AsyncRuntime)>()
+            .term_at(0).singleton()
+            .term_at(1).filter().singleton()
+            .each_iter(|it, _, (address, runtime)| {
+                let world = it.world();
+                let address = address.0;
+                let (receive_state, egress_comm) = init_proxy_comms(runtime, address);
+                world.set(receive_state);
+                world.set(egress_comm);
+            });
 
         let global = Global::new(shared.clone());
 
@@ -347,8 +337,6 @@ impl HyperionCore {
 
         let events = Events::initialize(world);
         world.set(events);
-
-        world.set(egress_comm);
 
         world.set(runtime);
         world.set(StreamLookup::default());
