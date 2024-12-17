@@ -44,6 +44,7 @@ pub fn get_direction_from_rotation(yaw: f32, pitch: f32) -> Vec3 {
 impl MinecraftCommand for RaycastCommand {
     fn execute(self, system: EntityView<'_>, caller: Entity) {
         const EYE_HEIGHT: f32 = 1.62;
+        const DISTANCE: f32 = 10.0;
 
         let world = system.world();
 
@@ -56,12 +57,12 @@ impl MinecraftCommand for RaycastCommand {
                     let eye = center + Vec3::new(0.0, EYE_HEIGHT, 0.0);
                     let direction = get_direction_from_rotation(**yaw, **pitch);
 
-                    geometry::ray::Ray::new(eye, direction)
+                    geometry::ray::Ray::new(eye, direction) * DISTANCE
                 });
 
         debug!("ray = {ray:?}");
 
-        let result = get_first_collision(ray, 10.0, &world, caller);
+        let result = get_first_collision(ray, &world);
 
         match result {
             Some(Either::Left(entity)) => {

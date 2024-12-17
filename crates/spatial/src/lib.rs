@@ -15,6 +15,7 @@ use hyperion::{
         blocks::{Blocks, RayCollision},
     },
 };
+use ordered_float::NotNan;
 use rayon::iter::Either;
 
 #[derive(Component)]
@@ -29,31 +30,24 @@ pub struct SpatialIndex {
 #[must_use]
 pub fn get_first_collision(
     ray: Ray,
-    distance: f32,
     world: &World,
-    caller: Entity,
-) -> Option<Either<Entity, RayCollision>> {
+) -> Option<Either<EntityView<'_>, RayCollision>> {
     // Check for collisions with entities
-    let entity =
-        world.get::<&SpatialIndex>(|index| index.closest_to_ray(ray, distance, world, caller));
-
-    let block = world.get::<&Blocks>(|blocks| blocks.first_collision(ray, distance));
+    let entity = world.get::<&SpatialIndex>(|index| index.closest_to_ray(ray, world));
+    let block = world.get::<&Blocks>(|blocks| blocks.first_collision(ray));
 
     // check which one is closest to the Ray don't forget to account for entity size
-    entity.map_or(block.map(Either::Right), |entity| {
-        let entity_data =
-            entity
-                .entity_view(world)
-                .get::<(&Position, &EntitySize)>(|(position, size)| {
-                    let entity_aabb = aabb(**position, *size);
+    entity.map_or(block.map(Either::Right), |(entity, _)| {
+        let entity_data = entity.get::<(&Position, &EntitySize)>(|(position, size)| {
+            let entity_aabb = aabb(**position, *size);
 
-                    #[allow(clippy::redundant_closure_for_method_calls)]
-                    let distance_to_entity = entity_aabb
-                        .intersect_ray(&ray)
-                        .map_or(f32::MAX, |distance| distance.into_inner());
+            #[allow(clippy::redundant_closure_for_method_calls)]
+            let distance_to_entity = entity_aabb
+                .intersect_ray(&ray)
+                .map_or(f32::MAX, |distance| distance.into_inner());
 
-                    (entity, distance_to_entity)
-                });
+            (entity, distance_to_entity)
+        });
 
         let (entity, distance_to_entity) = entity_data;
         block.map_or(Some(Either::Left(entity)), |block_collision| {
@@ -107,35 +101,15 @@ impl SpatialIndex {
     }
 
     #[must_use]
-    pub fn closest_to_ray(
+    pub fn closest_to_ray<'a>(
         &self,
         ray: Ray,
-        distance: f32,
-        world: &World,
-        caller: Entity,
-    ) -> Option<Entity> {
-        let mut closest_entity: Option<Entity> = None;
-        let mut closest_distance = f32::MAX;
-
-        for entity in self.query.elements.clone() {
-            entity
-                .entity_view(world)
-                .get::<(&Position, &EntitySize)>(|(position, size)| {
-                    let entity_aabb = aabb(**position, *size);
-
-                    #[allow(clippy::redundant_closure_for_method_calls)]
-                    let distance_to_entity = entity_aabb
-                        .intersect_ray(&Ray::new(ray.origin(), ray.direction() * distance))
-                        .map_or(f32::MAX, |distance| distance.into_inner());
-
-                    if distance_to_entity < closest_distance && entity != caller {
-                        closest_entity = Some(entity);
-                        closest_distance = distance_to_entity;
-                    }
-                });
-        }
-
-        closest_entity
+        world: &'a World,
+    ) -> Option<(EntityView<'a>, NotNan<f32>)> {
+        let get_aabb = get_aabb_func(world);
+        let (entity, distance) = self.query.get_closest_ray(ray, get_aabb)?;
+        let entity = world.entity_from_id(*entity);
+        Some((entity, distance))
     }
 }
 

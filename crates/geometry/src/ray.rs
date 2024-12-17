@@ -1,3 +1,5 @@
+use std::ops::Mul;
+
 use glam::{IVec3, Vec3};
 
 #[derive(Debug, Clone, Copy)]
@@ -5,6 +7,14 @@ pub struct Ray {
     origin: Vec3,
     direction: Vec3,
     inv_direction: Vec3,
+}
+
+impl Mul<f32> for Ray {
+    type Output = Self;
+
+    fn mul(self, rhs: f32) -> Self::Output {
+        Self::new(self.origin, self.direction * rhs)
+    }
 }
 
 impl Ray {

@@ -99,12 +99,12 @@ impl Blocks {
     }
 
     #[must_use]
-    pub fn first_collision(&self, ray: Ray, distance_limit: f32) -> Option<RayCollision> {
+    pub fn first_collision(&self, ray: Ray) -> Option<RayCollision> {
         // Calculate exact start position (the block we're in)
         let start_pos = ray.origin();
 
         // Calculate end position with a small offset to handle edge cases
-        let end_pos = ray.origin() + ray.direction() * (distance_limit + 0.0001);
+        let end_pos = ray.origin() + ray.direction();
 
         // Convert to block coordinates, expanding bounds to ensure we catch all blocks
         let min_block = start_pos.min(end_pos).floor().as_ivec3();
