@@ -1,12 +1,10 @@
 # Hyperion 
-`
 
 [![Discord invite link](https://dcbadge.vercel.app/api/server/PBfnDtj5Wb)](https://discord.gg/PBfnDtj5Wb)
 [![Discord invite link](https://dcbadge.vercel.app/api/server/GxtzEJfSQe)](https://discord.gg/GxtzEJfSQe)
 [![Documentation](https://img.shields.io/badge/docs-online-green)](https://andrewgazelka.github.io/hyperion/)
 [![Issues](https://img.shields.io/github/issues/andrewgazelka/hyperion)](https://github.com/andrewgazelka/hyperion/issues)
 [![Last Commit](https://img.shields.io/github/last-commit/andrewgazelka/hyperion)](https://github.com/andrewgazelka/hyperion/commits)
-
 
 Thank you for your hard work[^1] [@CuzImClicks](https://github.com/CuzImClicks), [@Indra-db](https://github.com/Indra-db), [@james-j-obrien](https://github.com/james-j-obrien), [@Ruben2424](https://github.com/Ruben2424), [@SanderMertens](https://github.com/SanderMertens), [@Tebarem](https://github.com/Tebarem), and [@TestingPlant](https://github.com/TestingPlant).
 
@@ -15,7 +13,8 @@ Record ([8825 by
 EVE Online](https://www.guinnessworldrecords.com/world-records/105603-largest-videogame-pvp-battle)). The
 architecture is ECS-driven using [Flecs Rust](https://github.com/Indra-db/Flecs-Rust).
 
-> **Note**: You can join the test server in 1.20.1 at `hyperion-test.duckdns.org` `
+> [!NOTE]  
+> You can join the test server in 1.20.1 at `hyperion-test.duckdns.org` `
 
 https://github.com/user-attachments/assets/64a4a8c7-f375-4821-a1c7-0efc69c1ae0b
 
