@@ -3,15 +3,10 @@ ARG RUST_NIGHTLY_VERSION=nightly-2024-11-29
 ARG RUSTFLAGS="-Z share-generics=y -Z threads=8"
 ARG CARGO_HOME=/usr/local/cargo
 
-# Use Ubuntu as base image
-FROM ubuntu:22.04 AS packages
-
-# Prevent apt from prompting for user input
-ENV DEBIAN_FRONTEND=noninteractive
-
 # Install essential build packages
-FROM ubuntu:22.04 AS packages
+FROM ubuntu:24.04 AS packages
 ENV DEBIAN_FRONTEND=noninteractive
+
 RUN apt-get update && \
     apt-get install -y \
         curl \
@@ -39,6 +34,9 @@ RUN curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain ${RUST_NIGH
     $CARGO_HOME/bin/rustc --version
 ENV PATH="${CARGO_HOME}/bin:${PATH}"
 WORKDIR /app
+
+RUN cargo install cargo-machete cargo-nextest
+
 COPY . .
 
 RUN --mount=type=cache,target=${CARGO_HOME}/registry \
@@ -46,9 +44,20 @@ RUN --mount=type=cache,target=${CARGO_HOME}/registry \
     --mount=type=cache,target=/app/target \
     cargo fetch
 
+# CI stage for checks
+FROM builder-base AS ci
+
+RUN --mount=type=cache,target=${CARGO_HOME}/registry \
+    --mount=type=cache,target=${CARGO_HOME}/git \
+    --mount=type=cache,target=/app/target \
+    cargo machete && \
+    cargo fmt --all -- --check && \
+    cargo clippy --workspace --benches --tests --examples --all-features --frozen -- -D warnings && \
+    cargo nextest run --all-features --workspace --frozen
+
 # Release builder
 FROM builder-base AS build-release
-ARG CARGO_HOME
+
 RUN --mount=type=cache,target=${CARGO_HOME}/registry \
     --mount=type=cache,target=${CARGO_HOME}/git \
     --mount=type=cache,target=/app/target \
@@ -58,10 +67,9 @@ RUN --mount=type=cache,target=${CARGO_HOME}/registry \
     cp target/release-full/tag /app/build/
 
 # Runtime base image
-FROM ubuntu:22.04 AS runtime-base
+FROM ubuntu:24.04 AS runtime-base
 RUN apt-get update && \
     apt-get install -y \
-        libssl3 \
         ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 ENV RUST_BACKTRACE=1 \

@@ -163,16 +163,22 @@ sequenceDiagram
 
 ## Running
 
-### Debug mode
+### Without cloning
+
+```bash
+curl -L https://raw.githubusercontent.com/hyperion-mc/hyperion/main/docker-compose.yml | docker compose -f - up --pull always
+```
+
+### `main` branch
+
+```bash
+docker compose up --pull always
+```
+
+### With local build (for development)
 
 ```bash
 docker compose up --build
-```
-
-### Release mode
-
-```bash
-docker compose -f docker-compose.release.yml up --build
 ```
 
 ## Features

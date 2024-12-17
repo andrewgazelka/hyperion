@@ -1,6 +1,10 @@
-use std::{fmt::Display, ops::Add};
+use std::{
+    fmt::{Debug, Display},
+    ops::Add,
+};
 
 use glam::Vec3;
+use ordered_float::NotNan;
 use serde::{Deserialize, Serialize};
 
 use crate::ray::Ray;
@@ -15,10 +19,52 @@ impl HasAabb for Aabb {
     }
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Ord, PartialOrd, Hash)]
+pub struct OrderedAabb {
+    min_x: NotNan<f32>,
+    min_y: NotNan<f32>,
+    min_z: NotNan<f32>,
+    max_x: NotNan<f32>,
+    max_y: NotNan<f32>,
+    max_z: NotNan<f32>,
+}
+
+impl TryFrom<Aabb> for OrderedAabb {
+    type Error = ordered_float::FloatIsNan;
+
+    fn try_from(value: Aabb) -> Result<Self, Self::Error> {
+        Ok(Self {
+            min_x: value.min.x.try_into()?,
+            min_y: value.min.y.try_into()?,
+            min_z: value.min.z.try_into()?,
+            max_x: value.max.x.try_into()?,
+            max_y: value.max.y.try_into()?,
+            max_z: value.max.z.try_into()?,
+        })
+    }
+}
+
+#[derive(Copy, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Aabb {
     pub min: Vec3,
     pub max: Vec3,
+}
+
+impl From<(f32, f32, f32, f32, f32, f32)> for Aabb {
+    fn from(value: (f32, f32, f32, f32, f32, f32)) -> Self {
+        let value: [f32; 6] = value.into();
+        Self::from(value)
+    }
+}
+
+impl From<[f32; 6]> for Aabb {
+    fn from(value: [f32; 6]) -> Self {
+        let [min_x, min_y, min_z, max_x, max_y, max_z] = value;
+        let min = Vec3::new(min_x, min_y, min_z);
+        let max = Vec3::new(max_x, max_y, max_z);
+
+        Self { min, max }
+    }
 }
 
 impl FromIterator<Self> for Aabb {
@@ -32,6 +78,12 @@ impl FromIterator<Self> for Aabb {
         }
 
         Self { min, max }
+    }
+}
+
+impl Debug for Aabb {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{self}")
     }
 }
 
@@ -59,8 +111,8 @@ impl Add<Vec3> for Aabb {
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Ord, PartialOrd, Hash)]
 pub struct CheckableAabb {
-    pub min: [ordered_float::NotNan<f32>; 3],
-    pub max: [ordered_float::NotNan<f32>; 3],
+    pub min: [NotNan<f32>; 3],
+    pub max: [NotNan<f32>; 3],
 }
 
 impl TryFrom<Aabb> for CheckableAabb {
@@ -69,14 +121,14 @@ impl TryFrom<Aabb> for CheckableAabb {
     fn try_from(value: Aabb) -> Result<Self, Self::Error> {
         Ok(Self {
             min: [
-                ordered_float::NotNan::new(value.min.x)?,
-                ordered_float::NotNan::new(value.min.y)?,
-                ordered_float::NotNan::new(value.min.z)?,
+                NotNan::new(value.min.x)?,
+                NotNan::new(value.min.y)?,
+                NotNan::new(value.min.z)?,
             ],
             max: [
-                ordered_float::NotNan::new(value.max.x)?,
-                ordered_float::NotNan::new(value.max.y)?,
-                ordered_float::NotNan::new(value.max.z)?,
+                NotNan::new(value.max.x)?,
+                NotNan::new(value.max.y)?,
+                NotNan::new(value.max.z)?,
             ],
         })
     }
@@ -152,8 +204,8 @@ impl Aabb {
         // Check if there is an overlap. If any dimension does not overlap, return None.
         if min_x < max_x && min_y < max_y && min_z < max_z {
             Some(Self {
-                min: Vec3::new(min_x, min_y, 0.0),
-                max: Vec3::new(max_x, max_y, 0.0),
+                min: Vec3::new(min_x, min_y, min_z),
+                max: Vec3::new(max_x, max_y, max_z),
             })
         } else {
             None
@@ -181,20 +233,16 @@ impl Aabb {
     }
 
     #[must_use]
-    pub fn dist2(&self, point: Vec3) -> f32 {
-        let point = point.as_ref();
-        let self_min = self.min.as_ref();
-        let self_max = self.max.as_ref();
+    pub fn dist2(&self, point: Vec3) -> f64 {
+        let point = point.as_dvec3();
+        // Clamp the point into the box volume.
+        let clamped = point.clamp(self.min.as_dvec3(), self.max.as_dvec3());
 
-        let mut dist2 = 0.0;
+        // Distance vector from point to the clamped point inside the box.
+        let diff = point - clamped;
 
-        #[expect(clippy::indexing_slicing, reason = "all of these have length of 3")]
-        for i in 0..3 {
-            dist2 += (self_min[i] - point[i]).max(0.0).powi(2);
-            dist2 += (self_max[i] - point[i]).min(0.0).powi(2);
-        }
-
-        dist2
+        // The squared distance.
+        diff.length_squared()
     }
 
     pub fn overlaps<'a, T>(
@@ -221,32 +269,84 @@ impl Aabb {
         lens.x * lens.y * lens.z
     }
 
-    /// Fast ray-AABB intersection test using the slab method with SIMD operations
-    ///
-    /// Returns Some(t) with the distance to intersection if hit, None if no hit
     #[must_use]
-    pub fn intersect_ray(&self, ray: &Ray) -> Option<ordered_float::NotNan<f32>> {
-        // Calculate t0 and t1 for all three axes simultaneously using SIMD
-        let t0 = (self.min - ray.origin()) * ray.inv_direction();
-        let t1 = (self.max - ray.origin()) * ray.inv_direction();
+    pub fn intersect_ray(&self, ray: &Ray) -> Option<NotNan<f32>> {
+        let origin = ray.origin();
 
-        // Find the largest minimum t and smallest maximum t
-        let t_small = t0.min(t1);
-        let t_big = t0.max(t1);
+        // If the ray is originating inside the AABB, we can immediately return.
+        if self.contains_point(origin) {
+            return Some(NotNan::new(0.0).unwrap());
+        }
 
-        let t_min = t_small.x.max(t_small.y).max(t_small.z);
-        let t_max = t_big.x.min(t_big.y).min(t_big.z);
+        let dir = ray.direction();
 
-        // Check if there's a valid intersection
-        if t_max < 0.0 || t_min > t_max {
+        // For each axis, handle zero direction:
+        let (mut t_min, mut t_max) = (f32::NEG_INFINITY, f32::INFINITY);
+
+        // X-axis
+        if dir.x == 0.0 {
+            // Ray is parallel to X slab
+            if origin.x < self.min.x || origin.x > self.max.x {
+                return None; // no intersection if outside slab
+            }
+            // else: no constraint from X (t_min, t_max remain infinite)
+        } else {
+            let inv_dx = 1.0 / dir.x;
+            let tx1 = (self.min.x - origin.x) * inv_dx;
+            let tx2 = (self.max.x - origin.x) * inv_dx;
+            let t_low = tx1.min(tx2);
+            let t_high = tx1.max(tx2);
+            t_min = t_min.max(t_low);
+            t_max = t_max.min(t_high);
+            if t_min > t_max {
+                return None;
+            }
+        }
+
+        // Y-axis (do the same zero-check logic)
+        if dir.y == 0.0 {
+            if origin.y < self.min.y || origin.y > self.max.y {
+                return None;
+            }
+        } else {
+            let inv_dy = 1.0 / dir.y;
+            let ty1 = (self.min.y - origin.y) * inv_dy;
+            let ty2 = (self.max.y - origin.y) * inv_dy;
+            let t_low = ty1.min(ty2);
+            let t_high = ty1.max(ty2);
+            t_min = t_min.max(t_low);
+            t_max = t_max.min(t_high);
+            if t_min > t_max {
+                return None;
+            }
+        }
+
+        // Z-axis (same pattern)
+        if dir.z == 0.0 {
+            if origin.z < self.min.z || origin.z > self.max.z {
+                return None;
+            }
+        } else {
+            let inv_dz = 1.0 / dir.z;
+            let tz1 = (self.min.z - origin.z) * inv_dz;
+            let tz2 = (self.max.z - origin.z) * inv_dz;
+            let t_low = tz1.min(tz2);
+            let t_high = tz1.max(tz2);
+            t_min = t_min.max(t_low);
+            t_max = t_max.min(t_high);
+            if t_min > t_max {
+                return None;
+            }
+        }
+
+        // At this point, t_min and t_max define the intersection range.
+        // If t_min < 0.0, it means we start “behind” the origin; if t_max < 0.0, no intersection in front.
+        let t_hit = if t_min >= 0.0 { t_min } else { t_max };
+        if t_hit < 0.0 {
             return None;
         }
 
-        Some(if t_min > 0.0 {
-            ordered_float::NotNan::new(t_min).unwrap()
-        } else {
-            ordered_float::NotNan::new(t_max).unwrap()
-        })
+        Some(NotNan::new(t_hit).unwrap())
     }
 
     #[must_use]
@@ -317,7 +417,9 @@ impl<T: HasAabb> From<&[T]> for Aabb {
 
 #[cfg(test)]
 mod tests {
+    use approx::assert_relative_eq;
     use glam::Vec3;
+    use ordered_float::NotNan;
 
     use crate::{aabb::Aabb, ray::Ray};
 
@@ -428,5 +530,91 @@ mod tests {
 
         let point = ray.at(2.0);
         assert_eq!(point, Vec3::new(2.0, 0.0, 0.0));
+    }
+
+    #[test]
+    fn test_degenerate_aabb_as_point() {
+        let aabb = Aabb::new(Vec3::new(1.0, 1.0, 1.0), Vec3::new(1.0, 1.0, 1.0));
+        let ray = Ray::new(Vec3::new(0.0, 1.0, 1.0), Vec3::new(1.0, 0.0, 0.0));
+        let intersection = aabb.intersect_ray(&ray);
+        assert!(
+            intersection.is_some(),
+            "Ray should hit the degenerate AABB point"
+        );
+        assert_relative_eq!(intersection.unwrap().into_inner(), 1.0, max_relative = 1e-6);
+    }
+
+    #[test]
+    fn test_degenerate_aabb_as_line() {
+        let aabb = Aabb::new(Vec3::new(0.0, 0.0, 0.0), Vec3::new(5.0, 0.0, 0.0));
+        let ray = Ray::new(Vec3::new(-1.0, 0.0, 0.0), Vec3::new(1.0, 0.0, 0.0));
+        let intersection = aabb.intersect_ray(&ray);
+        assert!(
+            intersection.is_some(),
+            "Ray should hit the line segment AABB"
+        );
+        assert_relative_eq!(intersection.unwrap().into_inner(), 1.0, max_relative = 1e-6);
+    }
+
+    #[test]
+    fn test_ray_touching_aabb_boundary() {
+        let aabb = Aabb::new(Vec3::new(-1.0, -1.0, -1.0), Vec3::new(1.0, 1.0, 1.0));
+        // Ray parallel to one axis and just touches at x = -1
+        let ray = Ray::new(Vec3::new(-2.0, 1.0, 0.0), Vec3::new(1.0, 0.0, 0.0));
+        let intersection = aabb.intersect_ray(&ray);
+        assert!(
+            intersection.is_some(),
+            "Ray should intersect exactly at the boundary x = -1"
+        );
+        assert_relative_eq!(intersection.unwrap().into_inner(), 1.0, max_relative = 1e-6);
+    }
+
+    #[test]
+    fn test_ray_near_corner() {
+        let aabb = Aabb::new(Vec3::new(-1.0, -1.0, -1.0), Vec3::new(0.0, 0.0, 0.0));
+        // A ray that "just misses" the corner at (-1,-1,-1)
+        let ray = Ray::new(
+            Vec3::new(-2.0, -1.000_001, -1.000_001),
+            Vec3::new(1.0, 0.0, 0.0),
+        );
+        let intersection = aabb.intersect_ray(&ray);
+        // Depending on precision, this might fail if the intersection logic isn't robust.
+        // Checking that we correctly return None or an intersection close to the corner.
+        assert!(intersection.is_none(), "Ray should miss by a tiny margin");
+    }
+
+    #[test]
+    fn test_ray_origin_inside_single_aabb() {
+        let aabb = Aabb::new(Vec3::new(0.0, 0.0, 0.0), Vec3::new(10.0, 10.0, 10.0));
+        let ray = Ray::new(Vec3::new(5.0, 5.0, 5.0), Vec3::new(1.0, 0.0, 0.0)); // Inside the box
+        let dist = aabb.intersect_ray(&ray);
+        assert!(
+            dist.is_some(),
+            "Ray from inside should intersect at t=0 or near 0"
+        );
+        assert_relative_eq!(dist.unwrap().into_inner(), 0.0, max_relative = 1e-6);
+    }
+
+    #[test]
+    fn test_ray_stationary_inside_aabb() {
+        let aabb = Aabb::new((0.0, 0.0, 0.0), (10.0, 10.0, 10.0));
+        let ray = Ray::new(Vec3::new(5.0, 5.0, 5.0), Vec3::new(0.0, 0.0, 0.0));
+        // With zero direction, we might choose to say intersection is at t=0 if inside, None if outside.
+        let intersection = aabb.intersect_ray(&ray);
+        assert_eq!(
+            intersection,
+            Some(NotNan::new(0.0).unwrap()),
+            "Inside and no direction should mean immediate intersection at t=0"
+        );
+    }
+
+    #[test]
+    fn test_ray_just_inside_boundary() {
+        let aabb = Aabb::new((0.0, 0.0, 0.0), (1.0, 1.0, 1.0));
+        let ray = Ray::new(Vec3::new(0.999_999, 0.5, 0.5), Vec3::new(1.0, 0.0, 0.0));
+        let intersection = aabb.intersect_ray(&ray);
+        // If inside, intersection should be at t=0.0 or very close.
+        assert!(intersection.is_some());
+        assert_relative_eq!(intersection.unwrap().into_inner(), 0.0, max_relative = 1e-6);
     }
 }
