@@ -3,11 +3,11 @@
 #![feature(stmt_expr_attributes)]
 #![feature(exact_size_is_empty)]
 
-use std::{collections::HashSet, net::ToSocketAddrs};
+use std::{collections::HashSet, net::SocketAddr};
 
 use flecs_ecs::prelude::*;
 use hyperion::{
-    Hyperion,
+    Address, AddressModule, HyperionCore,
     runtime::AsyncRuntime,
     simulation::{Player, blocks::Blocks},
 };
@@ -24,6 +24,7 @@ use hyperion::{
 use hyperion_rank_tree::Team;
 use module::{attack::AttackModule, level::LevelModule, regeneration::RegenerationModule};
 use spatial::SpatialIndex;
+use system_order::SystemOrderModule;
 use tracing::debug;
 
 use crate::{
@@ -157,10 +158,19 @@ impl Module for TagModule {
     }
 }
 
-pub fn init_game(address: impl ToSocketAddrs + Send + Sync + 'static) -> anyhow::Result<()> {
-    Hyperion::init_with(address, |world| {
-        world.import::<TagModule>();
-    })?;
+pub fn init_game(address: SocketAddr) -> anyhow::Result<()> {
+    let world = World::new();
+
+    world.import::<AddressModule>();
+    world.set(Address::new(address));
+
+    world.import::<HyperionCore>();
+    world.import::<TagModule>();
+
+    // must be init last
+    world.import::<SystemOrderModule>();
+
+    world.app().run();
 
     Ok(())
 }
