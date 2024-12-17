@@ -23,7 +23,7 @@ pub struct SpatialModule;
 
 #[derive(Component, Debug, Default)]
 pub struct SpatialIndex {
-    /// The bounding boxes of all players
+    /// The bounding boxes of all entities with the [`Spatial`] component
     query: bvh_region::Bvh<Entity>,
 }
 
