@@ -14,7 +14,7 @@ EVE Online](https://www.guinnessworldrecords.com/world-records/105603-largest-vi
 architecture is ECS-driven using [Flecs Rust](https://github.com/Indra-db/Flecs-Rust).
 
 > [!NOTE]  
-> You can join the test server in 1.20.1 at `hyperion-test.duckdns.org` `
+> You can join the test server in 1.20.1 at `hyperion-test.duckdns.org`
 
 https://github.com/user-attachments/assets/64a4a8c7-f375-4821-a1c7-0efc69c1ae0b
 
