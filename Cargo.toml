@@ -1,3 +1,7 @@
+[profile]
+[profile.dev]
+incremental = true
+
 [profile.release-debug]
 debug = true
 inherits = 'release'
@@ -9,9 +13,6 @@ inherits = 'release'
 lto = 'fat'
 panic = 'abort'
 
-[profile.dev]
-incremental = true
-
 [workspace]
 members = [
   'crates/bvh-region',
@@ -21,6 +22,7 @@ members = [
   'crates/hyperion-command',
   'crates/hyperion-crafting',
   'crates/hyperion-event-macros',
+  'crates/hyperion-genmap',
   'crates/hyperion-gui',
   'crates/hyperion-inventory',
   'crates/hyperion-item',
@@ -43,13 +45,6 @@ members = [
 ]
 resolver = '2'
 
-[workspace.package]
-edition = '2024'
-version = '0.1.0'
-documentation = "https://andrewgazelka.github.io/hyperion"
-repository = "https://github.com/andrewgazelka/hyperion"
-license = 'Apache-2.0'
-
 [workspace.dependencies]
 anyhow = '1.0.86'
 approx = '0.5.1'
@@ -67,18 +62,18 @@ criterion = '0.5.1'
 derive-build = '0.1.1'
 directories = '5.0.1'
 dotenvy = '0.15.7'
-eframe = "0.29.1"
-egui = "0.29.1"
-egui_dock = "0.14.0"
+eframe = '0.29.1'
+egui = '0.29.1'
+egui_dock = '0.14.0'
 enumset = '1.1.5'
 fastrand = '2.1.0'
-flume = "0.11.1"
+flume = '0.11.1'
 futures-util = '0.3.31'
 glam = '0.29.0'
 heapless = '0.8.0'
 heed = '0.20.5'
 hex = '0.4.3'
-humantime = "2.1.0"
+humantime = '2.1.0'
 itertools = '0.13.0'
 kanal = '0.1.0-pre8'
 libc = '0.2.155'
@@ -95,22 +90,20 @@ papaya = '0.1.4'
 parking_lot = '0.12.3'
 plotters-bitmap = '0.3.6'
 proc-macro2 = '1.0.89'
-proptest = "1.5.0"
+proptest = '1.5.0'
 quote = '1.0.37'
 rand = '0.8.5'
 rayon = '1.10.0'
 rkyv = '0.8.8'
-rustc-hash = { version = '2.0.0' , features = ["nightly"] }
 serde = '1.0.216'
 serde_json = '1.0.117'
 slotmap = '1.0.7'
 snafu = '0.8.5'
 syn = '2.0.87'
-syntect = { version = "5.2.0", default-features = false }
 tar = '0.4.41'
 thiserror = '2.0.7'
 tikv-jemallocator = '0.6.0'
-time = "0.3.37"
+time = '0.3.37'
 tokio = '1.40.0'
 toml = '0.8.14'
 uuid = '1.8.0'
@@ -136,16 +129,9 @@ version = '1.0.0-beta.7'
 [workspace.dependencies.divan]
 git = 'https://github.com/nvzqz/divan'
 
-[workspace.dependencies.hyperion-gui]
-path = 'crates/hyperion-gui'
-
 [workspace.dependencies.flate2]
 default-features = false
 version = '1.0.30'
-
-[workspace.dependencies.valence_build_utils]
-branch = 'feat-open'
-git = 'https://github.com/andrewgazelka/valence'
 
 [workspace.dependencies.flecs_ecs]
 features = ['flecs_manual_registration']
@@ -171,6 +157,12 @@ path = 'crates/hyperion-crafting'
 
 [workspace.dependencies.hyperion-event-macros]
 path = 'crates/hyperion-event-macros'
+
+[workspace.dependencies.hyperion-genmap]
+path = 'crates/hyperion-genmap'
+
+[workspace.dependencies.hyperion-gui]
+path = 'crates/hyperion-gui'
 
 [workspace.dependencies.hyperion-inventory]
 path = 'crates/hyperion-inventory'
@@ -222,17 +214,25 @@ version = '0.12.9'
 features = ['simd']
 version = '0.10.9'
 
+[workspace.dependencies.rustc-hash]
+features = ['nightly']
+version = '2.0.0'
+
 [workspace.dependencies.sha2]
 version = '0.10.8'
 
 [workspace.dependencies.simd-utils]
 path = 'crates/simd-utils'
 
-[workspace.dependencies.system-order]
-path = 'crates/system-order'
-
 [workspace.dependencies.spatial]
 path = 'crates/spatial'
+
+[workspace.dependencies.syntect]
+default-features = false
+version = '5.2.0'
+
+[workspace.dependencies.system-order]
+path = 'crates/system-order'
 
 [workspace.dependencies.tokio-util]
 features = ['full']
@@ -253,6 +253,10 @@ version = '0.11.3'
 [workspace.dependencies.valence_anvil]
 branch = 'feat-open'
 features = ['parsing']
+git = 'https://github.com/andrewgazelka/valence'
+
+[workspace.dependencies.valence_build_utils]
+branch = 'feat-open'
 git = 'https://github.com/andrewgazelka/valence'
 
 [workspace.dependencies.valence_generated]
@@ -349,3 +353,10 @@ priority = -1
 [workspace.lints.rust.rust_2024_compatibility]
 level = 'deny'
 priority = -1
+
+[workspace.package]
+documentation = 'https://andrewgazelka.github.io/hyperion'
+edition = '2024'
+license = 'Apache-2.0'
+repository = 'https://github.com/andrewgazelka/hyperion'
+version = '0.1.0'

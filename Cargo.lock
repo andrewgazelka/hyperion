@@ -2837,6 +2837,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "hyperion-genmap"
+version = "0.1.0"
+dependencies = [
+ "flecs_ecs",
+ "hyperion",
+]
+
+[[package]]
 name = "hyperion-gui"
 version = "0.1.0"
 dependencies = [

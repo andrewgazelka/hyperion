@@ -59,17 +59,6 @@ impl Module for TagModule {
         // on entity kind set UUID
 
         world.component::<FollowClosestPlayer>();
-
-        world
-            .observer::<flecs::OnAdd, ()>()
-            .with_enum_wildcard::<EntityKind>()
-            .without::<Uuid>()
-            .each_entity(|entity, ()| {
-                debug!("adding uuid to entity");
-                let uuid = uuid::Uuid::new_v4();
-                entity.set(Uuid::from(uuid));
-            });
-
         world.component::<MainBlockCount>();
 
         world
@@ -114,18 +103,6 @@ impl Module for TagModule {
         world
             .component::<Player>()
             .add_trait::<(flecs::With, spatial::Spatial)>();
-
-        world.get::<&AsyncRuntime>(|runtime| {
-            let f = hyperion_utils::cached_save(
-                world,
-                "https://github.com/andrewgazelka/maps/raw/main/GenMap.tar.gz",
-            );
-
-            runtime.schedule(f, |result, world| {
-                let save = result.unwrap();
-                world.set(Blocks::new(world, &save).unwrap());
-            });
-        });
 
         system!(
             "follow_closest_player",
