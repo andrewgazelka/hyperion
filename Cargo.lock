@@ -5377,6 +5377,7 @@ dependencies = [
  "flecs_ecs",
  "geometry",
  "hyperion",
+ "ordered-float",
  "rayon",
 ]
 

@@ -9,8 +9,9 @@ publish = false
 [dependencies]
 bvh-region.workspace = true
 flecs_ecs.workspace = true
-hyperion.workspace = true
 geometry.workspace = true
+hyperion.workspace = true
+ordered-float.workspace = true
 rayon.workspace = true
 
 [lints]

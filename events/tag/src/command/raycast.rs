@@ -1,11 +1,12 @@
 use clap::Parser;
-use flecs_ecs::core::{Entity, EntityView, EntityViewGet, WorldGet, WorldProvider};
+use flecs_ecs::core::{Entity, EntityView, EntityViewGet, WorldProvider};
 use hyperion::{
-    BlockState,
     glam::Vec3,
-    simulation::{Pitch, Position, Yaw, blocks::Blocks},
+    simulation::{Pitch, Position, Yaw, entity_kind::EntityKind},
 };
 use hyperion_clap::{CommandPermission, MinecraftCommand};
+use rayon::iter::Either;
+use spatial::get_first_collision;
 use tracing::debug;
 
 #[derive(Parser, CommandPermission, Debug)]
@@ -43,6 +44,7 @@ pub fn get_direction_from_rotation(yaw: f32, pitch: f32) -> Vec3 {
 impl MinecraftCommand for RaycastCommand {
     fn execute(self, system: EntityView<'_>, caller: Entity) {
         const EYE_HEIGHT: f32 = 1.62;
+        const DISTANCE: f32 = 10.0;
 
         let world = system.world();
 
@@ -55,21 +57,25 @@ impl MinecraftCommand for RaycastCommand {
                     let eye = center + Vec3::new(0.0, EYE_HEIGHT, 0.0);
                     let direction = get_direction_from_rotation(**yaw, **pitch);
 
-                    geometry::ray::Ray::new(eye, direction)
+                    geometry::ray::Ray::new(eye, direction) * DISTANCE
                 });
 
         debug!("ray = {ray:?}");
 
-        world.get::<&mut Blocks>(|blocks| {
-            let Some(collision) = blocks.first_collision(ray, 10.0) else {
-                return;
-            };
+        let result = get_first_collision(ray, &world);
 
-            debug!("collision = {collision:?}");
-
-            blocks
-                .set_block(collision.location, BlockState::DIRT)
-                .unwrap();
-        });
+        match result {
+            Some(Either::Left(entity)) => {
+                entity
+                    .entity_view(world)
+                    .get::<(&Position, &EntityKind)>(|(position, kind)| {
+                        let position = **position;
+                        debug!("kind: {kind:?}");
+                        debug!("position: {position:?}");
+                    });
+            }
+            Some(Either::Right(ray_collision)) => debug!("ray_collision: {ray_collision:?}"),
+            None => debug!("no collision found"),
+        }
     }
 }
