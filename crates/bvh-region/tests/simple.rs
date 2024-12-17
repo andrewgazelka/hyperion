@@ -2,8 +2,12 @@ use std::collections::HashSet;
 
 use approx::assert_relative_eq;
 use bvh_region::Bvh;
-use geometry::aabb::{Aabb, OrderedAabb};
+use geometry::{
+    aabb::{Aabb, OrderedAabb},
+    ray::Ray,
+};
 use glam::Vec3;
+use ordered_float::NotNan;
 use proptest::prelude::*;
 
 const fn copied<T: Copy>(value: &T) -> T {
@@ -18,6 +22,81 @@ fn aabb_distance_squared(aabb: &Aabb, p: Vec3) -> f64 {
     let max = aabb.max.as_dvec3();
     let clamped = p.clamp(min, max);
     p.distance_squared(clamped)
+}
+
+#[test]
+fn test_bvh_vs_brute_known_case() {
+    let elements = vec![
+        Aabb::new((0.0, 0.0, 0.0), (10.0, 10.0, 10.0)),
+        Aabb::new((5.0, 5.0, 0.0), (15.0, 15.0, 10.0)),
+    ];
+    let ray = Ray::new(Vec3::new(2.0, 2.0, 2.0), Vec3::new(1.0, 0.0, 0.0));
+
+    // Brute force:
+    let brute_closest = brute_force_closest_ray(&elements, ray);
+
+    // BVH:
+    let bvh = Bvh::build(elements.clone(), |x| *x);
+    let bvh_closest = bvh.get_closest_ray(ray, |x| *x);
+
+    assert_eq!(brute_closest.map(|x| x.1), bvh_closest.map(|x| x.1));
+}
+
+#[test]
+fn test_multiple_aabbs_along_ray() {
+    let elements = vec![
+        Aabb::new(Vec3::new(1.0, -0.5, -0.5), Vec3::new(2.0, 0.5, 0.5)),
+        Aabb::new(Vec3::new(3.0, -1.0, -1.0), Vec3::new(4.0, 1.0, 1.0)),
+        Aabb::new(Vec3::new(5.0, -0.5, -0.5), Vec3::new(6.0, 0.5, 0.5)),
+    ];
+
+    let ray = Ray::new(Vec3::new(0.0, 0.0, 0.0), Vec3::new(1.0, 0.0, 0.0));
+    let bvh = Bvh::build(elements.clone(), |x| *x);
+    let (closest, dist) = bvh
+        .get_closest_ray(ray, |x| *x)
+        .expect("Should find intersection");
+    assert_eq!(
+        closest, &elements[0],
+        "Closest AABB should be the first one"
+    );
+    assert!(dist < NotNan::new(2.0).unwrap());
+}
+
+proptest! {
+    #[test]
+    fn test_rays_origin_inside_aabb(
+        // Smaller ranges might reduce flakiness
+        elements in prop::collection::vec(
+            (0.0..10.0f32, 0.0..10.0f32, 0.0..10.0f32, 10.0..20.0f32, 10.0..20.0f32, 10.0..20.0f32)
+                .prop_map(|tuple| {
+                    // Guaranteed that min < max for all coords
+                    Aabb::from(tuple)
+                }),
+            1..20
+        ),
+        origin in (5.0..15.0f32, 5.0..15.0f32, 5.0..15.0f32), // Potentially inside some AABBs
+        direction in (-10.0..10.0f32, -10.0..10.0f32, -10.0..10.0f32)
+    ) {
+        // Avoid zero direction:
+        prop_assume!(direction != (0.0, 0.0, 0.0));
+        let ray = Ray::new(Vec3::new(origin.0, origin.1, origin.2), Vec3::new(direction.0, direction.1, direction.2));
+
+        let bvh = Bvh::build(elements.clone(), |x| *x);
+        let bvh_closest = bvh.get_closest_ray(ray, |x| *x);
+        let brute_closest = brute_force_closest_ray(&elements, ray);
+
+        match (bvh_closest, brute_closest) {
+            (None, None) => {}
+            (Some((bvh_aabb, bvh_t)), Some((brute_aabb, brute_t))) => {
+                let diff = (bvh_t.into_inner() - brute_t.into_inner()).abs();
+                prop_assert!(diff < 1e-6, "Rays from inside differ in intersection distance ... {bvh_aabb:?}, {brute_aabb:?}");
+            },
+            _ => {
+                // If one returns None and the other doesn't, it might indicate special case handling
+                prop_assert!(false, "Mismatch in inside-ray intersection");
+            }
+        }
+    }
 }
 
 #[test]
@@ -154,5 +233,81 @@ proptest! {
 
         // Compare sets
         prop_assert_eq!(&bvh_set, &brute_force_set, "Mismatch between BVH range and brute force collision sets: {:?} != {:?}", bvh_set, brute_force_set);
+    }
+}
+
+/// Computes the closest intersection of `ray` with the list of `elements` via brute force.
+fn brute_force_closest_ray(elements: &[Aabb], ray: Ray) -> Option<(&Aabb, NotNan<f32>)> {
+    let mut closest_t = NotNan::new(f32::INFINITY).unwrap();
+    let mut closest_elem = None;
+
+    for aabb in elements {
+        if let Some(t) = aabb.intersect_ray(&ray) {
+            if t < closest_t && t.into_inner() >= 0.0 {
+                closest_t = t;
+                closest_elem = Some(aabb);
+            }
+        }
+    }
+
+    closest_elem.map(|e| (e, closest_t))
+}
+
+proptest! {
+    #[test]
+    fn test_get_closest_ray_correctness(
+        elements in prop::collection::vec(
+            // Generate random AABBs by picking two random points and making one the min and the other the max.
+            (-1000.0..1000.0f32, -1000.0..1000.0f32, -1000.0..1000.0f32, -1000.0..1000.0f32, -1000.0..1000.0f32, -1000.0..1000.0f32)
+                .prop_map(|(x1, y1, z1, x2, y2, z2)| {
+                    let min_x = x1.min(x2);
+                    let max_x = x1.max(x2);
+                    let min_y = y1.min(y2);
+                    let max_y = y1.max(y2);
+                    let min_z = z1.min(z2);
+                    let max_z = z1.max(z2);
+                    Aabb::from([min_x, min_y, min_z, max_x, max_y, max_z])
+                }),
+            1..50 // vary the number of elements
+        ),
+        origin in (-1000.0..1000.0f32, -1000.0..1000.0f32, -1000.0..1000.0f32),
+        direction in (-1000.0..1000.0f32, -1000.0..1000.0f32, -1000.0..1000.0f32)
+    ) {
+        // If the direction is zero, we skip this test case. A ray with zero direction doesn't make sense.
+        let dir_vec = Vec3::new(direction.0, direction.1, direction.2);
+        let zero_vec = Vec3::new(0.0, 0.0, 0.0);
+
+        if dir_vec == zero_vec {
+            return Ok(());
+        }
+
+        let ray = Ray::new(
+            Vec3::new(origin.0, origin.1, origin.2),
+            dir_vec
+        );
+
+        let bvh = Bvh::build(elements.clone(), copied);
+        let bvh_closest = bvh.get_closest_ray(ray, copied);
+        let brute_closest = brute_force_closest_ray(&elements, ray);
+
+        match (bvh_closest, brute_closest) {
+            (None, None) => {
+                // Both found no intersections.
+            },
+            (Some((bvh_aabb, bvh_t)), Some((brute_aabb, brute_t))) => {
+                // Check that the chosen elements and intersection distances are close.
+                // Because multiple AABBs might have the exact same intersection distance, we can't always assert equality of the element references.
+                // But at minimum, we check that the distances are very close.
+                let diff = (bvh_t.into_inner() - brute_t.into_inner()).abs();
+                prop_assert!(diff < 1e-6, "Distances differ significantly; BVH: bvh_t: {bvh_t}, brute force: {brute_t}, aabb1: {bvh_aabb:?}, aabb2: {brute_aabb:?}");
+
+                // If desired (and if you trust that intersections are unique), you could also check:
+                // prop_assert_eq!(bvh_elem, brute_elem);
+            },
+            (bvh_val, brute_val) => {
+                // Mismatch: One found an intersection, the other didn't.
+                prop_assert!(false, "Mismatch between BVH closest ray and brute force closest ray; BVH: {:?}, brute force: {:?}", bvh_val, brute_val);
+            }
+        }
     }
 }

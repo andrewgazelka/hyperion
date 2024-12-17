@@ -2,6 +2,8 @@ use std::{cmp::Reverse, collections::BinaryHeap, fmt::Debug};
 
 use geometry::aabb::Aabb;
 use glam::Vec3;
+use num_traits::Zero;
+use ordered_float::NotNan;
 
 use crate::{Bvh, Node, utils::NodeOrd};
 
@@ -29,7 +31,12 @@ impl<T: Debug> Bvh<T> {
 
         // let mut stack: SmallVec<&BvhNode, 64> = SmallVec::new();
         let mut heap: BinaryHeap<_> = std::iter::once(on)
-            .map(|node| Reverse(NodeOrd { node, dist2: 0.0 }))
+            .map(|node| {
+                Reverse(NodeOrd {
+                    node,
+                    by: NotNan::zero(),
+                })
+            })
             .collect();
 
         while let Some(on) = heap.pop() {
@@ -43,9 +50,12 @@ impl<T: Debug> Bvh<T> {
             for child in on.children(self) {
                 match child {
                     Node::Internal(internal) => {
+                        let dist2 = internal.aabb.dist2(target);
+                        let dist2 = NotNan::new(dist2).unwrap();
+
                         heap.push(Reverse(NodeOrd {
                             node: internal,
-                            dist2: internal.aabb.dist2(target),
+                            by: dist2,
                         }));
                     }
                     Node::Leaf(leaf) => {

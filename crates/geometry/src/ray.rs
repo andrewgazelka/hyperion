@@ -25,8 +25,6 @@ impl Ray {
 
     #[must_use]
     pub fn new(origin: Vec3, direction: Vec3) -> Self {
-        // Normalize direction and compute inverse
-        let direction = direction.normalize();
         let inv_direction = Vec3::new(1.0 / direction.x, 1.0 / direction.y, 1.0 / direction.z);
 
         Self {
