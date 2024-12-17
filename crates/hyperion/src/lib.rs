@@ -69,6 +69,7 @@ use crate::{
 mod common;
 pub use common::*;
 use hyperion_crafting::CraftingRegistry;
+use system_order::SystemOrderModule;
 pub use valence_ident;
 
 use crate::{
@@ -348,6 +349,7 @@ impl HyperionCore {
         world.import::<SimModule>();
         world.import::<EgressModule>();
         world.import::<IngressModule>();
+        world.import::<SystemOrderModule>();
 
         world
             .component::<Player>()

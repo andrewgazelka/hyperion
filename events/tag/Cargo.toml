@@ -22,7 +22,6 @@ rayon = { workspace = true }
 roaring = { workspace = true }
 rustc-hash = { workspace = true }
 spatial = { workspace = true }
-system-order = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 tracing-tracy = { workspace = true }
