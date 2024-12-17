@@ -1,4 +1,5 @@
-# Hyperion
+# Hyperion `hyperion-test.duckdns.org`
+`
 
 [![Discord invite link](https://dcbadge.vercel.app/api/server/PBfnDtj5Wb)](https://discord.gg/PBfnDtj5Wb)
 [![Discord invite link](https://dcbadge.vercel.app/api/server/GxtzEJfSQe)](https://discord.gg/GxtzEJfSQe)
@@ -6,7 +7,6 @@
 [![Issues](https://img.shields.io/github/issues/andrewgazelka/hyperion)](https://github.com/andrewgazelka/hyperion/issues)
 [![Last Commit](https://img.shields.io/github/last-commit/andrewgazelka/hyperion)](https://github.com/andrewgazelka/hyperion/commits)
 
-Join the Minecraft server in 1.20.1 at: `hyperion-test.duckdns.org`.
 
 Thank you for your hard work[^1] [@CuzImClicks](https://github.com/CuzImClicks), [@Indra-db](https://github.com/Indra-db), [@james-j-obrien](https://github.com/james-j-obrien), [@Ruben2424](https://github.com/Ruben2424), [@SanderMertens](https://github.com/SanderMertens), [@Tebarem](https://github.com/Tebarem), and [@TestingPlant](https://github.com/TestingPlant).
 
