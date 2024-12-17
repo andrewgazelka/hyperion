@@ -1,5 +1,4 @@
 # Hyperion 
-**`hyperion-test.duckdns.org`**
 `
 
 [![Discord invite link](https://dcbadge.vercel.app/api/server/PBfnDtj5Wb)](https://discord.gg/PBfnDtj5Wb)
@@ -15,6 +14,8 @@ Hyperion is a **Minecraft game engine** that aims to enable a 10k player PvP bat
 Record ([8825 by
 EVE Online](https://www.guinnessworldrecords.com/world-records/105603-largest-videogame-pvp-battle)). The
 architecture is ECS-driven using [Flecs Rust](https://github.com/Indra-db/Flecs-Rust).
+
+> **Note**: You can join the test server in 1.20.1 at `hyperion-test.duckdns.org` `
 
 https://github.com/user-attachments/assets/64a4a8c7-f375-4821-a1c7-0efc69c1ae0b
 
