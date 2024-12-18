@@ -2738,6 +2738,7 @@ dependencies = [
  "humantime",
  "hyperion-crafting",
  "hyperion-event-macros",
+ "hyperion-genmap",
  "hyperion-inventory",
  "hyperion-nerd-font",
  "hyperion-palette",
@@ -2842,6 +2843,7 @@ version = "0.1.0"
 dependencies = [
  "flecs_ecs",
  "hyperion",
+ "hyperion-utils",
 ]
 
 [[package]]
@@ -5555,6 +5557,7 @@ dependencies = [
  "glam",
  "hyperion",
  "hyperion-clap",
+ "hyperion-genmap",
  "hyperion-gui",
  "hyperion-inventory",
  "hyperion-item",

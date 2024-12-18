@@ -6,25 +6,17 @@
 use std::{collections::HashSet, net::SocketAddr};
 
 use flecs_ecs::prelude::*;
-use hyperion::{
-    Address, HyperionCore,
-    runtime::AsyncRuntime,
-    simulation::{Player, blocks::Blocks},
-};
+use hyperion::{Address, HyperionCore, simulation::Player};
 use hyperion_clap::hyperion_command::CommandRegistry;
 use module::{block::BlockModule, vanish::VanishModule};
 
 mod module;
 
 use derive_more::{Deref, DerefMut};
-use hyperion::{
-    glam::IVec3,
-    simulation::{Position, Uuid, entity_kind::EntityKind},
-};
+use hyperion::{glam::IVec3, simulation::Position};
 use hyperion_rank_tree::Team;
 use module::{attack::AttackModule, level::LevelModule, regeneration::RegenerationModule};
 use spatial::SpatialIndex;
-use tracing::debug;
 
 use crate::{
     module::{bow::BowModule, chat::ChatModule, spawn::SpawnModule, stats::StatsModule},
@@ -87,6 +79,7 @@ impl Module for TagModule {
         world.import::<hyperion_clap::ClapCommandModule>();
         world.import::<SkinModule>();
         world.import::<VanishModule>();
+        world.import::<hyperion_genmap::GenMapModule>();
 
         world.get::<&mut CommandRegistry>(|registry| {
             command::register(registry, world);

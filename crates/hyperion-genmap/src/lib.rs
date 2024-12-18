@@ -1,7 +1,9 @@
-use flecs_ecs::core::{World, WorldGet};
-use flecs_ecs::macros::Component;
-use flecs_ecs::prelude::Module;
-use hyperion::runtime::AsyncRuntime;
+use flecs_ecs::{
+    core::{World, WorldGet},
+    macros::Component,
+    prelude::Module,
+};
+use hyperion::{runtime::AsyncRuntime, simulation::blocks::Blocks};
 
 #[derive(Component)]
 pub struct GenMapModule;
@@ -9,17 +11,15 @@ pub struct GenMapModule;
 impl Module for GenMapModule {
     fn module(world: &World) {
         world.get::<&AsyncRuntime>(|runtime| {
-            let f = hyperion_utils::cached_save(
-                world,
-                "https://github.com/andrewgazelka/maps/raw/main/GenMap.tar.gz",
-            );
+            const URL: &str = "https://github.com/andrewgazelka/maps/raw/main/GenMap.tar.gz";
 
-            runtime.schedule(f, |result, world| {
-                let save = result.unwrap();
-                world.set(Blocks::new(world, &save).unwrap());
+            let f = hyperion_utils::cached_save(world, URL);
+
+            let save = runtime.block_on(f).unwrap_or_else(|e| {
+                panic!("failed to download map {URL}: {e}");
             });
-        });
 
+            world.set(Blocks::new(world, &save).unwrap());
+        });
     }
 }
-
