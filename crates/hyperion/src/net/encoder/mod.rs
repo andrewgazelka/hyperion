@@ -9,7 +9,6 @@
 use std::{
     fmt::Debug,
     io::{Cursor, Write},
-    mem::MaybeUninit,
 };
 
 use anyhow::ensure;
@@ -129,37 +128,27 @@ impl PacketEncoder {
         if data_len > threshold {
             let scratch = scratch.obtain();
 
-            debug_assert!(scratch.is_empty());
-
             let data_slice = &mut slice
                 [usize::try_from(data_write_start)?..usize::try_from(end_data_position_exclusive)?];
 
-            {
-                // todo: I think this kinda safe maybe??? ... lol. well I know at least scratch is always large enough
-                let written = {
-                    let scratch = scratch.spare_capacity_mut();
-                    let scratch = unsafe { MaybeUninit::slice_assume_init_mut(scratch) };
+            let written = {
+                let len = data_slice.len();
+                let span = tracing::trace_span!("zlib_compress", bytes = len);
+                let _enter = span.enter();
+                compressor.zlib_compress(data_slice, scratch).unwrap()
+            };
 
-                    let len = data_slice.len();
-                    let span = tracing::trace_span!("zlib_compress", bytes = len);
-                    let _enter = span.enter();
-                    compressor.zlib_compress(data_slice, scratch)?
-                };
-
-                unsafe {
-                    scratch.set_len(scratch.len() + written);
-                }
-            }
+            let compressed = &scratch[..written];
 
             let data_len = VarInt(data_len as u32 as i32);
 
-            let packet_len = data_len.written_size() + scratch.len();
+            let packet_len = data_len.written_size() + compressed.len();
             let packet_len = VarInt(packet_len as u32 as i32);
 
             let mut write = Cursor::new(&mut slice[..]);
             packet_len.encode(&mut write)?;
             data_len.encode(&mut write)?;
-            write.write_all(scratch)?;
+            write.write_all(compressed)?;
 
             let len = write.position();
 
