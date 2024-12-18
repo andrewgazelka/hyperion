@@ -10,7 +10,9 @@ pub struct GenMapModule;
 
 impl Module for GenMapModule {
     fn module(world: &World) {
+        world.import::<hyperion::HyperionCore>();
         world.import::<hyperion_utils::HyperionUtilsModule>();
+
         world.get::<&AsyncRuntime>(|runtime| {
             const URL: &str = "https://github.com/andrewgazelka/maps/raw/main/GenMap.tar.gz";
 

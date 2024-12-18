@@ -4,13 +4,27 @@
               for the core libraries. These are tests, so it doesn't matter"
 )]
 
-use flecs_ecs::core::{EntityViewGet, World};
-use hyperion::simulation::{Position, Uuid, Velocity, blocks::Blocks, entity_kind::EntityKind};
+use flecs_ecs::{
+    core::{EntityViewGet, World},
+    macros::Component,
+    prelude::Module,
+};
+use hyperion::simulation::{Position, Uuid, Velocity, entity_kind::EntityKind};
+
+#[derive(Component)]
+struct TestModule;
+
+impl Module for TestModule {
+    fn module(world: &World) {
+        world.import::<hyperion_genmap::GenMapModule>();
+        world.import::<hyperion::HyperionCore>();
+    }
+}
 
 #[test]
 fn arrow() {
     let world = World::new();
-    world.import::<hyperion::HyperionCore>();
+    world.import::<TestModule>();
 
     let arrow = world.entity().add_enum(EntityKind::Arrow);
 
@@ -28,11 +42,6 @@ fn arrow() {
         .set(Position::new(0.0, 20.0, 0.0));
 
     println!("arrow = {arrow:?}\n");
-
-    // The arrow is going to have physics; this currently only works if `BlockModule` is imported.
-    assert!(!world.has::<Blocks>());
-    world.import::<hyperion_genmap::GenMapModule>();
-    assert!(world.has::<Blocks>());
 
     world.progress();
 
