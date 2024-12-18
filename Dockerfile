@@ -70,7 +70,7 @@ RUN --mount=type=cache,target=${CARGO_HOME}/registry \
 
 FROM builder-base AS nextest
 
-COPY --from=builder-ci /app/tests.zst /app/tests.tar.zst
+COPY --from=builder-ci /app/tests.tar.zst /app/tests.tar.zst
 RUN cargo nextest run --archive-file tests.tar.zst && \
     touch nextest-done
 
