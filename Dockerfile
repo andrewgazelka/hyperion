@@ -56,7 +56,7 @@ RUN --mount=type=cache,target=${CARGO_HOME}/registry \
     --mount=type=cache,target=${CARGO_HOME}/git \
     --mount=type=cache,target=/app/target \
     cargo build && \
-    cargo nextest archive tests.zst
+    cargo nextest archive tests.tar.zst
 
 
 FROM builder-ci AS ci-part
@@ -70,8 +70,8 @@ RUN --mount=type=cache,target=${CARGO_HOME}/registry \
 
 FROM builder-base AS nextest
 
-COPY --from=builder-ci /app/tests.zst /app/tests.zst
-RUN cargo nextest run --archive-file tests.zst
+COPY --from=builder-ci /app/tests.zst /app/tests.tar.zst
+RUN cargo nextest run --archive-file tests.tar.zst
 
 
 FROM builder-base AS fmt
