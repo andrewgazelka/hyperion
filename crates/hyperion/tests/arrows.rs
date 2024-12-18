@@ -12,15 +12,6 @@ fn arrow() {
     let world = World::new();
     world.import::<hyperion::HyperionCore>();
 
-    // todo: make GenMapModule work without this
-    world.import::<hyperion_utils::HyperionUtilsModule>();
-
-    world.set(hyperion_utils::AppId {
-        qualifier: "com".to_string(),
-        organization: "andrewgazelka".to_string(),
-        application: "hyperion-poc".to_string(),
-    });
-
     let arrow = world.entity().add_enum(EntityKind::Arrow);
 
     assert!(
