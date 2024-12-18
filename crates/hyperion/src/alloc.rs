@@ -1,5 +1,5 @@
 use std::{
-    alloc::{Layout, alloc, dealloc, realloc},
+    alloc::{Layout, alloc, alloc_zeroed, dealloc, realloc},
     ptr::null_mut,
     sync::OnceLock,
 };
@@ -21,7 +21,7 @@ fn get_size_map() -> &'static papaya::HashMap<usize, usize> {
     unsafe { ALLOC_SIZES.get().unwrap_unchecked() }
 }
 
-unsafe extern "C-unwind" fn aligned_malloc(size: ecs_size_t) -> *mut core::ffi::c_void {
+unsafe fn aligned_alloc(size: ecs_size_t, custom_alloc: fn(Layout) -> *mut u8) -> *mut core::ffi::c_void {
     #[allow(clippy::cast_possible_wrap, clippy::cast_sign_loss)]
     let size = size as usize;
 
@@ -30,7 +30,7 @@ unsafe extern "C-unwind" fn aligned_malloc(size: ecs_size_t) -> *mut core::ffi::
         return null_mut();
     };
 
-    let ptr = unsafe { alloc(layout) };
+    let ptr = unsafe { custom_alloc(layout) };
 
     if ptr.is_null() {
         return null_mut();
@@ -42,17 +42,12 @@ unsafe extern "C-unwind" fn aligned_malloc(size: ecs_size_t) -> *mut core::ffi::
     ptr.cast::<core::ffi::c_void>()
 }
 
-unsafe extern "C-unwind" fn aligned_calloc(size: ecs_size_t) -> *mut core::ffi::c_void {
-    let ptr = unsafe { aligned_malloc(size) };
-    if !ptr.is_null() {
-        // Zero the entire allocation
-        #[allow(clippy::cast_possible_wrap, clippy::cast_sign_loss)]
-        unsafe {
-            std::ptr::write_bytes(ptr, 0, size as usize);
-        };
-    }
+unsafe extern "C-unwind" fn aligned_malloc(size: ecs_size_t) -> *mut core::ffi::c_void {
+    aligned_alloc(size, alloc)
+}
 
-    ptr
+unsafe extern "C-unwind" fn aligned_calloc(size: ecs_size_t) -> *mut core::ffi::c_void {
+    aligned_alloc(size, alloc_zeroed)
 }
 
 unsafe extern "C-unwind" fn aligned_realloc(
