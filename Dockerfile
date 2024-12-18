@@ -56,7 +56,7 @@ RUN --mount=type=cache,target=${CARGO_HOME}/registry \
     --mount=type=cache,target=${CARGO_HOME}/git \
     --mount=type=cache,target=/app/target \
     cargo build && \
-    cargo nextest archive tests.tar.zst
+    cargo nextest archive --archive-file tests.tar.zst
 
 
 FROM builder-ci AS ci-part
