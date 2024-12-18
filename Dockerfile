@@ -71,7 +71,8 @@ RUN --mount=type=cache,target=${CARGO_HOME}/registry \
 FROM builder-base AS nextest
 
 COPY --from=builder-ci /app/tests.zst /app/tests.tar.zst
-RUN cargo nextest run --archive-file tests.tar.zst
+RUN cargo nextest run --archive-file tests.tar.zst && \
+    touch nextest-done
 
 
 FROM builder-base AS fmt
@@ -83,6 +84,7 @@ FROM builder-base AS ci
 COPY --from=ci-part /app/ci-part-done /app/ci-part-done
 COPY --from=machete /app/machete-done /app/machete-done
 COPY --from=fmt /app/fmt-done /app/fmt-done
+COPY --from=nextest /app/nextest-done /app/nextest-done
 
 # Release builder
 FROM builder-base AS build-release
