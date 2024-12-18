@@ -33,7 +33,7 @@ pub fn get_first_collision(
     world: &World,
 ) -> Option<Either<EntityView<'_>, RayCollision>> {
     // Check for collisions with entities
-    let entity = world.get::<&SpatialIndex>(|index| index.closest_to_ray(ray, world));
+    let entity = world.get::<&SpatialIndex>(|index| index.first_ray_collision(ray, world));
     let block = world.get::<&Blocks>(|blocks| blocks.first_collision(ray));
 
     // check which one is closest to the Ray don't forget to account for entity size
@@ -101,13 +101,13 @@ impl SpatialIndex {
     }
 
     #[must_use]
-    pub fn closest_to_ray<'a>(
+    pub fn first_ray_collision<'a>(
         &self,
         ray: Ray,
         world: &'a World,
     ) -> Option<(EntityView<'a>, NotNan<f32>)> {
         let get_aabb = get_aabb_func(world);
-        let (entity, distance) = self.query.get_closest_ray(ray, get_aabb)?;
+        let (entity, distance) = self.query.first_ray_collision(ray, get_aabb)?;
         let entity = world.entity_from_id(*entity);
         Some((entity, distance))
     }

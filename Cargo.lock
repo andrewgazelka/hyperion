@@ -2717,6 +2717,7 @@ name = "hyperion"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "approx",
  "base64 0.22.1",
  "bitfield-struct",
  "bitvec",
@@ -2766,6 +2767,7 @@ dependencies = [
  "serde_json",
  "sha2",
  "simd-utils",
+ "spatial",
  "system-order",
  "thiserror 2.0.7",
  "tokio",

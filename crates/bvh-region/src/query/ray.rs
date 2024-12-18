@@ -10,7 +10,7 @@ impl<T: Debug> Bvh<T> {
     ///
     /// If no element is hit, returns `None`.
     #[allow(clippy::excessive_nesting)]
-    pub fn get_closest_ray(
+    pub fn first_ray_collision(
         &self,
         ray: Ray,
         get_aabb: impl Fn(&T) -> Aabb,

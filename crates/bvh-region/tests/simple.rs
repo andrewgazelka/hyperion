@@ -37,7 +37,7 @@ fn test_bvh_vs_brute_known_case() {
 
     // BVH:
     let bvh = Bvh::build(elements.clone(), |x| *x);
-    let bvh_closest = bvh.get_closest_ray(ray, |x| *x);
+    let bvh_closest = bvh.first_ray_collision(ray, |x| *x);
 
     assert_eq!(brute_closest.map(|x| x.1), bvh_closest.map(|x| x.1));
 }
@@ -53,7 +53,7 @@ fn test_multiple_aabbs_along_ray() {
     let ray = Ray::new(Vec3::new(0.0, 0.0, 0.0), Vec3::new(1.0, 0.0, 0.0));
     let bvh = Bvh::build(elements.clone(), |x| *x);
     let (closest, dist) = bvh
-        .get_closest_ray(ray, |x| *x)
+        .first_ray_collision(ray, |x| *x)
         .expect("Should find intersection");
     assert_eq!(
         closest, &elements[0],
@@ -82,7 +82,7 @@ proptest! {
         let ray = Ray::new(Vec3::new(origin.0, origin.1, origin.2), Vec3::new(direction.0, direction.1, direction.2));
 
         let bvh = Bvh::build(elements.clone(), |x| *x);
-        let bvh_closest = bvh.get_closest_ray(ray, |x| *x);
+        let bvh_closest = bvh.first_ray_collision(ray, |x| *x);
         let brute_closest = brute_force_closest_ray(&elements, ray);
 
         match (bvh_closest, brute_closest) {
@@ -287,7 +287,7 @@ proptest! {
         );
 
         let bvh = Bvh::build(elements.clone(), copied);
-        let bvh_closest = bvh.get_closest_ray(ray, copied);
+        let bvh_closest = bvh.first_ray_collision(ray, copied);
         let brute_closest = brute_force_closest_ray(&elements, ray);
 
         match (bvh_closest, brute_closest) {
