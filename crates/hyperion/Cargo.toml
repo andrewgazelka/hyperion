@@ -73,8 +73,10 @@ valence_server = { workspace = true }
 valence_text = { workspace = true }
 
 [dev-dependencies]
+approx = { workspace = true }
 divan = { workspace = true }
 fastrand = { workspace = true }
+spatial = { workspace = true }
 
 [lints]
 workspace = true

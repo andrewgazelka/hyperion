@@ -44,6 +44,12 @@ impl Ray {
         }
     }
 
+    #[must_use]
+    pub fn from_points(origin: Vec3, end: Vec3) -> Self {
+        let direction = end - origin;
+        Self::new(origin, direction)
+    }
+
     /// Get the point along the ray at distance t
     #[must_use]
     pub fn at(&self, t: f32) -> Vec3 {

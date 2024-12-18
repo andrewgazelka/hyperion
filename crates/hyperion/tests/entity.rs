@@ -40,7 +40,7 @@ fn arrow() {
         .set(Velocity::new(0.0, 1.0, 0.0))
         .set(Position::new(0.0, 20.0, 0.0));
 
-    println!("arrow = {arrow:?}\n");
+    println!("arrow = {arrow:?}");
 
     world.progress();
 

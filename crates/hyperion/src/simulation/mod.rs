@@ -440,7 +440,7 @@ pub struct Pitch {
 const PLAYER_WIDTH: f32 = 0.6;
 const PLAYER_HEIGHT: f32 = 1.8;
 
-#[derive(Component, Copy, Clone, Debug)]
+#[derive(Component, Copy, Clone, Debug, Constructor, PartialEq)]
 #[meta]
 pub struct EntitySize {
     pub half_width: f32,
