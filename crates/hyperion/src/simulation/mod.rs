@@ -691,6 +691,17 @@ impl Module for SimModule {
             });
         });
 
+        // for every new entity without a UUID, give it one
+        world
+            .observer::<flecs::OnAdd, ()>()
+            .with_enum_wildcard::<EntityKind>()
+            .without::<Uuid>()
+            .each_entity(|entity, ()| {
+                debug!("adding uuid to entity");
+                let uuid = uuid::Uuid::new_v4();
+                entity.set(Uuid::from(uuid));
+            });
+
         world
             .observer::<flecs::OnSet, ()>()
             .with_enum_wildcard::<EntityKind>()

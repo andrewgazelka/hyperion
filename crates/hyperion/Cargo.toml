@@ -75,6 +75,7 @@ valence_text = {workspace = true}
 [dev-dependencies]
 divan = {workspace = true}
 fastrand = {workspace = true}
+hyperion-genmap = {workspace = true}
 
 [lints]
 workspace = true
