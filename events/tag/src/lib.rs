@@ -6,7 +6,7 @@
 use std::{collections::HashSet, net::SocketAddr};
 
 use flecs_ecs::prelude::*;
-use hyperion::{Address, HyperionCore, simulation::Player};
+use hyperion::{GameServerEndpoint, HyperionCore, simulation::Player};
 use hyperion_clap::hyperion_command::CommandRegistry;
 use module::{block::BlockModule, vanish::VanishModule};
 
@@ -133,7 +133,7 @@ pub fn init_game(address: SocketAddr) -> anyhow::Result<()> {
     world.import::<HyperionCore>();
     world.import::<TagModule>();
 
-    world.set(Address::new(address));
+    world.set(GameServerEndpoint::from(address));
 
     let mut app = world.app();
 

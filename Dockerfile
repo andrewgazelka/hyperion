@@ -58,7 +58,7 @@ RUN --mount=type=cache,target=${CARGO_HOME}/registry \
     cargo clippy --workspace --benches --tests --examples --all-features --frozen -- -D warnings && \
     cargo nextest archive --archive-file tests.tar.zst
 
-FROM builder-ci as doc
+FROM builder-ci AS doc
 
 RUN --mount=type=cache,target=${CARGO_HOME}/registry \
     --mount=type=cache,target=${CARGO_HOME}/git \
@@ -66,14 +66,6 @@ RUN --mount=type=cache,target=${CARGO_HOME}/registry \
     cargo doc --all-features --workspace --frozen --no-deps && \
     touch doc-done
 
-
-FROM builder-ci AS ci-part
-
-RUN --mount=type=cache,target=${CARGO_HOME}/registry \
-    --mount=type=cache,target=${CARGO_HOME}/git \
-    --mount=type=cache,target=/app/target \
-        cargo doc --all-features --workspace --frozen --no-deps && \
-        touch ci-part-done
 
 FROM builder-base AS nextest
 
@@ -88,7 +80,6 @@ RUN cargo fmt --all -- --check && touch fmt-done
 
 FROM builder-base AS ci
 
-COPY --from=ci-part /app/ci-part-done /app/ci-part-done
 COPY --from=machete /app/machete-done /app/machete-done
 COPY --from=fmt /app/fmt-done /app/fmt-done
 COPY --from=nextest /app/nextest-done /app/nextest-done

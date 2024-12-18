@@ -37,7 +37,7 @@ use std::{
 };
 
 use anyhow::Context;
-use derive_more::{Constructor, Deref, DerefMut};
+use derive_more::{Deref, DerefMut, From};
 use egress::EgressModule;
 use flecs_ecs::prelude::*;
 pub use glam;
@@ -142,8 +142,27 @@ pub fn adjust_file_descriptor_limits(recommended_min: u64) -> std::io::Result<()
     Ok(())
 }
 
-#[derive(Component, Debug, Clone, PartialEq, Eq, Hash, Constructor)]
-pub struct Address(SocketAddr);
+#[derive(Component, Debug, Clone, PartialEq, Eq, Hash)]
+pub struct GameServerEndpoint(SocketAddr);
+
+impl From<SocketAddr> for GameServerEndpoint {
+    fn from(value: SocketAddr) -> Self {
+        const DEFAULT_MINECRAFT_PORT: u16 = 25565;
+        let port = value.port();
+
+        if port == DEFAULT_MINECRAFT_PORT {
+            warn!(
+                "You are setting the port to the default Minecraft port \
+                 ({DEFAULT_MINECRAFT_PORT}). You are likely using the wrong port as the proxy \
+                 port is the port that players connect to. Therefore, if you want them to join on \
+                 {DEFAULT_MINECRAFT_PORT}, you need to set the PROXY port to \
+                 {DEFAULT_MINECRAFT_PORT} instead."
+            );
+        }
+
+        Self(value)
+    }
+}
 
 /// The central [`HyperionCore`] struct which owns and manages the entire server.
 #[derive(Component)]
@@ -197,7 +216,7 @@ impl HyperionCore {
                 .map_err(|_| anyhow::anyhow!("failed to create compression level"))?,
         });
 
-        world.component::<Address>();
+        world.component::<GameServerEndpoint>();
 
         world.component::<Shutdown>();
         let shutdown = Arc::new(AtomicBool::new(false));
@@ -316,7 +335,7 @@ impl HyperionCore {
 
         #[rustfmt::skip]
         world
-            .observer::<flecs::OnSet, (&Address, &AsyncRuntime)>()
+            .observer::<flecs::OnSet, (&GameServerEndpoint, &AsyncRuntime)>()
             .term_at(0).singleton()
             .term_at(1).filter().singleton()
             .each_iter(|it, _, (address, runtime)| {

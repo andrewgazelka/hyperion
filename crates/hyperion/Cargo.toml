@@ -15,7 +15,7 @@ bumpalo = { workspace = true }
 bytemuck = { workspace = true }
 byteorder = { workspace = true }
 bytes = { workspace = true }
-colored = "2.2.0"
+colored = { workspace = true }
 derive_more = { workspace = true }
 enumset = { workspace = true }
 fastrand = { workspace = true }
