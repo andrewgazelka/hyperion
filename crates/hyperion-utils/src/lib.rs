@@ -80,5 +80,11 @@ pub struct HyperionUtilsModule;
 impl Module for HyperionUtilsModule {
     fn module(world: &World) {
         world.component::<AppId>();
+
+        world.set(AppId {
+            qualifier: "github".to_string(),
+            organization: "hyperion-mc".to_string(),
+            application: "generic".to_string(),
+        });
     }
 }
