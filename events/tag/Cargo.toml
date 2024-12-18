@@ -10,6 +10,7 @@ geometry = { workspace = true }
 glam = { workspace = true }
 hyperion = { workspace = true }
 hyperion-clap = { workspace = true }
+hyperion-genmap = { workspace = true }
 hyperion-gui = { workspace = true }
 hyperion-inventory = { workspace = true }
 hyperion-item = { workspace = true }
@@ -26,7 +27,7 @@ tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 tracing-tracy = { workspace = true }
 uuid = { workspace = true }
-respawn = { workspace = true }
+hyperion-respawn = { workspace = true }
 valence_protocol = { workspace = true }
 valence_server = { workspace = true }
 
@@ -38,11 +39,11 @@ workspace = true
 
 [package]
 authors = ["Andrew Gazelka <andrew.gazelka@gmail.com>"]
-edition = "2024"
+edition.workspace = true
 name = "tag"
 publish = false
 readme = "README.md"
-version = "0.1.0"
+version.workspace = true
 
 [target.'cfg(not(target_os = "windows"))'.dependencies]
 tikv-jemallocator.workspace = true

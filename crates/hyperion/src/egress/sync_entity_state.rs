@@ -428,9 +428,7 @@ impl Module for EntityStateSyncModule {
 
                 #[allow(clippy::excessive_nesting)]
                 world.get::<&mut Blocks>(|blocks| {
-                    // calculate distance limit based on velocity
-                    let distance_limit = velocity.0.length();
-                    let Some(collision) = blocks.first_collision(ray, distance_limit) else {
+                    let Some(collision) = blocks.first_collision(ray) else {
                         // Drag (0.99 / 20.0)
                         // 1.0 - (0.99 / 20.0) * 0.05
                         velocity.0 *= 0.997_525;
@@ -442,7 +440,6 @@ impl Module for EntityStateSyncModule {
                         velocity.0 = velocity.0.clamp_length(0.0, 100.0);
                         return;
                     };
-                    debug!("distance_limit = {}", distance_limit);
 
                     debug!("collision = {collision:?}");
 

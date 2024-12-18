@@ -3,8 +3,8 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 use derive_more::Constructor;
 use flecs_ecs::{
     core::{
-        flecs, flecs::DependsOn, Builder, Entity, EntityView, EntityViewGet, IdOperations,
-        QueryAPI, QueryBuilderImpl,
+        Builder, Entity, EntityView, EntityViewGet, IdOperations, QueryAPI, QueryBuilderImpl,
+        SystemAPI, flecs, flecs::DependsOn,
     },
     macros::Component,
     prelude::{Module, World},
@@ -133,6 +133,14 @@ impl Module for SystemOrderModule {
     fn module(world: &World) {
         world.component::<SystemOrder>().meta();
 
-        calculate(world);
+        world
+            .observer::<flecs::OnAdd, ()>()
+            .with::<flecs::system::System>()
+            .run(|it| calculate(&it.world()));
+
+        world
+            .observer::<flecs::OnAdd, ()>()
+            .with::<flecs::Observer>()
+            .run(|it| calculate(&it.world()));
     }
 }

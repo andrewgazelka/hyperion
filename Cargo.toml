@@ -15,33 +15,34 @@ panic = 'abort'
 
 [workspace]
 members = [
-  'crates/bvh-region',
-  'crates/geometry',
-  'crates/hyperion',
-  'crates/hyperion-clap',
-  'crates/hyperion-command',
-  'crates/hyperion-crafting',
-  'crates/hyperion-event-macros',
-  'crates/hyperion-gui',
-  'crates/hyperion-inventory',
-  'crates/hyperion-item',
-  'crates/hyperion-minecraft-proto',
-  'crates/hyperion-nerd-font',
-  'crates/hyperion-palette',
-  'crates/hyperion-permission',
-  'crates/hyperion-proto',
-  'crates/hyperion-proxy',
-  'crates/hyperion-rank-tree',
-  'crates/hyperion-scheduled',
-  'crates/hyperion-stats',
-  'crates/hyperion-text',
-  'crates/hyperion-utils',
-  'crates/simd-utils',
-  'crates/spatial',
-  'crates/system-order',
-  'events/tag',
-  'tools/packet-inspector',
-  'crates/respawn',
+    'crates/bvh-region',
+    'crates/geometry',
+    'crates/hyperion',
+    'crates/hyperion-clap',
+    'crates/hyperion-command',
+    'crates/hyperion-crafting',
+    'crates/hyperion-event-macros',
+    'crates/hyperion-genmap',
+    'crates/hyperion-gui',
+    'crates/hyperion-inventory',
+    'crates/hyperion-item',
+    'crates/hyperion-minecraft-proto',
+    'crates/hyperion-nerd-font',
+    'crates/hyperion-palette',
+    'crates/hyperion-permission',
+    'crates/hyperion-proto',
+    'crates/hyperion-proxy',
+    'crates/hyperion-rank-tree',
+    'crates/hyperion-scheduled',
+    'crates/hyperion-stats',
+    'crates/hyperion-text',
+    'crates/hyperion-utils',
+    'crates/simd-utils',
+    'crates/spatial',
+    'crates/system-order',
+    'events/tag',
+    'tools/packet-inspector',
+    'crates/hyperion-respawn',
 ]
 resolver = '2'
 
@@ -55,7 +56,7 @@ bitvec = '1.0.1'
 bumpalo = '3.16'
 byteorder = '1.5.0'
 bytes = '1.8.0'
-colored = '2.1.0'
+colored = '2.2.0'
 compact_str = '0.8.0'
 convert_case = '0.6.0'
 criterion = '0.5.1'
@@ -90,17 +91,18 @@ papaya = '0.1.4'
 parking_lot = '0.12.3'
 plotters-bitmap = '0.3.6'
 proc-macro2 = '1.0.89'
+proptest = '1.5.0'
 quote = '1.0.37'
 rand = '0.8.5'
 rayon = '1.10.0'
 rkyv = '0.8.8'
-serde = '1.0.214'
+serde = '1.0.216'
 serde_json = '1.0.117'
 slotmap = '1.0.7'
 snafu = '0.8.5'
 syn = '2.0.87'
 tar = '0.4.41'
-thiserror = '2.0.1'
+thiserror = '2.0.7'
 tikv-jemallocator = '0.6.0'
 time = '0.3.37'
 tokio = '1.40.0'
@@ -157,6 +159,9 @@ path = 'crates/hyperion-crafting'
 [workspace.dependencies.hyperion-event-macros]
 path = 'crates/hyperion-event-macros'
 
+[workspace.dependencies.hyperion-genmap]
+path = 'crates/hyperion-genmap'
+
 [workspace.dependencies.hyperion-gui]
 path = 'crates/hyperion-gui'
 
@@ -206,12 +211,12 @@ version = '0.3.6'
 features = ['rustls-tls', 'stream']
 version = '0.12.9'
 
-[workspace.dependencies.respawn]
-path = 'crates/respawn'
+[workspace.dependencies.hyperion-respawn]
+path = 'crates/hyperion-respawn'
 
 [workspace.dependencies.roaring]
 features = ['simd']
-version = '0.10.6'
+version = '0.10.9'
 
 [workspace.dependencies.rustc-hash]
 features = ['nightly']

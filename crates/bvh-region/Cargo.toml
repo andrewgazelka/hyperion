@@ -11,23 +11,24 @@ name = "sort"
 #name = "side_by_side"
 
 [dependencies]
-geometry = {workspace = true}
-glam = {workspace = true, features = ["serde"]}
-plotters = {workspace = true, features = [
-  "plotters-bitmap",
-  "image"
-], optional = true}
-plotters-bitmap = {workspace = true, optional = true}
-arrayvec = {workspace = true}
-fastrand = {workspace = true}
-ordered-float = {workspace = true}
-rayon = {workspace = true}
-tracing = {workspace = true}
+arrayvec = { workspace = true }
+derive_more = { workspace = true }
+fastrand = { workspace = true }
+geometry = { workspace = true }
+glam = { workspace = true, features = ["serde"] }
+num-traits = { workspace = true }
+ordered-float = { workspace = true }
+plotters = { workspace = true, features = ["plotters-bitmap", "image"], optional = true }
+plotters-bitmap = { workspace = true, optional = true }
+proptest = { workspace = true }
+rayon = { workspace = true }
+tracing = { workspace = true }
 
 [dev-dependencies]
-criterion = {workspace = true}
+approx = { workspace = true }
+criterion = { workspace = true }
+rand = { workspace = true }
 #divan = {workspace = true}
-rand = {workspace = true}
 #tango-bench = {workspace = true}
 
 [features]
@@ -39,8 +40,8 @@ workspace = true
 
 [package]
 authors = ["Andrew Gazelka <andrew.gazelka@gmail.com>"]
-edition = "2024"
+edition.workspace = true
 name = "bvh-region"
 publish = false
 readme = "README.md"
-version = "0.1.0"
+version.workspace = true

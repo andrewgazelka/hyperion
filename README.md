@@ -13,6 +13,9 @@ Record ([8825 by
 EVE Online](https://www.guinnessworldrecords.com/world-records/105603-largest-videogame-pvp-battle)). The
 architecture is ECS-driven using [Flecs Rust](https://github.com/Indra-db/Flecs-Rust).
 
+> [!NOTE]  
+> You can join the test server in 1.20.1 at `hyperion-test.duckdns.org`
+
 https://github.com/user-attachments/assets/64a4a8c7-f375-4821-a1c7-0efc69c1ae0b
 
 ## Event
@@ -163,16 +166,22 @@ sequenceDiagram
 
 ## Running
 
-### Debug mode
+### Without cloning
+
+```bash
+curl -L https://raw.githubusercontent.com/hyperion-mc/hyperion/main/docker-compose.yml | docker compose -f - up --pull always
+```
+
+### `main` branch
+
+```bash
+docker compose up --pull always
+```
+
+### With local build (for development)
 
 ```bash
 docker compose up --build
-```
-
-### Release mode
-
-```bash
-docker compose -f docker-compose.release.yml up --build
 ```
 
 ## Features

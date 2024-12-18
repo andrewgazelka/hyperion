@@ -1,29 +1,66 @@
-use bvh_region::TrivialHeuristic;
 use flecs_ecs::{
     core::{
-        flecs, Builder, Entity, EntityView, EntityViewGet, IdOperations, QueryAPI,
-        QueryBuilderImpl, SystemAPI, TermBuilderImpl, World, WorldGet,
+        Builder, Entity, EntityView, EntityViewGet, IdOperations, QueryAPI, QueryBuilderImpl,
+        SystemAPI, TermBuilderImpl, World, WorldGet, flecs,
     },
-    macros::{system, Component},
+    macros::{Component, system},
     prelude::Module,
 };
-use geometry::aabb::Aabb;
+use geometry::{aabb::Aabb, ray::Ray};
 use hyperion::{
     egress::player_join::RayonWorldStages,
     glam::Vec3,
-    simulation::{aabb, EntitySize, Position},
+    simulation::{
+        EntitySize, Position, aabb,
+        blocks::{Blocks, RayCollision},
+    },
 };
+use ordered_float::NotNan;
+use rayon::iter::Either;
 
 #[derive(Component)]
 pub struct SpatialModule;
 
 #[derive(Component, Debug, Default)]
 pub struct SpatialIndex {
-    /// The bounding boxes of all players
+    /// The bounding boxes of all entities with the [`Spatial`] component
     query: bvh_region::Bvh<Entity>,
 }
 
-fn get_aabb_func<'a>(world: &'a World) -> impl Fn(&Entity) -> Aabb + Send + Sync + use<'a> {
+#[must_use]
+pub fn get_first_collision(
+    ray: Ray,
+    world: &World,
+) -> Option<Either<EntityView<'_>, RayCollision>> {
+    // Check for collisions with entities
+    let entity = world.get::<&SpatialIndex>(|index| index.first_ray_collision(ray, world));
+    let block = world.get::<&Blocks>(|blocks| blocks.first_collision(ray));
+
+    // check which one is closest to the Ray don't forget to account for entity size
+    entity.map_or(block.map(Either::Right), |(entity, _)| {
+        let entity_data = entity.get::<(&Position, &EntitySize)>(|(position, size)| {
+            let entity_aabb = aabb(**position, *size);
+
+            #[allow(clippy::redundant_closure_for_method_calls)]
+            let distance_to_entity = entity_aabb
+                .intersect_ray(&ray)
+                .map_or(f32::MAX, |distance| distance.into_inner());
+
+            (entity, distance_to_entity)
+        });
+
+        let (entity, distance_to_entity) = entity_data;
+        block.map_or(Some(Either::Left(entity)), |block_collision| {
+            if distance_to_entity < block_collision.distance {
+                Some(Either::Left(entity))
+            } else {
+                Some(Either::Right(block_collision))
+            }
+        })
+    })
+}
+
+fn get_aabb_func<'a>(world: &'a World) -> impl Fn(&Entity) -> Aabb + Send + Sync {
     let stages: &'a RayonWorldStages = world.get::<&RayonWorldStages>(|stages| {
         // we can properly extend lifetimes here
         unsafe { core::mem::transmute(stages) }
@@ -43,7 +80,7 @@ impl SpatialIndex {
         let all_entities = all_indexed_entities(world);
         let get_aabb = get_aabb_func(world);
 
-        self.query = bvh_region::Bvh::build::<TrivialHeuristic>(all_entities, &get_aabb);
+        self.query = bvh_region::Bvh::build(all_entities, &get_aabb);
     }
 
     pub fn get_collisions<'a>(
@@ -52,7 +89,7 @@ impl SpatialIndex {
         world: &'a World,
     ) -> impl Iterator<Item = Entity> + 'a {
         let get_aabb = get_aabb_func(world);
-        self.query.get_collisions(target, get_aabb).copied()
+        self.query.range(target, get_aabb).copied()
     }
 
     /// Get the closest player to the given position.
@@ -61,6 +98,18 @@ impl SpatialIndex {
         let get_aabb = get_aabb_func(world);
         let (target, _) = self.query.get_closest(point, &get_aabb)?;
         Some(world.entity_from_id(*target))
+    }
+
+    #[must_use]
+    pub fn first_ray_collision<'a>(
+        &self,
+        ray: Ray,
+        world: &'a World,
+    ) -> Option<(EntityView<'a>, NotNan<f32>)> {
+        let get_aabb = get_aabb_func(world);
+        let (entity, distance) = self.query.first_ray_collision(ray, get_aabb)?;
+        let entity = world.entity_from_id(*entity);
+        Some((entity, distance))
     }
 }
 

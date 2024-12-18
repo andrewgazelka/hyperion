@@ -3,28 +3,20 @@
 #![feature(stmt_expr_attributes)]
 #![feature(exact_size_is_empty)]
 
-use std::{collections::HashSet, net::ToSocketAddrs};
+use std::{collections::HashSet, net::SocketAddr};
 
 use flecs_ecs::prelude::*;
-use hyperion::{
-    Hyperion,
-    runtime::AsyncRuntime,
-    simulation::{Player, blocks::Blocks},
-};
+use hyperion::{Address, HyperionCore, simulation::Player};
 use hyperion_clap::hyperion_command::CommandRegistry;
 use module::{block::BlockModule, vanish::VanishModule};
 
 mod module;
 
 use derive_more::{Deref, DerefMut};
-use hyperion::{
-    glam::IVec3,
-    simulation::{Position, Uuid, entity_kind::EntityKind},
-};
+use hyperion::{glam::IVec3, simulation::Position};
 use hyperion_rank_tree::Team;
 use module::{attack::AttackModule, level::LevelModule, regeneration::RegenerationModule};
 use spatial::SpatialIndex;
-use tracing::debug;
 
 use crate::{
     module::{bow::BowModule, chat::ChatModule, spawn::SpawnModule, stats::StatsModule},
@@ -59,17 +51,6 @@ impl Module for TagModule {
         // on entity kind set UUID
 
         world.component::<FollowClosestPlayer>();
-
-        world
-            .observer::<flecs::OnAdd, ()>()
-            .with_enum_wildcard::<EntityKind>()
-            .without::<Uuid>()
-            .each_entity(|entity, ()| {
-                debug!("adding uuid to entity");
-                let uuid = uuid::Uuid::new_v4();
-                entity.set(Uuid::from(uuid));
-            });
-
         world.component::<MainBlockCount>();
 
         world
@@ -98,7 +79,8 @@ impl Module for TagModule {
         world.import::<hyperion_clap::ClapCommandModule>();
         world.import::<SkinModule>();
         world.import::<VanishModule>();
-        world.import::<respawn::RespawnModule>();
+        world.import::<hyperion_genmap::GenMapModule>();
+        world.import::<hyperion_respawn::RespawnModule>();
 
         world.get::<&mut CommandRegistry>(|registry| {
             command::register(registry, world);
@@ -115,18 +97,6 @@ impl Module for TagModule {
         world
             .component::<Player>()
             .add_trait::<(flecs::With, spatial::Spatial)>();
-
-        world.get::<&AsyncRuntime>(|runtime| {
-            let f = hyperion_utils::cached_save(
-                world,
-                "https://github.com/andrewgazelka/maps/raw/main/GenMap.tar.gz",
-            );
-
-            runtime.schedule(f, |result, world| {
-                let save = result.unwrap();
-                world.set(Blocks::new(world, &save).unwrap());
-            });
-        });
 
         system!(
             "follow_closest_player",
@@ -158,10 +128,21 @@ impl Module for TagModule {
     }
 }
 
-pub fn init_game(address: impl ToSocketAddrs + Send + Sync + 'static) -> anyhow::Result<()> {
-    Hyperion::init_with(address, |world| {
-        world.import::<TagModule>();
-    })?;
+pub fn init_game(address: SocketAddr) -> anyhow::Result<()> {
+    let world = World::new();
+
+    world.import::<HyperionCore>();
+    world.import::<TagModule>();
+
+    world.set(Address::new(address));
+
+    let mut app = world.app();
+
+    app.enable_rest(0)
+        .enable_stats(true)
+        .set_threads(i32::try_from(rayon::current_num_threads())?);
+
+    app.run();
 
     Ok(())
 }

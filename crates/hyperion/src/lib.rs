@@ -32,17 +32,17 @@ use std::{
     cell::RefCell,
     fmt::Debug,
     io::Write,
-    net::ToSocketAddrs,
+    net::SocketAddr,
     sync::{Arc, atomic::AtomicBool},
 };
 
-use anyhow::{Context, bail};
-use derive_more::{Deref, DerefMut};
+use anyhow::Context;
+use derive_more::{Constructor, Deref, DerefMut};
 use egress::EgressModule;
 pub use flecs_ecs;
 use flecs_ecs::prelude::*;
 pub use glam;
-use glam::IVec2;
+use glam::{I16Vec2, IVec2};
 use ingress::IngressModule;
 #[cfg(unix)]
 use libc::{RLIMIT_NOFILE, getrlimit, setrlimit};
@@ -145,27 +145,39 @@ pub fn adjust_file_descriptor_limits(recommended_min: u64) -> std::io::Result<()
     Ok(())
 }
 
-/// The central [`Hyperion`] struct which owns and manages the entire server.
-pub struct Hyperion;
+#[derive(Component, Debug, Clone, PartialEq, Eq, Hash, Constructor)]
+pub struct Address(SocketAddr);
+
+/// The central [`HyperionCore`] struct which owns and manages the entire server.
+#[derive(Component)]
+pub struct HyperionCore;
 
 #[derive(Component)]
 struct Shutdown {
     value: Arc<AtomicBool>,
 }
 
-impl Hyperion {
-    /// Initializes the server.
-    pub fn init(address: impl ToSocketAddrs + Send + Sync + 'static) -> anyhow::Result<()> {
-        Self::init_with(address, |_| {})
+impl Module for HyperionCore {
+    fn module(world: &World) {
+        Self::init_with(world).unwrap();
     }
+}
 
+impl HyperionCore {
     /// Initializes the server with a custom handler.
-    pub fn init_with(
-        address: impl ToSocketAddrs + Send + Sync + 'static,
-        handlers: impl FnOnce(&World) + Send + Sync + 'static,
-    ) -> anyhow::Result<()> {
+    fn init_with(world: &World) -> anyhow::Result<()> {
         // Denormals (numbers very close to 0) are flushed to zero because doing computations on them
         // is slow.
+
+        no_denormals::no_denormals(|| Self::init_with_helper(world))
+    }
+
+    /// Initialize the server.
+    fn init_with_helper(world: &World) -> anyhow::Result<()> {
+        // 10k players * 2 file handles / player  = 20,000. We can probably get away with 16,384 file handles
+        #[cfg(unix)]
+        adjust_file_descriptor_limits(32_768).context("failed to set file limits")?;
+
         rayon::ThreadPoolBuilder::new()
             .num_threads(NUM_THREADS)
             .spawn_handler(|thread| {
@@ -182,42 +194,13 @@ impl Hyperion {
             .build_global()
             .context("failed to build thread pool")?;
 
-        no_denormals::no_denormals(|| Self::init_with_helper(address, handlers))
-    }
-
-    /// Initialize the server.
-    fn init_with_helper(
-        address: impl ToSocketAddrs + Send + Sync + 'static,
-        handlers: impl FnOnce(&World) + Send + Sync + 'static,
-    ) -> anyhow::Result<()> {
-        // 10k players * 2 file handles / player  = 20,000. We can probably get away with 16,384 file handles
-        #[cfg(unix)]
-        adjust_file_descriptor_limits(32_768).context("failed to set file limits")?;
-
         let shared = Arc::new(Shared {
             compression_threshold: CompressionThreshold(256),
             compression_level: CompressionLvl::new(2)
                 .map_err(|_| anyhow::anyhow!("failed to create compression level"))?,
         });
 
-        let world = World::new();
-
-        let world = Box::new(world);
-        let world: &World = Box::leak(world);
-
-        let mut app = world.app();
-
-        app.enable_rest(0)
-            .enable_stats(true)
-            .set_threads(i32::try_from(rayon::current_num_threads())?)
-            .set_target_fps(20.0);
-
-        world.set_threads(i32::try_from(rayon::current_num_threads())?);
-
-        let address = address
-            .to_socket_addrs()?
-            .next()
-            .context("could not get first address")?;
+        world.component::<Address>();
 
         world.component::<Shutdown>();
         let shutdown = Arc::new(AtomicBool::new(false));
@@ -228,6 +211,9 @@ impl Hyperion {
 
         world.component::<Prev>();
 
+        // Minecraft tick rate is 20 ticks per second
+        world.set_target_fps(20.0);
+
         // todo: sadly this requires u32
         // .bit("on_fire", *EntityFlags::ON_FIRE)
         // .bit("crouching", *EntityFlags::CROUCHING)
@@ -236,6 +222,8 @@ impl Hyperion {
         // .bit("invisible", *EntityFlags::INVISIBLE)
         // .bit("glowing", *EntityFlags::GLOWING)
         // .bit("flying_with_elytra", *EntityFlags::FLYING_WITH_ELYTRA);
+
+        component!(world, I16Vec2 { x: i16, y: i16 });
 
         component!(world, IVec2 { x: i32, y: i32 });
         world.component::<PendingRemove>();
@@ -259,9 +247,10 @@ impl Hyperion {
         world.component::<Events>();
         world.component::<Comms>();
         world.component::<EgressComm>();
-        world.component::<Blocks>();
 
         world.component::<AsyncRuntime>();
+        world.component::<Blocks>();
+
         world.component::<Tasks>();
 
         system!("run_tasks", world, &mut Tasks($))
@@ -328,9 +317,18 @@ impl Hyperion {
 
         world.set(MojangClient::new(&runtime, ApiProvider::MAT_DOES_DEV));
 
-        let (receive_state, egress_comm) = init_proxy_comms(&runtime, address);
-
-        world.set(receive_state);
+        #[rustfmt::skip]
+        world
+            .observer::<flecs::OnSet, (&Address, &AsyncRuntime)>()
+            .term_at(0).singleton()
+            .term_at(1).filter().singleton()
+            .each_iter(|it, _, (address, runtime)| {
+                let world = it.world();
+                let address = address.0;
+                let (receive_state, egress_comm) = init_proxy_comms(runtime, address);
+                world.set(receive_state);
+                world.set(egress_comm);
+            });
 
         let global = Global::new(shared.clone());
 
@@ -348,14 +346,14 @@ impl Hyperion {
         let events = Events::initialize(world);
         world.set(events);
 
-        world.set(egress_comm);
-
         world.set(runtime);
         world.set(StreamLookup::default());
 
+        world.set_threads(i32::try_from(rayon::current_num_threads())?);
         world.import::<SimModule>();
         world.import::<EgressModule>();
         world.import::<IngressModule>();
+        world.import::<SystemOrderModule>();
 
         world
             .component::<Player>()
@@ -379,41 +377,30 @@ impl Hyperion {
             });
 
         world.set(IgnMap::default());
+        world.set(Blocks::empty(world));
 
-        handlers(world);
-
-        // must be init last
-        world.import::<SystemOrderModule>();
-
-        app.run();
-
-        bail!("app exited");
+        Ok(())
     }
 }
 
 /// A scratch buffer for intermediate operations. This will return an empty [`Vec`] when calling [`Scratch::obtain`].
 #[derive(Debug)]
 pub struct Scratch<A: Allocator = std::alloc::Global> {
-    inner: Vec<u8, A>,
+    inner: Box<[u8], A>,
 }
 
 impl Default for Scratch<std::alloc::Global> {
     fn default() -> Self {
-        let inner = Vec::with_capacity(MAX_PACKET_SIZE);
-        Self { inner }
+        std::alloc::Global.into()
     }
 }
 
 /// Nice for getting a buffer that can be used for intermediate work
-///
-/// # Safety
-/// - every single time [`ScratchBuffer::obtain`] is called, the buffer will be cleared before returning
-/// - the buffer has capacity of at least `MAX_PACKET_SIZE`
-pub unsafe trait ScratchBuffer: sealed::Sealed + Debug {
+pub trait ScratchBuffer: sealed::Sealed + Debug {
     /// The type of the allocator the [`Vec`] uses.
     type Allocator: Allocator;
-    /// Obtains a buffer that can be used for intermediate work.
-    fn obtain(&mut self) -> &mut Vec<u8, Self::Allocator>;
+    /// Obtains a buffer that can be used for intermediate work. The contents are unspecified.
+    fn obtain(&mut self) -> &mut [u8];
 }
 
 mod sealed {
@@ -422,20 +409,23 @@ mod sealed {
 
 impl<A: Allocator + Debug> sealed::Sealed for Scratch<A> {}
 
-unsafe impl<A: Allocator + Debug> ScratchBuffer for Scratch<A> {
+impl<A: Allocator + Debug> ScratchBuffer for Scratch<A> {
     type Allocator = A;
 
-    fn obtain(&mut self) -> &mut Vec<u8, Self::Allocator> {
-        self.inner.clear();
+    fn obtain(&mut self) -> &mut [u8] {
         &mut self.inner
     }
 }
 
 impl<A: Allocator> From<A> for Scratch<A> {
     fn from(allocator: A) -> Self {
-        Self {
-            inner: Vec::with_capacity_in(MAX_PACKET_SIZE, allocator),
-        }
+        // A zeroed slice is allocated to avoid reading from uninitialized memory, which is UB.
+        // Allocating zeroed memory is usually very cheap, so there are minimal performance
+        // penalties from this.
+        let inner = Box::new_zeroed_slice_in(MAX_PACKET_SIZE, allocator);
+        // SAFETY: The box was initialized to zero, and u8 can be represented by zero
+        let inner = unsafe { inner.assume_init() };
+        Self { inner }
     }
 }
 

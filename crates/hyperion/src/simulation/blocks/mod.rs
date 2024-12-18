@@ -13,7 +13,7 @@ use flecs_ecs::{
 use geometry::ray::Ray;
 use glam::{I16Vec2, IVec2, IVec3, Vec3};
 use indexmap::IndexMap;
-use loader::{ChunkLoaderHandle, launch_manager};
+use loader::{ChunkLoaderHandle, launch_loader};
 use rayon::iter::ParallelIterator;
 use roaring::RoaringBitmap;
 use rustc_hash::FxBuildHasher;
@@ -25,7 +25,10 @@ use valence_server::layer::chunk::Chunk;
 use crate::{
     CHUNK_HEIGHT_SPAN,
     runtime::AsyncRuntime,
-    simulation::{blocks::loader::parse::section::Section, util::generate_biome_registry},
+    simulation::{
+        blocks::loader::{launch_empty_loader, parse::section::Section},
+        util::generate_biome_registry,
+    },
 };
 
 pub mod chunk;
@@ -54,7 +57,7 @@ pub enum TrySetBlockDeltaError {
     ChunkNotLoaded,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub struct RayCollision {
     pub distance: f32,
     pub location: IVec3,
@@ -76,6 +79,20 @@ pub struct Blocks {
     pub to_confirm: Vec<EntityAndSequence>,
 }
 
+impl From<ChunkLoaderHandle> for Blocks {
+    fn from(loader_handle: ChunkLoaderHandle) -> Self {
+        let (tx_loaded_chunks, rx_loaded_chunks) = tokio::sync::mpsc::unbounded_channel();
+        Self {
+            chunk_cache: IndexMap::default(),
+            should_update: RoaringBitmap::default(),
+            loader_handle,
+            tx_loaded_chunks,
+            rx_loaded_chunks,
+            to_confirm: vec![],
+        }
+    }
+}
+
 impl Blocks {
     pub fn new(world: &World, path: &Path) -> anyhow::Result<Self> {
         world.get::<&AsyncRuntime>(|runtime| {
@@ -85,26 +102,29 @@ impl Blocks {
             let shared = WorldShared::new(&biome_registry, runtime, path)?;
             let shared = Arc::new(shared);
 
-            let (tx_loaded_chunks, rx_loaded_chunks) = tokio::sync::mpsc::unbounded_channel();
+            let loader_handle = launch_loader(shared, runtime);
 
-            Ok(Self {
-                chunk_cache: IndexMap::default(),
-                should_update: RoaringBitmap::default(),
-                loader_handle: launch_manager(shared, runtime),
-                tx_loaded_chunks,
-                rx_loaded_chunks,
-                to_confirm: vec![],
-            })
+            let result = Self::from(loader_handle);
+
+            Ok(result)
         })
     }
 
     #[must_use]
-    pub fn first_collision(&self, ray: Ray, distance_limit: f32) -> Option<RayCollision> {
+    pub fn empty(world: &World) -> Self {
+        world.get::<&AsyncRuntime>(|runtime| {
+            let loader_handle = launch_empty_loader(runtime);
+            Self::from(loader_handle)
+        })
+    }
+
+    #[must_use]
+    pub fn first_collision(&self, ray: Ray) -> Option<RayCollision> {
         // Calculate exact start position (the block we're in)
         let start_pos = ray.origin();
 
         // Calculate end position with a small offset to handle edge cases
-        let end_pos = ray.origin() + ray.direction() * (distance_limit + 0.0001);
+        let end_pos = ray.origin() + ray.direction();
 
         // Convert to block coordinates, expanding bounds to ensure we catch all blocks
         let min_block = start_pos.min(end_pos).floor().as_ivec3();

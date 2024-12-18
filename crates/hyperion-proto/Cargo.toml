@@ -9,11 +9,11 @@ workspace = true
 
 [package]
 authors = ["Andrew Gazelka <andrew.gazelka@gmail.com>"]
-edition = "2024"
+edition.workspace = true
 name = "hyperion-proto"
 publish = false
 readme = "README.md"
-version = "0.1.0"
+version.workspace = true
 
 [package.metadata.cargo-machete]
 ignored = ["prost"]

@@ -1,3 +1,5 @@
+use std::ops::Mul;
+
 use glam::{IVec3, Vec3};
 
 #[derive(Debug, Clone, Copy)]
@@ -5,6 +7,14 @@ pub struct Ray {
     origin: Vec3,
     direction: Vec3,
     inv_direction: Vec3,
+}
+
+impl Mul<f32> for Ray {
+    type Output = Self;
+
+    fn mul(self, rhs: f32) -> Self::Output {
+        Self::new(self.origin, self.direction * rhs)
+    }
 }
 
 impl Ray {
@@ -25,8 +35,6 @@ impl Ray {
 
     #[must_use]
     pub fn new(origin: Vec3, direction: Vec3) -> Self {
-        // Normalize direction and compute inverse
-        let direction = direction.normalize();
         let inv_direction = Vec3::new(1.0 / direction.x, 1.0 / direction.y, 1.0 / direction.z);
 
         Self {
@@ -34,6 +42,12 @@ impl Ray {
             direction,
             inv_direction,
         }
+    }
+
+    #[must_use]
+    pub fn from_points(origin: Vec3, end: Vec3) -> Self {
+        let direction = end - origin;
+        Self::new(origin, direction)
     }
 
     /// Get the point along the ray at distance t

@@ -1,5 +1,5 @@
 [package]
-name = "respawn"
+name = "hyperion-respawn"
 version = "0.1.0"
 edition = "2021"
 authors = ["Andrew Gazelka <andrew.gazelka@gmail.com>"]

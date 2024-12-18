@@ -1,3 +1,5 @@
+use std::net::SocketAddr;
+
 use clap::Parser;
 use tag::init_game;
 use tracing_subscriber::{EnvFilter, Registry, layer::SubscriberExt};
@@ -42,6 +44,7 @@ fn main() {
     let Args { ip, port } = Args::parse();
 
     let address = format!("{ip}:{port}");
+    let address = address.parse::<SocketAddr>().unwrap();
 
     init_game(address).unwrap();
 }

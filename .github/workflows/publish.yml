@@ -46,3 +46,7 @@ jobs:
           tags: |
             ghcr.io/${{ github.repository }}/tag:latest
             ghcr.io/${{ github.repository }}/tag:${{ github.sha }}
+      - name: Update test server
+        env:
+          KEY: ${{ secrets.TEST_SERVER_KEY }}
+        run: curl -X POST -H "Key: $KEY" https://hyperion-test.duckdns.org
