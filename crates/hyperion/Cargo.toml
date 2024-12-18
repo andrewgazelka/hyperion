@@ -45,7 +45,6 @@ ndarray = { workspace = true }
 no_denormals = { workspace = true }
 once_cell = { workspace = true }
 ouroboros = { workspace = true }
-papaya = { workspace = true }
 parking_lot = { workspace = true }
 rayon = { workspace = true }
 reqwest = { workspace = true }
