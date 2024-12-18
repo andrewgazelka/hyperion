@@ -244,9 +244,10 @@ impl HyperionCore {
         world.component::<Events>();
         world.component::<Comms>();
         world.component::<EgressComm>();
-        world.component::<Blocks>();
 
         world.component::<AsyncRuntime>();
+        world.component::<Blocks>();
+
         world.component::<Tasks>();
 
         system!("run_tasks", world, &mut Tasks($))
@@ -373,6 +374,7 @@ impl HyperionCore {
             });
 
         world.set(IgnMap::default());
+        world.set(Blocks::empty(world));
 
         Ok(())
     }

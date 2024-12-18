@@ -2,6 +2,7 @@ use std::{borrow::Cow, cell::RefCell, io::Write, sync::Arc};
 
 use anyhow::{Context, bail};
 use bytes::BytesMut;
+use derive_more::Constructor;
 use glam::{I16Vec2, IVec2};
 use hyperion_nerd_font::NERD_ROCKET;
 use itertools::Itertools;
@@ -58,6 +59,7 @@ struct ChunkLoader {
     runtime: AsyncRuntime,
 }
 
+#[derive(Constructor)]
 pub struct ChunkLoaderHandle {
     tx_load_chunk_requests: tokio::sync::mpsc::UnboundedSender<Message>,
 }
@@ -70,7 +72,7 @@ impl ChunkLoaderHandle {
     }
 }
 
-pub fn launch_manager(shared: Arc<WorldShared>, runtime: &AsyncRuntime) -> ChunkLoaderHandle {
+pub fn launch_loader(shared: Arc<WorldShared>, runtime: &AsyncRuntime) -> ChunkLoaderHandle {
     let (tx_load_chunk_requests, rx_load_chunk_requests) = tokio::sync::mpsc::unbounded_channel();
 
     runtime.spawn({
@@ -90,6 +92,20 @@ pub fn launch_manager(shared: Arc<WorldShared>, runtime: &AsyncRuntime) -> Chunk
     ChunkLoaderHandle {
         tx_load_chunk_requests,
     }
+}
+
+pub fn launch_empty_loader(runtime: &AsyncRuntime) -> ChunkLoaderHandle {
+    let (tx_loaded_chunks, mut rx_loaded_chunks) =
+        tokio::sync::mpsc::unbounded_channel::<Message>();
+
+    runtime.spawn(async move {
+        while let Some(msg) = rx_loaded_chunks.recv().await {
+            let column = empty_column(msg.position);
+            msg.tx.send(column).unwrap();
+        }
+    });
+
+    ChunkLoaderHandle::new(tx_loaded_chunks)
 }
 
 impl ChunkLoader {
@@ -125,12 +141,12 @@ impl ChunkLoader {
                              version of Minecraft.\n\nExpected height: {CHUNK_HEIGHT_SPAN}, got \
                              {chunk_height}"
                         );
-                        empty_chunk(position)
+                        empty_column(position)
                     }
                 }
                 Err(err) => {
                     warn!("failed to load chunk {position:?}: {err}");
-                    empty_chunk(position)
+                    empty_column(position)
                 }
             };
 
@@ -149,7 +165,7 @@ impl ChunkLoader {
     }
 }
 
-fn empty_chunk(position: I16Vec2) -> Column {
+fn empty_column(position: I16Vec2) -> Column {
     // height: 24
     let unloaded = ColumnData::new_with(CHUNK_HEIGHT_SPAN, Section::empty_sky);
     let position = position.as_ivec2();
@@ -176,7 +192,7 @@ async fn load_chunk(position: I16Vec2, shared: &WorldShared) -> anyhow::Result<C
     let Ok(region) = shared.regions.get_region_from_chunk(x, y).await else {
         // most likely the file representing the region does not exist so we will just return en empty chunk
         warn!("region file for {position} does not exist; returning empty chunk");
-        return Ok(empty_chunk(position));
+        return Ok(empty_column(position));
     };
 
     let raw_chunk = {
