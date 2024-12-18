@@ -141,7 +141,7 @@ pub fn init_game(address: SocketAddr) -> anyhow::Result<()> {
         .enable_stats(true)
         .set_threads(i32::try_from(rayon::current_num_threads())?);
 
-    world.app().run();
+    app.run();
 
     Ok(())
 }

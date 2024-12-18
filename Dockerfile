@@ -48,11 +48,7 @@ RUN --mount=type=cache,target=${CARGO_HOME}/registry \
 
 FROM builder-base AS machete
 
-RUN --mount=type=cache,target=${CARGO_HOME}/registry \
-    --mount=type=cache,target=${CARGO_HOME}/git \
-    --mount=type=cache,target=/app/target \
-    cargo machete
-RUN touch machete-done
+RUN cargo machete && touch machete-done
 
 FROM builder-base AS clippy
 
@@ -72,11 +68,7 @@ RUN touch nextest-done
 
 FROM builder-base AS fmt
 
-RUN --mount=type=cache,target=${CARGO_HOME}/registry \
-    --mount=type=cache,target=${CARGO_HOME}/git \
-    --mount=type=cache,target=/app/target \
-    cargo fmt --all -- --check
-RUN touch fmt-done
+RUN cargo fmt --all -- --check && touch fmt-done
 
 FROM builder-base AS docs
 
