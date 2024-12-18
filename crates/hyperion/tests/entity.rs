@@ -16,7 +16,6 @@ struct TestModule;
 
 impl Module for TestModule {
     fn module(world: &World) {
-        world.import::<hyperion_genmap::GenMapModule>();
         world.import::<hyperion::HyperionCore>();
     }
 }
