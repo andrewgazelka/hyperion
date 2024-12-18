@@ -45,15 +45,54 @@ RUN --mount=type=cache,target=${CARGO_HOME}/registry \
     cargo fetch
 
 # CI stage for checks
-FROM builder-base AS ci
+
+FROM builder-base AS machete
 
 RUN --mount=type=cache,target=${CARGO_HOME}/registry \
     --mount=type=cache,target=${CARGO_HOME}/git \
     --mount=type=cache,target=/app/target \
-    cargo machete && \
-    cargo fmt --all -- --check && \
-    cargo clippy --workspace --benches --tests --examples --all-features --frozen -- -D warnings && \
+    cargo machete
+RUN touch machete-done
+
+FROM builder-base AS clippy
+
+RUN --mount=type=cache,target=${CARGO_HOME}/registry \
+    --mount=type=cache,target=${CARGO_HOME}/git \
+    --mount=type=cache,target=/app/target \
+    cargo clippy --workspace --benches --tests --examples --all-features --frozen -- -D warnings
+RUN touch clippy-done
+
+FROM builder-base AS nextest
+
+RUN --mount=type=cache,target=${CARGO_HOME}/registry \
+    --mount=type=cache,target=${CARGO_HOME}/git \
+    --mount=type=cache,target=/app/target \
     cargo nextest run --all-features --workspace --frozen
+RUN touch nextest-done
+
+FROM builder-base AS fmt
+
+RUN --mount=type=cache,target=${CARGO_HOME}/registry \
+    --mount=type=cache,target=${CARGO_HOME}/git \
+    --mount=type=cache,target=/app/target \
+    cargo fmt --all -- --check
+RUN touch fmt-done
+
+FROM builder-base AS docs
+
+RUN --mount=type=cache,target=${CARGO_HOME}/registry \
+    --mount=type=cache,target=${CARGO_HOME}/git \
+    --mount=type=cache,target=/app/target \
+    cargo doc --all-features --workspace --frozen --no-deps
+RUN touch docs-done
+
+FROM builder-base AS ci
+
+COPY --from=machete /app/machete-done /app/machete-done
+COPY --from=clippy /app/clippy-done /app/clippy-done
+COPY --from=nextest /app/nextest-done /app/nextest-done
+COPY --from=fmt /app/fmt-done /app/fmt-done
+COPY --from=docs /app/docs-done /app/docs-done
 
 # Release builder
 FROM builder-base AS build-release
