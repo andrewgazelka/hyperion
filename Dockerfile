@@ -83,7 +83,7 @@ FROM builder-base AS docs
 RUN --mount=type=cache,target=${CARGO_HOME}/registry \
     --mount=type=cache,target=${CARGO_HOME}/git \
     --mount=type=cache,target=/app/target \
-    cargo doc --all-features --workspace --frozen
+    cargo doc --all-features --workspace --frozen --no-deps
 RUN touch docs-done
 
 FROM builder-base AS ci
