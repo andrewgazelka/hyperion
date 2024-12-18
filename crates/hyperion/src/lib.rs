@@ -383,26 +383,21 @@ impl HyperionCore {
 /// A scratch buffer for intermediate operations. This will return an empty [`Vec`] when calling [`Scratch::obtain`].
 #[derive(Debug)]
 pub struct Scratch<A: Allocator = std::alloc::Global> {
-    inner: Vec<u8, A>,
+    inner: Box<[u8], A>,
 }
 
 impl Default for Scratch<std::alloc::Global> {
     fn default() -> Self {
-        let inner = Vec::with_capacity(MAX_PACKET_SIZE);
-        Self { inner }
+        std::alloc::Global.into()
     }
 }
 
 /// Nice for getting a buffer that can be used for intermediate work
-///
-/// # Safety
-/// - every single time [`ScratchBuffer::obtain`] is called, the buffer will be cleared before returning
-/// - the buffer has capacity of at least `MAX_PACKET_SIZE`
-pub unsafe trait ScratchBuffer: sealed::Sealed + Debug {
+pub trait ScratchBuffer: sealed::Sealed + Debug {
     /// The type of the allocator the [`Vec`] uses.
     type Allocator: Allocator;
-    /// Obtains a buffer that can be used for intermediate work.
-    fn obtain(&mut self) -> &mut Vec<u8, Self::Allocator>;
+    /// Obtains a buffer that can be used for intermediate work. The contents are unspecified.
+    fn obtain(&mut self) -> &mut [u8];
 }
 
 mod sealed {
@@ -411,20 +406,23 @@ mod sealed {
 
 impl<A: Allocator + Debug> sealed::Sealed for Scratch<A> {}
 
-unsafe impl<A: Allocator + Debug> ScratchBuffer for Scratch<A> {
+impl<A: Allocator + Debug> ScratchBuffer for Scratch<A> {
     type Allocator = A;
 
-    fn obtain(&mut self) -> &mut Vec<u8, Self::Allocator> {
-        self.inner.clear();
+    fn obtain(&mut self) -> &mut [u8] {
         &mut self.inner
     }
 }
 
 impl<A: Allocator> From<A> for Scratch<A> {
     fn from(allocator: A) -> Self {
-        Self {
-            inner: Vec::with_capacity_in(MAX_PACKET_SIZE, allocator),
-        }
+        // A zeroed slice is allocated to avoid reading from uninitialized memory, which is UB.
+        // Allocating zeroed memory is usually very cheap, so there are minimal performance
+        // penalties from this.
+        let inner = Box::new_zeroed_slice_in(MAX_PACKET_SIZE, allocator);
+        // SAFETY: The box was initialized to zero, and u8 can be represented by zero
+        let inner = unsafe { inner.assume_init() };
+        Self { inner }
     }
 }
 
