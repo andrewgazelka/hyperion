@@ -55,8 +55,16 @@ FROM builder-base AS builder-ci
 RUN --mount=type=cache,target=${CARGO_HOME}/registry \
     --mount=type=cache,target=${CARGO_HOME}/git \
     --mount=type=cache,target=/app/target \
-    cargo build && \
+    cargo clippy --workspace --benches --tests --examples --all-features --frozen -- -D warnings && \
     cargo nextest archive --archive-file tests.tar.zst
+
+FROM builder-ci as doc
+
+RUN --mount=type=cache,target=${CARGO_HOME}/registry \
+    --mount=type=cache,target=${CARGO_HOME}/git \
+    --mount=type=cache,target=/app/target \
+    cargo doc --all-features --workspace --frozen --no-deps && \
+    touch doc-done
 
 
 FROM builder-ci AS ci-part
@@ -64,7 +72,6 @@ FROM builder-ci AS ci-part
 RUN --mount=type=cache,target=${CARGO_HOME}/registry \
     --mount=type=cache,target=${CARGO_HOME}/git \
     --mount=type=cache,target=/app/target \
-        cargo clippy --workspace --benches --tests --examples --all-features --frozen -- -D warnings && \
         cargo doc --all-features --workspace --frozen --no-deps && \
         touch ci-part-done
 
@@ -85,6 +92,7 @@ COPY --from=ci-part /app/ci-part-done /app/ci-part-done
 COPY --from=machete /app/machete-done /app/machete-done
 COPY --from=fmt /app/fmt-done /app/fmt-done
 COPY --from=nextest /app/nextest-done /app/nextest-done
+COPY --from=doc /app/doc-done /app/doc-done
 
 # Release builder
 FROM builder-base AS build-release
