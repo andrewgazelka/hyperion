@@ -9,6 +9,8 @@ use valence_server::{ItemKind, entity::item_frame::ItemStack};
 
 use crate::simulation::skin::PlayerSkin;
 
+use super::blocks::RayCollision;
+
 #[derive(Component, Default, Debug)]
 pub struct ItemDropEvent {
     pub item: ItemStack,
@@ -145,4 +147,16 @@ pub enum ClientStatusCommand {
 pub struct ClientStatusEvent {
     pub client: Entity,
     pub status: ClientStatusCommand,
+}
+
+#[derive(Clone, Debug)]
+pub struct ProjectileEntityEvent {
+    pub client: Entity,
+    pub projectile: Entity,
+}
+
+#[derive(Clone, Debug)]
+pub struct ProjectileBlockEvent {
+    pub collision: RayCollision,
+    pub projectile: Entity,
 }
