@@ -429,13 +429,10 @@ impl Module for EntityStateSyncModule {
 
                 let center = **position;
 
+                // getting max distance
                 let distance = velocity.0.length();
 
-                debug!("Creatign Ray");
-
                 let ray = geometry::ray::Ray::new(center, velocity.0) * distance;
-
-                debug!("ray = {ray:?}");
 
                 let Some(collision) = get_first_collision(ray, &world) else {
                     // Drag (0.99 / 20.0)
@@ -450,12 +447,9 @@ impl Module for EntityStateSyncModule {
                     return;
                 };
 
-                debug!("Collision: {collision:?}");
-
                 match collision {
                     Either::Left(entity) => {
                         let entity = entity.entity_view(world);
-                        debug!("entity: {entity:?}");
                         // send event
                         world.get::<&mut Events>(|events| events.push(
                             event::ProjectileEntityEvent {
@@ -466,7 +460,6 @@ impl Module for EntityStateSyncModule {
                         ));
                     }
                     Either::Right(collision) => {
-                        debug!("block: {collision:?}");
                         // send event
                         world.get::<&mut Events>(|events| events.push(
                             event::ProjectileBlockEvent {
