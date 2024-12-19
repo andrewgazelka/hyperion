@@ -34,7 +34,7 @@ impl Module for BowModule {
         system!(
             "handle_bow_release",
             world,
-            &mut EventQueue<event::ReleaseUseItem>,
+            &mut EventQueue<event::ReleaseUseItem>($),
         )
         .singleton()
         .kind::<flecs::pipeline::PostUpdate>()
