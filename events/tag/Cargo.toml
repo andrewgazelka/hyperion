@@ -27,11 +27,12 @@ tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 tracing-tracy = { workspace = true }
 uuid = { workspace = true }
+hyperion-respawn = { workspace = true }
 valence_protocol = { workspace = true }
 valence_server = { workspace = true }
 
 [dev-dependencies]
-tracing = {workspace = true, features = ["release_max_level_info"]}
+tracing = { workspace = true, features = ["release_max_level_info"] }
 
 [lints]
 workspace = true

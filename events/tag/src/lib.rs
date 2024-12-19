@@ -80,6 +80,7 @@ impl Module for TagModule {
         world.import::<SkinModule>();
         world.import::<VanishModule>();
         world.import::<hyperion_genmap::GenMapModule>();
+        world.import::<hyperion_respawn::RespawnModule>();
 
         world.get::<&mut CommandRegistry>(|registry| {
             command::register(registry, world);

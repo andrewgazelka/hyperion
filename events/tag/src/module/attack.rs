@@ -30,6 +30,7 @@ use hyperion::{
     },
 };
 use hyperion_inventory::PlayerInventory;
+use hyperion_rank_tree::Team;
 use hyperion_utils::EntityExt;
 use tracing::info_span;
 
@@ -139,17 +140,20 @@ impl Module for AttackModule {
                     for event in event_queue.drain() {
                         let target = world.entity_from_id(event.target);
                         let origin = world.entity_from_id(event.origin);
-                        origin.get::<(&Position, &mut KillCount, &mut PlayerInventory, &mut Armor, &CombatStats, &PlayerInventory)>(|(origin_pos, kill_count, inventory, origin_armor, from_stats, from_inventory)| {
+                        origin.get::<(&ConnectionId, &Position, &mut KillCount, &mut PlayerInventory, &mut Armor, &CombatStats, &PlayerInventory, &Team)>(|(origin_connection, origin_pos, kill_count, inventory, origin_armor, from_stats, from_inventory, origin_team)| {
                             let damage = from_stats.damage + calculate_stats(from_inventory).damage;
                             target.try_get::<(
+                                &ConnectionId,
                                 Option<&mut ImmuneUntil>,
                                 &mut Health,
                                 &mut Position,
                                 &Yaw,
                                 &CombatStats,
-                                &PlayerInventory
+                                &PlayerInventory,
+                                &Team,
+                                &mut Pose
                             )>(
-                                |(immune_until, health, target_position, target_yaw, stats, target_inventory)| {
+                                |(target_connection, immune_until, health, target_position, target_yaw, stats, target_inventory, target_team, target_pose)| {
                                     if let Some(immune_until) = immune_until {
                                         if immune_until.tick > current_tick {
                                             return;
@@ -157,6 +161,16 @@ impl Module for AttackModule {
                                         immune_until.tick = current_tick + IMMUNE_TICK_DURATION;
                                     }
 
+                                    if target_team == origin_team {
+                                        let msg = "§cCannot attack teammates";
+                                        let pkt_msg = play::GameMessageS2c {
+                                            chat: msg.into_cow_text(),
+                                            overlay: false,
+                                        };
+
+                                        compose.unicast(&pkt_msg, *origin_connection, system).unwrap();
+                                        return;
+                                    }
 
                                     let calculated_stats = calculate_stats(target_inventory);
                                     let armor = stats.armor + calculated_stats.armor;
@@ -199,21 +213,18 @@ impl Module for AttackModule {
                                     .seed(fastrand::i64(..))
                                     .build();
 
-                                    target.entity_view(world)
-                                    .get::<&ConnectionId>(|stream| {
-                                        compose.unicast(&pkt_hurt, *stream, system).unwrap();
-                                        compose.unicast(&pkt_health, *stream, system).unwrap();
+                                    compose.unicast(&pkt_hurt, *target_connection, system).unwrap();
+                                    compose.unicast(&pkt_health, *target_connection, system).unwrap();
 
-                                        if health.is_dead() {
-                                            let attacker_name = origin.name();
-                                            // Even if enable_respawn_screen is false, the client needs this to send ClientCommandC2s and initiate its respawn
-                                            let pkt_death_screen = play::DeathMessageS2c {
-                                                player_id: VarInt(target.minecraft_id()),
-                                                message: format!("You were killed by {attacker_name}").into_cow_text()
-                                            };
-                                            compose.unicast(&pkt_death_screen, *stream, system).unwrap();
-                                        }
-                                    });
+                                    if health.is_dead() {
+                                        let attacker_name = origin.name();
+                                        // Even if enable_respawn_screen is false, the client needs this to send ClientCommandC2s and initiate its respawn
+                                        let pkt_death_screen = play::DeathMessageS2c {
+                                            player_id: VarInt(target.minecraft_id()),
+                                            message: format!("You were killed by {attacker_name}").into_cow_text()
+                                        };
+                                        compose.unicast(&pkt_death_screen, *target_connection, system).unwrap();
+                                    }
                                     compose.broadcast(&sound, system).send().unwrap();
                                     compose.broadcast(&pkt_damage_event, system).send().unwrap();
 
@@ -256,11 +267,18 @@ impl Module for AttackModule {
                                             ],
                                         };
 
+                                        let entities_to_remove = [VarInt(target.minecraft_id())];
+                                        let pkt_remove_entities = play::EntitiesDestroyS2c {
+                                            entity_ids: Cow::Borrowed(&entities_to_remove)
+                                        };
+
+                                        *target_pose = Pose::Dying;
+                                        target.modified::<Pose>();
                                         compose.broadcast(&pkt, system).send().unwrap();
                                         compose.broadcast(&particle_pkt, system).send().unwrap();
                                         compose.broadcast(&particle_pkt2, system).send().unwrap();
                                         compose.broadcast(&pkt_entity_status, system).send().unwrap();
-                                        target.set::<Pose>(Pose::Dying);
+                                        compose.broadcast(&pkt_remove_entities, system).send().unwrap();
 
                                         // Create NBT for enchantment protection level 1
                                         let mut protection_nbt = nbt::Compound::new();
@@ -441,8 +459,8 @@ impl Module for AttackModule {
                                         // player died, increment kill count
                                         kill_count.kill_count += 1;
 
-                                        // Respawning player TODO : Restore target's health
-                                        // send respawn and teleport packets
+                                        target.set::<Team>(*origin_team);
+
                                         return;
                                     }
 
@@ -496,6 +514,7 @@ const fn calculate_damage(item: &ItemStack) -> f32 {
         ItemKind::IronSword => 6.0,
         ItemKind::DiamondSword => 7.0,
         ItemKind::NetheriteSword => 8.0,
+        ItemKind::WoodenPickaxe => 2.0,
         _ => 1.0,
     }
 }
@@ -541,7 +560,7 @@ const fn calculate_toughness(item: &ItemStack) -> f32 {
 }
 
 fn calculate_stats(inventory: &PlayerInventory) -> CombatStats {
-    let hand = inventory.get_hand_slot(0).unwrap();
+    let hand = inventory.get_cursor();
     let damage = calculate_damage(hand);
     let armor = calculate_armor(inventory.get_helmet())
         + calculate_armor(inventory.get_chestplate())

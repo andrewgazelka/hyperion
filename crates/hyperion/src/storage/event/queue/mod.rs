@@ -58,6 +58,7 @@ define_events! {
     event::SwingArm,
     event::ToggleDoor,
     event::ReleaseUseItem,
+    event::ClientStatusEvent
 }
 
 pub trait ReducedLifetime {

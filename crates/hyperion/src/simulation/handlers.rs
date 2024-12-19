@@ -28,6 +28,7 @@ use super::{
     block_bounds,
     blocks::Blocks,
     bow::BowCharging,
+    event::ClientStatusEvent,
 };
 use crate::{
     net::{Compose, ConnectionId, decoder::BorrowedPacketFrame},
@@ -613,6 +614,22 @@ pub fn request_command_completions(
     Ok(())
 }
 
+pub fn client_status(mut data: &'static [u8], query: &PacketSwitchQuery<'_>) -> anyhow::Result<()> {
+    let pkt = play::ClientStatusC2s::decode(&mut data)?;
+
+    let command = ClientStatusEvent {
+        client: query.id,
+        status: match pkt {
+            play::ClientStatusC2s::PerformRespawn => event::ClientStatusCommand::PerformRespawn,
+            play::ClientStatusC2s::RequestStats => event::ClientStatusCommand::RequestStats,
+        },
+    };
+
+    query.events.push(command, query.world);
+
+    Ok(())
+}
+
 pub fn packet_switch(
     raw: BorrowedPacketFrame<'_>,
     query: &mut PacketSwitchQuery<'_>,
@@ -628,6 +645,7 @@ pub fn packet_switch(
         play::ChatMessageC2s::ID => chat_message(data, query)?,
         play::ClickSlotC2s::ID => click_slot(data, query)?,
         play::ClientCommandC2s::ID => client_command(data, query)?,
+        play::ClientStatusC2s::ID => client_status(data, query)?,
         play::CommandExecutionC2s::ID => chat_command(data, query)?,
         play::CreativeInventoryActionC2s::ID => creative_inventory_action(data, query)?,
         play::CustomPayloadC2s::ID => custom_payload(data, query)?,

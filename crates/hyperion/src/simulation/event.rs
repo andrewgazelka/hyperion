@@ -134,3 +134,15 @@ pub struct Command<'a> {
 }
 
 pub struct BlockInteract {}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ClientStatusCommand {
+    PerformRespawn,
+    RequestStats,
+}
+
+#[derive(Clone, Debug)]
+pub struct ClientStatusEvent {
+    pub client: Entity,
+    pub status: ClientStatusCommand,
+}
