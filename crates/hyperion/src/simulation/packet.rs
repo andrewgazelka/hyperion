@@ -108,7 +108,7 @@ impl HandlerRegistry {
             handler(packet)?;
         }
 
-        drop(packet);
+        unsafe { dropper(packet) };
 
         Ok(())
     }
