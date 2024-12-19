@@ -4,9 +4,11 @@ use anyhow::Result;
 use rustc_hash::FxBuildHasher;
 use valence_protocol::{Decode, Packet, packets::play::ChatMessageC2s};
 
+type TempAny<'a> = Box<dyn std::any::Any + Send + Sync + 'a>;
+
 // We'll store the deserialization function separately from handlers
-type DeserializerFn =
-    Box<dyn for<'a> Fn(&'a [u8]) -> Result<Box<dyn std::any::Any + Send + Sync + 'a>>>;
+type DeserializerFn = Box<dyn for<'a> Fn(&'a [u8]) -> Result<TempAny<'a>> + 'static>;
+
 type PacketHandler = Box<dyn Fn(&(dyn std::any::Any + Send + Sync)) -> Result<()>>;
 
 pub struct HandlerRegistry {
@@ -43,8 +45,10 @@ impl HandlerRegistry {
     }
 
     // Add a handler for a packet type
-    pub fn add_handler<P>(&mut self, handler: impl for<'a> Fn(&'a P) -> Result<()> + Send + Sync)
-    where
+    pub fn add_handler<P>(
+        &mut self,
+        handler: impl for<'a> Fn(&'a P) -> Result<()> + Send + Sync + 'static,
+    ) where
         P: Packet + Send + Sync + for<'a> Decode<'a>,
     {
         // Ensure the packet type is registered
@@ -65,7 +69,7 @@ impl HandlerRegistry {
     }
 
     // Process a packet, calling all registered handlers
-    pub fn process_packet(&self, id: i32, bytes: &[u8]) -> Result<()> {
+    pub fn process_packet<'a>(&self, id: i32, bytes: &'a [u8]) -> Result<()> {
         // Get the deserializer
         let deserializer = self
             .deserializers
@@ -80,7 +84,7 @@ impl HandlerRegistry {
         //     .handlers
         //     .get(&id)
         //     .ok_or_else(|| anyhow::anyhow!("No handlers registered for packet ID: {}", id))?;
-        // 
+        //
         // // Call all handlers with the deserialized packet
         // for handler in handlers {
         //     handler(&*packet)?;
