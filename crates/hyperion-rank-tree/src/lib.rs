@@ -6,7 +6,7 @@ use flecs_ecs::{
 };
 use hyperion::{
     simulation::{Player, handlers::PacketSwitchQuery},
-    storage::{EventFn, InteractEvent},
+    storage::{BoxedEventFn, InteractEvent},
 };
 
 pub mod inventory;
@@ -66,7 +66,7 @@ impl Module for RankTree {
             .component::<Player>()
             .add_trait::<(flecs::With, Class)>();
 
-        let handler: EventFn<InteractEvent> = Box::new(|query: &mut PacketSwitchQuery<'_>, _| {
+        let handler: BoxedEventFn<InteractEvent> = Box::new(|query: &mut PacketSwitchQuery<'_>, _| {
             let cursor = query.inventory.get_cursor();
             tracing::debug!("clicked {cursor:?}");
         });

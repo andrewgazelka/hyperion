@@ -30,6 +30,7 @@ members = [
     'crates/hyperion-nerd-font',
     'crates/hyperion-palette',
     'crates/hyperion-permission',
+    'crates/hyperion-plugin-channel',
     'crates/hyperion-proto',
     'crates/hyperion-proxy',
     'crates/hyperion-rank-tree',
@@ -182,6 +183,9 @@ path = 'crates/hyperion-palette'
 
 [workspace.dependencies.hyperion-permission]
 path = 'crates/hyperion-permission'
+
+[workspace.dependencies.hyperion-plugin-channel]
+path = 'crates/hyperion-plugin-channel'
 
 [workspace.dependencies.hyperion-proto]
 path = 'crates/hyperion-proto'
