@@ -1,0 +1,14 @@
+[package]
+name = "hyperion-plugin-channel"
+version.workspace = true
+edition.workspace = true
+authors = ["Andrew Gazelka <andrew.gazelka@gmail.com>"]
+readme = "README.md"
+publish = false
+
+[dependencies]
+flecs_ecs.workspace = true
+hyperion.workspace = true
+
+[lints]
+workspace = true

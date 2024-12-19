@@ -4,7 +4,7 @@ use flecs_ecs::{
     macros::Component,
     prelude::Module,
 };
-use hyperion::storage::{EventFn, GlobalEventHandlers, InteractEvent};
+use hyperion::storage::{BoxedEventFn, GlobalEventHandlers, InteractEvent};
 use valence_protocol::nbt;
 
 pub mod builder;
@@ -14,7 +14,7 @@ pub struct ItemModule;
 
 #[derive(Component, Constructor, Deref, DerefMut)]
 pub struct Handler {
-    on_click: EventFn<InteractEvent>,
+    on_click: BoxedEventFn<InteractEvent>,
 }
 
 impl Module for ItemModule {
