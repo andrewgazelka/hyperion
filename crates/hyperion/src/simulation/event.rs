@@ -135,7 +135,7 @@ pub struct Command<'a> {
 
 pub struct BlockInteract {}
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum ClientStatusCommand {
     PerformRespawn,
     RequestStats,

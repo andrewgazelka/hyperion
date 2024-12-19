@@ -6,14 +6,16 @@ use hyperion::{
         prelude::Module,
     },
     net::{Compose, ConnectionId},
-    protocol::{game_mode::OptGameMode, packets::play, VarInt},
+    protocol::{game_mode::OptGameMode, packets::play, ByteAngle, VarInt},
     server::{ident, GameMode},
     simulation::{
-        event::ClientStatusEvent,
+        event::{ClientStatusCommand, ClientStatusEvent},
         metadata::{entity::Pose, living_entity::Health},
+        Pitch, Position, Uuid, Yaw,
     },
     storage::EventQueue,
 };
+use hyperion_utils::EntityExt;
 
 #[derive(Component)]
 pub struct RespawnModule;
@@ -26,9 +28,21 @@ impl Module for RespawnModule {
                 let world = it.world();
                 let system = it.system();
                 for event in event_queue.drain() {
+                    if event.status == ClientStatusCommand::RequestStats {
+                        continue;
+                    }
+
                     let client = event.client.entity_view(world);
-                    client.get::<(&ConnectionId, &mut Health, &mut Pose)>(
-                        |(connection, health, pose)| {
+                    client.get::<(
+                        &ConnectionId,
+                        &mut Health,
+                        &mut Pose,
+                        &Uuid,
+                        &Position,
+                        &Yaw,
+                        &Pitch,
+                    )>(
+                        |(connection, health, pose, uuid, position, yaw, pitch)| {
                             health.heal(20.);
 
                             *pose = Pose::Standing;
@@ -53,8 +67,17 @@ impl Module for RespawnModule {
                                 portal_cooldown: VarInt::default(),
                             };
 
+                            let pkt_add_player = play::PlayerSpawnS2c {
+                                entity_id: VarInt(client.minecraft_id()),
+                                player_uuid: uuid.0,
+                                position: position.as_dvec3(),
+                                yaw: ByteAngle::from_degrees(**yaw),
+                                pitch: ByteAngle::from_degrees(**pitch),
+                            };
+
                             compose.unicast(&pkt_health, *connection, system).unwrap();
                             compose.unicast(&pkt_respawn, *connection, system).unwrap();
+                            compose.broadcast(&pkt_add_player, system).send().unwrap();
                         },
                     );
                 }

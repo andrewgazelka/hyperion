@@ -267,12 +267,18 @@ impl Module for AttackModule {
                                             ],
                                         };
 
+                                        let entities_to_remove = [VarInt(target.minecraft_id())];
+                                        let pkt_remove_entities = play::EntitiesDestroyS2c {
+                                            entity_ids: Cow::Borrowed(&entities_to_remove)
+                                        };
+
+                                        *target_pose = Pose::Dying;
+                                        target.modified::<Pose>();
                                         compose.broadcast(&pkt, system).send().unwrap();
                                         compose.broadcast(&particle_pkt, system).send().unwrap();
                                         compose.broadcast(&particle_pkt2, system).send().unwrap();
                                         compose.broadcast(&pkt_entity_status, system).send().unwrap();
-                                        *target_pose = Pose::Dying;
-                                        target.modified::<Pose>();
+                                        compose.broadcast(&pkt_remove_entities, system).send().unwrap();
 
                                         // Create NBT for enchantment protection level 1
                                         let mut protection_nbt = nbt::Compound::new();
