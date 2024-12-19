@@ -88,6 +88,7 @@ pub mod ingress;
 pub mod net;
 pub mod simulation;
 pub mod storage;
+pub mod spatial;
 
 /// Relationship for previous values
 #[derive(Component)]
