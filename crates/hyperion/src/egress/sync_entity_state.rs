@@ -442,8 +442,8 @@ impl Module for EntityStateSyncModule {
                     // Gravity (20 MPSS)
                     velocity.0.y -= 0.05;
 
-                    // Terminal Velocity (100.0)
-                    velocity.0 = velocity.0.clamp_length(0.0, 100.0);
+                    // Terminal Velocity max (100.0)
+                    velocity.0 = velocity.0.clamp_length_max(100.0);
                     return;
                 };
 
