@@ -1,10 +1,12 @@
-use std::{collections::HashMap, ptr::NonNull};
+use std::{
+    alloc::{Layout, dealloc},
+    collections::HashMap,
+    ptr::NonNull,
+};
 
 use anyhow::Result;
 use rustc_hash::FxBuildHasher;
 use valence_protocol::{Decode, Packet, packets::play::ChatMessageC2s};
-
-type TempAny<'a> = Box<dyn std::any::Any + Send + Sync + 'a>;
 
 // We'll store the deserialization function separately from handlers
 type DeserializerFn = Box<dyn Fn(&[u8]) -> Result<NonNull<u8>>>;
@@ -47,12 +49,15 @@ impl HandlerRegistry {
 
         self.droppers.insert(
             P::ID,
-            std::mem::needs_drop::<P>().then_some(Self::drop_ptr::<P> as _),
+            std::mem::needs_drop::<P>().then_some(Self::dealloc_ptr::<P> as _),
         );
     }
 
-    unsafe fn drop_ptr<T>(ptr: NonNull<u8>) {
-        unsafe { ptr.cast::<T>().as_ptr().drop_in_place() }
+    unsafe fn dealloc_ptr<T>(ptr: NonNull<u8>) {
+        unsafe {
+            ptr.cast::<T>().as_ptr().drop_in_place();
+            dealloc(ptr.as_ptr(), Layout::new::<T>());
+        }
     }
 
     // Add a handler for a packet type
@@ -108,10 +113,13 @@ impl HandlerRegistry {
             unsafe { drop(packet) };
         }
 
+        unsafe { drop(Box::from_raw(packet.as_ptr())) };
+
         Ok(())
     }
 }
 
+#[test]
 fn main() -> Result<()> {
     let mut registry = HandlerRegistry::new();
 
