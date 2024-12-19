@@ -17,7 +17,7 @@ pub struct HandlerRegistry {
     // Store deserializer and multiple handlers separately
     deserializers: HashMap<i32, DeserializerFn, FxBuildHasher>,
     handlers: HashMap<i32, Vec<PacketHandler>, FxBuildHasher>,
-    droppers: HashMap<i32, Option<unsafe fn(NonNull<u8>)>, FxBuildHasher>,
+    droppers: HashMap<i32, unsafe fn(NonNull<u8>), FxBuildHasher>,
 }
 
 impl HandlerRegistry {
@@ -47,15 +47,14 @@ impl HandlerRegistry {
         // Initialize the handlers vector if it doesn't exist
         self.handlers.entry(P::ID).or_insert_with(Vec::new);
 
-        self.droppers.insert(
-            P::ID,
-            std::mem::needs_drop::<P>().then_some(Self::dealloc_ptr::<P> as _),
-        );
+        self.droppers.insert(P::ID, Self::dealloc_ptr::<P> as _);
     }
 
     unsafe fn dealloc_ptr<T>(ptr: NonNull<u8>) {
         unsafe {
-            ptr.cast::<T>().as_ptr().drop_in_place();
+            if std::mem::needs_drop::<P>() {
+                ptr.cast::<T>().as_ptr().drop_in_place();
+            }
             dealloc(ptr.as_ptr(), Layout::new::<T>());
         }
     }
@@ -109,17 +108,12 @@ impl HandlerRegistry {
             handler(packet)?;
         }
 
-        if let Some(drop) = dropper {
-            unsafe { drop(packet) };
-        }
-
-        unsafe { drop(Box::from_raw(packet.as_ptr())) };
+        drop(packet);
 
         Ok(())
     }
 }
 
-#[test]
 fn main() -> Result<()> {
     let mut registry = HandlerRegistry::new();
 
