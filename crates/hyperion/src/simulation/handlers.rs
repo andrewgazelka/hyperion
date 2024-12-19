@@ -23,16 +23,11 @@ use valence_protocol::{
 use valence_text::IntoText;
 
 use super::{
-    ConfirmBlockSequences, EntitySize, Position,
-    animation::{self, ActiveAnimation},
-    block_bounds,
-    blocks::Blocks,
-    bow::BowCharging,
-    event::ClientStatusEvent,
+    animation::{self, ActiveAnimation, Kind}, block_bounds, blocks::Blocks, bow::BowCharging, event::ClientStatusEvent, ConfirmBlockSequences, EntitySize, Position
 };
 use crate::{
     net::{Compose, ConnectionId, decoder::BorrowedPacketFrame},
-    simulation::{Pitch, Yaw, aabb, event, event::PluginMessage, metadata::entity::Pose},
+    simulation::{Pitch, Yaw, aabb, event, event::PluginMessage, metadata::entity::Pose, metadata::living_entity::HandStates},
     storage::{
         ClickSlotEvent, CommandCompletionRequest, Events, GlobalEventHandlers, InteractEvent,
     },
@@ -298,6 +293,8 @@ fn player_action(mut data: &[u8], query: &PacketSwitchQuery<'_>) -> anyhow::Resu
                 item: query.inventory.get_cursor().item,
             };
 
+            query.id.entity_view(query.world).set(HandStates::new(0));
+
             query.events.push(event, query.world);
         }
         action => bail!("unimplemented {action:?}"),
@@ -364,6 +361,8 @@ pub fn player_interact_item(
                     return;
                 }
                 entity.set(BowCharging::now());
+
+                entity.set(HandStates::new(1));
             });
         }
     }
