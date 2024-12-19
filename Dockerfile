@@ -107,10 +107,10 @@ ENV LD_LIBRARY_PATH=/usr/lib
 
 RUN --mount=type=cache,target=${CARGO_HOME}/registry \
     --mount=type=cache,target=${CARGO_HOME}/git \
-    --mount=type=cache,target=/app/target \
-    cargo build --frozen && \
-    cp target/debug/hyperion-proxy /app/hyperion-proxy && \
-    cp target/debug/tag /app/tag
+    --mount=type=cache,target=/antithesis-target \
+    cargo build --frozen --target-dir /antithesis-target && \
+    cp /antithesis-target/debug/hyperion-proxy /app/hyperion-proxy && \
+    cp /antithesis-target/debug/tag /app/tag
 
 # Verify instrumentation was successful
 #RUN nm target/debug/hyperion-proxy | grep "sanitizer_cov_trace_pc_guard" && \
