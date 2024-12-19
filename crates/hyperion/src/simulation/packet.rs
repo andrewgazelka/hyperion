@@ -52,7 +52,7 @@ impl HandlerRegistry {
 
     unsafe fn dealloc_ptr<T>(ptr: NonNull<u8>) {
         unsafe {
-            if std::mem::needs_drop::<P>() {
+            if std::mem::needs_drop::<T>() {
                 ptr.cast::<T>().as_ptr().drop_in_place();
             }
             dealloc(ptr.as_ptr(), Layout::new::<T>());
