@@ -2,10 +2,12 @@ use flecs_ecs::{
     core::{EntityViewGet, World},
     prelude::*,
 };
+use glam::I16Vec2;
 use hyperion::{
     ItemKind, ItemStack,
     glam::Vec3,
     net::Compose,
+    valence_protocol::packets::play,
     simulation::{
         Pitch, Position, Spawn, Uuid, Velocity, Yaw, bow::BowCharging, entity_kind::EntityKind,
         event, get_direction_from_rotation, metadata::living_entity::ArrowsInEntity,
@@ -13,7 +15,9 @@ use hyperion::{
     storage::{EventQueue, Events},
 };
 use hyperion_inventory::PlayerInventory;
+use hyperion_utils::EntityExt;
 use tracing::debug;
+use valence_protocol::VarInt;
 
 #[derive(Component)]
 pub struct BowModule;
@@ -117,21 +121,33 @@ impl Module for BowModule {
         system!(
             "arrow_entity_hit",
             world,
+            &Compose($),
             &mut EventQueue<event::ProjectileEntityEvent>,
         )
         .singleton()
         .kind::<flecs::pipeline::PostUpdate>()
-        .each_iter(move |it, _, event_queue| {
-            let _system = it.system();
+        .each_iter(move |it, _, (compose, event_queue)| {
+            let system = it.system();
             let world = it.world();
 
             for event in event_queue.drain() {
-                let (damage, owner) = event
+                let (damage, owner, chunk_pos) = event
                     .projectile
                     .entity_view(world)
                     .get::<(&Velocity, &Owner)>(|(velocity, owner)| {
-                        (velocity.0.length() * 2.0, owner.entity)
+                        if owner.entity == event.client {
+                            return (0.0, owner.entity, I16Vec2::ZERO);
+                        }
+                        let chunck_pos = event.client.entity_view(world).get::<&Position>(|pos| {
+                            pos.to_chunk()
+                        });
+                        (velocity.0.length() * 2.0, owner.entity, chunck_pos)
                     });
+                
+                if damage == 0.0 && owner == event.client {
+                    continue;
+                }
+
                 event
                     .client
                     .entity_view(world)
@@ -139,7 +155,11 @@ impl Module for BowModule {
                         arrows.0 += 1;
                     });
                 
-                // Destroy the arrow
+                let packet = play::EntitiesDestroyS2c {
+                    entity_ids: vec![VarInt(event.projectile.minecraft_id() as i32)].into(),
+                };
+                compose.broadcast_local(&packet, chunk_pos, system).send().unwrap();
+
                 event.projectile.entity_view(world).destruct();
 
                 world.get::<&Events>(|events| {
