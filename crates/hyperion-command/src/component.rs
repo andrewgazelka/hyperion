@@ -3,12 +3,12 @@ use flecs_ecs::{
     macros::Component,
     prelude::Module,
 };
-use hyperion::storage::{CommandCompletionRequest, EventFn};
+use hyperion::storage::{CommandCompletionRequest, BoxedEventFn};
 use indexmap::IndexMap;
 
 pub struct CommandHandler {
     pub on_execute: fn(input: &str, system: EntityView<'_>, caller: Entity),
-    pub on_tab_complete: EventFn<CommandCompletionRequest<'static>>,
+    pub on_tab_complete: BoxedEventFn<CommandCompletionRequest<'static>>,
     pub has_permissions: fn(world: &World, caller: Entity) -> bool,
 }
 

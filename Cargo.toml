@@ -42,6 +42,7 @@ members = [
   'crates/system-order',
   'events/tag',
   'tools/packet-inspector',
+  'crates/hyperion-plugin-channel',
 ]
 resolver = '2'
 
@@ -71,7 +72,7 @@ flume = '0.11.1'
 futures-util = '0.3.31'
 glam = '0.29.0'
 heapless = '0.8.0'
-heed = "0.21.0"
+heed = '0.21.0'
 hex = '0.4.3'
 humantime = '2.1.0'
 itertools = '0.13.0'
@@ -178,6 +179,9 @@ path = 'crates/hyperion-palette'
 
 [workspace.dependencies.hyperion-permission]
 path = 'crates/hyperion-permission'
+
+[workspace.dependencies.hyperion-plugin-channel]
+path = 'crates/hyperion-plugin-channel'
 
 [workspace.dependencies.hyperion-proto]
 path = 'crates/hyperion-proto'
