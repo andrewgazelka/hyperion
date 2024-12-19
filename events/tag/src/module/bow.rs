@@ -3,9 +3,14 @@ use flecs_ecs::{
     prelude::*,
 };
 use hyperion::{
-    glam::Vec3, net::Compose, simulation::{
-        bow::BowCharging, entity_kind::EntityKind, event, get_direction_from_rotation, metadata::living_entity::ArrowsInEntity, Pitch, Position, Spawn, Uuid, Velocity, Yaw
-    }, storage::{EventQueue, Events}, ItemKind, ItemStack
+    ItemKind, ItemStack,
+    glam::Vec3,
+    net::Compose,
+    simulation::{
+        Pitch, Position, Spawn, Uuid, Velocity, Yaw, bow::BowCharging, entity_kind::EntityKind,
+        event, get_direction_from_rotation, metadata::living_entity::ArrowsInEntity,
+    },
+    storage::{EventQueue, Events},
 };
 use hyperion_inventory::PlayerInventory;
 use tracing::debug;
@@ -15,7 +20,7 @@ pub struct BowModule;
 
 #[derive(Component)]
 pub struct Owner {
-    pub entity: Entity,
+    entity: Entity,
 }
 
 impl Owner {
@@ -33,9 +38,7 @@ impl Module for BowModule {
             world,
             &mut EventQueue<event::ReleaseUseItem>,
         )
-        .term_at(0u32)
         .singleton()
-        .multi_threaded()
         .kind::<flecs::pipeline::PostUpdate>()
         .each_iter(move |it, _, event_queue| {
             let _system = it.system();
@@ -87,8 +90,6 @@ impl Module for BowModule {
                             })
                             .unwrap_or(0.0);
 
-                        debug!("charge: {charge}");
-
                         // Calculate the direction vector from the player's rotation
                         let direction = get_direction_from_rotation(**yaw, **pitch);
                         // Calculate the velocity of the arrow based on the charge (3.0 is max velocity)
@@ -96,13 +97,6 @@ impl Module for BowModule {
 
                         let spawn_pos =
                             Vec3::new(position.x, position.y + 1.62, position.z) + direction * 0.5;
-
-                        debug!(
-                            "Arrow velocity: ({}, {}, {})",
-                            velocity.x, velocity.y, velocity.z
-                        );
-
-                        debug!("Arrow Yaw: {}, Arrow Pitch: {}", **yaw, **pitch);
 
                         // Spawn arrow
                         world
@@ -113,7 +107,7 @@ impl Module for BowModule {
                             .set(Velocity::new(velocity.x, velocity.y, velocity.z))
                             .set(Pitch::new(**pitch))
                             .set(Yaw::new(**yaw))
-                            //.set(Owner::new(*player))
+                            .set(Owner::new(*player))
                             .enqueue(Spawn);
                     },
                 );
@@ -126,42 +120,60 @@ impl Module for BowModule {
             &mut EventQueue<event::ProjectileEntityEvent>,
         )
         .singleton()
-        .multi_threaded()
         .kind::<flecs::pipeline::PostUpdate>()
         .each_iter(move |it, _, event_queue| {
             let _system = it.system();
             let world = it.world();
 
             for event in event_queue.drain() {
+                let (damage, owner) = event
+                    .projectile
+                    .entity_view(world)
+                    .get::<(&Velocity, &Owner)>(|(velocity, owner)| {
+                        (velocity.0.length() * 2.0, owner.entity)
+                    });
+                event
+                    .client
+                    .entity_view(world)
+                    .get::<&mut ArrowsInEntity>(|arrows| {
+                        arrows.0 += 1;
+                    });
+                
+                // Destroy the arrow
+                event.projectile.entity_view(world).destruct();
 
-                debug!("arrow_entity_hit: {event:?}");
+                world.get::<&Events>(|events| {
+                    events.push(
+                        event::AttackEntity {
+                            origin: owner,
+                            target: event.client,
+                            damage: damage,
+                        },
+                        &world,
+                    );
+                })
+            }
+        });
+
+        system!(
+            "arrow_block_hit",
+            world,
+            &mut EventQueue<event::ProjectileBlockEvent>,
+        )
+        .singleton()
+        .kind::<flecs::pipeline::PostUpdate>()
+        .each_iter(move |it, _, event_queue| {
+            let _system = it.system();
+            let world = it.world();
+
+            for event in event_queue.drain() {
                 event
                     .projectile
                     .entity_view(world)
-                    .get::<&Owner>(| owner| {
-                        debug!("Sending attack event");
-                        world.get::<&Events>(|events| {
-                            events.push(
-                                event::AttackEntity {
-                                    origin: owner.entity,
-                                    target: event.client,
-                                    damage: 1.0,
-                                },
-                                &world,
-                            )
-                        });
-
-                        // Updating arrows in entity
-                        debug!("Updating arrows in entity");
-                        event.client
-                            .entity_view(world)
-                            .get::<&mut ArrowsInEntity>(|arrows| {
-                                arrows.0 += 1;
-                            });
-
+                    .get::<(&mut Position, &mut Velocity)>(|(position, velocity)| {
+                        velocity.0 = Vec3::ZERO;
+                        **position = event.collision.normal;
                     });
-
-                event.projectile.entity_view(world).destruct();
             }
         });
     }

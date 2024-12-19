@@ -154,8 +154,8 @@ impl Blocks {
                 continue;
             };
 
-            let collision_point = ray.origin() + ray.direction() * min_dist.into_inner();
-            let collision_normal = (collision_point - origin).normalize();
+            let collision_normal = ray.origin() + ray.direction() * min_dist.into_inner();
+            //let collision_normal = (collision_point - origin).normalize();
 
             match &min {
                 Some(current_min) => {
