@@ -55,7 +55,7 @@ RUN --mount=type=cache,target=${CARGO_HOME}/registry \
     --mount=type=cache,target=${CARGO_HOME}/git \
     --mount=type=cache,target=/app/target \
     cargo clippy --workspace --benches --tests --examples --all-features --frozen -- -D warnings && \
-    cargo nextest archive --archive-file tests.tar.zst
+    cargo nextest archive --all-features --frozen --archive-file tests.tar.zst
 
 FROM builder-ci AS doc
 
