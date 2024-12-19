@@ -92,7 +92,7 @@ impl HandlerRegistry {
         let dropper = self
             .droppers
             .get(&id)
-            .ok_or_else(|| anyhow::anyhow!("No deserializer registered for packet ID: {}", id))?;
+            .ok_or_else(|| anyhow::anyhow!("No dropper registered for packet ID: {}", id))?;
 
         // Deserialize the packet once
         let packet = deserializer(bytes)?;
