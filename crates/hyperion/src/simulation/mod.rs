@@ -1,6 +1,5 @@
 use std::{borrow::Borrow, collections::HashMap, hash::Hash, sync::Arc};
 
-use bow::BowCharging;
 use bytemuck::{Pod, Zeroable};
 use derive_more::{Constructor, Deref, DerefMut, Display, From};
 use flecs_ecs::prelude::*;
@@ -28,7 +27,6 @@ use crate::{
 
 pub mod animation;
 pub mod blocks;
-pub mod bow;
 pub mod command;
 pub mod entity_kind;
 pub mod event;
@@ -628,8 +626,8 @@ impl Module for SimModule {
 
         world.component::<hyperion_inventory::PlayerInventory>();
 
-        world.component::<BowCharging>();
-        component!(world, BowCharging).opaque_func(meta_ser_stringify_type_display::<BowCharging>);
+        /* world.component::<BowCharging>();
+        component!(world, BowCharging).opaque_func(meta_ser_stringify_type_display::<BowCharging>); */
 
         observer!(
             world,

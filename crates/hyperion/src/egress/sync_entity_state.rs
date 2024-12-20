@@ -423,7 +423,6 @@ impl Module for EntityStateSyncModule {
 
             if velocity.0 != Vec3::ZERO {
                 // let (new_yaw, new_pitch) = get_rotation_from_velocity(velocity.0);
-                
                 let center = **position;
 
                 // getting max distance
@@ -443,6 +442,10 @@ impl Module for EntityStateSyncModule {
 
                     // Terminal Velocity max (100.0)
                     velocity.0 = velocity.0.clamp_length_max(100.0);
+
+                    position.x += velocity.0.x;
+                    position.y += velocity.0.y;
+                    position.z += velocity.0.z;
                     return;
                 };
 
