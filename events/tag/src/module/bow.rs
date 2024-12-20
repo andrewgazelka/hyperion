@@ -4,21 +4,14 @@ use flecs_ecs::{
 };
 use glam::I16Vec2;
 use hyperion::{
-    ItemKind, ItemStack,
-    glam::Vec3,
-    net::Compose,
-    simulation::{
-        Pitch, Position, Spawn, Uuid, Velocity, Yaw, bow::BowCharging, entity_kind::EntityKind,
-        event, get_direction_from_rotation, get_rotation_from_velocity,
-        metadata::living_entity::ArrowsInEntity,
-    },
-    storage::{EventQueue, Events},
-    valence_protocol::packets::play,
+    glam::Vec3, net::Compose, simulation::{
+        bow::BowCharging, entity_kind::EntityKind, event, get_direction_from_rotation, metadata::living_entity::{ArrowsInEntity, HandStates}, Pitch, Position, Spawn, Uuid, Velocity, Yaw
+    }, storage::{EventQueue, Events}, valence_protocol::packets::play, ItemKind, ItemStack
 };
 use hyperion_inventory::PlayerInventory;
 use hyperion_utils::EntityExt;
 use tracing::debug;
-use valence_protocol::{ByteAngle, VarInt};
+use valence_protocol::VarInt;
 
 #[derive(Component)]
 pub struct BowModule;
@@ -132,21 +125,19 @@ impl Module for BowModule {
             let world = it.world();
 
             for event in event_queue.drain() {
-                let (damage, owner, chunk_pos) =
-                    event
-                        .projectile
-                        .entity_view(world)
-                        .get::<(&Velocity, &Owner)>(|(velocity, owner)| {
-                            if owner.entity == event.client {
-                                return (0.0, owner.entity, I16Vec2::ZERO);
-                            }
-                            let chunck_pos = event
-                                .client
-                                .entity_view(world)
-                                .get::<&Position>(|pos| pos.to_chunk());
-                            (velocity.0.length() * 2.0, owner.entity, chunck_pos)
+                let (damage, owner, chunk_pos) = event
+                    .projectile
+                    .entity_view(world)
+                    .get::<(&Velocity, &Owner)>(|(velocity, owner)| {
+                        if owner.entity == event.client {
+                            return (0.0, owner.entity, I16Vec2::ZERO);
+                        }
+                        let chunck_pos = event.client.entity_view(world).get::<&Position>(|pos| {
+                            pos.to_chunk()
                         });
-
+                        (velocity.0.length() * 2.0, owner.entity, chunck_pos)
+                    });
+                
                 if damage == 0.0 && owner == event.client {
                     continue;
                 }
@@ -157,14 +148,11 @@ impl Module for BowModule {
                     .get::<&mut ArrowsInEntity>(|arrows| {
                         arrows.0 += 1;
                     });
-
+                
                 let packet = play::EntitiesDestroyS2c {
                     entity_ids: vec![VarInt(event.projectile.minecraft_id() as i32)].into(),
                 };
-                compose
-                    .broadcast_local(&packet, chunk_pos, system)
-                    .send()
-                    .unwrap();
+                compose.broadcast_local(&packet, chunk_pos, system).send().unwrap();
 
                 event.projectile.entity_view(world).destruct();
 
@@ -193,21 +181,13 @@ impl Module for BowModule {
             let world = it.world();
 
             for event in event_queue.drain() {
-                event.projectile.entity_view(world).get::<(
-                    &mut Position,
-                    &mut Velocity,
-                    &mut Yaw,
-                    &mut Pitch,
-                )>(
-                    |(position, velocity, _yaw, _pitch)| {
-                        let (new_yaw, new_pitch) = get_rotation_from_velocity(velocity.0);
-                        debug!("Arrow hit block at {:?}", event.collision);
+                event
+                    .projectile
+                    .entity_view(world)
+                    .get::<(&mut Position, &mut Velocity)>(|(position, velocity)| {
                         velocity.0 = Vec3::ZERO;
                         **position = event.collision.normal;
-                        /* **yaw = new_yaw;
-                        **pitch = new_pitch; */
-                    },
-                );
+                    });
             }
         });
     }
