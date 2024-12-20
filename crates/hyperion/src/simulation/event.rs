@@ -7,9 +7,8 @@ use valence_generated::block::BlockState;
 use valence_protocol::Hand;
 use valence_server::{ItemKind, entity::item_frame::ItemStack};
 
-use crate::simulation::skin::PlayerSkin;
-
 use super::blocks::RayCollision;
+use crate::simulation::skin::PlayerSkin;
 
 #[derive(Component, Default, Debug)]
 pub struct ItemDropEvent {

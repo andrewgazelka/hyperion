@@ -124,7 +124,6 @@ impl Module for BowModule {
             world,
             &mut EventQueue<event::ReleaseUseItem>($),
         )
-        .multi_threaded()
         .kind::<flecs::pipeline::PreUpdate>()
         .each_iter(move |it, _, event_queue| {
             let _system = it.system();
@@ -196,7 +195,8 @@ impl Module for BowModule {
 
                         debug!("Arrow spawn position: {:?}", spawn_pos);
 
-                        world.entity() 
+                        world
+                            .entity()
                             .add_enum(EntityKind::Arrow)
                             .set(Uuid::new_v4())
                             .set(Position::new(spawn_pos.x, spawn_pos.y, spawn_pos.z))
