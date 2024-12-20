@@ -120,66 +120,45 @@ impl Blocks {
 
     #[must_use]
     pub fn first_collision(&self, ray: Ray) -> Option<RayCollision> {
-        // Calculate exact start position (the block we're in)
-        let start_pos = ray.origin();
+        // Get ray properties
+        let direction = ray.direction().normalize();
+        let max_distance = ray.direction().length();
+        let step_size = 0.1; // Small increment to check along ray
 
-        // Calculate end position with a small offset to handle edge cases
-        let end_pos = ray.origin() + ray.direction();
+        // Walk along ray
+        let mut current_distance = 0.0;
+        while current_distance <= max_distance {
+            let current_pos = ray.origin() + direction * current_distance;
+            let block_pos = current_pos.floor().as_ivec3();
 
-        // Convert to block coordinates, expanding bounds to ensure we catch all blocks
-        let min_block = start_pos.min(end_pos).floor().as_ivec3();
-        let max_block = start_pos.max(end_pos).ceil().as_ivec3();
+            if let Some(block) = self.get_block(block_pos) {
+                let origin = Vec3::new(block_pos.x as f32, block_pos.y as f32, block_pos.z as f32);
 
-        // Set up voxel traversal through the blocks
-        let traversal = ray.voxel_traversal(min_block, max_block);
+                let collision = block
+                    .collision_shapes()
+                    .map(|shape| {
+                        geometry::aabb::Aabb::new(shape.min().as_vec3(), shape.max().as_vec3())
+                    })
+                    .map(|shape| shape + origin)
+                    .filter_map(|shape| shape.intersect_ray(&ray))
+                    .min();
 
-        let mut min: Option<RayCollision> = None;
+                if let Some(dist) = collision {
+                    let hit_point = ray.origin() + direction * dist.into_inner();
 
-        for cell in traversal {
-            // if there is no block at this cell, return None
-            let block = self.get_block(cell)?;
-
-            let origin = Vec3::new(cell.x as f32, cell.y as f32, cell.z as f32);
-
-            let min_dist = block
-                .collision_shapes()
-                .map(|shape| {
-                    geometry::aabb::Aabb::new(shape.min().as_vec3(), shape.max().as_vec3())
-                })
-                .map(|shape| shape + origin)
-                .filter_map(|shape| shape.intersect_ray(&ray))
-                .min();
-
-            let Some(min_dist) = min_dist else {
-                continue;
-            };
-
-            let collision_normal = ray.origin() + ray.direction() * min_dist.into_inner();
-            //let collision_normal = (collision_point - origin).normalize();
-
-            match &min {
-                Some(current_min) => {
-                    if min_dist.into_inner() < current_min.distance {
-                        min = Some(RayCollision {
-                            distance: min_dist.into_inner(),
-                            location: cell,
-                            normal: collision_normal,
-                            block,
-                        });
-                    }
-                }
-                None => {
-                    min = Some(RayCollision {
-                        distance: min_dist.into_inner(),
-                        location: cell,
-                        normal: collision_normal,
+                    return Some(RayCollision {
+                        distance: dist.into_inner(),
+                        location: block_pos,
+                        normal: hit_point,
                         block,
                     });
                 }
             }
+
+            current_distance += step_size;
         }
 
-        min
+        None
     }
 
     #[must_use]

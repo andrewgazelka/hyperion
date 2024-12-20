@@ -432,6 +432,8 @@ impl Module for EntityStateSyncModule {
                 // getting max distance
                 let distance = velocity.0.length();
 
+                debug!("distance = {distance}");
+
                 let ray = geometry::ray::Ray::new(center, velocity.0) * distance;
 
                 let Some(collision) = get_first_collision(ray, &world) else {

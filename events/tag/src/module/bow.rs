@@ -174,8 +174,8 @@ impl Module for BowModule {
             world,
             &mut EventQueue<event::ProjectileBlockEvent>,
         )
-        .singleton()
-        .kind::<flecs::pipeline::PostUpdate>()
+        .multi_threaded()
+        .kind::<flecs::pipeline::PreStore>()
         .each_iter(move |it, _, event_queue| {
             let _system = it.system();
             let world = it.world();
