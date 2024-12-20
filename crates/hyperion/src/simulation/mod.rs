@@ -727,7 +727,7 @@ pub struct Visible;
 
 #[must_use]
 pub fn get_rotation_from_velocity(velocity: Vec3) -> (f32, f32) {
-    let yaw = (-velocity.x).atan2(velocity.z).to_degrees().abs(); // Correct yaw calculation
+    let yaw = (-velocity.x).atan2(velocity.z).to_degrees(); // Correct yaw calculation
     let pitch = (-velocity.y).atan2(velocity.length()).to_degrees(); // Correct pitch calculation
     (yaw, pitch)
 }

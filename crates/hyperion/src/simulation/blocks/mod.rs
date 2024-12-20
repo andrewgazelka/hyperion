@@ -146,10 +146,29 @@ impl Blocks {
                 if let Some(dist) = collision {
                     let hit_point = ray.origin() + direction * dist.into_inner();
 
+                    let epsilon = 1e-5;
+                    let offset = hit_point - origin;
+
+                    let normal = if (offset.x - 0.0).abs() < epsilon {
+                        Vec3::new(-1.0, 0.0, 0.0)
+                    } else if (offset.x - 1.0).abs() < epsilon {
+                        Vec3::new(1.0, 0.0, 0.0)
+                    } else if (offset.y - 0.0).abs() < epsilon {
+                        Vec3::new(0.0, -1.0, 0.0)
+                    } else if (offset.y - 1.0).abs() < epsilon {
+                        Vec3::new(0.0, 1.0, 0.0)
+                    } else if (offset.z - 0.0).abs() < epsilon {
+                        Vec3::new(0.0, 0.0, -1.0)
+                    } else if (offset.z - 1.0).abs() < epsilon {
+                        Vec3::new(0.0, 0.0, 1.0)
+                    } else {
+                        Vec3::ZERO // Default normal if none of the faces match
+                    };
+
                     return Some(RayCollision {
                         distance: dist.into_inner(),
                         location: block_pos,
-                        normal: hit_point,
+                        normal,
                         block,
                     });
                 }

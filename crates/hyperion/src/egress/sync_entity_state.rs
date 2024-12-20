@@ -422,30 +422,29 @@ impl Module for EntityStateSyncModule {
             let _entity = it.entity(row);
 
             if velocity.0 != Vec3::ZERO {
-                position.x += velocity.0.x;
-                position.y += velocity.0.y;
-                position.z += velocity.0.z;
                 // let (new_yaw, new_pitch) = get_rotation_from_velocity(velocity.0);
-
+                
                 let center = **position;
-
+                
                 // getting max distance
                 let distance = velocity.0.length();
-
-                debug!("distance = {distance}");
-
+                
                 let ray = geometry::ray::Ray::new(center, velocity.0) * distance;
-
+                
                 let Some(collision) = get_first_collision(ray, &world) else {
+                    debug!("Velocity = {:?}", velocity.0);
                     // Drag (0.99 / 20.0)
                     // 1.0 - (0.99 / 20.0) * 0.05
-                    velocity.0 *= 0.997_525;
-
+                    velocity.0 *= 1.0 - (0.99 / 20.0) * 0.05;
+                    
                     // Gravity (20 MPSS)
                     velocity.0.y -= 0.05;
-
+                    
                     // Terminal Velocity max (100.0)
-                    velocity.0 = velocity.0.clamp_length_max(100.0);
+                    velocity.0 = velocity.0.clamp_length(0.0, 100.0);
+                    position.x += velocity.0.x;
+                    position.y += velocity.0.y;
+                    position.z += velocity.0.z;
                     return;
                 };
 
