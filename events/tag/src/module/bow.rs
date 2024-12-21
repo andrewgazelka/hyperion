@@ -98,6 +98,7 @@ impl Module for BowModule {
             &mut EventQueue<event::ItemInteract>,
         )
         .singleton()
+        .multi_threaded()
         .kind::<flecs::pipeline::PostUpdate>()
         .each_iter(move |it, _, event_queue| {
             let _system = it.system();
@@ -124,7 +125,6 @@ impl Module for BowModule {
             world,
             &mut EventQueue<event::ReleaseUseItem>($),
         )
-        .multi_threaded()
         .kind::<flecs::pipeline::PreUpdate>()
         .each_iter(move |it, _, event_queue| {
             let _system = it.system();
@@ -272,12 +272,12 @@ impl Module for BowModule {
             }
         });
 
+        // multi-threaded causes issues
         system!(
             "arrow_block_hit",
             world,
             &mut EventQueue<event::ProjectileBlockEvent>,
         )
-        .multi_threaded()
         .kind::<flecs::pipeline::PreStore>()
         .each_iter(move |it, _, event_queue| {
             let _system = it.system();
@@ -288,8 +288,9 @@ impl Module for BowModule {
                     .projectile
                     .entity_view(world)
                     .get::<(&mut Position, &mut Velocity)>(|(position, velocity)| {
+                        debug!("Arrow hit block at {:?}", event.collision.point);
                         velocity.0 = Vec3::ZERO;
-                        **position = event.collision.normal;
+                        **position = event.collision.point;
                     });
             }
         });
