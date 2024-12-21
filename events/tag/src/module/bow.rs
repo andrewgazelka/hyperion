@@ -196,7 +196,8 @@ impl Module for BowModule {
 
                         debug!("Arrow spawn position: {:?}", spawn_pos);
 
-                        world.entity() 
+                        world
+                            .entity()
                             .add_enum(EntityKind::Arrow)
                             .set(Uuid::new_v4())
                             .set(Position::new(spawn_pos.x, spawn_pos.y, spawn_pos.z))
