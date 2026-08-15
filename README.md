@@ -311,7 +311,7 @@ your own mechanics and replace the core mechanics with your own.
 
 ## Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=andrewgazelka/hyperion&type=Date)](https://star-history.com/#andrewgazelka/hyperion&Date)
+[![Star History Chart](https://star-history.dera.page/svg?repos=andrewgazelka/hyperion&type=Date)](https://star-history.dera.page/#andrewgazelka/hyperion&Date)
 
 Thank you for your hard work[^1] [@CuzImClicks](https://github.com/CuzImClicks), [@Indra-db](https://github.com/Indra-db), [@james-j-obrien](https://github.com/james-j-obrien), [@Ruben2424](https://github.com/Ruben2424), [@SanderMertens](https://github.com/SanderMertens), [@Tebarem](https://github.com/Tebarem), and [@TestingPlant](https://github.com/TestingPlant).
 
